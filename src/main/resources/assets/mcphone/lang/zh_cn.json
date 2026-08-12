@@ -13,7 +13,7 @@
   "mcphone.gui.wallpaper_hint1": "放入PNG到",
   "mcphone.gui.wallpaper_hint2": "config/mcphone/",
   "mcphone.gui.wallpaper_hint3": "wallpapers/",
-  "mcphone.gui.back": "◀",
+  "mcphone.gui.back": "←",
   "mcphone.gui.nav_back": "◁",
   "mcphone.gui.nav_home": "○",
   "mcphone.gui.nav_tasks": "□",
@@ -24,6 +24,7 @@
   "mcphone.app.camera": "相机",
   "mcphone.app.gallery": "相册",
   "mcphone.app.music": "音乐",
+  "mcphone.app.app_manager": "App管理器",
   "mcphone.item.tooltip.open": "§7右键打开手机",
   "mcphone.item.tooltip.version": "§8MCphone v1.0.0"
 }
