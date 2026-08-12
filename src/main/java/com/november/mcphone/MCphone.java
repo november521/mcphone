@@ -34,6 +34,7 @@ public class MCphone {
 
     public MCphone(IEventBus modEventBus, ModContainer modContainer) {
         ITEMS.register(modEventBus);
+        ModDataComponents.COMPONENTS.register(modEventBus);
         ModCreativeTabs.TABS.register(modEventBus);
         com.november.mcphone.network.WallpaperData.ATTACHMENT_TYPES.register(modEventBus);
         modEventBus.addListener(com.november.mcphone.network.NetworkHandler::register);

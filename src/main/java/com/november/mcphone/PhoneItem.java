@@ -42,6 +42,24 @@ public class PhoneItem extends Item {
         Minecraft.getInstance().setScreen(new PhoneScreen());
     }
 
+    /**
+     * 起过名的手机在物品栏里显示设备名。
+     *
+     * 覆盖 getName 而不是去写原版的 custom_name 组件：
+     * custom_name 是铁砧改名用的，占了它玩家就没法再用铁砧改名，
+     * 而且那条路径显示出来是斜体。这里返回的名字与普通物品名一样正常显示。
+     * 玩家若真用铁砧改了名，custom_name 优先级更高，会盖过设备名——
+     * 这是原版既有行为，符合直觉。
+     */
+    @Override
+    public Component getName(ItemStack stack) {
+        String deviceName = stack.get(ModDataComponents.DEVICE_NAME.get());
+        if (deviceName != null && !deviceName.isBlank()) {
+            return Component.literal(deviceName);
+        }
+        return super.getName(stack);
+    }
+
     @Override
     public void appendHoverText(ItemStack stack, TooltipContext context,
                                 List<Component> tooltip, TooltipFlag flag) {
