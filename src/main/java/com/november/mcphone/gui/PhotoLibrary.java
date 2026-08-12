@@ -96,6 +96,15 @@ public final class PhotoLibrary {
         String cacheKey() { return fileName + ":" + lastModified; }
     }
 
+    /**
+     * 一张已就绪的缩略图贴图。
+     *
+     * 必须带上宽高：把缩略图等比塞进格子要用 GuiGraphics 的 11 参 blit，
+     * 而那个重载需要纹理的真实尺寸才能算出源区域。缩略图是等比缩小的，
+     * 宽高比各不相同（截图有 16:9 也有窗口化的怪比例），不能写死。
+     */
+    public record Thumb(ResourceLocation texture, int width, int height) {}
+
     /** 已扫描到的照片，新的在前 */
     private static final List<Photo> PHOTOS = new ArrayList<>();
 
@@ -107,13 +116,13 @@ public final class PhotoLibrary {
      * 访问序 LinkedHashMap：每次 thumbnail() 命中都会把该项移到最新，
      * 于是"当前页"始终是热的，被逐出的必然是翻过去很久的旧页。
      */
-    private static final Map<String, ResourceLocation> THUMBNAILS =
+    private static final Map<String, Thumb> THUMBNAILS =
             new LinkedHashMap<>(MAX_CACHED + 1, 0.75f, true) {
                 @Override
-                protected boolean removeEldestEntry(Map.Entry<String, ResourceLocation> eldest) {
+                protected boolean removeEldestEntry(Map.Entry<String, Thumb> eldest) {
                     if (size() <= MAX_CACHED) return false;
                     // 逐出的同时归还显存，否则贴图会一直留在 TextureManager 里
-                    Minecraft.getInstance().getTextureManager().release(eldest.getValue());
+                    Minecraft.getInstance().getTextureManager().release(eldest.getValue().texture());
                     return true;
                 }
             };
@@ -205,11 +214,11 @@ public final class PhotoLibrary {
      * 加载完成后的某一帧自然就拿到贴图了。每帧调用是安全的：
      * 加载中与失败的都有集合挡着，不会重复提交。
      */
-    public static ResourceLocation thumbnail(Photo photo) {
+    public static Thumb thumbnail(Photo photo) {
         if (photo == null) return null;
 
         String key = photo.cacheKey();
-        ResourceLocation cached = THUMBNAILS.get(key);   // 命中即刷新 LRU 位置
+        Thumb cached = THUMBNAILS.get(key);   // 命中即刷新 LRU 位置
         if (cached != null) return cached;
 
         if (FAILED.contains(key) || LOADING.contains(key)) return null;
@@ -245,8 +254,12 @@ public final class PhotoLibrary {
 
                 ResourceLocation loc = ResourceLocation.fromNamespaceAndPath(
                         "mcphone", "photo_thumb_" + (textureSeq++));
+                // 尺寸要在 register 之前取：DynamicTexture 接管 NativeImage 后
+                // 不该再碰它
+                int w = image.getWidth();
+                int h = image.getHeight();
                 mc.getTextureManager().register(loc, new DynamicTexture(image));
-                THUMBNAILS.put(key, loc);
+                THUMBNAILS.put(key, new Thumb(loc, w, h));
             });
         });
     }
@@ -344,7 +357,7 @@ public final class PhotoLibrary {
      */
     public static void releaseAll() {
         var tm = Minecraft.getInstance().getTextureManager();
-        for (ResourceLocation loc : THUMBNAILS.values()) tm.release(loc);
+        for (Thumb t : THUMBNAILS.values()) tm.release(t.texture());
         THUMBNAILS.clear();
         FAILED.clear();
         generation++;
