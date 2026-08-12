@@ -233,41 +233,141 @@ public final class PhotoLibrary {
     private static void load(Photo photo, String key) {
         final int gen = generation;
 
-        Util.backgroundExecutor().execute(() -> {
-            NativeImage image = readAndScale(photo.path());
-            Minecraft mc = Minecraft.getInstance();
+        submit(photo.path(), THUMB_MAX_SIDE, image -> {
+            LOADING.remove(key);
 
-            mc.execute(() -> {   // 回到渲染线程：贴图上传是 GL 调用
-                LOADING.remove(key);
+            if (image == null) {
+                // 失败也要认世代：清过场后旧的坏文件记录不该继续压着
+                if (gen == generation) FAILED.add(key);
+                return;
+            }
+            // 期间玩家已退出相册（releaseAll 递增了世代），或这张已被
+            // 别的路径装好了——两种情况都直接丢弃，别再往缓存里塞
+            if (gen != generation || THUMBNAILS.containsKey(key)) {
+                image.close();
+                return;
+            }
 
-                if (image == null) {
-                    // 失败也要认世代：清过场后旧的坏文件记录不该继续压着
-                    if (gen == generation) FAILED.add(key);
-                    return;
-                }
-                // 期间玩家已退出相册（releaseAll 递增了世代），或这张已被
-                // 别的路径装好了——两种情况都直接丢弃，别再往缓存里塞
-                if (gen != generation || THUMBNAILS.containsKey(key)) {
-                    image.close();
-                    return;
-                }
-
-                ResourceLocation loc = ResourceLocation.fromNamespaceAndPath(
-                        "mcphone", "photo_thumb_" + (textureSeq++));
-                // 尺寸要在 register 之前取：DynamicTexture 接管 NativeImage 后
-                // 不该再碰它
-                int w = image.getWidth();
-                int h = image.getHeight();
-                mc.getTextureManager().register(loc, new DynamicTexture(image));
-                THUMBNAILS.put(key, new Thumb(loc, w, h));
-            });
+            THUMBNAILS.put(key, upload(image, "photo_thumb_"));
         });
+    }
+
+    /**
+     * 后台读盘缩放，完成后回到渲染线程交给 onReady（失败时传 null）。
+     * 缩略图与大图预览共用这条路径。
+     */
+    private static void submit(Path path, int maxSide, java.util.function.Consumer<NativeImage> onReady) {
+        Util.backgroundExecutor().execute(() -> {
+            NativeImage image = readAndScale(path, maxSide);
+            // 回到渲染线程：贴图上传是 GL 调用
+            Minecraft.getInstance().execute(() -> onReady.accept(image));
+        });
+    }
+
+    /** 把已就绪的 NativeImage 注册成贴图。必须在渲染线程调用。 */
+    private static Thumb upload(NativeImage image, String namePrefix) {
+        ResourceLocation loc = ResourceLocation.fromNamespaceAndPath(
+                "mcphone", namePrefix + (textureSeq++));
+        // 尺寸要在 register 之前取：DynamicTexture 接管 NativeImage 后
+        // 不该再碰它
+        int w = image.getWidth();
+        int h = image.getHeight();
+        Minecraft.getInstance().getTextureManager().register(loc, new DynamicTexture(image));
+        return new Thumb(loc, w, h);
+    }
+
+    // ============================================================
+    //  大图预览（单张查看用）
+    // ============================================================
+
+    /**
+     * 预览图长边上限。
+     *
+     * 缩略图只有 96px，放大到满屏会糊。手机屏幕 120×200 GUI 像素，
+     * GUI 缩放最高 4 倍即 480×800 实际像素，512 足够清晰又不至于
+     * 把一张 4K 截图整个搬进显存。
+     */
+    private static final int PREVIEW_MAX_SIDE = 512;
+
+    /** 当前预览的照片缓存键，null 表示没有预览 */
+    private static String previewKey = null;
+
+    /** 当前预览贴图，加载完成前为 null */
+    private static Thumb preview = null;
+
+    /**
+     * 取一张照片的大图预览。同一时刻只保留一张——
+     * 大图比缩略图重得多，缓存多张没有意义。
+     *
+     * 未就绪时返回 null，调用方可以先拿缩略图放大顶着，
+     * 这样翻看时不会出现空白。
+     */
+    public static Thumb preview(Photo photo) {
+        if (photo == null) return null;
+
+        String key = photo.cacheKey();
+        if (key.equals(previewKey)) return preview;   // 命中；加载中时 preview 仍为 null
+
+        // 换了一张：立刻释放上一张，别让两张大图同时占着显存
+        releasePreview();
+        previewKey = key;
+
+        final int gen = generation;
+        submit(photo.path(), PREVIEW_MAX_SIDE, image -> {
+            if (image == null) return;
+            // 期间玩家已翻到别的照片或退出了相册，这张白读了，丢弃
+            if (gen != generation || !key.equals(previewKey)) {
+                image.close();
+                return;
+            }
+            preview = upload(image, "photo_view_");
+        });
+        return null;
+    }
+
+    /** 释放预览贴图。退出单张查看、或切换到另一张时调用。 */
+    public static void releasePreview() {
+        if (preview != null) {
+            Minecraft.getInstance().getTextureManager().release(preview.texture());
+            preview = null;
+        }
+        // 键一并清掉：在飞的那次加载回来时会发现键对不上，自行丢弃
+        previewKey = null;
+    }
+
+    // ============================================================
+    //  删除
+    // ============================================================
+
+    /**
+     * 从磁盘删除一张照片，随后重扫目录。
+     *
+     * 不可撤销——调用方应当先向玩家确认。
+     *
+     * @return 是否删除成功
+     */
+    public static boolean delete(Photo photo) {
+        if (photo == null) return false;
+        try {
+            Files.deleteIfExists(photo.path());
+        } catch (IOException e) {
+            LOGGER.warn("删除照片失败: {} - {}", photo.fileName(), e.getMessage());
+            return false;
+        }
+
+        // 连带回收这张的贴图：文件都没了，留着缓存纯占显存
+        Thumb stale = THUMBNAILS.remove(photo.cacheKey());
+        if (stale != null) Minecraft.getInstance().getTextureManager().release(stale.texture());
+        if (photo.cacheKey().equals(previewKey)) releasePreview();
+
+        refresh();
+        return true;
     }
 
     /**
      * 读盘 → 缩小 → 转成 NativeImage。全程在后台线程，失败返回 null。
      */
-    private static NativeImage readAndScale(Path path) {
+    private static NativeImage readAndScale(Path path, int maxSide) {
         try (InputStream in = Files.newInputStream(path)) {
             BufferedImage src = ImageIO.read(in);
             if (src == null) {
@@ -275,7 +375,7 @@ public final class PhotoLibrary {
                 return null;
             }
 
-            BufferedImage thumb = scaleDown(src, THUMB_MAX_SIDE);
+            BufferedImage thumb = scaleDown(src, maxSide);
             int w = thumb.getWidth();
             int h = thumb.getHeight();
 
@@ -360,6 +460,7 @@ public final class PhotoLibrary {
         for (Thumb t : THUMBNAILS.values()) tm.release(t.texture());
         THUMBNAILS.clear();
         FAILED.clear();
+        releasePreview();
         generation++;
     }
 }
