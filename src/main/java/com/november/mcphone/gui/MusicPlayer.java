@@ -1,15 +1,13 @@
 package com.november.mcphone.gui;
 
-import com.mojang.logging.LogUtils;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.core.Holder;
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.network.chat.Component;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.sounds.SoundSource;
-import net.minecraft.world.item.Item;
+import net.minecraft.world.item.JukeboxSong;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -22,7 +20,7 @@ import java.util.*;
  * 音乐播放器 —— 由 PhoneScreen 嵌入渲染。
  *
  * 功能:
- * - 原版唱片列表 (自动发现所有 RecordItem)
+ * - 原版唱片列表 (读取 JukeboxSong 注册表)
  * - 自定义 WAV 文件 (config/mcphone/music/)
  * - 点击播放/暂停
  *
@@ -56,43 +54,27 @@ public final class MusicPlayer {
 
     private void ensureScanned() {
         if (scanned) return;
+        // JUKEBOX_SONG 是随存档同步的动态注册表，进入世界前读不到，
+        // 此时直接返回且不置 scanned，避免把空列表永久缓存
+        if (mc.level == null) return;
         scanned = true;
 
-        // ---- 原版唱片 (RecordItem在net.minecraft.world.item包下，用反射方式获取sound) ----
-        for (var entry : BuiltInRegistries.ITEM.entrySet()) {
-            Item item = entry.getValue();
-            // RecordItem: 通过反射判断和获取sound
-            boolean isRecord = false;
-            String name = "";
-            String soundId = "";
-            try {
-                // 检查是否是RecordItem的子类
-                Class<?> clz = item.getClass();
-                while (clz != null && clz != Object.class) {
-                    if (clz.getSimpleName().equals("RecordItem")) {
-                        isRecord = true;
-                        break;
-                    }
-                    clz = clz.getSuperclass();
+        // ---- 原版唱片：1.21 起唱片不再是 RecordItem 类，
+        //      改为数据驱动的 JukeboxSong 注册表（原版 19 首） ----
+        mc.level.registryAccess().registry(Registries.JUKEBOX_SONG).ifPresent(reg -> {
+            List<MusicTrack> vanilla = new ArrayList<>();
+            for (var entry : reg.entrySet()) {
+                JukeboxSong song = entry.getValue();
+                String name = song.description().getString();
+                String soundId = song.soundEvent().unwrapKey()
+                        .map(k -> k.location().toString()).orElse("");
+                if (!name.isEmpty() && !soundId.isEmpty()) {
+                    vanilla.add(new MusicTrack(name, soundId, false));
                 }
-                if (isRecord) {
-                    Component desc = item.getDescription();
-                    name = desc.getString();
-                    // 通过反射获取 sound 字段（RecordItem.sound 为 private）
-                    var soundField = clz.getDeclaredField("sound");
-                    soundField.setAccessible(true);
-                    Holder<?> holder = (Holder<?>) soundField.get(item);
-                    // 从 Holder 取注册名，如 minecraft:music_disc.13
-                    soundId = holder.unwrapKey().map(k -> k.location().toString()).orElse("");
-                }
-            } catch (Exception e) {
-                LOGGER.debug("跳过唱片扫描 {}: {}", entry.getKey().location(), e.toString());
-                continue;
             }
-            if (isRecord && name != null && !name.isEmpty() && soundId != null && !soundId.isEmpty()) {
-                tracks.add(new MusicTrack(name, soundId, false));
-            }
-        }
+            vanilla.sort(Comparator.comparing(MusicTrack::name));
+            tracks.addAll(vanilla);
+        });
 
         // ---- 自定义 WAV (config/mcphone/music/) ----
         Path musicDir = Path.of("config/mcphone/music");

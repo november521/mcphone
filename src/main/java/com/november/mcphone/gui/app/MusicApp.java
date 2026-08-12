@@ -7,7 +7,7 @@ import com.november.mcphone.gui.PhoneScreen;
  * 音乐 App —— 手机音乐播放器。
  *
  * 功能：
- * - 播放原版唱片音乐（自动从物品注册表发现所有 RecordItem）
+ * - 播放原版唱片音乐（读取 JukeboxSong 注册表）
  * - 播放自定义 WAV 文件（放入 config/mcphone/music/）
  * - OGG 格式建议通过资源包加载
  *
