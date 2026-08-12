@@ -45,7 +45,7 @@ public class PhoneItem extends Item {
     @Override
     public void appendHoverText(ItemStack stack, TooltipContext context,
                                 List<Component> tooltip, TooltipFlag flag) {
-        tooltip.add(Component.literal("§7右键打开手机"));
-        tooltip.add(Component.literal("§8MCphone v1.0.0"));
+        tooltip.add(Component.translatable("mcphone.item.tooltip.open"));
+        tooltip.add(Component.translatable("mcphone.item.tooltip.version"));
     }
 }

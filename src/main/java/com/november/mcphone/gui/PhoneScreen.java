@@ -3,7 +3,6 @@ package com.november.mcphone.gui;
 import com.november.mcphone.api.IPhoneApp;
 import com.november.mcphone.network.NetworkHandler;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;

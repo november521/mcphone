@@ -23,5 +23,7 @@
   "mcphone.app.contacts": "Contacts",
   "mcphone.app.camera": "Camera",
   "mcphone.app.gallery": "Gallery",
-  "mcphone.app.music": "Music"
+  "mcphone.app.music": "Music",
+  "mcphone.item.tooltip.open": "§7Right-click to open phone",
+  "mcphone.item.tooltip.version": "§8MCphone v1.0.0"
 }

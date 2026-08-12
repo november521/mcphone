@@ -23,5 +23,7 @@
   "mcphone.app.contacts": "联系人",
   "mcphone.app.camera": "相机",
   "mcphone.app.gallery": "相册",
-  "mcphone.app.music": "音乐"
+  "mcphone.app.music": "音乐",
+  "mcphone.item.tooltip.open": "§7右键打开手机",
+  "mcphone.item.tooltip.version": "§8MCphone v1.0.0"
 }
