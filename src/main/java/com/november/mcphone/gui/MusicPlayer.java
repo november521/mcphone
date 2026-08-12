@@ -4,6 +4,7 @@ import com.mojang.logging.LogUtils;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.core.Holder;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
@@ -77,19 +78,15 @@ public final class MusicPlayer {
                 if (isRecord) {
                     Component desc = item.getDescription();
                     name = desc.getString();
-                    // 通过反射获取 sound 字段
+                    // 通过反射获取 sound 字段（RecordItem.sound 为 private）
                     var soundField = clz.getDeclaredField("sound");
                     soundField.setAccessible(true);
-                    var holder = soundField.get(item);
-                    var keyField = holder.getClass().getDeclaredField("key");
-                    // SoundEvent 的 key
-                    soundField.setAccessible(true);
-                    Object soundEvent = ((java.lang.reflect.Field)holder.getClass().getDeclaredField("value")).get(holder);
-                    // 直接获取 ResourceLocation
-                    ResourceLocation rl = ((net.minecraft.core.Holder.Reference<net.minecraft.sounds.SoundEvent>)holder).key().location();
-                    soundId = rl.toString();
+                    Holder<?> holder = (Holder<?>) soundField.get(item);
+                    // 从 Holder 取注册名，如 minecraft:music_disc.13
+                    soundId = holder.unwrapKey().map(k -> k.location().toString()).orElse("");
                 }
-            } catch (Exception ignored) {
+            } catch (Exception e) {
+                LOGGER.debug("跳过唱片扫描 {}: {}", entry.getKey().location(), e.toString());
                 continue;
             }
             if (isRecord && name != null && !name.isEmpty() && soundId != null && !soundId.isEmpty()) {
