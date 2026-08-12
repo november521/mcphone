@@ -497,7 +497,13 @@ public final class PhoneScreen extends Screen {
             }
             case APP_MANAGER -> {
                 if (appManagerHover >= 0 && appManagerHover < appManagerApps.size()) {
-                    PhoneScreenRegistry.uninstall(appManagerApps.get(appManagerHover).getId());
+                    IPhoneApp toUninstall = appManagerApps.get(appManagerHover);
+                    PhoneScreenRegistry.uninstall(toUninstall.getId());
+                    // 立刻刷新 appManagerApps，否则列表中还保留已卸载的 App
+                    appManagerApps.clear();
+                    for (IPhoneApp a : PhoneScreenRegistry.getApps()) {
+                        if (!a.isSystemApp()) appManagerApps.add(a);
+                    }
                     yield true;
                 }
                 yield true;
