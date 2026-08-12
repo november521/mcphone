@@ -1,5 +1,6 @@
 package com.november.mcphone.gui;
 
+import com.november.mcphone.gui.app.PhoneApp;
 import com.november.mcphone.network.NetworkHandler;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
@@ -221,10 +222,10 @@ public final class PhoneScreen extends Screen {
                 g.fill(ix - 2, iy - 2, ix + is + 2, iy + is + 2, PhoneTheme.COLOR_APP_PRESSED);
             }
 
-            AppEntry app = apps.get(i);
+            PhoneApp app = apps.get(i);
             app.renderIcon(g, ix, iy, is, 0);
 
-            drawAppName(g, app.getName(), ix, iy, is);
+            drawAppName(g, app.getDisplayName(), ix, iy, is);
         }
     }
 
@@ -397,7 +398,7 @@ public final class PhoneScreen extends Screen {
         return switch (mode) {
             case MAIN -> {
                 if (hoveredAppIndex >= 0) {
-                    AppEntry app = PhoneScreenRegistry.getApp(hoveredAppIndex);
+                    PhoneApp app = PhoneScreenRegistry.getApp(hoveredAppIndex);
                     if (app != null) { app.onPress(); yield true; }
                 }
                 yield super.mouseClicked(mx, my, button);
