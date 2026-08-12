@@ -44,7 +44,7 @@ import java.util.Set;
  *   1. 扫描只读元数据（路径、文件名、修改时间），不碰像素。
  *      两千张照片的扫描也只是一次目录列举。
  *   2. 缩略图按需加载：只有正在显示的那一页会去请求贴图。
- *   3. 缓存有上限（{@link #MAX_CACHED}），超出后按最久未使用逐出，
+ *   3. 缓存有上限（{@link #maxCached}），超出后按最久未使用逐出，
  *      并 release 掉贴图归还显存。翻页时旧页自然被挤出去。
  *
  * 另外上传前会把图缩到长边 {@link #THUMB_MAX_SIDE} 像素，一张缩略图
@@ -71,8 +71,28 @@ public final class PhotoLibrary {
     /** 缩略图长边上限（像素）。手机屏幕只有 120 宽，96 足够清晰。 */
     private static final int THUMB_MAX_SIDE = 96;
 
-    /** 缩略图贴图缓存上限。一页 12 张，留出前后页的余量。 */
-    private static final int MAX_CACHED = 24;
+    /** 缩略图贴图缓存下限。够装下一页还有余量。 */
+    private static final int MIN_CACHED = 24;
+
+    /**
+     * 缩略图贴图缓存上限。
+     *
+     * 必须始终大于"一页的张数"，否则同一页里先加载的会被后加载的挤掉，
+     * 下一帧又重新加载，陷入加载—逐出的死循环，画面持续闪烁。
+     * 每页张数由界面按手机屏幕高度算出，不是定值，
+     * 因此由界面调 {@link #ensureCacheFor} 把上限顶上去。
+     */
+    private static int maxCached = MIN_CACHED;
+
+    /**
+     * 声明"一页会同时显示多少张"，据此抬高缓存上限。
+     * 只增不减：手机屏幕尺寸在一次游戏里不会反复变，缩回去没有意义。
+     */
+    public static void ensureCacheFor(int perPage) {
+        // 多留一行的余量，翻页时上一页的尾巴还能命中
+        int want = Math.max(MIN_CACHED, perPage + perPage / 3 + 1);
+        if (want > maxCached) maxCached = want;
+    }
 
     /** 同时在飞的加载数上限，防止快速翻页时打出 IO 风暴 */
     private static final int MAX_IN_FLIGHT = 4;
@@ -117,10 +137,10 @@ public final class PhotoLibrary {
      * 于是"当前页"始终是热的，被逐出的必然是翻过去很久的旧页。
      */
     private static final Map<String, Thumb> THUMBNAILS =
-            new LinkedHashMap<>(MAX_CACHED + 1, 0.75f, true) {
+            new LinkedHashMap<>(MIN_CACHED + 1, 0.75f, true) {
                 @Override
                 protected boolean removeEldestEntry(Map.Entry<String, Thumb> eldest) {
-                    if (size() <= MAX_CACHED) return false;
+                    if (size() <= maxCached) return false;
                     // 逐出的同时归还显存，否则贴图会一直留在 TextureManager 里
                     Minecraft.getInstance().getTextureManager().release(eldest.getValue().texture());
                     return true;

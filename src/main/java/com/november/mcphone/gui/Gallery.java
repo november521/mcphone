@@ -163,6 +163,11 @@ public final class Gallery {
         int rows = Math.max(1, (gridBottom - gridTop + GAP) / (CELL_H + GAP));
         this.perPage = COLS * rows;
 
+        // 缓存必须装得下一整页，否则同页内先加载的会被后加载的挤掉，
+        // 下一帧又重新加载，画面持续闪烁。行数随手机屏幕高度变，
+        // 所以每帧把上限顶到位而不是写死
+        PhotoLibrary.ensureCacheFor(perPage);
+
         // 照片可能被删掉或换了目录，页码越界时拉回最后一页
         int pageCount = Math.max(1, (photos.size() + perPage - 1) / perPage);
         if (page >= pageCount) page = pageCount - 1;
