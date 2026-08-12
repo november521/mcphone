@@ -1,6 +1,7 @@
 package com.november.mcphone.api;
 
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 
 /**
@@ -31,7 +32,9 @@ import net.minecraft.resources.ResourceLocation;
  *       public String getId() { return "calculator"; }
  *
  *       @Override
- *       public String getDisplayName() { return "计算器"; }
+ *       public Component getDisplayName() {
+ *           return Component.translatable("mymod.app.calculator");
+ *       }
  *
  *       @Override
  *       public ResourceLocation getIconTexture() {
@@ -56,20 +59,15 @@ import net.minecraft.resources.ResourceLocation;
  * 如果有多个 App，一行一个类名。
  *
  * ================================================================
- * 第四步：贴图
+ * 第四步：语言文件 + 贴图
  * ================================================================
  *
- *   位置: assets/<你的modid>/textures/gui/app_icon_xxx.png
- *   尺寸: 20 × 20 px，PNG-32
+ *   语言: assets/<modid>/lang/en_us.json
+ *         { "mymod.app.calculator": "Calculator" }
+ *
+ *   贴图: assets/<modid>/textures/gui/app_icon_xxx.png (20×20, PNG-32)
  *
  * ================================================================
- * 额外能力
- * ================================================================
- *
- * - {@link #onUninstall} — App 被卸载时清理数据
- * - {@link #isSystemApp}  — 标记为系统 App（不可卸载）
- * - {@link #getVersion}   — App 版本号
- * - {@link #getAuthor}    — 作者信息
  */
 public interface IPhoneApp {
 
@@ -80,8 +78,12 @@ public interface IPhoneApp {
     /** App 唯一标识符，如 "calculator", "weather"。全小写英文+下划线。 */
     String getId();
 
-    /** App 显示名称，如 "计算器", "天气" */
-    String getDisplayName();
+    /**
+     * App 显示名称。
+     * 推荐使用 Component.translatable("translation.key") 以支持多语言。
+     * 如果不想用翻译系统，可用 Component.literal("计算器")。
+     */
+    Component getDisplayName();
 
     /** 图标纹理定位 */
     ResourceLocation getIconTexture();
@@ -101,16 +103,10 @@ public interface IPhoneApp {
         }
     }
 
-    /**
-     * App 被卸载时调用。在此清理持久化数据。
-     * 默认空实现。
-     */
+    /** App 被卸载时调用。在此清理持久化数据。 */
     default void onUninstall() {}
 
-    /**
-     * 系统 App 不可被玩家卸载（如"设置"）。
-     * 默认 false。
-     */
+    /** 系统 App 不可被玩家卸载（如"设置"）。默认 false。 */
     default boolean isSystemApp() { return false; }
 
     /** App 版本号。默认 "1.0.0" */

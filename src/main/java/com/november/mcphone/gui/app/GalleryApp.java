@@ -8,7 +8,7 @@ package com.november.mcphone.gui.app;
 public final class GalleryApp extends PhoneApp {
 
     public GalleryApp() {
-        super("gallery", "相册");
+        super("gallery");
     }
 
     @Override

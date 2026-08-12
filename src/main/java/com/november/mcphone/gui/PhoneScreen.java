@@ -225,7 +225,7 @@ public final class PhoneScreen extends Screen {
             IPhoneApp app = apps.get(i);
             app.renderIcon(g, ix, iy, is, 0);
 
-            drawAppName(g, app.getDisplayName(), ix, iy, is);
+            drawAppName(g, app.getDisplayName().getString(), ix, iy, is);
         }
     }
 
@@ -248,8 +248,12 @@ public final class PhoneScreen extends Screen {
 
     private void buildSettingItems() {
         if (!settingItems.isEmpty()) return;
-        settingItems.add(new SettingItem("壁纸", () -> navigateTo(Mode.WALLPAPER_PICKER)));
-        settingItems.add(new SettingItem("关于", () -> {
+        settingItems.add(new SettingItem(
+                Component.translatable("mcphone.gui.wallpaper").getString(),
+                () -> navigateTo(Mode.WALLPAPER_PICKER)));
+        settingItems.add(new SettingItem(
+                Component.translatable("mcphone.gui.about").getString(),
+                () -> {
             if (minecraft != null && minecraft.player != null) {
                 minecraft.player.displayClientMessage(
                         Component.literal("§eMCphone v1.0.0 §7by november"), false);
@@ -266,7 +270,8 @@ public final class PhoneScreen extends Screen {
         int bottom = phoneTop + PhoneTheme.PHONE_HEIGHT - PhoneTheme.NAV_BAR_HEIGHT;
 
         // 标题
-        g.drawString(font, "设置", x, y, PhoneTheme.FONT_COLOR_TITLE, true);
+        String title = Component.translatable("mcphone.gui.settings").getString();
+        g.drawString(font, title, x, y, PhoneTheme.FONT_COLOR_TITLE, true);
         y += font.lineHeight + 4;
 
         // 分割线
@@ -295,7 +300,8 @@ public final class PhoneScreen extends Screen {
 
         // 空列表提示
         if (settingItems.isEmpty()) {
-            g.drawString(font, "暂无设置项", x, y, 0xFF888888, false);
+            String noItems = Component.translatable("mcphone.gui.no_settings").getString();
+            g.drawString(font, noItems, x, y, 0xFF888888, false);
         }
     }
 

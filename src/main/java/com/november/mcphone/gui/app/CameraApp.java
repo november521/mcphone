@@ -8,7 +8,7 @@ package com.november.mcphone.gui.app;
 public final class CameraApp extends PhoneApp {
 
     public CameraApp() {
-        super("camera", "相机");
+        super("camera");
     }
 
     @Override

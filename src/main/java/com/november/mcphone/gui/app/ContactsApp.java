@@ -8,7 +8,7 @@ package com.november.mcphone.gui.app;
 public final class ContactsApp extends PhoneApp {
 
     public ContactsApp() {
-        super("contacts", "联系人");
+        super("contacts");
     }
 
     @Override

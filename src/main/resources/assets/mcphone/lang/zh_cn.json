@@ -1,0 +1,21 @@
+{
+  "itemGroup.mcphone": "MCphone",
+  "item.mcphone.phone": "§6手机",
+  "mcphone.loaded": "MCphone 模组加载完成 —— 手机已就绪",
+  "mcphone.client_loaded": "MCphone 客户端加载完成",
+  "mcphone.gui.home": "手机主屏幕",
+  "mcphone.gui.settings": "设置",
+  "mcphone.gui.wallpaper": "壁纸",
+  "mcphone.gui.about": "关于",
+  "mcphone.gui.wallpaper_title": "更换壁纸",
+  "mcphone.gui.wallpaper_default": "恢复默认背景",
+  "mcphone.gui.wallpaper_empty": "暂无壁纸",
+  "mcphone.gui.wallpaper_hint1": "放入PNG到",
+  "mcphone.gui.wallpaper_hint2": "config/mcphone/",
+  "mcphone.gui.wallpaper_hint3": "wallpapers/",
+  "mcphone.gui.back": "◀",
+  "mcphone.gui.nav_back": "◁",
+  "mcphone.gui.nav_home": "○",
+  "mcphone.gui.nav_tasks": "□",
+  "mcphone.gui.no_settings": "暂无设置项"
+}

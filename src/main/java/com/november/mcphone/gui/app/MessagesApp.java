@@ -10,7 +10,7 @@ import net.minecraft.network.chat.Component;
 public final class MessagesApp extends PhoneApp {
 
     public MessagesApp() {
-        super("messages", "消息");
+        super("messages");
     }
 
     @Override

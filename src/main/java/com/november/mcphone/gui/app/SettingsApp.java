@@ -11,7 +11,7 @@ import com.november.mcphone.gui.PhoneScreen;
 public final class SettingsApp extends PhoneApp {
 
     public SettingsApp() {
-        super("settings", "设置");
+        super("settings");
     }
 
     @Override

@@ -8,7 +8,7 @@ package com.november.mcphone.gui.app;
 public final class MusicApp extends PhoneApp {
 
     public MusicApp() {
-        super("music", "音乐");
+        super("music");
     }
 
     @Override

@@ -1,34 +1,51 @@
 package com.november.mcphone.gui.app;
 
 import com.november.mcphone.api.IPhoneApp;
-import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.resources.ResourceLocation;
 import com.november.mcphone.MCphone;
+import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
 
 /**
  * 手机内建 App 基类 —— 实现 IPhoneApp 接口。
  *
  * 仅用于 MCphone 内建 App。附属模组开发者请直接实现
  * {@link com.november.mcphone.api.IPhoneApp} 接口。
+ *
+ * 每个内建 App 只需提供 id，名称自动从翻译键获取：
+ *   translation key: mcphone.app.<id>
+ *
+ * 翻译文件位置：
+ *   assets/mcphone/lang/en_us.json  — 英文
+ *   assets/mcphone/lang/zh_cn.json  — 中文
  */
 public abstract class PhoneApp implements IPhoneApp {
 
     private final String id;
-    private final String displayName;
 
-    protected PhoneApp(String id, String displayName) {
+    /**
+     * @param id App 唯一标识。名称从 mcphone.app.<id> 翻译键获取。
+     */
+    protected PhoneApp(String id) {
         this.id = id;
-        this.displayName = displayName;
     }
 
     @Override
-    public String getId() { return id; }
+    public final String getId() { return id; }
 
+    /**
+     * 从语言文件获取显示名称。
+     * 翻译键: mcphone.app.<id>
+     * 如 id="settings" → 查找 mcphone.app.settings
+     */
     @Override
-    public String getDisplayName() { return displayName; }
+    public Component getDisplayName() {
+        return Component.translatable("mcphone.app." + id);
+    }
 
     /**
      * 内建 App 图标路径: mcphone:textures/gui/app_icon_{id}.png
+     * 贴图放在: assets/mcphone/textures/gui/app_icon_{id}.png (20×20, PNG)
      */
     @Override
     public ResourceLocation getIconTexture() {
