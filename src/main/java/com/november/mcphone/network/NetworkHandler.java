@@ -1,32 +1,32 @@
 package com.november.mcphone.network;
 
 import com.november.mcphone.MCphone;
-import net.neoforged.bus.api.SubscribeEvent;
-import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 import net.neoforged.neoforge.network.registration.PayloadRegistrar;
 
 /**
  * 网络包处理 —— 注册并处理所有 MCphone 网络包。
+ *
+ * 注册入口：在 MCphone 构造函数中通过
+ * modEventBus.addListener(NetworkHandler::register) 挂载。
  */
-@EventBusSubscriber(modid = MCphone.MODID)
 public final class NetworkHandler {
 
     private NetworkHandler() {}
 
-    @SubscribeEvent
-    static void register(final RegisterPayloadHandlersEvent event) {
+    // ---- 由 MCphone 构造函数调用 ----
+    public static void register(final RegisterPayloadHandlersEvent event) {
         PayloadRegistrar registrar = event.registrar("1");
 
-        // ---- C2S: 客户端 → 服务端 —— 玩家选了壁纸 ----
+        // C2S: 玩家选了壁纸
         registrar.playToServer(
                 SetWallpaperPacket.TYPE,
                 SetWallpaperPacket.STREAM_CODEC,
                 NetworkHandler::handleSetWallpaper
         );
 
-        // ---- S2C: 服务端 → 客户端 —— 同步壁纸给玩家 ----
+        // S2C: 同步壁纸给玩家
         registrar.playToClient(
                 SyncWallpaperPacket.TYPE,
                 SyncWallpaperPacket.STREAM_CODEC,

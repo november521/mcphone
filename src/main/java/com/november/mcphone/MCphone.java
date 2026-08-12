@@ -36,6 +36,7 @@ public class MCphone {
         ITEMS.register(modEventBus);
         ModCreativeTabs.TABS.register(modEventBus);
         com.november.mcphone.network.WallpaperData.ATTACHMENT_TYPES.register(modEventBus);
+        modEventBus.addListener(com.november.mcphone.network.NetworkHandler::register);
         modContainer.registerConfig(ModConfig.Type.COMMON, Config.SPEC);
 
         LOGGER.info("MCphone 模组加载完成 —— 手机已就绪");
