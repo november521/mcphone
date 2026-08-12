@@ -117,7 +117,9 @@ public final class WallpaperStore {
                     int r = (argb >> 16) & 0xFF;
                     int g = (argb >> 8) & 0xFF;
                     int b = argb & 0xFF;
-                    nativeImage.setPixelRGBA(x, y, NativeImage.combine(a, b, g, r));
+                    // ABGR = (a << 24) | (b << 16) | (g << 8) | r
+                    int abgr = (a << 24) | (b << 16) | (g << 8) | r;
+                    nativeImage.setPixelRGBA(x, y, abgr);
                 }
             }
 

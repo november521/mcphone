@@ -107,6 +107,9 @@ public final class PhoneTheme {
     /** App 名称文字颜色 */
     public static final int FONT_COLOR_APP_NAME = 0xFFAAAAAA;
 
+    /** 主标题文字颜色 */
+    public static final int FONT_COLOR_TITLE = 0xFFFFFFFF;
+
     // ==================== 布局参数 ====================
 
     /** 状态栏高度 */
