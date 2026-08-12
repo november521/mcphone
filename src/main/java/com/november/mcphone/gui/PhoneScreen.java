@@ -401,7 +401,9 @@ public final class PhoneScreen extends Screen {
                     IPhoneApp app = PhoneScreenRegistry.getApp(hoveredAppIndex);
                     if (app != null) { app.onPress(); yield true; }
                 }
-                yield super.mouseClicked(mx, my, button);
+                // 点击手机屏幕外区域 → 关闭手机
+                onClose();
+                yield true;
             }
             case SETTINGS -> {
                 if (hoveredSettingIdx >= 0 && hoveredSettingIdx < settingItems.size()) {
