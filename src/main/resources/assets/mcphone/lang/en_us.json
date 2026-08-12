@@ -1,5 +1,8 @@
 {
   "itemGroup.mcphone": "MCphone",
+  "key.categories.mcphone": "MCphone",
+  "key.mcphone.camera_shutter": "Take Photo",
+  "key.mcphone.camera_exit": "Exit Camera",
   "item.mcphone.phone": "§6Phone",
   "mcphone.loaded": "MCphone mod loaded — phone is ready",
   "mcphone.client_loaded": "MCphone client loaded",

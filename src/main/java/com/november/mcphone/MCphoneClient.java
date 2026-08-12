@@ -1,8 +1,10 @@
 package com.november.mcphone;
 
+import com.november.mcphone.client.MCphoneKeyBindings;
 import com.november.mcphone.gui.PhoneScreenRegistry;
 import com.november.mcphone.gui.WallpaperStore;
 import net.minecraft.client.Minecraft;
+import net.neoforged.bus.api.IEventBus;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.ModContainer;
@@ -16,8 +18,11 @@ import net.neoforged.neoforge.client.gui.IConfigScreenFactory;
 @EventBusSubscriber(modid = MCphone.MODID, value = Dist.CLIENT)
 public class MCphoneClient {
 
-    public MCphoneClient(ModContainer container) {
+    public MCphoneClient(ModContainer container, IEventBus modEventBus) {
         container.registerExtensionPoint(IConfigScreenFactory.class, ConfigurationScreen::new);
+
+        // 按键注册是【模组总线】事件，显式挂载而不依赖注解自动路由
+        modEventBus.addListener(MCphoneKeyBindings::register);
     }
 
     @SubscribeEvent
