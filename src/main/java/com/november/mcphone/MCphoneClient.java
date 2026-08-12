@@ -1,6 +1,7 @@
 package com.november.mcphone;
 
 import com.november.mcphone.gui.PhoneScreenRegistry;
+import com.november.mcphone.gui.WallpaperStore;
 import net.minecraft.client.Minecraft;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
@@ -21,6 +22,9 @@ public class MCphoneClient {
 
     @SubscribeEvent
     static void onClientSetup(FMLClientSetupEvent event) {
+        // 扫描壁纸目录
+        WallpaperStore.scan();
+
         // 注册所有内建 App
         PhoneScreenRegistry.registerDefaultApps();
 

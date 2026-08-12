@@ -1,9 +1,11 @@
 package com.november.mcphone.gui;
 
+import com.november.mcphone.network.NetworkHandler;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
 
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
@@ -14,47 +16,36 @@ import java.time.format.DateTimeFormatter;
  * 玩家右键手机物品时打开此界面。
  * 界面渲染一个仿手机外观的屏幕，展示已注册的 App 图标网格。
  *
- * 【如何自定义界面样式】
- * 所有视觉参数集中在 {@link PhoneTheme} 中：
- * - 改颜色 → 修改 COLOR_* 常量
- * - 改大小 → 修改 PHONE_WIDTH / PHONE_HEIGHT / APP_ICON_SIZE 等
- * - 换贴图 → 在 assets/mcphone/textures/gui/ 下放置对应 PNG
- *
- * 【如何添加新 App】
- * 参考 {@link PhoneScreenRegistry#registerDefaultApps} 中的示例，
- * 调用 PhoneScreenRegistry.register(...) 即可。
- *
- * 【性能说明】
- * - App 列表只读，没有每帧 new 对象
- * - 鼠标悬停检测仅遍历可见 App（O(n), n≤16）
- * - 计时器用 System.currentTimeMillis()，避免每帧创建新对象
+ * 支持两个模式：
+ * - MAIN: 主屏幕 App 网格
+ * - WALLPAPER_PICKER: 壁纸选择界面
  */
 public final class PhoneScreen extends Screen {
+
+    private enum Mode { MAIN, WALLPAPER_PICKER }
 
     // ---- 时间格式化器（static final，复用） ----
     private static final DateTimeFormatter TIME_FORMATTER =
             DateTimeFormatter.ofPattern("HH:mm");
 
     // ---- 打开动画 ----
-    private final long openTimeMs;          // GUI 打开时刻
+    private final long openTimeMs;
     private boolean animationDone;
 
+    // ---- 当前模式 ----
+    private Mode mode = Mode.MAIN;
+    private final WallpaperPicker wallpaperPicker = new WallpaperPicker();
+
     // ---- 鼠标交互 ----
-    /** 当前鼠标悬停在哪个 App 索引上，-1 表示无 */
     private int hoveredAppIndex = -1;
 
-    // ---- 布局计算缓存（窗口大小改变时重新计算） ----
-    /** 手机屏幕区域左上角 X（内容区，不含边框） */
+    // ---- 布局计算缓存 ----
     private int phoneLeft;
-    /** 手机屏幕区域左上角 Y（内容区，不含边框） */
     private int phoneTop;
-    /** App 网格起始 X */
     private int gridStartX;
-    /** App 网格起始 Y */
     private int gridStartY;
     private boolean layoutDirty = true;
 
-    /** 当前帧时间（缓存在 render 开头，避免多次调用 System.currentTimeMillis） */
     private long nowMs;
 
     public PhoneScreen() {
@@ -63,29 +54,31 @@ public final class PhoneScreen extends Screen {
         this.animationDone = PhoneTheme.OPEN_ANIMATION_MS <= 0;
     }
 
+    /** 切换到壁纸选择模式 */
+    public void openWallpaperPicker() {
+        this.mode = Mode.WALLPAPER_PICKER;
+    }
+
+    /** 返回主屏幕 */
+    public void backToMain() {
+        this.mode = Mode.MAIN;
+    }
+
     // ============================================================
-    //  布局计算
+    //  布局
     // ============================================================
 
-    /**
-     * 一次性计算所有布局坐标，结果缓存到下次 invalidate 为止。
-     * 只在窗口大小改变时重新计算。
-     */
     private void computeLayout() {
         if (!layoutDirty) return;
 
         final int screenW = this.width;
         final int screenH = this.height;
-
-        // 手机总尺寸（含边框）
         final int phoneW = PhoneTheme.PHONE_TOTAL_WIDTH;
         final int phoneH = PhoneTheme.PHONE_TOTAL_HEIGHT;
 
-        // 居中放置
         this.phoneLeft = (screenW - phoneW) / 2 + PhoneTheme.PHONE_BORDER;
         this.phoneTop = (screenH - phoneH) / 2 + PhoneTheme.PHONE_BORDER + PhoneTheme.SCREEN_Y_OFFSET;
 
-        // App 网格起始坐标
         this.gridStartX = this.phoneLeft + PhoneTheme.APP_GRID_PADDING_LEFT;
         this.gridStartY = this.phoneTop + PhoneTheme.STATUS_BAR_HEIGHT + PhoneTheme.APP_GRID_PADDING_TOP;
 
@@ -116,39 +109,38 @@ public final class PhoneScreen extends Screen {
     public void render(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
         this.nowMs = System.currentTimeMillis();
 
-        // 预计算布局
         computeLayout();
 
-        // --- 背景遮罩 ---
+        // 背景遮罩
         renderBackground(guiGraphics, mouseX, mouseY, partialTick);
 
-        // --- 获取动画缩放系数 ---
         float scale = getAnimationScale();
 
-        // --- 渲染手机 ---
-        guiGraphics.pose().pushPose();
-
-        // 以手机屏幕中心为原点做缩放动画
+        // 缩放动画
         int phoneCenterX = this.phoneLeft + PhoneTheme.PHONE_WIDTH / 2;
         int phoneCenterY = this.phoneTop + PhoneTheme.PHONE_HEIGHT / 2;
 
+        guiGraphics.pose().pushPose();
         guiGraphics.pose().translate(phoneCenterX, phoneCenterY, 0);
         guiGraphics.pose().scale(scale, scale, 1.0f);
         guiGraphics.pose().translate(-phoneCenterX, -phoneCenterY, 0);
 
-        // 绘制手机边框
         renderPhoneFrame(guiGraphics);
-        // 绘制屏幕内容
         renderScreenContent(guiGraphics, mouseX, mouseY, partialTick);
-        // 绘制 App 网格
-        renderAppGrid(guiGraphics, mouseX, mouseY, partialTick);
-        // 绘制底部导航栏
+
+        if (mode == Mode.WALLPAPER_PICKER) {
+            renderWallpaperPicker(guiGraphics, mouseX, mouseY);
+        } else {
+            renderAppGrid(guiGraphics, mouseX, mouseY, partialTick);
+        }
+
         renderNavBar(guiGraphics);
 
         guiGraphics.pose().popPose();
 
-        // --- 更新 hover 状态 ---
-        updateHover(mouseX, mouseY);
+        if (mode == Mode.MAIN) {
+            updateHover(mouseX, mouseY);
+        }
     }
 
     // ============================================================
@@ -161,53 +153,68 @@ public final class PhoneScreen extends Screen {
         final int frameW = PhoneTheme.PHONE_TOTAL_WIDTH;
         final int frameH = PhoneTheme.PHONE_TOTAL_HEIGHT;
 
-        // 外壳主体
         g.fill(frameLeft, frameTop, frameLeft + frameW, frameTop + frameH,
                 PhoneTheme.COLOR_FRAME);
-
-        // 顶部高光条
         g.fill(frameLeft, frameTop, frameLeft + frameW, frameTop + 2,
                 PhoneTheme.COLOR_FRAME_HIGHLIGHT);
 
-        // 屏幕区域（纯色背景，贴图可选）
-        g.fill(this.phoneLeft, this.phoneTop,
-                this.phoneLeft + PhoneTheme.PHONE_WIDTH,
-                this.phoneTop + PhoneTheme.PHONE_HEIGHT,
-                PhoneTheme.COLOR_SCREEN_BG);
+        // ---- 壁纸或纯色背景 ----
+        String wallpaperName = NetworkHandler.WakeholderData.get();
+        ResourceLocation wallpaperTex = WallpaperStore.findTexture(wallpaperName);
+
+        if (wallpaperTex != null) {
+            // 用壁纸纹理填充屏幕
+            g.blit(wallpaperTex,
+                    this.phoneLeft, this.phoneTop,
+                    0, 0,
+                    PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
+                    PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT);
+        } else {
+            // 纯色背景
+            g.fill(this.phoneLeft, this.phoneTop,
+                    this.phoneLeft + PhoneTheme.PHONE_WIDTH,
+                    this.phoneTop + PhoneTheme.PHONE_HEIGHT,
+                    PhoneTheme.COLOR_SCREEN_BG);
+        }
     }
 
     // ============================================================
-    //  屏幕内容（状态栏）
+    //  状态栏
     // ============================================================
 
     private void renderScreenContent(GuiGraphics g, int mouseX, int mouseY, float pt) {
-        // 状态栏背景
+        // 状态栏半透明背景
         g.fill(this.phoneLeft, this.phoneTop,
                 this.phoneLeft + PhoneTheme.PHONE_WIDTH,
                 this.phoneTop + PhoneTheme.STATUS_BAR_HEIGHT,
-                PhoneTheme.COLOR_STATUS_BAR);
+                0x66000000);
 
-        // 状态栏时间（居中偏右）
         String timeStr = LocalTime.now().format(TIME_FORMATTER);
         int timeX = this.phoneLeft + PhoneTheme.PHONE_WIDTH - 6
                 - this.font.width(timeStr);
-        int timeY = this.phoneTop + 4;
-        g.drawString(this.font, timeStr, timeX, timeY, PhoneTheme.FONT_COLOR_STATUS, true);
+        g.drawString(this.font, timeStr, timeX, this.phoneTop + 1,
+                PhoneTheme.FONT_COLOR_STATUS, true);
 
-        // 左侧信号/电池占位符
-        g.drawString(this.font, "●●●●", this.phoneLeft + 4, this.phoneTop + 4,
+        g.drawString(this.font, "●●●●", this.phoneLeft + 4, this.phoneTop + 1,
                 0xFFFFFFFF, true);
+
+        // 壁纸模式下显示返回按钮
+        if (mode == Mode.WALLPAPER_PICKER) {
+            int backX = this.phoneLeft + 4;
+            int backY = this.phoneTop + 4 + PhoneTheme.STATUS_BAR_HEIGHT;
+            g.drawString(this.font, "◀ 返回",
+                    backX, backY + PhoneTheme.STATUS_BAR_HEIGHT, 0xFF88CCFF, true);
+        }
     }
 
     // ============================================================
-    //  App 图标网格
+    //  App 网格
     // ============================================================
 
     private void renderAppGrid(GuiGraphics g, int mouseX, int mouseY, float pt) {
         final var apps = PhoneScreenRegistry.getApps();
         final int iconSize = PhoneTheme.APP_ICON_SIZE;
         final int spaceX = PhoneTheme.APP_GRID_SPACING_X;
-        final int spaceY = PhoneTheme.APP_GRID_SPACING_Y;
         final int cols = PhoneTheme.APP_COLUMNS;
 
         final int cellW = iconSize + spaceX;
@@ -220,22 +227,20 @@ public final class PhoneScreen extends Screen {
             int iconX = this.gridStartX + col * cellW;
             int iconY = this.gridStartY + row * cellH;
 
-            // 如果图标区域超出屏幕，停止绘制
             if (iconY + iconSize > this.phoneTop + PhoneTheme.PHONE_HEIGHT - PhoneTheme.NAV_BAR_HEIGHT) {
                 break;
             }
 
-            // 绘制图标背景（按下/悬停高亮）
+            // 按下/悬停高亮
             if (i == this.hoveredAppIndex) {
                 g.fill(iconX - 2, iconY - 2, iconX + iconSize + 2, iconY + iconSize + 2,
                         PhoneTheme.COLOR_APP_PRESSED);
             }
 
-            // 绘制 App 图标
             AppEntry app = apps.get(i);
             app.renderIcon(g, iconX, iconY, iconSize, pt);
 
-            // 绘制 App 名称
+            // App 名称
             int nameW = this.font.width(app.getName());
             float nameScale = PhoneTheme.APP_NAME_SCALE;
             int nameX = iconX + (iconSize - (int)(nameW * nameScale)) / 2;
@@ -251,6 +256,18 @@ public final class PhoneScreen extends Screen {
     }
 
     // ============================================================
+    //  壁纸选择器
+    // ============================================================
+
+    private void renderWallpaperPicker(GuiGraphics g, int mouseX, int mouseY) {
+        wallpaperPicker.render(g,
+                this.phoneLeft, this.phoneTop,
+                PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
+                PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT,
+                mouseX, mouseY, this.font);
+    }
+
+    // ============================================================
     //  底部导航栏
     // ============================================================
 
@@ -261,7 +278,6 @@ public final class PhoneScreen extends Screen {
                 this.phoneTop + PhoneTheme.PHONE_HEIGHT,
                 PhoneTheme.COLOR_NAV_BAR);
 
-        // 三个导航按钮占位 (◁  ○  □)
         int navCenterY = navY + PhoneTheme.NAV_BAR_HEIGHT / 2 - this.font.lineHeight / 2;
         int thirdW = PhoneTheme.PHONE_WIDTH / 3;
         String[] btns = {"◁", "○", "□"};
@@ -276,7 +292,6 @@ public final class PhoneScreen extends Screen {
     //  动画
     // ============================================================
 
-    /** 返回 0.0~1.0 的缩放系数 */
     private float getAnimationScale() {
         if (animationDone) return 1.0f;
 
@@ -288,7 +303,6 @@ public final class PhoneScreen extends Screen {
             return 1.0f;
         }
 
-        // easeOutBack 缓动：从 0.6 缩放到 1.0
         float t = (float) elapsed / duration;
         float c1 = 1.70158f;
         float c3 = c1 + 1;
@@ -296,15 +310,10 @@ public final class PhoneScreen extends Screen {
     }
 
     // ============================================================
-    //  鼠标事件
+    //  鼠标
     // ============================================================
 
-    /**
-     * 根据鼠标坐标判断当前悬停的 App。
-     * 注意：这里需要反算缩放后的坐标。
-     */
     private void updateHover(int mouseX, int mouseY) {
-        // 反算缩放
         float scale = getAnimationScale();
         int phoneCenterX = this.phoneLeft + PhoneTheme.PHONE_WIDTH / 2;
         int phoneCenterY = this.phoneTop + PhoneTheme.PHONE_HEIGHT / 2;
@@ -337,7 +346,16 @@ public final class PhoneScreen extends Screen {
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        if (button == 0 && this.hoveredAppIndex >= 0) { // 左键
+        // 壁纸选择模式下转发给 picker
+        if (mode == Mode.WALLPAPER_PICKER) {
+            if (wallpaperPicker.mouseClicked(mouseX, mouseY, button)) {
+                backToMain();
+                return true;
+            }
+            return true;
+        }
+
+        if (button == 0 && this.hoveredAppIndex >= 0) {
             AppEntry app = PhoneScreenRegistry.getApp(this.hoveredAppIndex);
             if (app != null) {
                 app.onPress();
@@ -348,17 +366,25 @@ public final class PhoneScreen extends Screen {
     }
 
     // ============================================================
-    //  键盘事件
+    //  键盘
     // ============================================================
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        // E 键（打开背包的键）也关闭手机，方便玩家快速切回
-        if (minecraft != null && minecraft.options.keyInventory.matches(keyCode, scanCode)) {
-            this.onClose();
+        // 壁纸模式下 ESC 返回主屏幕
+        if (mode == Mode.WALLPAPER_PICKER && keyCode == 256) { // 256 = ESC
+            backToMain();
             return true;
         }
-        // ESC 关闭由父类 Screen 自动处理，无需额外覆盖
+
+        if (minecraft != null && minecraft.options.keyInventory.matches(keyCode, scanCode)) {
+            if (mode == Mode.WALLPAPER_PICKER) {
+                backToMain();
+            } else {
+                this.onClose();
+            }
+            return true;
+        }
         return super.keyPressed(keyCode, scanCode, modifiers);
     }
 
@@ -369,6 +395,6 @@ public final class PhoneScreen extends Screen {
 
     @Override
     public boolean isPauseScreen() {
-        return false; // 不暂停游戏（手机打开时游戏继续运行）
+        return false;
     }
 }

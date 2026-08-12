@@ -73,17 +73,31 @@ public final class PhoneScreenRegistry {
 
         // ---- 示例 App 1: 设置 ----
         register(new AppEntry.GenericApp(
-                "设置",
+                "壁纸",
                 (g, x, y, size, pt) -> {
-                    // 绘制一个简单的齿轮形图标（纯色方块占位）
+                    // 图像图标占位
                     int color = 0xFF607D8B;
                     int margin = 4;
                     g.fill(x + margin, y + margin, x + size - margin, y + size - margin, color);
-                    // 中心小圆点
                     int center = size / 2;
                     int dotSize = 4;
                     g.fill(x + center - dotSize, y + center - dotSize,
                             x + center + dotSize, y + center + dotSize, 0xFFFFFFFF);
+                },
+                () -> {
+                    // 打开壁纸选择器
+                    if (net.minecraft.client.Minecraft.getInstance().screen instanceof PhoneScreen ps) {
+                        ps.openWallpaperPicker();
+                    }
+                }
+        ));
+
+        register(new AppEntry.GenericApp(
+                "设置",
+                (g, x, y, size, pt) -> {
+                    int color = 0xFF78909C;
+                    int margin = 5;
+                    g.fill(x + margin, y + margin, x + size - margin, y + size - margin, color);
                 },
                 () -> {
                     // TODO: 后续阶段实现设置界面
