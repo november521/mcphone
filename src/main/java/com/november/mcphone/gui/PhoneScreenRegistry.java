@@ -1,69 +1,81 @@
 package com.november.mcphone.gui;
 
+import com.november.mcphone.api.IPhoneApp;
 import com.november.mcphone.gui.app.*;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
+import java.util.*;
 
 /**
  * 手机主屏幕 App 注册中心。
  *
- * 这里是添加/移除 App 的唯一入口。
- * 所有 App 必须继承 {@link com.november.mcphone.gui.app.PhoneApp}。
- *
- * 给手机添加新 App 的步骤：
- * <pre>
- * 1. 在 gui/app/ 包下新建类，继承 PhoneApp
- * 2. 实现 onPress() 方法
- * 3. 准备贴图: assets/mcphone/textures/gui/app_icon_{id}.png (20×20)
- * 4. 在 registerDefaultApps() 中 register(new YourApp())
- * </pre>
+ * App 来源有三：
+ * 1. 内建 App —— registerDefaultApps() 硬编码注册
+ * 2. 附属模组 —— SPI 通过 META-INF/services 自动发现
+ * 3. 运行时 —— 其他模组代码调用 register()
  */
 public final class PhoneScreenRegistry {
 
-    private static final List<PhoneApp> APPS = new ArrayList<>();
+    private static final List<IPhoneApp> APPS = new ArrayList<>();
+    private static boolean loaded = false;
 
     private PhoneScreenRegistry() {}
 
-    /** 注册一个 App */
-    public static void register(PhoneApp app) {
-        if (app == null) throw new IllegalArgumentException("PhoneApp 不能为 null");
+    // ================================================================
+    //  注册
+    // ================================================================
+
+    /** 注册一个 App（任何模组可在任意时刻调用） */
+    public static void register(IPhoneApp app) {
+        if (app == null) throw new IllegalArgumentException("IPhoneApp 不能为 null");
         APPS.add(app);
     }
 
-    /** 获取所有已注册 App 的只读列表 */
-    public static List<PhoneApp> getApps() {
+    // ================================================================
+    //  查询
+    // ================================================================
+
+    public static List<IPhoneApp> getApps() {
+        ensureLoaded();
         return Collections.unmodifiableList(APPS);
     }
 
-    /** 获取当前 App 数量 */
-    public static int getAppCount() {
-        return APPS.size();
-    }
+    public static int getAppCount() { ensureLoaded(); return APPS.size(); }
 
-    /** 获取指定位置的 App，越界返回 null */
-    public static PhoneApp getApp(int index) {
+    public static IPhoneApp getApp(int index) {
+        ensureLoaded();
         return (index >= 0 && index < APPS.size()) ? APPS.get(index) : null;
     }
 
     // ================================================================
-    //  默认 App 注册 —— 一行一个 App，干净清晰
+    //  延迟加载（客户端初始化时调用）
     // ================================================================
 
-    /**
-     * 注册所有内建 App。在客户端初始化阶段调用一次。
-     *
-     * 要开发新 App，就新加一行 register(new XxxApp())。
-     */
-    public static void registerDefaultApps() {
-        if (!APPS.isEmpty()) return;
+    private static void ensureLoaded() {
+        if (loaded) return;
+        loaded = true;
 
+        // 第一层: 内建 App
+        registerBuiltinApps();
+
+        // 第二层: SPI 自动发现附属模组 App
+        registerSpiApps();
+    }
+
+    private static void registerBuiltinApps() {
         register(new SettingsApp());
         register(new MessagesApp());
         register(new ContactsApp());
         register(new CameraApp());
         register(new GalleryApp());
         register(new MusicApp());
+    }
+
+    /** 通过 Java SPI 扫描所有 IPhoneApp 实现（包括附属模组） */
+    private static void registerSpiApps() {
+        for (IPhoneApp app : ServiceLoader.load(IPhoneApp.class)) {
+            register(app);
+            MCphone.LOGGER.info("[MCphone] SPI 加载 App: {} ({})",
+                    app.getDisplayName(), app.getClass().getName());
+        }
     }
 }

@@ -25,8 +25,8 @@ public class MCphoneClient {
         // 扫描壁纸目录
         WallpaperStore.scan();
 
-        // 注册所有内建 App
-        PhoneScreenRegistry.registerDefaultApps();
+        // 触发 PhoneScreenRegistry 延迟加载（内建 + SPI）
+        PhoneScreenRegistry.getAppCount();
 
         MCphone.LOGGER.info("MCphone 客户端加载完成");
         MCphone.LOGGER.info("玩家: {}", Minecraft.getInstance().getUser().getName());
