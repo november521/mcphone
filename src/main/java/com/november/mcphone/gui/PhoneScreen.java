@@ -24,7 +24,7 @@ import java.util.List;
 public final class PhoneScreen extends Screen {
 
     /** 手机导航模式 */
-    public enum Mode { MAIN, SETTINGS, WALLPAPER_PICKER }
+    public enum Mode { MAIN, SETTINGS, WALLPAPER_PICKER, APP_MANAGER }
 
     private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
 
@@ -40,6 +40,10 @@ public final class PhoneScreen extends Screen {
     private static final record SettingItem(String label, Runnable action) {}
     private final List<SettingItem> settingItems = new ArrayList<>();
     private int hoveredSettingIdx = -1;
+
+    // ---- App 管理器 ----
+    private final List<IPhoneApp> appManagerApps = new ArrayList<>();
+    private int appManagerHover = -1;
 
     // ---- 主屏幕 hover ----
     private int hoveredAppIndex = -1;
@@ -67,7 +71,7 @@ public final class PhoneScreen extends Screen {
 
     public void back() {
         mode = switch (mode) {
-            case SETTINGS, WALLPAPER_PICKER -> Mode.MAIN;
+            case SETTINGS, WALLPAPER_PICKER, APP_MANAGER -> Mode.MAIN;
             default -> Mode.MAIN;
         };
     }
@@ -122,16 +126,18 @@ public final class PhoneScreen extends Screen {
         renderStatusBar(g);
 
         switch (mode) {
-            case MAIN            -> renderAppGrid(g);
-            case SETTINGS        -> renderSettingsList(g, mouseX, mouseY);
-            case WALLPAPER_PICKER -> renderWallpaperPicker(g, mouseX, mouseY);
+            case MAIN              -> renderAppGrid(g);
+            case SETTINGS          -> renderSettingsList(g, mouseX, mouseY);
+            case WALLPAPER_PICKER  -> renderWallpaperPicker(g, mouseX, mouseY);
+            case APP_MANAGER       -> renderAppManager(g, mouseX, mouseY);
         }
 
         renderNavBar(g);
         g.pose().popPose();
 
-        if (mode == Mode.MAIN)       updateAppHover(mouseX, mouseY);
-        if (mode == Mode.SETTINGS)   updateSettingsHover(mouseX, mouseY);
+        if (mode == Mode.MAIN)           updateAppHover(mouseX, mouseY);
+        if (mode == Mode.SETTINGS)       updateSettingsHover(mouseX, mouseY);
+        if (mode == Mode.APP_MANAGER)    updateAppManagerHover(mouseX, mouseY);
     }
 
     // ============================================================
@@ -194,7 +200,8 @@ public final class PhoneScreen extends Screen {
 
         // 非主界面显示返回箭头
         if (mode != Mode.MAIN) {
-            g.drawString(font, "◀", phoneLeft + PhoneTheme.PHONE_WIDTH / 2 - 3,
+            String back = Component.translatable("mcphone.gui.back").getString();
+            g.drawString(font, back + " 返回", phoneLeft + PhoneTheme.PHONE_WIDTH / 2 - 12,
                     phoneTop + 1, 0xFF88CCFF, true);
         }
     }
@@ -251,6 +258,9 @@ public final class PhoneScreen extends Screen {
                 Component.translatable("mcphone.gui.wallpaper").getString(),
                 () -> navigateTo(Mode.WALLPAPER_PICKER)));
         settingItems.add(new SettingItem(
+                Component.translatable("mcphone.app.app_manager").getString(),
+                () -> navigateTo(Mode.APP_MANAGER)));
+        settingItems.add(new SettingItem(
                 Component.translatable("mcphone.gui.about").getString(),
                 () -> {
             if (minecraft != null && minecraft.player != null) {
@@ -301,6 +311,68 @@ public final class PhoneScreen extends Screen {
         if (settingItems.isEmpty()) {
             String noItems = Component.translatable("mcphone.gui.no_settings").getString();
             g.drawString(font, noItems, x, y, 0xFF888888, false);
+        }
+    }
+
+    // ============================================================
+    //  App 管理器
+    // ============================================================
+
+    private void renderAppManager(GuiGraphics g, int mx, int my) {
+        // 刷新可卸载的App列表
+        appManagerApps.clear();
+        for (IPhoneApp a : PhoneScreenRegistry.getApps()) {
+            if (!a.isSystemApp()) appManagerApps.add(a);
+        }
+
+        int y = phoneTop + PhoneTheme.STATUS_BAR_HEIGHT + 4;
+        int x = phoneLeft + 6;
+        int w = PhoneTheme.PHONE_WIDTH - 12;
+        int bottom = phoneTop + PhoneTheme.PHONE_HEIGHT - PhoneTheme.NAV_BAR_HEIGHT;
+
+        String title = Component.translatable("mcphone.app.app_manager").getString();
+        g.drawString(font, title, x, y, PhoneTheme.FONT_COLOR_TITLE, true);
+        y += font.lineHeight + 4;
+
+        g.fill(x, y, x + w, y + 1, 0x44FFFFFF);
+        y += 4;
+
+        if (appManagerApps.isEmpty()) {
+            g.drawString(font, "没有可卸载的第三方App", x, y, 0xFF888888, false);
+            return;
+        }
+
+        for (int i = 0; i < appManagerApps.size(); i++) {
+            if (y + font.lineHeight + 6 > bottom) break;
+            IPhoneApp app = appManagerApps.get(i);
+            int rowH = font.lineHeight + 4;
+
+            if (i == appManagerHover) {
+                g.fill(x, y, x + w, y + rowH, 0x44FF4444);
+            }
+
+            g.drawString(font, app.getDisplayName().getString(), x + 2, y + 2, 0xFFCCCCCC, false);
+            String uninstall = "✕ 卸载";
+            int ux = x + w - font.width(uninstall) - 4;
+            g.drawString(font, uninstall, ux, y + 2, 0xFFFF6666, false);
+
+            y += rowH + 2;
+        }
+    }
+
+    private void updateAppManagerHover(int mx, int my) {
+        int y = phoneTop + PhoneTheme.STATUS_BAR_HEIGHT + 4 + font.lineHeight + 4 + 4;
+        int x = phoneLeft + 6;
+        int w = PhoneTheme.PHONE_WIDTH - 12;
+
+        appManagerHover = -1;
+        for (int i = 0; i < appManagerApps.size(); i++) {
+            int rowH = font.lineHeight + 4;
+            if (mx >= x && mx <= x + w && my >= y && my <= y + rowH) {
+                appManagerHover = i;
+                return;
+            }
+            y += rowH + 2;
         }
     }
 
@@ -419,8 +491,14 @@ public final class PhoneScreen extends Screen {
             }
             case WALLPAPER_PICKER -> {
                 if (wallpaperPicker.mouseClicked(button)) {
-                    // 选完壁纸返回设置列表
                     navigateTo(Mode.SETTINGS);
+                }
+                yield true;
+            }
+            case APP_MANAGER -> {
+                if (appManagerHover >= 0 && appManagerHover < appManagerApps.size()) {
+                    PhoneScreenRegistry.uninstall(appManagerApps.get(appManagerHover).getId());
+                    yield true;
                 }
                 yield true;
             }
