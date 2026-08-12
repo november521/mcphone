@@ -12,10 +12,10 @@ import java.util.*;
  * 开放环境设计
  * ================================================================
  *
- * App 来源：
- * 1. 内建系统App（不可卸载）  — registerBuiltinApps()
- * 2. SPI 自动发现              — ServiceLoader 扫描所有模组
- * 3. 运行时动态注册            — 任何代码调用 install()
+ * App 来源（统一走 SPI）：
+ * 1. MCphone 内建 App   — 注册在 META-INF/services/...IPhoneApp
+ * 2. 附属模组 App        — 同样注册在 META-INF/services/...IPhoneApp
+ * 3. 运行时动态注册      — 调用 install()
  *
  * 支持的操作：
  * - install(IPhoneApp)        安装一个 App
@@ -120,36 +120,20 @@ public final class PhoneScreenRegistry {
     }
 
     // ================================================================
-    //  延迟初始化
+    //  延迟初始化（SPI 统一扫描）
     // ================================================================
 
     private static void ensureLoaded() {
         if (loaded) return;
         loaded = true;
 
-        // 第一层: 内建系统 App
-        registerBuiltinApps();
-
-        // 第二层: SPI 自动发现第三方 App
-        registerSpiApps();
-    }
-
-    private static void registerBuiltinApps() {
-        for (IPhoneApp app : new IPhoneApp[]{
-                new com.november.mcphone.gui.app.SettingsApp(),
-                new com.november.mcphone.gui.app.MessagesApp(),
-                new com.november.mcphone.gui.app.ContactsApp(),
-                new com.november.mcphone.gui.app.CameraApp(),
-                new com.november.mcphone.gui.app.GalleryApp(),
-                new com.november.mcphone.gui.app.MusicApp()
-        }) {
-            install(app);
-        }
-    }
-
-    private static void registerSpiApps() {
+        // 所有 App 均通过 SPI 发现，包括内建 App
+        // ServiceLoader 会扫描所有已加载 jar 包中的
+        // META-INF/services/com.november.mcphone.api.IPhoneApp
+        int count = 0;
         for (IPhoneApp app : ServiceLoader.load(IPhoneApp.class)) {
-            install(app);
+            if (install(app)) count++;
         }
+        MCphone.LOGGER.info("[MCphone] SPI 扫描完成，共加载 {} 个 App", count);
     }
 }
