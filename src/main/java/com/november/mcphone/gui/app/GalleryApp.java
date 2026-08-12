@@ -1,7 +1,16 @@
 package com.november.mcphone.gui.app;
 
+import com.november.mcphone.gui.PhoneScreen;
+import net.minecraft.client.Minecraft;
+
 /**
- * 相册 App —— 目前为占位，待后续实现图片浏览功能。
+ * 相册 App —— 浏览 <游戏目录>/screenshots/ 下的照片。
+ *
+ * 相机 App 拍的照片与 F2 随手截的图都在同一目录、格式命名一致，
+ * 相册不作区分，一律按时间倒序展示。
+ *
+ * 界面见 {@link com.november.mcphone.gui.Gallery}，
+ * 扫描与缩略图缓存见 {@link com.november.mcphone.gui.PhotoLibrary}。
  *
  * 贴图: assets/mcphone/textures/gui/app_icon_gallery.png (20×20)
  */
@@ -17,6 +26,10 @@ public final class GalleryApp extends PhoneApp {
 
     @Override
     public void onPress() {
-        // TODO: 后续实现相册功能
+        // 与音乐、商店一致：相册是手机内的一个模式，不另开 Screen。
+        // navigateTo 进入时会重扫目录，刚拍的照片立刻可见
+        if (Minecraft.getInstance().screen instanceof PhoneScreen ps) {
+            ps.navigateTo(PhoneScreen.Mode.GALLERY);
+        }
     }
 }
