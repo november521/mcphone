@@ -322,12 +322,17 @@ public final class PhoneScreen extends Screen {
     //  App 管理器
     // ============================================================
 
-    private void renderAppManager(GuiGraphics g, int mx, int my) {
-        // 刷新可卸载的App列表
+    /**
+     * 重建 App 管理器列表：列出全部已安装 App。
+     * 系统 App 也在列表内，渲染时标灰且不响应点击。
+     */
+    private void refreshAppManagerList() {
         appManagerApps.clear();
-        for (IPhoneApp a : PhoneScreenRegistry.getApps()) {
-            if (!a.isSystemApp()) appManagerApps.add(a);
-        }
+        appManagerApps.addAll(PhoneScreenRegistry.getApps());
+    }
+
+    private void renderAppManager(GuiGraphics g, int mx, int my) {
+        refreshAppManagerList();
 
         int y = phoneTop + PhoneTheme.STATUS_BAR_HEIGHT + 4;
         int x = phoneLeft + 6;
@@ -342,23 +347,31 @@ public final class PhoneScreen extends Screen {
         y += 4;
 
         if (appManagerApps.isEmpty()) {
-            g.drawString(font, "没有可卸载的第三方App", x, y, 0xFF888888, false);
+            g.drawString(font, Component.translatable("mcphone.gui.app_manager_empty").getString(),
+                    x, y, 0xFF888888, false);
             return;
         }
+
+        final String uninstall = Component.translatable("mcphone.gui.uninstall").getString();
+        final String systemTag = Component.translatable("mcphone.gui.system_app").getString();
 
         for (int i = 0; i < appManagerApps.size(); i++) {
             if (y + font.lineHeight + 6 > bottom) break;
             IPhoneApp app = appManagerApps.get(i);
             int rowH = font.lineHeight + 4;
+            boolean system = app.isSystemApp();
 
-            if (i == appManagerHover) {
+            // 系统 App 不可卸载，不画 hover 高亮
+            if (i == appManagerHover && !system) {
                 g.fill(x, y, x + w, y + rowH, 0x44FF4444);
             }
 
-            g.drawString(font, app.getDisplayName().getString(), x + 2, y + 2, 0xFFCCCCCC, false);
-            String uninstall = "✕ 卸载";
-            int ux = x + w - font.width(uninstall) - 4;
-            g.drawString(font, uninstall, ux, y + 2, 0xFFFF6666, false);
+            g.drawString(font, app.getDisplayName().getString(), x + 2, y + 2,
+                    system ? 0xFF666666 : 0xFFCCCCCC, false);
+
+            String tag = system ? systemTag : uninstall;
+            int tx = x + w - font.width(tag) - 4;
+            g.drawString(font, tag, tx, y + 2, system ? 0xFF666666 : 0xFFFF6666, false);
 
             y += rowH + 2;
         }
@@ -372,7 +385,9 @@ public final class PhoneScreen extends Screen {
         appManagerHover = -1;
         for (int i = 0; i < appManagerApps.size(); i++) {
             int rowH = font.lineHeight + 4;
-            if (mx >= x && mx <= x + w && my >= y && my <= y + rowH) {
+            // 系统 App 行不可选中；但 y 仍需累加，否则后续行的命中区会整体错位
+            if (!appManagerApps.get(i).isSystemApp()
+                    && mx >= x && mx <= x + w && my >= y && my <= y + rowH) {
                 appManagerHover = i;
                 return;
             }
@@ -545,12 +560,12 @@ public final class PhoneScreen extends Screen {
             case APP_MANAGER -> {
                 if (appManagerHover >= 0 && appManagerHover < appManagerApps.size()) {
                     IPhoneApp toUninstall = appManagerApps.get(appManagerHover);
-                    PhoneScreenRegistry.uninstall(toUninstall.getId());
-                    appManagerApps.clear();
-                    for (IPhoneApp a : PhoneScreenRegistry.getApps()) {
-                        if (!a.isSystemApp()) appManagerApps.add(a);
+                    if (!toUninstall.isSystemApp()) {
+                        PhoneScreenRegistry.uninstall(toUninstall.getId());
+                        refreshAppManagerList();
+                        // 重置 hover：卸载后该索引会指向顶上来的另一个 App
+                        appManagerHover = -1;
                     }
-                    yield true;
                 }
                 yield true;
             }
