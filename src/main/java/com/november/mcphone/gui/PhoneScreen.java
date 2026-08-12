@@ -24,7 +24,7 @@ import java.util.List;
 public final class PhoneScreen extends Screen {
 
     /** 手机导航模式 */
-    public enum Mode { MAIN, SETTINGS, WALLPAPER_PICKER, APP_MANAGER }
+    public enum Mode { MAIN, SETTINGS, WALLPAPER_PICKER, APP_MANAGER, MUSIC_PLAYER }
 
     private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
 
@@ -44,6 +44,9 @@ public final class PhoneScreen extends Screen {
     // ---- App 管理器 ----
     private final List<IPhoneApp> appManagerApps = new ArrayList<>();
     private int appManagerHover = -1;
+
+    // ---- 音乐播放器 ----
+    private final MusicPlayer musicPlayer = new MusicPlayer();
 
     // ---- 主屏幕 hover ----
     private int hoveredAppIndex = -1;
@@ -71,7 +74,7 @@ public final class PhoneScreen extends Screen {
 
     public void back() {
         mode = switch (mode) {
-            case SETTINGS, WALLPAPER_PICKER, APP_MANAGER -> Mode.MAIN;
+            case SETTINGS, WALLPAPER_PICKER, APP_MANAGER, MUSIC_PLAYER -> Mode.MAIN;
             default -> Mode.MAIN;
         };
     }
@@ -130,6 +133,7 @@ public final class PhoneScreen extends Screen {
             case SETTINGS          -> renderSettingsList(g, mouseX, mouseY);
             case WALLPAPER_PICKER  -> renderWallpaperPicker(g, mouseX, mouseY);
             case APP_MANAGER       -> renderAppManager(g, mouseX, mouseY);
+            case MUSIC_PLAYER      -> renderMusicPlayer(g, mouseX, mouseY);
         }
 
         renderNavBar(g);
@@ -388,6 +392,17 @@ public final class PhoneScreen extends Screen {
     }
 
     // ============================================================
+    //  音乐播放器
+    // ============================================================
+
+    private void renderMusicPlayer(GuiGraphics g, int mx, int my) {
+        musicPlayer.render(g, phoneLeft, phoneTop,
+                PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
+                PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT,
+                mx, my, font);
+    }
+
+    // ============================================================
     //  底部导航栏
     // ============================================================
 
@@ -499,13 +514,16 @@ public final class PhoneScreen extends Screen {
                 if (appManagerHover >= 0 && appManagerHover < appManagerApps.size()) {
                     IPhoneApp toUninstall = appManagerApps.get(appManagerHover);
                     PhoneScreenRegistry.uninstall(toUninstall.getId());
-                    // 立刻刷新 appManagerApps，否则列表中还保留已卸载的 App
                     appManagerApps.clear();
                     for (IPhoneApp a : PhoneScreenRegistry.getApps()) {
                         if (!a.isSystemApp()) appManagerApps.add(a);
                     }
                     yield true;
                 }
+                yield true;
+            }
+            case MUSIC_PLAYER -> {
+                if (musicPlayer.mouseClicked(mx, my, button)) yield true;
                 yield true;
             }
         };
