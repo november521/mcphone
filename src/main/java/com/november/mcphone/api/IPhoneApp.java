@@ -109,6 +109,16 @@ public interface IPhoneApp {
     /** 系统 App 不可被玩家卸载（如"设置"）。默认 false。 */
     default boolean isSystemApp() { return false; }
 
+    /**
+     * 是否预装。决定该 App 首次被发现时的初始安装状态：
+     *
+     *   true  —— 直接出现在手机主屏（默认，与旧行为一致）
+     *   false —— 不自动安装，出现在应用商店中等待玩家下载
+     *
+     * 只在该 App 首次进入目录时生效；此后以玩家的安装/卸载选择为准。
+     */
+    default boolean isPreinstalled() { return true; }
+
     /** App 版本号。默认 "1.0.0" */
     default String getVersion() { return "1.0.0"; }
 
