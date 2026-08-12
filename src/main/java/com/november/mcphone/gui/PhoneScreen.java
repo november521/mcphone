@@ -436,6 +436,38 @@ public final class PhoneScreen extends Screen {
     }
 
     // ============================================================
+    //  坐标换算
+    // ============================================================
+
+    /**
+     * 把屏幕坐标逆变换回未缩放的手机局部坐标。
+     * render() 在开场动画期间以手机中心为原点做了缩放，
+     * 因此命中判定必须应用同样的逆变换，否则动画期间点击位置会偏。
+     */
+    private double toLocalX(double mx) {
+        int cx = phoneLeft + PhoneTheme.PHONE_WIDTH / 2;
+        return (mx - cx) / getAnimationScale() + cx;
+    }
+
+    private double toLocalY(double my) {
+        int cy = phoneTop + PhoneTheme.PHONE_HEIGHT / 2;
+        return (my - cy) / getAnimationScale() + cy;
+    }
+
+    /**
+     * 点击是否落在手机机身（含边框）内。
+     * 矩形与 renderPhoneFrame() 绘制边框所用坐标一致，保证判定与视觉对齐。
+     */
+    private boolean isInsidePhone(double mx, double my) {
+        double lx = toLocalX(mx);
+        double ly = toLocalY(my);
+        int fl = phoneLeft - PhoneTheme.PHONE_BORDER;
+        int ft = phoneTop - PhoneTheme.PHONE_BORDER;
+        return lx >= fl && lx < fl + PhoneTheme.PHONE_TOTAL_WIDTH
+            && ly >= ft && ly < ft + PhoneTheme.PHONE_TOTAL_HEIGHT;
+    }
+
+    // ============================================================
     //  鼠标 hover
     // ============================================================
 
@@ -493,8 +525,8 @@ public final class PhoneScreen extends Screen {
                     IPhoneApp app = PhoneScreenRegistry.getApp(hoveredAppIndex);
                     if (app != null) { app.onPress(); yield true; }
                 }
-                // 点击手机屏幕外区域 → 关闭手机
-                onClose();
+                // 只有点在手机机身外才关闭；机身内的空白处不响应
+                if (!isInsidePhone(mx, my)) onClose();
                 yield true;
             }
             case SETTINGS -> {
