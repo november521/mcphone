@@ -37,6 +37,9 @@ public abstract class PhoneApp implements IPhoneApp {
     }
 
     @Override
+    public boolean isSystemApp() { return true; }
+
+    @Override
     public void renderIcon(GuiGraphics g, int x, int y, int size, float partialTick) {
         ResourceLocation tex = getIconTexture();
         if (tex != null) {
