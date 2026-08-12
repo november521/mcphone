@@ -1,4 +1,5 @@
 com.november.mcphone.gui.app.SettingsApp
+com.november.mcphone.gui.app.AppStoreApp
 com.november.mcphone.gui.app.MessagesApp
 com.november.mcphone.gui.app.ContactsApp
 com.november.mcphone.gui.app.CameraApp

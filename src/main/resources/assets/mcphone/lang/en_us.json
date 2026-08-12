@@ -22,6 +22,10 @@
   "mcphone.gui.uninstall": "✕ Uninstall",
   "mcphone.gui.system_app": "[System]",
   "mcphone.store.source.local": "On this device",
+  "mcphone.store.empty": "No apps available",
+  "mcphone.store.install": "↓ Install",
+  "mcphone.store.installed": "Installed %s",
+  "mcphone.store.error.no_source": "Source unavailable: %s",
   "mcphone.store.error.not_found": "App not found: %s",
   "mcphone.store.error.install_failed": "Install failed: %s",
   "mcphone.app.settings": "Settings",
@@ -31,6 +35,7 @@
   "mcphone.app.gallery": "Gallery",
   "mcphone.app.music": "Music",
   "mcphone.app.app_manager": "App Manager",
+  "mcphone.app.app_store": "App Store",
   "mcphone.item.tooltip.open": "§7Right-click to open phone",
   "mcphone.item.tooltip.version": "§8MCphone v1.0.0"
 }

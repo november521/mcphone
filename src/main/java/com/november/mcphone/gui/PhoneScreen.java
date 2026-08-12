@@ -24,7 +24,7 @@ import java.util.List;
 public final class PhoneScreen extends Screen {
 
     /** 手机导航模式 */
-    public enum Mode { MAIN, SETTINGS, WALLPAPER_PICKER, APP_MANAGER, MUSIC_PLAYER }
+    public enum Mode { MAIN, SETTINGS, WALLPAPER_PICKER, APP_MANAGER, MUSIC_PLAYER, APP_STORE }
 
     private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
 
@@ -48,6 +48,9 @@ public final class PhoneScreen extends Screen {
     // ---- 音乐播放器 ----
     private final MusicPlayer musicPlayer = new MusicPlayer();
 
+    // ---- 应用商店 ----
+    private final AppStore appStore = new AppStore();
+
     // ---- 主屏幕 hover ----
     private int hoveredAppIndex = -1;
 
@@ -68,15 +71,14 @@ public final class PhoneScreen extends Screen {
     // ============================================================
 
     public void navigateTo(Mode target) {
+        // 离开商店时清掉上次的列表与提示，下次进入重新拉取
+        if (this.mode == Mode.APP_STORE && target != Mode.APP_STORE) appStore.reset();
         this.mode = target;
         this.hoveredSettingIdx = -1;
     }
 
     public void back() {
-        mode = switch (mode) {
-            case SETTINGS, WALLPAPER_PICKER, APP_MANAGER, MUSIC_PLAYER -> Mode.MAIN;
-            default -> Mode.MAIN;
-        };
+        navigateTo(Mode.MAIN);
     }
 
     // ============================================================
@@ -134,6 +136,7 @@ public final class PhoneScreen extends Screen {
             case WALLPAPER_PICKER  -> renderWallpaperPicker(g, mouseX, mouseY);
             case APP_MANAGER       -> renderAppManager(g, mouseX, mouseY);
             case MUSIC_PLAYER      -> renderMusicPlayer(g, mouseX, mouseY);
+            case APP_STORE         -> renderAppStore(g, mouseX, mouseY);
         }
 
         renderNavBar(g);
@@ -418,6 +421,17 @@ public final class PhoneScreen extends Screen {
     }
 
     // ============================================================
+    //  应用商店
+    // ============================================================
+
+    private void renderAppStore(GuiGraphics g, int mx, int my) {
+        appStore.render(g, phoneLeft, phoneTop,
+                PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
+                PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT,
+                mx, my, font);
+    }
+
+    // ============================================================
     //  底部导航栏
     // ============================================================
 
@@ -571,6 +585,10 @@ public final class PhoneScreen extends Screen {
             }
             case MUSIC_PLAYER -> {
                 if (musicPlayer.mouseClicked(mx, my, button)) yield true;
+                yield true;
+            }
+            case APP_STORE -> {
+                appStore.mouseClicked(mx, my, button);
                 yield true;
             }
         };
