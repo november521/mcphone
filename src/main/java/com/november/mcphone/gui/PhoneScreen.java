@@ -7,6 +7,7 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.InteractionHand;
 
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
@@ -24,7 +25,7 @@ import java.util.List;
 public final class PhoneScreen extends Screen {
 
     /** 手机导航模式 */
-    public enum Mode { MAIN, SETTINGS, WALLPAPER_PICKER, APP_MANAGER, MUSIC_PLAYER, APP_STORE, GALLERY }
+    public enum Mode { MAIN, SETTINGS, WALLPAPER_PICKER, APP_MANAGER, MUSIC_PLAYER, APP_STORE, GALLERY, DEVICE_NAME }
 
     private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
 
@@ -37,7 +38,15 @@ public final class PhoneScreen extends Screen {
     private final WallpaperPicker wallpaperPicker = new WallpaperPicker();
 
     // ---- 设置列表项 ----
-    private static final record SettingItem(String label, Runnable action) {}
+    /**
+     * @param value 右侧显示的当前值，null 表示画 ">" 箭头。
+     *              用 Supplier 而非定值：列表只构建一次，
+     *              而设备名是会变的，每帧现取才不会显示过期的名字。
+     */
+    private static final record SettingItem(String label, Runnable action,
+                                            java.util.function.Supplier<String> value) {
+        SettingItem(String label, Runnable action) { this(label, action, null); }
+    }
     private final List<SettingItem> settingItems = new ArrayList<>();
     private int hoveredSettingIdx = -1;
 
@@ -54,6 +63,15 @@ public final class PhoneScreen extends Screen {
     // ---- 相册 ----
     private final Gallery gallery = new Gallery();
 
+    // ---- 设备名称 ----
+    private final DeviceNameEditor deviceNameEditor = new DeviceNameEditor();
+
+    /**
+     * 手机在玩家哪只手上。
+     * 设备名要写回这只手上的物品堆——玩家两只手各拿一只手机时不能改错。
+     */
+    private final InteractionHand hand;
+
     // ---- 主屏幕 hover ----
     private int hoveredAppIndex = -1;
 
@@ -64,7 +82,12 @@ public final class PhoneScreen extends Screen {
     private long nowMs;
 
     public PhoneScreen() {
+        this(InteractionHand.MAIN_HAND);
+    }
+
+    public PhoneScreen(InteractionHand hand) {
         super(Component.translatable("mcphone.gui.home"));
+        this.hand = hand;
         this.openTimeMs = System.currentTimeMillis();
         this.animationDone = PhoneTheme.OPEN_ANIMATION_MS <= 0;
     }
@@ -82,6 +105,10 @@ public final class PhoneScreen extends Screen {
         // 相册进出都要动作：进入时重扫目录，离开时释放缩略图贴图
         if (this.mode == Mode.GALLERY) gallery.close();
         if (target == Mode.GALLERY) gallery.open();
+
+        // 进入命名界面时把当前设备名填进输入框
+        if (this.mode == Mode.DEVICE_NAME) deviceNameEditor.close();
+        if (target == Mode.DEVICE_NAME) deviceNameEditor.open(hand);
 
         this.mode = target;
         this.hoveredSettingIdx = -1;
@@ -148,6 +175,7 @@ public final class PhoneScreen extends Screen {
             case MUSIC_PLAYER      -> renderMusicPlayer(g, mouseX, mouseY);
             case APP_STORE         -> renderAppStore(g, mouseX, mouseY);
             case GALLERY           -> renderGallery(g, mouseX, mouseY);
+            case DEVICE_NAME       -> renderDeviceName(g, mouseX, mouseY, partialTick);
         }
 
         renderNavBar(g);
@@ -280,6 +308,10 @@ public final class PhoneScreen extends Screen {
                 Component.translatable("mcphone.gui.wallpaper").getString(),
                 () -> navigateTo(Mode.WALLPAPER_PICKER)));
         settingItems.add(new SettingItem(
+                Component.translatable("mcphone.settings.device_name").getString(),
+                () -> navigateTo(Mode.DEVICE_NAME),
+                this::currentDeviceNameLabel));
+        settingItems.add(new SettingItem(
                 Component.translatable("mcphone.app.app_manager").getString(),
                 () -> navigateTo(Mode.APP_MANAGER)));
         settingItems.add(new SettingItem(
@@ -321,10 +353,15 @@ public final class PhoneScreen extends Screen {
 
             g.drawString(font, item.label(), x + 2, y + 2, 0xFFCCCCCC, false);
 
-            // 右箭头
-            String arrow = ">";
-            int ax = x + w - font.width(arrow) - 4;
-            g.drawString(font, arrow, ax, y + 2, 0xFF888888, false);
+            // 有当前值就显示值，否则画右箭头
+            String right = item.value() != null ? item.value().get() : ">";
+            // 值过长会与左侧标题撞上，按剩余宽度截断
+            int maxRightW = w - font.width(item.label()) - 10;
+            if (font.width(right) > maxRightW) {
+                right = font.plainSubstrByWidth(right, Math.max(6, maxRightW - 4)) + "…";
+            }
+            int ax = x + w - font.width(right) - 4;
+            g.drawString(font, right, ax, y + 2, 0xFF888888, false);
 
             y += rowH + 2;
         }
@@ -444,6 +481,27 @@ public final class PhoneScreen extends Screen {
                 PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
                 PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT,
                 mx, my, font);
+    }
+
+    // ============================================================
+    //  设备名称
+    // ============================================================
+
+    private void renderDeviceName(GuiGraphics g, int mx, int my, float partialTick) {
+        deviceNameEditor.render(g, phoneLeft, phoneTop,
+                PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
+                PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT,
+                mx, my, partialTick, font);
+    }
+
+    /** 设置列表右侧显示的当前设备名，未命名时显示占位文案 */
+    private String currentDeviceNameLabel() {
+        if (minecraft == null || minecraft.player == null) return "";
+        String name = minecraft.player.getItemInHand(hand)
+                .get(com.november.mcphone.ModDataComponents.DEVICE_NAME.get());
+        return (name == null || name.isBlank())
+                ? Component.translatable("mcphone.settings.device_name_unset").getString()
+                : name;
     }
 
     // ============================================================
@@ -621,6 +679,11 @@ public final class PhoneScreen extends Screen {
                 gallery.mouseClicked(mx, my, button);
                 yield true;
             }
+            case DEVICE_NAME -> {
+                // 点了保存或取消都回到设置列表
+                if (deviceNameEditor.mouseClicked(mx, my, button)) navigateTo(Mode.SETTINGS);
+                yield true;
+            }
         };
     }
 
@@ -645,6 +708,12 @@ public final class PhoneScreen extends Screen {
             // 再按一次才离开相册
             if (mode == Mode.GALLERY && gallery.backToGrid()) return true;
 
+            // 命名界面 ESC＝放弃修改，退回设置列表而非直接回主屏
+            if (mode == Mode.DEVICE_NAME) {
+                navigateTo(Mode.SETTINGS);
+                return true;
+            }
+
             if (mode != Mode.MAIN) {
                 navigateTo(Mode.MAIN);
                 return true;
@@ -652,6 +721,15 @@ public final class PhoneScreen extends Screen {
             onClose();
             return true;
         }
+        // 命名界面必须抢在背包键判定之前，且无论输入框是否消费都要吃掉按键：
+        // 否则名字里打个 "e" 就会命中背包键，手机当场关掉。
+        // ESC 已在上面单独处理，不会被这里吞掉
+        if (mode == Mode.DEVICE_NAME) {
+            deviceNameEditor.keyPressed(keyCode, scanCode, modifiers);
+            if (deviceNameEditor.consumeBackRequest()) navigateTo(Mode.SETTINGS);
+            return true;
+        }
+
         if (minecraft != null && minecraft.options.keyInventory.matches(keyCode, scanCode)) {
             if (mode != Mode.MAIN) back();
             else onClose();
@@ -662,6 +740,13 @@ public final class PhoneScreen extends Screen {
         if (mode == Mode.GALLERY && gallery.keyPressed(keyCode)) return true;
 
         return super.keyPressed(keyCode, scanCode, modifiers);
+    }
+
+    /** 字符输入只有命名界面用得上；EditBox 靠这个收字符（含粘贴） */
+    @Override
+    public boolean charTyped(char c, int modifiers) {
+        if (mode == Mode.DEVICE_NAME && deviceNameEditor.charTyped(c, modifiers)) return true;
+        return super.charTyped(c, modifiers);
     }
 
     @Override public void onClose() { super.onClose(); }

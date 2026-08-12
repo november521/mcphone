@@ -28,7 +28,7 @@ public class PhoneItem extends Item {
 
         // 只在客户端打开 GUI
         if (level.isClientSide()) {
-            openPhoneScreen();
+            openPhoneScreen(hand);
         }
 
         return InteractionResultHolder.success(stack);
@@ -37,9 +37,17 @@ public class PhoneItem extends Item {
     /**
      * 在客户端打开手机主屏幕。
      * 提取为独立方法，方便后续通过其他途径（如快捷键）打开手机。
+     *
+     * @param hand 手机在哪只手上。设备名要写回这只手上的物品堆，
+     *             玩家两只手各拿一只手机时不能改错。
      */
+    public static void openPhoneScreen(InteractionHand hand) {
+        Minecraft.getInstance().setScreen(new PhoneScreen(hand));
+    }
+
+    /** 不指定手时按主手处理 */
     public static void openPhoneScreen() {
-        Minecraft.getInstance().setScreen(new PhoneScreen());
+        openPhoneScreen(InteractionHand.MAIN_HAND);
     }
 
     /**
