@@ -10,7 +10,7 @@ import net.neoforged.neoforge.network.registration.PayloadRegistrar;
 /**
  * 网络包处理 —— 注册并处理所有 MCphone 网络包。
  */
-@EventBusSubscriber(modid = MCphone.MODID, bus = EventBusSubscriber.Bus.MOD)
+@EventBusSubscriber(modid = MCphone.MODID)
 public final class NetworkHandler {
 
     private NetworkHandler() {}
