@@ -71,27 +71,7 @@ public final class PhoneScreenRegistry {
         // 如果已注册过则跳过（防止重复注册）
         if (!APPS.isEmpty()) return;
 
-        // ---- 示例 App 1: 设置 ----
-        register(new AppEntry.GenericApp(
-                "壁纸",
-                (g, x, y, size, pt) -> {
-                    // 图像图标占位
-                    int color = 0xFF607D8B;
-                    int margin = 4;
-                    g.fill(x + margin, y + margin, x + size - margin, y + size - margin, color);
-                    int center = size / 2;
-                    int dotSize = 4;
-                    g.fill(x + center - dotSize, y + center - dotSize,
-                            x + center + dotSize, y + center + dotSize, 0xFFFFFFFF);
-                },
-                () -> {
-                    // 打开壁纸选择器
-                    if (net.minecraft.client.Minecraft.getInstance().screen instanceof PhoneScreen ps) {
-                        ps.openWallpaperPicker();
-                    }
-                }
-        ));
-
+        // ---- 设置 ----
         register(new AppEntry.GenericApp(
                 "设置",
                 (g, x, y, size, pt) -> {
@@ -100,93 +80,75 @@ public final class PhoneScreenRegistry {
                     g.fill(x + margin, y + margin, x + size - margin, y + size - margin, color);
                 },
                 () -> {
-                    // TODO: 后续阶段实现设置界面
+                    if (net.minecraft.client.Minecraft.getInstance().screen instanceof PhoneScreen ps) {
+                        ps.navigateTo(PhoneScreen.Mode.SETTINGS);
+                    }
                 }
         ));
 
-        // ---- 示例 App 2: 消息 ----
+        // ---- 消息 ----
         register(new AppEntry.GenericApp(
                 "消息",
                 (g, x, y, size, pt) -> {
-                    // 消息气泡图标占位
                     int color = 0xFF4CAF50;
                     int margin = 3;
                     g.fill(x + margin, y + margin, x + size - margin, y + size - margin, color);
-                    // 对话气泡的小三角
                     g.fill(x + margin + 2, y + size - margin - 6,
                             x + margin + 10, y + size - margin - 2, 0xFFFFFFFF);
                 },
-                () -> {
-                    // TODO: 后续阶段实现消息 App
-                }
+                () -> { /* TODO */ }
         ));
 
-        // ---- 示例 App 3: 联系人 ----
+        // ---- 联系人 ----
         register(new AppEntry.GenericApp(
                 "联系人",
                 (g, x, y, size, pt) -> {
                     int color = 0xFF2196F3;
                     int margin = 5;
-                    // 人头圆形
                     g.fill(x + margin, y + margin, x + size - margin, y + size - margin, color);
                 },
-                () -> {
-                    // TODO: 后续阶段实现联系人 App
-                }
+                () -> { /* TODO */ }
         ));
 
-        // ---- 示例 App 4: 相机 ----
+        // ---- 相机 ----
         register(new AppEntry.GenericApp(
                 "相机",
                 (g, x, y, size, pt) -> {
                     int color = 0xFFFF9800;
                     int margin = 6;
                     g.fill(x + margin, y + margin, x + size - margin, y + size - margin, color);
-                    // 镜头圆圈
-                    int lensR = 5;
-                    int cx = x + size / 2;
-                    int cy = y + size / 2;
+                    int lensR = 5, cx = x + size / 2, cy = y + size / 2;
                     g.fill(cx - lensR, cy - lensR, cx + lensR, cy + lensR, 0xFF333333);
                 },
-                () -> {
-                    // TODO: 后续阶段实现相机 App
-                }
+                () -> { /* TODO */ }
         ));
 
-        // ---- 示例 App 5: 相册 ----
+        // ---- 相册 ----
         register(new AppEntry.GenericApp(
                 "相册",
                 (g, x, y, size, pt) -> {
                     int color = 0xFF9C27B0;
                     int margin = 4;
                     g.fill(x + margin, y + margin, x + size - margin, y + size - margin, color);
-                    // 山峰三角形占位
-                    int peakX = x + size / 2;
-                    int peakY1 = y + margin + 4;
-                    int peakY2 = y + size - margin - 2;
+                    int peakX = x + size / 2, peakY1 = y + margin + 4, peakY2 = y + size - margin - 2;
                     int halfW = (size - margin * 2) / 2;
                     g.fill(peakX - halfW, peakY2, peakX, peakY1, 0xFFFFFFFF);
                     g.fill(peakX, peakY1, peakX + halfW, peakY2, 0xFFFFEB3B);
                 },
-                () -> {
-                    // TODO: 后续阶段实现相册 App
-                }
+                () -> { /* TODO */ }
         ));
 
-        // ---- 示例 App 6: 音乐 ----
+        // ---- 音乐 ----
         register(new AppEntry.GenericApp(
                 "音乐",
                 (g, x, y, size, pt) -> {
                     int color = 0xFFE91E63;
                     int margin = 4;
                     g.fill(x + margin, y + margin, x + size - margin, y + size - margin, color);
-                    // 音符竖线占位
                     int barX = x + size / 2 - 2;
                     g.fill(barX, y + margin + 4, barX + 4, y + size - margin, 0xFFFFFFFF);
                 },
-                () -> {
-                    // TODO: 后续阶段实现音乐 App
-                }
+                () -> { /* TODO */ }
         ));
     }
 }

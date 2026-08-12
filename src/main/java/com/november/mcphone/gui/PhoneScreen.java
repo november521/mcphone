@@ -2,6 +2,7 @@ package com.november.mcphone.gui;
 
 import com.november.mcphone.network.NetworkHandler;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
@@ -9,43 +10,44 @@ import net.minecraft.resources.ResourceLocation;
 
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * 手机主屏幕 GUI。
  *
- * 玩家右键手机物品时打开此界面。
- * 界面渲染一个仿手机外观的屏幕，展示已注册的 App 图标网格。
- *
- * 支持两个模式：
- * - MAIN: 主屏幕 App 网格
- * - WALLPAPER_PICKER: 壁纸选择界面
+ * 此 Screen 管理手机的导航状态：
+ * - MAIN：App 图标网格（桌面）
+ * - SETTINGS：设置列表
+ * - WALLPAPER_PICKER：壁纸选择
  */
 public final class PhoneScreen extends Screen {
 
-    private enum Mode { MAIN, WALLPAPER_PICKER }
+    /** 手机导航模式 */
+    public enum Mode { MAIN, SETTINGS, WALLPAPER_PICKER }
 
-    // ---- 时间格式化器（static final，复用） ----
-    private static final DateTimeFormatter TIME_FORMATTER =
-            DateTimeFormatter.ofPattern("HH:mm");
+    private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
 
     // ---- 打开动画 ----
     private final long openTimeMs;
     private boolean animationDone;
 
-    // ---- 当前模式 ----
+    // ---- 模式 ----
     private Mode mode = Mode.MAIN;
     private final WallpaperPicker wallpaperPicker = new WallpaperPicker();
 
-    // ---- 鼠标交互 ----
+    // ---- 设置列表项 ----
+    private static final record SettingItem(String label, Runnable action) {}
+    private final List<SettingItem> settingItems = new ArrayList<>();
+    private int hoveredSettingIdx = -1;
+
+    // ---- 主屏幕 hover ----
     private int hoveredAppIndex = -1;
 
-    // ---- 布局计算缓存 ----
-    private int phoneLeft;
-    private int phoneTop;
-    private int gridStartX;
-    private int gridStartY;
+    // ---- 布局缓存 ----
+    private int phoneLeft, phoneTop;
+    private int gridStartX, gridStartY;
     private boolean layoutDirty = true;
-
     private long nowMs;
 
     public PhoneScreen() {
@@ -54,14 +56,20 @@ public final class PhoneScreen extends Screen {
         this.animationDone = PhoneTheme.OPEN_ANIMATION_MS <= 0;
     }
 
-    /** 切换到壁纸选择模式 */
-    public void openWallpaperPicker() {
-        this.mode = Mode.WALLPAPER_PICKER;
+    // ============================================================
+    //  导航
+    // ============================================================
+
+    public void navigateTo(Mode target) {
+        this.mode = target;
+        this.hoveredSettingIdx = -1;
     }
 
-    /** 返回主屏幕 */
-    public void backToMain() {
-        this.mode = Mode.MAIN;
+    public void back() {
+        mode = switch (mode) {
+            case SETTINGS, WALLPAPER_PICKER -> Mode.MAIN;
+            default -> Mode.MAIN;
+        };
     }
 
     // ============================================================
@@ -71,13 +79,11 @@ public final class PhoneScreen extends Screen {
     private void computeLayout() {
         if (!layoutDirty) return;
 
-        final int screenW = this.width;
-        final int screenH = this.height;
         final int phoneW = PhoneTheme.PHONE_TOTAL_WIDTH;
         final int phoneH = PhoneTheme.PHONE_TOTAL_HEIGHT;
 
-        this.phoneLeft = (screenW - phoneW) / 2 + PhoneTheme.PHONE_BORDER;
-        this.phoneTop = (screenH - phoneH) / 2 + PhoneTheme.PHONE_BORDER + PhoneTheme.SCREEN_Y_OFFSET;
+        this.phoneLeft = (this.width - phoneW) / 2 + PhoneTheme.PHONE_BORDER;
+        this.phoneTop = (this.height - phoneH) / 2 + PhoneTheme.PHONE_BORDER + PhoneTheme.SCREEN_Y_OFFSET;
 
         this.gridStartX = this.phoneLeft + PhoneTheme.APP_GRID_PADDING_LEFT;
         this.gridStartY = this.phoneTop + PhoneTheme.STATUS_BAR_HEIGHT + PhoneTheme.APP_GRID_PADDING_TOP;
@@ -85,95 +91,89 @@ public final class PhoneScreen extends Screen {
         this.layoutDirty = false;
     }
 
-    private void invalidateLayout() {
-        this.layoutDirty = true;
-    }
+    private void invalidateLayout() { layoutDirty = true; }
+
+    @Override protected void init() { super.init(); invalidateLayout(); }
 
     @Override
-    protected void init() {
-        super.init();
-        invalidateLayout();
-    }
-
-    @Override
-    public void resize(Minecraft minecraft, int width, int height) {
-        super.resize(minecraft, width, height);
-        invalidateLayout();
-    }
+    public void resize(Minecraft mc, int w, int h) { super.resize(mc, w, h); invalidateLayout(); }
 
     // ============================================================
-    //  每帧渲染
+    //  渲染入口
     // ============================================================
 
     @Override
-    public void render(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
+    public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
         this.nowMs = System.currentTimeMillis();
-
         computeLayout();
 
-        // 背景遮罩
-        renderBackground(guiGraphics, mouseX, mouseY, partialTick);
+        renderBackground(g, mouseX, mouseY, partialTick);
 
         float scale = getAnimationScale();
+        int cx = phoneLeft + PhoneTheme.PHONE_WIDTH / 2;
+        int cy = phoneTop + PhoneTheme.PHONE_HEIGHT / 2;
 
-        // 缩放动画
-        int phoneCenterX = this.phoneLeft + PhoneTheme.PHONE_WIDTH / 2;
-        int phoneCenterY = this.phoneTop + PhoneTheme.PHONE_HEIGHT / 2;
+        g.pose().pushPose();
+        g.pose().translate(cx, cy, 0);
+        g.pose().scale(scale, scale, 1.0f);
+        g.pose().translate(-cx, -cy, 0);
 
-        guiGraphics.pose().pushPose();
-        guiGraphics.pose().translate(phoneCenterX, phoneCenterY, 0);
-        guiGraphics.pose().scale(scale, scale, 1.0f);
-        guiGraphics.pose().translate(-phoneCenterX, -phoneCenterY, 0);
+        renderPhoneFrame(g);
+        renderStatusBar(g);
 
-        renderPhoneFrame(guiGraphics);
-        renderScreenContent(guiGraphics, mouseX, mouseY, partialTick);
-
-        if (mode == Mode.WALLPAPER_PICKER) {
-            renderWallpaperPicker(guiGraphics, mouseX, mouseY);
-        } else {
-            renderAppGrid(guiGraphics, mouseX, mouseY, partialTick);
+        switch (mode) {
+            case MAIN            -> renderAppGrid(g);
+            case SETTINGS        -> renderSettingsList(g, mouseX, mouseY);
+            case WALLPAPER_PICKER -> renderWallpaperPicker(g, mouseX, mouseY);
         }
 
-        renderNavBar(guiGraphics);
+        renderNavBar(g);
+        g.pose().popPose();
 
-        guiGraphics.pose().popPose();
-
-        if (mode == Mode.MAIN) {
-            updateHover(mouseX, mouseY);
-        }
+        if (mode == Mode.MAIN)       updateAppHover(mouseX, mouseY);
+        if (mode == Mode.SETTINGS)   updateSettingsHover(mouseX, mouseY);
     }
 
     // ============================================================
-    //  手机外壳
+    //  手机外壳 + 壁纸背景
     // ============================================================
 
     private void renderPhoneFrame(GuiGraphics g) {
-        final int frameLeft = this.phoneLeft - PhoneTheme.PHONE_BORDER;
-        final int frameTop = this.phoneTop - PhoneTheme.PHONE_BORDER;
-        final int frameW = PhoneTheme.PHONE_TOTAL_WIDTH;
-        final int frameH = PhoneTheme.PHONE_TOTAL_HEIGHT;
+        final int fl = phoneLeft - PhoneTheme.PHONE_BORDER;
+        final int ft = phoneTop - PhoneTheme.PHONE_BORDER;
+        final int fw = PhoneTheme.PHONE_TOTAL_WIDTH;
+        final int fh = PhoneTheme.PHONE_TOTAL_HEIGHT;
 
-        g.fill(frameLeft, frameTop, frameLeft + frameW, frameTop + frameH,
-                PhoneTheme.COLOR_FRAME);
-        g.fill(frameLeft, frameTop, frameLeft + frameW, frameTop + 2,
-                PhoneTheme.COLOR_FRAME_HIGHLIGHT);
+        g.fill(fl, ft, fl + fw, ft + fh, PhoneTheme.COLOR_FRAME);
+        g.fill(fl, ft, fl + fw, ft + 2, PhoneTheme.COLOR_FRAME_HIGHLIGHT);
 
         // ---- 壁纸或纯色背景 ----
-        String wallpaperName = NetworkHandler.WakeholderData.get();
-        ResourceLocation wallpaperTex = WallpaperStore.findTexture(wallpaperName);
+        String wpName = NetworkHandler.WakeholderData.get();
+        WallpaperStore.WallpaperEntry wp = WallpaperStore.findEntry(wpName);
 
-        if (wallpaperTex != null) {
-            // 用壁纸纹理填充屏幕
-            g.blit(wallpaperTex,
-                    this.phoneLeft, this.phoneTop,
-                    0, 0,
-                    PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
-                    PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT);
+        if (wp != null) {
+            // 使用图片原始尺寸做 blit：按比例填充屏幕
+            int texW = wp.imageWidth();
+            int texH = wp.imageHeight();
+            // 计算 cover 缩放：覆盖整个屏幕，超出部分裁剪
+            float sw = (float) PhoneTheme.PHONE_WIDTH / texW;
+            float sh = (float) PhoneTheme.PHONE_HEIGHT / texH;
+            float s = Math.max(sw, sh);
+            int srcW = (int)(PhoneTheme.PHONE_WIDTH / s);
+            int srcH = (int)(PhoneTheme.PHONE_HEIGHT / s);
+            int srcX = (texW - srcW) / 2;
+            int srcY = (texH - srcH) / 2;
+
+            g.blit(wp.texture(),
+                    phoneLeft, phoneTop,              // 屏幕目标位置
+                    srcX, srcY,                       // 纹理源 UV
+                    PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,  // 目标宽高
+                    srcW, srcH,                       // 源区域宽高
+                    texW, texH);                      // 纹理总宽高
         } else {
-            // 纯色背景
-            g.fill(this.phoneLeft, this.phoneTop,
-                    this.phoneLeft + PhoneTheme.PHONE_WIDTH,
-                    this.phoneTop + PhoneTheme.PHONE_HEIGHT,
+            g.fill(phoneLeft, phoneTop,
+                    phoneLeft + PhoneTheme.PHONE_WIDTH,
+                    phoneTop + PhoneTheme.PHONE_HEIGHT,
                     PhoneTheme.COLOR_SCREEN_BG);
         }
     }
@@ -182,28 +182,20 @@ public final class PhoneScreen extends Screen {
     //  状态栏
     // ============================================================
 
-    private void renderScreenContent(GuiGraphics g, int mouseX, int mouseY, float pt) {
-        // 状态栏半透明背景
-        g.fill(this.phoneLeft, this.phoneTop,
-                this.phoneLeft + PhoneTheme.PHONE_WIDTH,
-                this.phoneTop + PhoneTheme.STATUS_BAR_HEIGHT,
-                0x66000000);
+    private void renderStatusBar(GuiGraphics g) {
+        g.fill(phoneLeft, phoneTop,
+                phoneLeft + PhoneTheme.PHONE_WIDTH,
+                phoneTop + PhoneTheme.STATUS_BAR_HEIGHT, 0x66000000);
 
-        String timeStr = LocalTime.now().format(TIME_FORMATTER);
-        int timeX = this.phoneLeft + PhoneTheme.PHONE_WIDTH - 6
-                - this.font.width(timeStr);
-        g.drawString(this.font, timeStr, timeX, this.phoneTop + 1,
-                PhoneTheme.FONT_COLOR_STATUS, true);
+        String time = LocalTime.now().format(TIME_FORMATTER);
+        int tx = phoneLeft + PhoneTheme.PHONE_WIDTH - 6 - font.width(time);
+        g.drawString(font, time, tx, phoneTop + 1, PhoneTheme.FONT_COLOR_STATUS, true);
+        g.drawString(font, "●●●●", phoneLeft + 4, phoneTop + 1, 0xFFFFFFFF, true);
 
-        g.drawString(this.font, "●●●●", this.phoneLeft + 4, this.phoneTop + 1,
-                0xFFFFFFFF, true);
-
-        // 壁纸模式下显示返回按钮
-        if (mode == Mode.WALLPAPER_PICKER) {
-            int backX = this.phoneLeft + 4;
-            int backY = this.phoneTop + 4 + PhoneTheme.STATUS_BAR_HEIGHT;
-            g.drawString(this.font, "◀ 返回",
-                    backX, backY + PhoneTheme.STATUS_BAR_HEIGHT, 0xFF88CCFF, true);
+        // 非主界面显示返回箭头
+        if (mode != Mode.MAIN) {
+            g.drawString(font, "◀", phoneLeft + PhoneTheme.PHONE_WIDTH / 2 - 3,
+                    phoneTop + 1, 0xFF88CCFF, true);
         }
     }
 
@@ -211,47 +203,98 @@ public final class PhoneScreen extends Screen {
     //  App 网格
     // ============================================================
 
-    private void renderAppGrid(GuiGraphics g, int mouseX, int mouseY, float pt) {
+    private void renderAppGrid(GuiGraphics g) {
         final var apps = PhoneScreenRegistry.getApps();
-        final int iconSize = PhoneTheme.APP_ICON_SIZE;
-        final int spaceX = PhoneTheme.APP_GRID_SPACING_X;
+        final int is = PhoneTheme.APP_ICON_SIZE;
+        final int sx = PhoneTheme.APP_GRID_SPACING_X;
         final int cols = PhoneTheme.APP_COLUMNS;
-
-        final int cellW = iconSize + spaceX;
-        final int cellH = iconSize + (int)(this.font.lineHeight * PhoneTheme.APP_NAME_SCALE) + 4;
+        final int cellW = is + sx;
+        final int cellH = is + (int)(font.lineHeight * PhoneTheme.APP_NAME_SCALE) + 4;
 
         for (int i = 0; i < apps.size(); i++) {
-            int col = i % cols;
-            int row = i / cols;
+            int ix = gridStartX + (i % cols) * cellW;
+            int iy = gridStartY + (i / cols) * cellH;
 
-            int iconX = this.gridStartX + col * cellW;
-            int iconY = this.gridStartY + row * cellH;
+            if (iy + is > phoneTop + PhoneTheme.PHONE_HEIGHT - PhoneTheme.NAV_BAR_HEIGHT) break;
 
-            if (iconY + iconSize > this.phoneTop + PhoneTheme.PHONE_HEIGHT - PhoneTheme.NAV_BAR_HEIGHT) {
-                break;
-            }
-
-            // 按下/悬停高亮
-            if (i == this.hoveredAppIndex) {
-                g.fill(iconX - 2, iconY - 2, iconX + iconSize + 2, iconY + iconSize + 2,
-                        PhoneTheme.COLOR_APP_PRESSED);
+            if (i == hoveredAppIndex) {
+                g.fill(ix - 2, iy - 2, ix + is + 2, iy + is + 2, PhoneTheme.COLOR_APP_PRESSED);
             }
 
             AppEntry app = apps.get(i);
-            app.renderIcon(g, iconX, iconY, iconSize, pt);
+            app.renderIcon(g, ix, iy, is, 0);
 
-            // App 名称
-            int nameW = this.font.width(app.getName());
-            float nameScale = PhoneTheme.APP_NAME_SCALE;
-            int nameX = iconX + (iconSize - (int)(nameW * nameScale)) / 2;
-            int nameY = iconY + iconSize + 2;
-            g.pose().pushPose();
-            g.pose().translate(nameX + (int)(nameW * nameScale) / 2f, nameY, 0);
-            g.pose().scale(nameScale, nameScale, 1.0f);
-            g.pose().translate(-(nameX + (int)(nameW * nameScale) / 2f), -nameY, 0);
-            g.drawString(this.font, app.getName(),
-                    nameX, nameY, PhoneTheme.FONT_COLOR_APP_NAME, false);
-            g.pose().popPose();
+            drawAppName(g, app.getName(), ix, iy, is);
+        }
+    }
+
+    private void drawAppName(GuiGraphics g, String name, int ix, int iy, int is) {
+        float ns = PhoneTheme.APP_NAME_SCALE;
+        int nw = font.width(name);
+        int nx = ix + (is - (int)(nw * ns)) / 2;
+        int ny = iy + is + 2;
+        g.pose().pushPose();
+        g.pose().translate(nx + nw * ns / 2f, ny, 0);
+        g.pose().scale(ns, ns, 1f);
+        g.pose().translate(-(nx + nw * ns / 2f), -ny, 0);
+        g.drawString(font, name, nx, ny, PhoneTheme.FONT_COLOR_APP_NAME, false);
+        g.pose().popPose();
+    }
+
+    // ============================================================
+    //  设置列表
+    // ============================================================
+
+    private void buildSettingItems() {
+        if (!settingItems.isEmpty()) return;
+        settingItems.add(new SettingItem("壁纸", () -> navigateTo(Mode.WALLPAPER_PICKER)));
+        settingItems.add(new SettingItem("关于", () -> {
+            if (minecraft != null && minecraft.player != null) {
+                minecraft.player.displayClientMessage(
+                        Component.literal("§eMCphone v1.0.0 §7by november"), false);
+            }
+        }));
+    }
+
+    private void renderSettingsList(GuiGraphics g, int mouseX, int mouseY) {
+        buildSettingItems();
+
+        int y = phoneTop + PhoneTheme.STATUS_BAR_HEIGHT + 4;
+        int x = phoneLeft + 6;
+        int w = PhoneTheme.PHONE_WIDTH - 12;
+        int bottom = phoneTop + PhoneTheme.PHONE_HEIGHT - PhoneTheme.NAV_BAR_HEIGHT;
+
+        // 标题
+        g.drawString(font, "设置", x, y, PhoneTheme.FONT_COLOR_TITLE, true);
+        y += font.lineHeight + 4;
+
+        // 分割线
+        g.fill(x, y, x + w, y + 1, 0x44FFFFFF);
+        y += 4;
+
+        for (int i = 0; i < settingItems.size(); i++) {
+            if (y + font.lineHeight + 6 > bottom) break;
+
+            SettingItem item = settingItems.get(i);
+            int rowH = font.lineHeight + 4;
+
+            if (i == hoveredSettingIdx) {
+                g.fill(x, y, x + w, y + rowH, 0x33FFFFFF);
+            }
+
+            g.drawString(font, item.label(), x + 2, y + 2, 0xFFCCCCCC, false);
+
+            // 右箭头
+            String arrow = ">";
+            int ax = x + w - font.width(arrow) - 4;
+            g.drawString(font, arrow, ax, y + 2, 0xFF888888, false);
+
+            y += rowH + 2;
+        }
+
+        // 空列表提示
+        if (settingItems.isEmpty()) {
+            g.drawString(font, "暂无设置项", x, y, 0xFF888888, false);
         }
     }
 
@@ -259,12 +302,11 @@ public final class PhoneScreen extends Screen {
     //  壁纸选择器
     // ============================================================
 
-    private void renderWallpaperPicker(GuiGraphics g, int mouseX, int mouseY) {
-        wallpaperPicker.render(g,
-                this.phoneLeft, this.phoneTop,
+    private void renderWallpaperPicker(GuiGraphics g, int mx, int my) {
+        wallpaperPicker.render(g, phoneLeft, phoneTop,
                 PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
                 PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT,
-                mouseX, mouseY, this.font);
+                mx, my, font);
     }
 
     // ============================================================
@@ -272,19 +314,17 @@ public final class PhoneScreen extends Screen {
     // ============================================================
 
     private void renderNavBar(GuiGraphics g) {
-        int navY = this.phoneTop + PhoneTheme.PHONE_HEIGHT - PhoneTheme.NAV_BAR_HEIGHT;
-        g.fill(this.phoneLeft, navY,
-                this.phoneLeft + PhoneTheme.PHONE_WIDTH,
-                this.phoneTop + PhoneTheme.PHONE_HEIGHT,
-                PhoneTheme.COLOR_NAV_BAR);
+        int ny = phoneTop + PhoneTheme.PHONE_HEIGHT - PhoneTheme.NAV_BAR_HEIGHT;
+        g.fill(phoneLeft, ny, phoneLeft + PhoneTheme.PHONE_WIDTH,
+                phoneTop + PhoneTheme.PHONE_HEIGHT, PhoneTheme.COLOR_NAV_BAR);
 
-        int navCenterY = navY + PhoneTheme.NAV_BAR_HEIGHT / 2 - this.font.lineHeight / 2;
-        int thirdW = PhoneTheme.PHONE_WIDTH / 3;
+        int cy = ny + PhoneTheme.NAV_BAR_HEIGHT / 2 - font.lineHeight / 2;
+        int tw = PhoneTheme.PHONE_WIDTH / 3;
         String[] btns = {"◁", "○", "□"};
         for (int i = 0; i < btns.length; i++) {
-            int bw = this.font.width(btns[i]);
-            int bx = this.phoneLeft + thirdW * i + (thirdW - bw) / 2;
-            g.drawString(this.font, btns[i], bx, navCenterY, 0xFF888888, false);
+            int bw = font.width(btns[i]);
+            int bx = phoneLeft + tw * i + (tw - bw) / 2;
+            g.drawString(font, btns[i], bx, cy, 0xFF888888, false);
         }
     }
 
@@ -293,76 +333,90 @@ public final class PhoneScreen extends Screen {
     // ============================================================
 
     private float getAnimationScale() {
-        if (animationDone) return 1.0f;
-
+        if (animationDone) return 1f;
         long elapsed = nowMs - openTimeMs;
-        int duration = PhoneTheme.OPEN_ANIMATION_MS;
-
-        if (elapsed >= duration) {
-            animationDone = true;
-            return 1.0f;
-        }
-
-        float t = (float) elapsed / duration;
-        float c1 = 1.70158f;
-        float c3 = c1 + 1;
+        int dur = PhoneTheme.OPEN_ANIMATION_MS;
+        if (elapsed >= dur) { animationDone = true; return 1f; }
+        float t = (float) elapsed / dur;
+        float c1 = 1.70158f, c3 = c1 + 1;
         return (float)(1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2)) * 0.4f + 0.6f;
     }
 
     // ============================================================
-    //  鼠标
+    //  鼠标 hover
     // ============================================================
 
-    private void updateHover(int mouseX, int mouseY) {
-        float scale = getAnimationScale();
-        int phoneCenterX = this.phoneLeft + PhoneTheme.PHONE_WIDTH / 2;
-        int phoneCenterY = this.phoneTop + PhoneTheme.PHONE_HEIGHT / 2;
-
-        int localX = (int)((mouseX - phoneCenterX) / scale + phoneCenterX);
-        int localY = (int)((mouseY - phoneCenterY) / scale + phoneCenterY);
+    private void updateAppHover(int mx, int my) {
+        float s = getAnimationScale();
+        int cx = phoneLeft + PhoneTheme.PHONE_WIDTH / 2;
+        int cy = phoneTop + PhoneTheme.PHONE_HEIGHT / 2;
+        int lx = (int)((mx - cx) / s + cx);
+        int ly = (int)((my - cy) / s + cy);
 
         final var apps = PhoneScreenRegistry.getApps();
-        final int iconSize = PhoneTheme.APP_ICON_SIZE;
+        final int is = PhoneTheme.APP_ICON_SIZE;
         final int cols = PhoneTheme.APP_COLUMNS;
-        final int cellW = iconSize + PhoneTheme.APP_GRID_SPACING_X;
-        final int cellH = iconSize + (int)(this.font.lineHeight * PhoneTheme.APP_NAME_SCALE) + 4;
+        final int cellW = is + PhoneTheme.APP_GRID_SPACING_X;
+        final int cellH = is + (int)(font.lineHeight * PhoneTheme.APP_NAME_SCALE) + 4;
 
-        this.hoveredAppIndex = -1;
-
+        hoveredAppIndex = -1;
         for (int i = 0; i < apps.size(); i++) {
-            int col = i % cols;
-            int row = i / cols;
-
-            int iconX = this.gridStartX + col * cellW;
-            int iconY = this.gridStartY + row * cellH;
-
-            if (localX >= iconX && localX <= iconX + iconSize
-                    && localY >= iconY && localY <= iconY + iconSize + 6) {
-                this.hoveredAppIndex = i;
+            int ix = gridStartX + (i % cols) * cellW;
+            int iy = gridStartY + (i / cols) * cellH;
+            if (lx >= ix && lx <= ix + is && ly >= iy && ly <= iy + is + 6) {
+                hoveredAppIndex = i;
                 return;
             }
         }
     }
 
-    @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        // 壁纸选择模式下转发给 picker
-        if (mode == Mode.WALLPAPER_PICKER) {
-            if (wallpaperPicker.mouseClicked(mouseX, mouseY, button)) {
-                backToMain();
-                return true;
-            }
-            return true;
-        }
+    private void updateSettingsHover(int mx, int my) {
+        int y = phoneTop + PhoneTheme.STATUS_BAR_HEIGHT + 4 + font.lineHeight + 4 + 4;
+        int x = phoneLeft + 6;
+        int w = PhoneTheme.PHONE_WIDTH - 12;
 
-        if (button == 0 && this.hoveredAppIndex >= 0) {
-            AppEntry app = PhoneScreenRegistry.getApp(this.hoveredAppIndex);
-            if (app != null) {
-                app.onPress();
-                return true;
+        hoveredSettingIdx = -1;
+        for (int i = 0; i < settingItems.size(); i++) {
+            int rowH = font.lineHeight + 4;
+            if (mx >= x && mx <= x + w && my >= y && my <= y + rowH) {
+                hoveredSettingIdx = i;
+                return;
             }
+            y += rowH + 2;
         }
-        return super.mouseClicked(mouseX, mouseY, button);
+    }
+
+    // ============================================================
+    //  鼠标点击
+    // ============================================================
+
+    @Override
+    public boolean mouseClicked(double mx, double my, int button) {
+        if (button != 0) return super.mouseClicked(mx, my, button);
+
+        return switch (mode) {
+            case MAIN -> {
+                if (hoveredAppIndex >= 0) {
+                    AppEntry app = PhoneScreenRegistry.getApp(hoveredAppIndex);
+                    if (app != null) { app.onPress(); yield true; }
+                }
+                yield super.mouseClicked(mx, my, button);
+            }
+            case SETTINGS -> {
+                if (hoveredSettingIdx >= 0 && hoveredSettingIdx < settingItems.size()) {
+                    settingItems.get(hoveredSettingIdx).action().run();
+                    yield true;
+                }
+                yield true;
+            }
+            case WALLPAPER_PICKER -> {
+                if (wallpaperPicker.mouseClicked(button)) {
+                    // 选完壁纸返回设置列表
+                    navigateTo(Mode.SETTINGS);
+                }
+                yield true;
+            }
+        };
     }
 
     // ============================================================
@@ -371,30 +425,22 @@ public final class PhoneScreen extends Screen {
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        // 壁纸模式下 ESC 返回主屏幕
-        if (mode == Mode.WALLPAPER_PICKER && keyCode == 256) { // 256 = ESC
-            backToMain();
+        if (keyCode == 256) { // ESC
+            if (mode != Mode.MAIN) {
+                navigateTo(Mode.MAIN);
+                return true;
+            }
+            onClose();
             return true;
         }
-
         if (minecraft != null && minecraft.options.keyInventory.matches(keyCode, scanCode)) {
-            if (mode == Mode.WALLPAPER_PICKER) {
-                backToMain();
-            } else {
-                this.onClose();
-            }
+            if (mode != Mode.MAIN) back();
+            else onClose();
             return true;
         }
         return super.keyPressed(keyCode, scanCode, modifiers);
     }
 
-    @Override
-    public void onClose() {
-        super.onClose();
-    }
-
-    @Override
-    public boolean isPauseScreen() {
-        return false;
-    }
+    @Override public void onClose() { super.onClose(); }
+    @Override public boolean isPauseScreen() { return false; }
 }
