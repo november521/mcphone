@@ -177,12 +177,16 @@ public final class PhoneScreen extends Screen {
             int srcX = (texW - srcW) / 2;
             int srcY = (texH - srcH) / 2;
 
+            // 参数顺序按 GuiGraphics 的 11 参重载：
+            //   (贴图, x, y, 目标宽, 目标高, u, v, 源区宽, 源区高, 纹理宽, 纹理高)
+            // 目标宽高在前、UV 在后，写反会导致目标矩形取到 srcX/srcY，
+            // 而居中裁剪下二者必有一个为 0，壁纸就整个画不出来
             g.blit(wp.texture(),
-                    phoneLeft, phoneTop,              // 屏幕目标位置
-                    srcX, srcY,                       // 纹理源 UV
+                    phoneLeft, phoneTop,                              // 屏幕目标位置
                     PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,  // 目标宽高
-                    srcW, srcH,                       // 源区域宽高
-                    texW, texH);                      // 纹理总宽高
+                    srcX, srcY,                                       // 纹理源 UV
+                    srcW, srcH,                                       // 源区域宽高
+                    texW, texH);                                      // 纹理总宽高
         } else {
             g.fill(phoneLeft, phoneTop,
                     phoneLeft + PhoneTheme.PHONE_WIDTH,

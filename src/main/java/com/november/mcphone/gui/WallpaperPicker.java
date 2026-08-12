@@ -133,8 +133,15 @@ public final class WallpaperPicker {
         int drawX = boxX + (boxW - drawW) / 2;
         int drawY = boxY + (boxH - drawH) / 2;
 
-        // 绘制 —— 纹理尺寸就是图片原始尺寸
-        g.blit(tex, drawX, drawY, 0, 0, drawW, drawH, texW, texH);
+        // 必须用带"源区宽高"的 11 参重载：9 参那个不缩放，
+        // 它是从贴图左上角取 drawW×drawH 一块按 1:1 画出来，
+        // 结果是原图左上角的一小块裁切而非缩略图。
+        // 这里源区取满整张纹理(texW×texH)，缩放进 drawW×drawH 才是等比预览。
+        g.blit(tex, drawX, drawY,
+                drawW, drawH,    // 目标宽高
+                0, 0,            // 纹理源 UV
+                texW, texH,      // 源区域宽高：整张
+                texW, texH);     // 纹理总宽高
     }
 
     // ============================================================
