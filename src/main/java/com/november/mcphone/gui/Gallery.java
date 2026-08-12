@@ -69,6 +69,24 @@ public final class Gallery {
     /** 上一帧算出的每页容量，供点击与翻页复用 */
     private int perPage = COLS * 5;
 
+    // ---- 单张查看 ----
+
+    /** 正在查看的照片下标，-1 表示当前是网格 */
+    private int viewing = -1;
+
+    /** 单张查看里鼠标悬停的按钮 */
+    private enum ViewBtn { NONE, BACK, PREV, NEXT, DELETE }
+    private ViewBtn hoveredBtn = ViewBtn.NONE;
+
+    /**
+     * 删除是否已"上膛"。
+     *
+     * 删照片是直接删磁盘文件、不可撤销，所以要点两次：
+     * 第一次把按钮变成"再点一次确认"，第二次才真删。
+     * 任何其他操作（翻页、返回、切换照片）都会卸掉。
+     */
+    private boolean deleteArmed = false;
+
     // ============================================================
     //  进入 / 离开
     // ============================================================
@@ -79,6 +97,8 @@ public final class Gallery {
         page = 0;
         hoveredIdx = -1;
         hoveredPager = 0;
+        viewing = -1;
+        deleteArmed = false;
     }
 
     /**
@@ -98,6 +118,14 @@ public final class Gallery {
                        int mouseX, int mouseY, Font font) {
 
         final List<PhotoLibrary.Photo> photos = PhotoLibrary.getPhotos();
+
+        // 照片可能在查看期间被删空，或下标越界，此时退回网格
+        if (viewing >= photos.size()) viewing = photos.isEmpty() ? -1 : photos.size() - 1;
+        if (viewing >= 0) {
+            renderViewer(g, phoneLeft, phoneTop, screenW, screenH, statusH, navH,
+                    mouseX, mouseY, font, photos);
+            return;
+        }
 
         int x = phoneLeft + PAD;
         int y = phoneTop + statusH + 4;
@@ -232,39 +260,203 @@ public final class Gallery {
     }
 
     // ============================================================
+    //  单张查看
+    // ============================================================
+
+    /**
+     * 单张查看：顶部返回与序号，中间大图，底部文件名与「◁ 删除 ▷」。
+     *
+     * 大图未加载完时先拿缩略图放大顶着——虽然糊，但翻看时不会闪空白，
+     * 大图就绪的那一帧自然换上。
+     */
+    private void renderViewer(GuiGraphics g, int phoneLeft, int phoneTop,
+                              int screenW, int screenH, int statusH, int navH,
+                              int mouseX, int mouseY, Font font,
+                              List<PhotoLibrary.Photo> photos) {
+
+        PhotoLibrary.Photo photo = photos.get(viewing);
+
+        final int x = phoneLeft + PAD;
+        final int w = screenW - PAD * 2;
+        final int rowH = font.lineHeight + 2;
+
+        // ---- 顶部：返回 + 序号 ----
+        int headerY = phoneTop + statusH + 2;
+        String back = ARROW_PREV + " " + Component.translatable("mcphone.gallery.back").getString();
+        boolean onBack = mouseX >= x && mouseX < x + font.width(back) + 4
+                      && mouseY >= headerY && mouseY < headerY + rowH;
+        g.drawString(font, back, x, headerY, onBack ? COLOR_CELL_BORDER : COLOR_PAGER, false);
+
+        String idx = (viewing + 1) + "/" + photos.size();
+        g.drawString(font, idx, x + w - font.width(idx), headerY, COLOR_HINT, false);
+
+        // ---- 底部两行：文件名 / ◁ 删除 ▷ ----
+        int btnRowY = phoneTop + screenH - navH - rowH - 2;
+        int nameRowY = btnRowY - rowH;
+
+        boolean canPrev = viewing > 0;
+        boolean canNext = viewing < photos.size() - 1;
+
+        boolean onPrev = mouseX >= x && mouseX < x + ARROW_HIT_W
+                      && mouseY >= btnRowY && mouseY < btnRowY + rowH;
+        boolean onNext = mouseX >= x + w - ARROW_HIT_W && mouseX < x + w
+                      && mouseY >= btnRowY && mouseY < btnRowY + rowH;
+
+        String del = Component.translatable(
+                deleteArmed ? "mcphone.gallery.delete_confirm" : "mcphone.gallery.delete").getString();
+        int delW = font.width(del);
+        int delX = x + (w - delW) / 2;
+        boolean onDelete = mouseX >= delX - 2 && mouseX < delX + delW + 2
+                        && mouseY >= btnRowY && mouseY < btnRowY + rowH;
+
+        hoveredBtn = onBack ? ViewBtn.BACK
+                : (onPrev && canPrev) ? ViewBtn.PREV
+                : (onNext && canNext) ? ViewBtn.NEXT
+                : onDelete ? ViewBtn.DELETE
+                : ViewBtn.NONE;
+
+        // ---- 中间：大图 ----
+        int imgTop = headerY + rowH + 2;
+        int imgBottom = nameRowY - 2;
+        renderPhoto(g, font, photo, phoneLeft, imgTop, screenW, imgBottom - imgTop);
+
+        // 文件名过长就截断，手机屏幕放不下完整的时间戳文件名
+        String name = photo.fileName();
+        if (font.width(name) > w) name = font.plainSubstrByWidth(name, w - 6) + "…";
+        g.drawString(font, name, x + (w - font.width(name)) / 2, nameRowY, COLOR_HINT, false);
+
+        g.drawString(font, ARROW_PREV, x + 2, btnRowY,
+                canPrev ? (onPrev ? COLOR_CELL_BORDER : COLOR_PAGER) : COLOR_PAGER_OFF, false);
+        g.drawString(font, ARROW_NEXT, x + w - font.width(ARROW_NEXT) - 2, btnRowY,
+                canNext ? (onNext ? COLOR_CELL_BORDER : COLOR_PAGER) : COLOR_PAGER_OFF, false);
+        g.drawString(font, del, delX, btnRowY,
+                deleteArmed ? 0xFFFF5555 : (onDelete ? 0xFFFF8888 : COLOR_PAGER), false);
+    }
+
+    /** 大图区域：黑底 + 等比居中的照片 */
+    private void renderPhoto(GuiGraphics g, Font font, PhotoLibrary.Photo photo,
+                             int areaX, int areaY, int areaW, int areaH) {
+
+        // 黑底：照片可能是任意比例，留白处不该透出壁纸
+        g.fill(areaX, areaY, areaX + areaW, areaY + areaH, 0xCC000000);
+
+        PhotoLibrary.Thumb img = PhotoLibrary.preview(photo);
+        if (img == null) img = PhotoLibrary.thumbnail(photo);   // 大图未就绪，先用缩略图顶着
+
+        if (img == null) {
+            String loading = Component.translatable("mcphone.gallery.loading").getString();
+            g.drawString(font, loading,
+                    areaX + (areaW - font.width(loading)) / 2,
+                    areaY + (areaH - font.lineHeight) / 2, COLOR_HINT, false);
+            return;
+        }
+
+        int boxW = areaW - 4;
+        int boxH = areaH - 4;
+        float scale = Math.min((float) boxW / img.width(), (float) boxH / img.height());
+        int dw = Math.max(1, Math.round(img.width() * scale));
+        int dh = Math.max(1, Math.round(img.height() * scale));
+        int dx = areaX + (areaW - dw) / 2;
+        int dy = areaY + (areaH - dh) / 2;
+
+        g.blit(img.texture(), dx, dy, dw, dh, 0, 0,
+                img.width(), img.height(), img.width(), img.height());
+    }
+
+    /** 切换到相邻照片。到头就停住。 */
+    private void step(int delta) {
+        int n = PhotoLibrary.count();
+        if (n == 0) { viewing = -1; return; }
+        viewing = Math.max(0, Math.min(viewing + delta, n - 1));
+        deleteArmed = false;   // 换了张照片，之前上膛的删除作废
+    }
+
+    /** 退出单张查看回到网格。返回 false 表示本来就在网格。 */
+    public boolean backToGrid() {
+        if (viewing < 0) return false;
+        viewing = -1;
+        deleteArmed = false;
+        // 大图对网格毫无用处，立刻归还显存
+        PhotoLibrary.releasePreview();
+        return true;
+    }
+
+    /** 打开单张查看，并把该照片所在页设为当前页，返回网格时位置对得上 */
+    private void openViewer(int index) {
+        viewing = index;
+        deleteArmed = false;
+        if (perPage > 0) page = index / perPage;
+    }
+
+    // ============================================================
     //  交互
     // ============================================================
 
     public boolean mouseClicked(double mx, double my, int button) {
         if (button != 0) return false;
 
+        if (viewing >= 0) {
+            switch (hoveredBtn) {
+                case BACK   -> backToGrid();
+                case PREV   -> step(-1);
+                case NEXT   -> step(1);
+                case DELETE -> confirmDelete();
+                case NONE   -> deleteArmed = false;   // 点空白处即卸掉上膛的删除
+            }
+            return true;
+        }
+
         if (hoveredPager < 0) { flip(-1); return true; }
         if (hoveredPager > 0) { flip(1); return true; }
 
-        // 点中缩略图：查看单张照片将在后续实现
-        return hoveredIdx >= 0;
+        if (hoveredIdx >= 0) { openViewer(hoveredIdx); return true; }
+        return false;
     }
 
-    /** 滚轮翻页：向下滚翻到下一页 */
+    /**
+     * 删除按钮：第一次点上膛，第二次才真删。
+     * 删的是磁盘上的文件，不可撤销，所以不能一点就没。
+     */
+    private void confirmDelete() {
+        if (!deleteArmed) { deleteArmed = true; return; }
+        deleteArmed = false;
+
+        PhotoLibrary.Photo photo = PhotoLibrary.get(viewing);
+        if (photo == null || !PhotoLibrary.delete(photo)) return;
+
+        // 删完停在原下标上——那里已经是下一张照片了，
+        // 与手机相册的行为一致；删的是最后一张则回退一格
+        int n = PhotoLibrary.count();
+        if (n == 0) viewing = -1;
+        else if (viewing >= n) viewing = n - 1;
+    }
+
+    /** 滚轮：网格里翻页，单张查看里切换照片 */
     public boolean mouseScrolled(double scrollY) {
         if (scrollY == 0) return false;
-        flip(scrollY < 0 ? 1 : -1);
+        int dir = scrollY < 0 ? 1 : -1;
+        if (viewing >= 0) step(dir);
+        else flip(dir);
         return true;
     }
 
     /**
-     * 方向键翻页，Home/End 跳首尾页。
-     * 照片上千张时，只能一页页点箭头会很难受。
+     * 网格：方向键翻页，Home/End 跳首尾页——照片上千张时
+     * 只能一页页点箭头会很难受。
+     * 单张查看：方向键切换照片，Home/End 跳到最新/最旧。
      */
     public boolean keyPressed(int keyCode) {
+        boolean inViewer = viewing >= 0;
         switch (keyCode) {
-            case 262 -> { flip(1);  return true; }   // →
-            case 263 -> { flip(-1); return true; }   // ←
-            case 264 -> { flip(1);  return true; }   // ↓
-            case 265 -> { flip(-1); return true; }   // ↑
-            case 268 -> { page = 0; return true; }   // Home
-            case 269 -> {                            // End
-                page = Math.max(0, lastPage());
+            case 262, 264 -> { if (inViewer) step(1);  else flip(1);  return true; }   // → ↓
+            case 263, 265 -> { if (inViewer) step(-1); else flip(-1); return true; }   // ← ↑
+            case 268 -> {                                                              // Home
+                if (inViewer) { viewing = 0; deleteArmed = false; } else page = 0;
+                return true;
+            }
+            case 269 -> {                                                              // End
+                if (inViewer) { viewing = Math.max(0, PhotoLibrary.count() - 1); deleteArmed = false; }
+                else page = Math.max(0, lastPage());
                 return true;
             }
             default -> { return false; }

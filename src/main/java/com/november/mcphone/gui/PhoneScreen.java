@@ -641,6 +641,10 @@ public final class PhoneScreen extends Screen {
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
         if (keyCode == 256) { // ESC
+            // 相册的单张查看是相册内的一层，ESC 先退回缩略图网格，
+            // 再按一次才离开相册
+            if (mode == Mode.GALLERY && gallery.backToGrid()) return true;
+
             if (mode != Mode.MAIN) {
                 navigateTo(Mode.MAIN);
                 return true;
