@@ -1,10 +1,12 @@
 package com.november.mcphone;
 
+import com.november.mcphone.client.CameraHandler;
 import com.november.mcphone.client.MCphoneKeyBindings;
 import com.november.mcphone.gui.PhoneScreenRegistry;
 import com.november.mcphone.gui.WallpaperStore;
 import net.minecraft.client.Minecraft;
 import net.neoforged.bus.api.IEventBus;
+import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.ModContainer;
@@ -23,6 +25,11 @@ public class MCphoneClient {
 
         // 按键注册是【模组总线】事件，显式挂载而不依赖注解自动路由
         modEventBus.addListener(MCphoneKeyBindings::register);
+
+        // 相机模式的监听都在【游戏总线】，同样显式挂载
+        NeoForge.EVENT_BUS.addListener(CameraHandler::onClientTick);
+        NeoForge.EVENT_BUS.addListener(CameraHandler::onRenderGui);
+        NeoForge.EVENT_BUS.addListener(CameraHandler::onScreenOpening);
     }
 
     @SubscribeEvent

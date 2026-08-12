@@ -3,6 +3,7 @@
   "key.categories.mcphone": "MCphone",
   "key.mcphone.camera_shutter": "拍照",
   "key.mcphone.camera_exit": "退出相机",
+  "mcphone.camera.hint": "按 %s 拍照  ·  按 %s 退出相机",
   "item.mcphone.phone": "§6手机",
   "mcphone.loaded": "MCphone 模组加载完成 —— 手机已就绪",
   "mcphone.client_loaded": "MCphone 客户端加载完成",
