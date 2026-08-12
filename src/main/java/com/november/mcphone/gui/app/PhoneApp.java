@@ -53,8 +53,9 @@ public abstract class PhoneApp implements IPhoneApp {
                 MCphone.MODID, "textures/gui/app_icon_" + id + ".png");
     }
 
-    @Override
-    public boolean isSystemApp() { return true; }
+    // isSystemApp() 不在此覆盖，沿用 IPhoneApp 的默认值 false：
+    // 内建 App 默认允许玩家卸载，确需常驻的由具体 App 自行覆盖为 true
+    // （目前只有 SettingsApp——它是进入 App 管理器的唯一入口）
 
     @Override
     public void renderIcon(GuiGraphics g, int x, int y, int size, float partialTick) {

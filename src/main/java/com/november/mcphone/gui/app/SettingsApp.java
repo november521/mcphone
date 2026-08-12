@@ -14,6 +14,13 @@ public final class SettingsApp extends PhoneApp {
         super("settings");
     }
 
+    /**
+     * 设置是唯一的系统 App，不可卸载。
+     * 它是进入 App 管理器的唯一入口，一旦卸载玩家将无法再装回任何 App。
+     */
+    @Override
+    public boolean isSystemApp() { return true; }
+
     @Override
     public void onPress() {
         if (Minecraft.getInstance().screen instanceof PhoneScreen ps) {
