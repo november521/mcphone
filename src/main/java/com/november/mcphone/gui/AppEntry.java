@@ -14,8 +14,7 @@ import net.minecraft.client.gui.GuiGraphics;
  * {@link PhoneScreenRegistry#registerDefaultApps} 中新增一条即可，
  * 无需修改 PhoneScreen 本身。
  */
-public abstract sealed class AppEntry
-        permits GenericApp, IconApp {
+public abstract class AppEntry {
 
     private final String name;
 
