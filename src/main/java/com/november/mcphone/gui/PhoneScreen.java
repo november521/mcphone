@@ -24,7 +24,7 @@ import java.util.List;
 public final class PhoneScreen extends Screen {
 
     /** 手机导航模式 */
-    public enum Mode { MAIN, SETTINGS, WALLPAPER_PICKER, APP_MANAGER, MUSIC_PLAYER, APP_STORE }
+    public enum Mode { MAIN, SETTINGS, WALLPAPER_PICKER, APP_MANAGER, MUSIC_PLAYER, APP_STORE, GALLERY }
 
     private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
 
@@ -51,6 +51,9 @@ public final class PhoneScreen extends Screen {
     // ---- 应用商店 ----
     private final AppStore appStore = new AppStore();
 
+    // ---- 相册 ----
+    private final Gallery gallery = new Gallery();
+
     // ---- 主屏幕 hover ----
     private int hoveredAppIndex = -1;
 
@@ -71,8 +74,15 @@ public final class PhoneScreen extends Screen {
     // ============================================================
 
     public void navigateTo(Mode target) {
+        if (this.mode == target) return;
+
         // 离开商店时清掉上次的列表与提示，下次进入重新拉取
         if (this.mode == Mode.APP_STORE && target != Mode.APP_STORE) appStore.reset();
+
+        // 相册进出都要动作：进入时重扫目录，离开时释放缩略图贴图
+        if (this.mode == Mode.GALLERY) gallery.close();
+        if (target == Mode.GALLERY) gallery.open();
+
         this.mode = target;
         this.hoveredSettingIdx = -1;
     }
@@ -137,6 +147,7 @@ public final class PhoneScreen extends Screen {
             case APP_MANAGER       -> renderAppManager(g, mouseX, mouseY);
             case MUSIC_PLAYER      -> renderMusicPlayer(g, mouseX, mouseY);
             case APP_STORE         -> renderAppStore(g, mouseX, mouseY);
+            case GALLERY           -> renderGallery(g, mouseX, mouseY);
         }
 
         renderNavBar(g);
@@ -436,6 +447,17 @@ public final class PhoneScreen extends Screen {
     }
 
     // ============================================================
+    //  相册
+    // ============================================================
+
+    private void renderGallery(GuiGraphics g, int mx, int my) {
+        gallery.render(g, phoneLeft, phoneTop,
+                PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
+                PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT,
+                mx, my, font);
+    }
+
+    // ============================================================
     //  底部导航栏
     // ============================================================
 
@@ -595,7 +617,21 @@ public final class PhoneScreen extends Screen {
                 appStore.mouseClicked(mx, my, button);
                 yield true;
             }
+            case GALLERY -> {
+                gallery.mouseClicked(mx, my, button);
+                yield true;
+            }
         };
+    }
+
+    // ============================================================
+    //  滚轮
+    // ============================================================
+
+    @Override
+    public boolean mouseScrolled(double mx, double my, double scrollX, double scrollY) {
+        if (mode == Mode.GALLERY && gallery.mouseScrolled(scrollY)) return true;
+        return super.mouseScrolled(mx, my, scrollX, scrollY);
     }
 
     // ============================================================
@@ -617,9 +653,25 @@ public final class PhoneScreen extends Screen {
             else onClose();
             return true;
         }
+        // 相册的方向键翻页放在最后：ESC 与背包键优先，
+        // 免得有人把背包键绑成方向键时被相册吃掉
+        if (mode == Mode.GALLERY && gallery.keyPressed(keyCode)) return true;
+
         return super.keyPressed(keyCode, scanCode, modifiers);
     }
 
     @Override public void onClose() { super.onClose(); }
+
+    /**
+     * 界面被移除时释放相册贴图。
+     *
+     * 用 removed() 而不是 onClose()：被别的界面顶掉时（如按 E 开背包）
+     * onClose 不会触发，贴图就一直占着显存了。
+     */
+    @Override
+    public void removed() {
+        if (mode == Mode.GALLERY) gallery.close();
+        super.removed();
+    }
     @Override public boolean isPauseScreen() { return false; }
 }

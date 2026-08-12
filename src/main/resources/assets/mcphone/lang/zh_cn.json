@@ -32,6 +32,8 @@
   "mcphone.store.error.no_source": "来源不可用: %s",
   "mcphone.store.error.not_found": "找不到App: %s",
   "mcphone.store.error.install_failed": "安装失败: %s",
+  "mcphone.gallery.empty": "还没有照片",
+  "mcphone.gallery.empty_hint": "用相机拍的照片会出现在这里",
   "mcphone.app.settings": "设置",
   "mcphone.app.messages": "消息",
   "mcphone.app.contacts": "联系人",

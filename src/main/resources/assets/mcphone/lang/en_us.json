@@ -32,6 +32,8 @@
   "mcphone.store.error.no_source": "Source unavailable: %s",
   "mcphone.store.error.not_found": "App not found: %s",
   "mcphone.store.error.install_failed": "Install failed: %s",
+  "mcphone.gallery.empty": "No photos yet",
+  "mcphone.gallery.empty_hint": "Photos you take will show up here",
   "mcphone.app.settings": "Settings",
   "mcphone.app.messages": "Messages",
   "mcphone.app.contacts": "Contacts",
