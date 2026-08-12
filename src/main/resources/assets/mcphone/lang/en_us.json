@@ -2,5 +2,6 @@
   "itemGroup.mcphone": "MCphone",
   "item.mcphone.phone": "§6手机",
   "mcphone.loaded": "MCphone 模组加载完成 —— 手机已就绪",
-  "mcphone.client_loaded": "MCphone 客户端加载完成"
+  "mcphone.client_loaded": "MCphone 客户端加载完成",
+  "mcphone.gui.home": "手机主屏幕"
 }

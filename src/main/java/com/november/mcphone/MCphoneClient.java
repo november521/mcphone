@@ -1,5 +1,6 @@
 package com.november.mcphone;
 
+import com.november.mcphone.gui.PhoneScreenRegistry;
 import net.minecraft.client.Minecraft;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
@@ -20,9 +21,10 @@ public class MCphoneClient {
 
     @SubscribeEvent
     static void onClientSetup(FMLClientSetupEvent event) {
+        // 注册所有内建 App
+        PhoneScreenRegistry.registerDefaultApps();
+
         MCphone.LOGGER.info("MCphone 客户端加载完成");
         MCphone.LOGGER.info("玩家: {}", Minecraft.getInstance().getUser().getName());
     }
-
-    // 下一阶段: 注册手机 GUI Screen
 }
