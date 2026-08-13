@@ -43,9 +43,13 @@ public final class ChatList {
     private static final DateTimeFormatter TIME_FORMAT = DateTimeFormatter.ofPattern("HH:mm");
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("MM-dd");
 
+    /** 头像边长。16 ＝ 皮肤头部 8×8 的整数倍放大，边缘才锐利 */
+    private static final int AVATAR_SIZE = 16;
+
+    /** 头像与右侧文字之间的空隙 */
+    private static final int AVATAR_GAP = 3;
+
     // ---- 颜色 ----
-    private static final int COLOR_ONLINE = 0xFF55DD55;
-    private static final int COLOR_OFFLINE = 0xFF777777;
     private static final int COLOR_NAME = 0xFFFFFFFF;
     private static final int COLOR_PREVIEW = 0xFF999999;
     private static final int COLOR_TIME = 0xFF777777;
@@ -177,17 +181,16 @@ public final class ChatList {
 
     private void renderRow(GuiGraphics g, Font font, ConversationSummary c,
                            int x, int y, int w) {
-        // ---- 第一行：在线圆点 + 名字 + 右侧未读/时间 ----
-        int dotSize = 3;
-        int dotY = y + (font.lineHeight - dotSize) / 2 + 1;
-        g.fill(x, dotY, x + dotSize, dotY + dotSize,
-                c.online() ? COLOR_ONLINE : COLOR_OFFLINE);
+        // ---- 头像：竖跨两行文字，在行内居中 ----
+        // 在线状态点挂在头像右下角，比单独占一列省地方，也更像真手机
+        int avatarY = y + (rowHeight(font) - AVATAR_SIZE) / 2;
+        PlayerAvatar.drawWithStatus(g, c.id(), x, avatarY, AVATAR_SIZE, c.online());
 
         // 右侧先算宽度，名字才知道能占多少
         String right = c.unread() > 0 ? unreadLabel(c.unread()) : formatTime(c.lastTime());
         int rightW = right.isEmpty() ? 0 : font.width(right) + (c.unread() > 0 ? 4 : 0);
 
-        int nameX = x + dotSize + 3;
+        int nameX = x + AVATAR_SIZE + AVATAR_GAP;
         int nameMaxW = w - (nameX - x) - rightW - 4;
         String name = truncate(font, c.name(), nameMaxW);
         g.drawString(font, name, nameX, y, COLOR_NAME, false);
