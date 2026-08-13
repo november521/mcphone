@@ -2,8 +2,11 @@ package com.november.mcphone;
 
 import com.november.mcphone.client.CameraHandler;
 import com.november.mcphone.client.MCphoneKeyBindings;
+import com.november.mcphone.gui.PhoneContainerScreen;
 import com.november.mcphone.gui.PhoneScreenRegistry;
 import com.november.mcphone.gui.WallpaperStore;
+import com.november.mcphone.menu.ModMenus;
+import net.neoforged.neoforge.client.event.RegisterMenuScreensEvent;
 import net.minecraft.client.Minecraft;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.neoforge.common.NeoForge;
@@ -30,6 +33,17 @@ public class MCphoneClient {
         NeoForge.EVENT_BUS.addListener(CameraHandler::onClientTick);
         NeoForge.EVENT_BUS.addListener(CameraHandler::onRenderGui);
         NeoForge.EVENT_BUS.addListener(CameraHandler::onScreenOpening);
+    }
+
+    /**
+     * 把菜单类型与界面类绑定。
+     *
+     * RegisterMenuScreensEvent 是【模组总线】事件。不注册的话，服务端
+     * openMenu 后客户端不知道该开哪个界面，表现为菜单开了但什么都没显示。
+     */
+    @SubscribeEvent
+    static void onRegisterMenuScreens(RegisterMenuScreensEvent event) {
+        event.register(ModMenus.ENDER_CHEST.get(), PhoneContainerScreen::new);
     }
 
     @SubscribeEvent
