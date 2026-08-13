@@ -320,16 +320,22 @@ public final class PhoneScreen extends Screen {
         }
     }
 
+    /**
+     * 画图标下面那行名字，缩放后仍要对准图标中线。
+     *
+     * 先 translate 到目标位置再 scale，最后在原点画——而不是缩放一个
+     * 非原点的坐标。原先的写法把缩放锚点放在文字中心、却仍从左端起笔，
+     * 结果实际中心比图标中线偏右 nw×ns×(1-ns)/2 像素，名字越长偏得越多。
+     * 这类错位只在缩放时出现，肉眼看着"就是有点歪"，很难想到是变换写反了。
+     */
     private void drawAppName(GuiGraphics g, String name, int ix, int iy, int is) {
         float ns = PhoneTheme.APP_NAME_SCALE;
-        int nw = font.width(name);
-        int nx = ix + (is - (int)(nw * ns)) / 2;
-        int ny = iy + is + 2;
+        float nw = font.width(name) * ns;   // 缩放【后】的实际宽度
+
         g.pose().pushPose();
-        g.pose().translate(nx + nw * ns / 2f, ny, 0);
+        g.pose().translate(ix + (is - nw) / 2f, iy + is + 2, 0);
         g.pose().scale(ns, ns, 1f);
-        g.pose().translate(-(nx + nw * ns / 2f), -ny, 0);
-        g.drawString(font, name, nx, ny, PhoneTheme.FONT_COLOR_APP_NAME, false);
+        g.drawString(font, name, 0, 0, PhoneTheme.FONT_COLOR_APP_NAME, false);
         g.pose().popPose();
     }
 

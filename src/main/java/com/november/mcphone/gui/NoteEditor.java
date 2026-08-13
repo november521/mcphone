@@ -7,6 +7,8 @@ import com.november.mcphone.network.notes.RequestNotePacket;
 import com.november.mcphone.network.notes.SaveNotePacket;
 import com.november.mcphone.notes.Note;
 import com.november.mcphone.notes.NoteService;
+import com.november.mcphone.notes.NotePrinter;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.MultiLineEditBox;
@@ -61,6 +63,9 @@ public final class NoteEditor {
     /** 删除已上膛时的颜色 —— 与相册的确认态一致 */
     private static final int COLOR_ARMED = 0xFFFFDD44;
 
+    /** 临时提示的颜色 */
+    private static final int COLOR_TOAST = 0xFFFFDD44;
+
     private MultiLineEditBox box;
 
     /** 正在编辑哪一条；{@link NoteService#NEW_NOTE_ID} 表示新建 */
@@ -87,6 +92,19 @@ public final class NoteEditor {
     /** 保存或删除后置位，PhoneScreen 取走后退回列表 */
     private boolean backRequested;
 
+    /**
+     * 手机屏幕里的一行临时提示。
+     *
+     * 打印的结果本来是服务端用动作栏说的，但动作栏在游戏 HUD 上、手机
+     * 机身之外——玩家正盯着手机屏幕，得先关掉手机才看得见那句话，等于
+     * 白说。所以结果也在这块小屏幕里说一遍。
+     */
+    private String toast = "";
+    private long toastUntilMs;
+
+    /** 提示停留时长。够读完一行短句，又不至于赖着不走 */
+    private static final long TOAST_MS = 2500L;
+
     // ============================================================
     //  生命周期
     // ============================================================
@@ -96,6 +114,7 @@ public final class NoteEditor {
         this.noteId = id;
         this.filled = false;
         this.deleteArmed = false;
+        this.toast = "";
         resetBox();
 
         NotesClientCache.openNote(id);
@@ -107,6 +126,7 @@ public final class NoteEditor {
         this.noteId = NoteService.NEW_NOTE_ID;
         this.filled = true;   // 白纸本身就是"填好了"，别再等回包
         this.deleteArmed = false;
+        this.toast = "";
         resetBox();
 
         NotesClientCache.openNewNote();
@@ -168,6 +188,9 @@ public final class NoteEditor {
         box.render(g, mouseX, mouseY, partialTick);
 
         renderButtons(g, font, x, buttonY, w, mouseX, mouseY);
+
+        // 画在字数那一行的位置：那儿本来就是空的，且紧挨按钮，视线不用挪
+        renderToast(g, font, x, buttonY - font.lineHeight - 1, w);
     }
 
     /**
@@ -283,7 +306,30 @@ public final class NoteEditor {
      */
     private void print() {
         deleteArmed = false;
+
+        // 背包在客户端是齐全的，够不够这里就能算准——不必先发一趟包，
+        // 等服务端拒绝了再回话。缺书是最常见的失败，就地说清楚
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.player != null && !NotePrinter.COST.canAfford(mc.player)) {
+            showToast("mcphone.notes.print_failed");
+            return;
+        }
+
         PacketDistributor.sendToServer(new PrintNotePacket(noteId));
+        showToast("mcphone.notes.print_done");
+    }
+
+    private void showToast(String translationKey) {
+        toast = Component.translatable(translationKey).getString();
+        toastUntilMs = System.currentTimeMillis() + TOAST_MS;
+    }
+
+    /** 提示画在按钮行正上方，到点自动消失 */
+    private void renderToast(GuiGraphics g, Font font, int x, int y, int w) {
+        if (toast.isEmpty() || System.currentTimeMillis() > toastUntilMs) return;
+
+        int tw = font.width(toast);
+        g.drawString(font, toast, x + (w - tw) / 2, y, COLOR_TOAST, false);
     }
 
     /** 第一次点上膛，第二次才真删 —— 理由见 deleteArmed 的注释 */
