@@ -18,9 +18,29 @@ import net.neoforged.neoforge.network.PacketDistributor;
  * 为什么用原版 EditBox 而不是自己撸一个输入框
  * ================================================================
  *
- * Minecraft 的 GUI 不支持输入法，中文名基本只能靠 Ctrl+V 粘贴进来。
- * 粘贴、光标移动、选中、退格这些 EditBox 全都现成，自己写要重来一遍
+ * 粘贴、光标移动、选中、退格这些 EditBox 全都现成，自己写要重来一遍，
  * 还容易在代理对（表情符号）上出错。
+ *
+ * 原版按 T 弹出的聊天框用的就是这个类（见 ChatScreen 的 input 字段），
+ * 中文走的也是同一条路，没有第二条通道：
+ *
+ *   系统输入法提交 → GLFW 字符回调 → KeyboardHandler.charTyped
+ *     → Screen.charTyped → EditBox.charTyped
+ *
+ * 中途只有 StringUtil.isAllowedChatCharacter 一道过滤，它整个实现就是
+ * "不是 §、不是控制字符、不是 DEL"，汉字一律放行；超出基本平面的字符
+ * （表情）由 KeyboardHandler 拆成代理对逐个送来，拼回去仍然正确。
+ * 唯一的门槛是 EditBox.canConsumeInput 要求的焦点，下面已经设过。
+ *
+ * 所以这里能不能打中文，与原版聊天框完全一致——不存在"手机界面不支持
+ * 输入法"这回事，先前那条注释是错的。
+ *
+ * 真正碍事的是另外两件，都不在本类：
+ *   看不见候选框 —— LWJGL 带的 GLFW（3.3.3）没有 preedit 定位接口，
+ *     Minecraft 从不告诉系统候选窗该画在哪，等于盲打。原版聊天框同病，
+ *     只是它贴在屏幕底部，系统候选框默认也弹在那附近，才显得正常。
+ *   按键被界面吞掉 —— 打拼音必然按到 e，而背包键默认就是 e。
+ *     见 PhoneScreen.keyPressed 里对本界面的整段吞键处理。
  *
  * 但 EditBox 不作为 widget 加进 Screen：PhoneScreen.render 没有调
  * super.render()，加进去根本不会被画出来。这里手动调它的 render
