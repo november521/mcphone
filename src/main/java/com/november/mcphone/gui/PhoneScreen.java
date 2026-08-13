@@ -233,7 +233,7 @@ public final class PhoneScreen extends Screen {
             case DEVICE_NAME       -> renderDeviceName(g, mouseX, mouseY, partialTick);
             case CHAT              -> renderChat(g, mouseX, mouseY);
             case CHAT_ADD_CONTACT  -> renderChatAddContact(g, mouseX, mouseY);
-            case CHAT_CONVERSATION -> renderChatConversation(g, mouseX, mouseY);
+            case CHAT_CONVERSATION -> renderChatConversation(g, mouseX, mouseY, partialTick);
         }
 
         renderNavBar(g, mouseX, mouseY);
@@ -516,11 +516,11 @@ public final class PhoneScreen extends Screen {
                 mx, my, font);
     }
 
-    private void renderChatConversation(GuiGraphics g, int mx, int my) {
+    private void renderChatConversation(GuiGraphics g, int mx, int my, float partialTick) {
         chatConversation.render(g, phoneLeft, phoneTop,
                 PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
                 PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT,
-                mx, my, font);
+                mx, my, partialTick, font);
     }
 
     /** 设置列表右侧显示的当前设备名，未命名时显示占位文案 */
@@ -739,8 +739,10 @@ public final class PhoneScreen extends Screen {
                 chatAddContact.mouseClicked(mx, my, button);
                 yield true;
             }
-            // 会话界面此刻没有可点的东西，输入框在下个版本加上
-            case CHAT_CONVERSATION -> true;
+            case CHAT_CONVERSATION -> {
+                chatConversation.mouseClicked(mx, my, button);
+                yield true;
+            }
         };
     }
 
@@ -768,12 +770,17 @@ public final class PhoneScreen extends Screen {
             if (!goBackOneLevel()) onClose();
             return true;
         }
-        // 命名界面必须抢在背包键判定之前，且无论输入框是否消费都要吃掉按键：
-        // 否则名字里打个 "e" 就会命中背包键，手机当场关掉。
+        // 带输入框的界面必须抢在背包键判定之前，且无论输入框是否消费都要
+        // 吃掉按键：否则打个 "e" 就会命中背包键，手机当场关掉。打拼音时
+        // 一定会按到 e，中文用户尤其躲不开。
         // ESC 已在上面单独处理，不会被这里吞掉
         if (mode == Mode.DEVICE_NAME) {
             deviceNameEditor.keyPressed(keyCode, scanCode, modifiers);
             if (deviceNameEditor.consumeBackRequest()) navigateTo(Mode.SETTINGS);
+            return true;
+        }
+        if (mode == Mode.CHAT_CONVERSATION) {
+            chatConversation.keyPressed(keyCode, scanCode, modifiers);
             return true;
         }
 
@@ -789,10 +796,16 @@ public final class PhoneScreen extends Screen {
         return super.keyPressed(keyCode, scanCode, modifiers);
     }
 
-    /** 字符输入只有命名界面用得上；EditBox 靠这个收字符（含粘贴） */
+    /**
+     * 字符输入。EditBox 靠这个收字符，包括输入法提交的汉字与 Ctrl+V 粘贴。
+     *
+     * 这是所有文字进入界面的唯一通道，原版按 T 的聊天框走的也是它，
+     * 详见 DeviceNameEditor 类注释。
+     */
     @Override
     public boolean charTyped(char c, int modifiers) {
         if (mode == Mode.DEVICE_NAME && deviceNameEditor.charTyped(c, modifiers)) return true;
+        if (mode == Mode.CHAT_CONVERSATION && chatConversation.charTyped(c, modifiers)) return true;
         return super.charTyped(c, modifiers);
     }
 

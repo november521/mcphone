@@ -60,5 +60,6 @@
   "mcphone.chat.truncated": "Showing %s of %s players",
   "mcphone.chat.request_pending": "Pending",
   "mcphone.chat.accept_action": "✔ Accept",
-  "mcphone.chat.conversation_empty": "No messages yet"
+  "mcphone.chat.conversation_empty": "No messages yet",
+  "mcphone.chat.send": "Send"
 }

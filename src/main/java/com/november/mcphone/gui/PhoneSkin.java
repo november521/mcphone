@@ -76,7 +76,10 @@ public final class PhoneSkin {
         CHAT_BUBBLE_SELF("chat_bubble_self"),
 
         /** 对方发来的聊天气泡底。拉伸方式同 {@link #CHAT_BUBBLE_SELF} */
-        CHAT_BUBBLE_PEER("chat_bubble_peer");
+        CHAT_BUBBLE_PEER("chat_bubble_peer"),
+
+        /** 会话界面底部输入栏的底。建议 90×14 */
+        CHAT_INPUT_BAR("chat_input_bar");
 
         private final ResourceLocation texture;
 

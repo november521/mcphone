@@ -5,9 +5,11 @@ import com.november.mcphone.network.chat.ChatClientCache;
 import com.november.mcphone.network.chat.ConversationSummary;
 import com.november.mcphone.network.chat.RequestConversationsPacket;
 import com.november.mcphone.network.chat.RequestMessagesPacket;
+import com.november.mcphone.network.chat.SendChatMessagePacket;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.FormattedCharSequence;
 import net.neoforged.neoforge.network.PacketDistributor;
@@ -43,6 +45,20 @@ import java.util.UUID;
  *
  * 每条消息高度不等（一行到二十行都可能），按条滚动的话，最后一条如果
  * 很长就永远看不到它的结尾——而那恰恰是最该看到的部分。
+ *
+ * ============================================================
+ * 输入框与中文
+ * ============================================================
+ *
+ * 用原版 EditBox，和设备命名界面同一套路数（那边有详细说明）。中文能不能
+ * 打，与原版按 T 的聊天框完全一致——用的就是同一个类、同一条字符通道。
+ *
+ * 但有一条必须由 PhoneScreen 配合：本界面下所有按键都得被吞掉，否则打
+ * 拼音按到 e 就命中背包键，手机当场关掉。命名界面早踩过这个坑。
+ *
+ * ESC 例外，仍然退出会话——原版聊天框按 ESC 也是直接关掉，就算它同时
+ * 是输入法取消候选的键。让 ESC 只取消候选的话，玩家就没有任何一个键能
+ * 退出会话了，两害相权取其轻。
  */
 public final class ChatConversation {
 
@@ -70,6 +86,15 @@ public final class ChatConversation {
     /** 滚轮一格滚多少像素 */
     private static final int SCROLL_STEP = 18;
 
+    /** 底部输入栏高度 */
+    private static final int INPUT_H = 14;
+
+    /** 输入栏与消息区、导航栏之间的空隙 */
+    private static final int INPUT_GAP = 2;
+
+    /** 文字距输入栏左右边缘的距离 */
+    private static final int INPUT_TEXT_PAD = 3;
+
     private static final DateTimeFormatter TIME_FORMAT = DateTimeFormatter.ofPattern("HH:mm");
     private static final DateTimeFormatter DATE_TIME_FORMAT = DateTimeFormatter.ofPattern("MM-dd HH:mm");
 
@@ -82,6 +107,12 @@ public final class ChatConversation {
     private static final int COLOR_TEXT_PEER = 0xFFEEEEEE;
     private static final int COLOR_STAMP = 0xFF777777;
     private static final int COLOR_EMPTY = 0xFF888888;
+    private static final int COLOR_INPUT_BG = 0xFF26263A;
+    private static final int COLOR_SEND = 0xFF66FF88;
+    private static final int COLOR_SEND_HOVER = 0xFFFFFFFF;
+
+    /** 输入框空着时发送键置灰：点了也不会发，颜色要说明这一点 */
+    private static final int COLOR_SEND_OFF = 0xFF555555;
 
     /** 当前会话的对端；null 表示不在会话界面 */
     private UUID peer;
@@ -93,6 +124,17 @@ public final class ChatConversation {
 
     /** 上一帧算出的可翻动上限，滚轮据此夹紧 */
     private int maxScroll;
+
+    /**
+     * 底部输入框。
+     *
+     * 首次 render 时才创建：那时才知道机身坐标。之后每帧同步位置，
+     * 手机居中位置会随窗口大小变化。
+     */
+    private EditBox box;
+
+    /** 本帧鼠标是否停在发送键上 */
+    private boolean sendHovered;
 
     // ---- 排版缓存 ----
     private List<Block> blocks = List.of();
@@ -137,6 +179,14 @@ public final class ChatConversation {
         this.blocks = List.of();
         this.contentH = 0;
 
+        // 进来就能直接打字，不必先点一下输入框。
+        // 代价是 EditBox 的 hint 不会显示（原版只在失焦时画提示），
+        // 空输入框旁边就是发送键，不至于看不懂
+        if (box != null) {
+            box.setValue("");
+            box.setFocused(true);
+        }
+
         ChatClientCache.openConversation(peer);
         PacketDistributor.sendToServer(new RequestMessagesPacket(peer));
     }
@@ -147,6 +197,8 @@ public final class ChatConversation {
         laidOutFrom = null;
         blocks = List.of();
         contentH = 0;
+        sendHovered = false;
+        if (box != null) box.setFocused(false);
         ChatClientCache.closeConversation();
     }
 
@@ -156,19 +208,23 @@ public final class ChatConversation {
 
     public void render(GuiGraphics g, int phoneLeft, int phoneTop,
                        int screenW, int screenH, int statusH, int navH,
-                       int mouseX, int mouseY, Font font) {
+                       int mouseX, int mouseY, float partialTick, Font font) {
 
         maybeRefresh();
 
         final int x = phoneLeft + PAD;
         final int w = screenW - PAD * 2;
-        final int bottom = phoneTop + screenH - navH;
-        int y = phoneTop + statusH + 4;
 
+        // 输入栏钉在导航栏正上方，消息区用剩下的地方
+        final int inputTop = phoneTop + screenH - navH - INPUT_H - INPUT_GAP;
+        final int bottom = inputTop - INPUT_GAP;
+
+        int y = phoneTop + statusH + 4;
         y = renderHeader(g, font, x, y, w);
 
         relayout(font, w);
         renderMessages(g, font, x, y, w, bottom);
+        renderInputBar(g, font, x, inputTop, w, mouseX, mouseY, partialTick);
     }
 
     /** 标题行：在线圆点 + 对方名字 */
@@ -242,6 +298,44 @@ public final class ChatConversation {
         }
     }
 
+    /** 底部输入栏：输入框 + 发送键 */
+    private void renderInputBar(GuiGraphics g, Font font, int x, int y, int w,
+                                int mouseX, int mouseY, float partialTick) {
+
+        String send = Component.translatable("mcphone.chat.send").getString();
+        int sendW = font.width(send) + 4;
+        int boxW = w - sendW - 2;
+
+        PhoneSkin.drawOrFill(g, PhoneSkin.Element.CHAT_INPUT_BAR,
+                x, y, boxW, INPUT_H, COLOR_INPUT_BG);
+
+        // 无边框：底由上面那句负责，换肤才有意义。
+        // 代价是 EditBox 不再自己垂直居中（原版只在有边框时居中），
+        // 所以这里手动把它摆到栏中间
+        int textY = y + (INPUT_H - font.lineHeight) / 2 + 1;
+        if (box == null) {
+            box = new EditBox(font, x + INPUT_TEXT_PAD, textY,
+                    boxW - INPUT_TEXT_PAD * 2, INPUT_H - 4,
+                    Component.translatable("mcphone.app.chat"));
+            box.setMaxLength(ChatMessage.MAX_TEXT_LENGTH);
+            box.setBordered(false);
+            box.setFocused(true);
+        } else {
+            box.setX(x + INPUT_TEXT_PAD);
+            box.setY(textY);
+            box.setWidth(boxW - INPUT_TEXT_PAD * 2);
+        }
+        box.render(g, mouseX, mouseY, partialTick);
+
+        int sendX = x + w - sendW;
+        sendHovered = mouseX >= sendX && mouseX <= x + w
+                   && mouseY >= y && mouseY < y + INPUT_H;
+
+        boolean empty = box.getValue().isBlank();
+        g.drawString(font, send, sendX + 2, textY,
+                empty ? COLOR_SEND_OFF : (sendHovered ? COLOR_SEND_HOVER : COLOR_SEND), false);
+    }
+
     // ============================================================
     //  排版
     // ============================================================
@@ -297,6 +391,59 @@ public final class ChatConversation {
         contentH = total;
         laidOutFrom = src;
         laidOutWidth = maxW;
+    }
+
+    // ============================================================
+    //  输入
+    // ============================================================
+
+    public boolean mouseClicked(double mx, double my, int button) {
+        if (button == 0 && sendHovered) {
+            send();
+            return true;
+        }
+        // 其余点击交给输入框，用来挪光标 / 选中
+        if (box != null) box.mouseClicked(mx, my, button);
+        return false;
+    }
+
+    /**
+     * @return true 表示按键已被消费。
+     *         调用方无论如何都该吃掉按键，别让 e 漏到背包键那边去
+     */
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (keyCode == 257 || keyCode == 335) {   // Enter / 小键盘 Enter
+            send();
+            return true;
+        }
+        return box != null && box.keyPressed(keyCode, scanCode, modifiers);
+    }
+
+    public boolean charTyped(char c, int modifiers) {
+        return box != null && box.charTyped(c, modifiers);
+    }
+
+    /**
+     * 发一条消息。
+     *
+     * 只发包、不本地插入：服务端校验没过（比如刚被对方解除好友）时会静默
+     * 丢弃，本地抢先插入的话，界面上就留下一条根本不存在的消息。自己发的
+     * 那条会由服务端回声送回来，见 ChatNetworking 的 handleSendMessage。
+     *
+     * 空白内容直接不发：服务端清洗后也是空的，白跑一趟。
+     */
+    private void send() {
+        if (box == null || peer == null) return;
+
+        String text = box.getValue();
+        if (text.isBlank()) return;
+
+        PacketDistributor.sendToServer(new SendChatMessagePacket(peer, text));
+        box.setValue("");
+
+        // 回到底部：自己刚发的那条得看得见。
+        // 正翻着历史时发消息也一样——发完还盯着旧记录看很奇怪
+        scrollPx = 0;
     }
 
     // ============================================================
