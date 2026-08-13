@@ -23,25 +23,40 @@ public final class TextSanitizer {
     private TextSanitizer() {}
 
     /**
-     * 清洗一段玩家输入，做三件事：
-     *
-     *   - 去掉 § 格式符，否则玩家能把文本染色、做成乱码，
-     *     甚至用 §k 乱码字符干扰别人的界面
-     *   - 去掉控制字符（含换行与 DEL），这些文本都是单行的
-     *   - 截断到 maxLength，且不切开代理对——否则表情符号会被劈成
-     *     半个，渲染出来是个方框，严重时能让字体渲染器出错
+     * 清洗一段【单行】输入 —— 设备名、聊天消息走这条。
      *
      * @param raw       原始输入，允许为 null
      * @param maxLength 长度上限（字符数，非字节数）
      * @return 清洗后的文本，绝不为 null
      */
     public static String sanitize(String raw, int maxLength) {
+        return sanitize(raw, maxLength, false);
+    }
+
+    /**
+     * 清洗一段玩家输入，做三件事：
+     *
+     *   - 去掉 § 格式符，否则玩家能把文本染色、做成乱码，
+     *     甚至用 §k 乱码字符干扰别人的界面
+     *   - 去掉控制字符与 DEL
+     *   - 截断到 maxLength，且不切开代理对——否则表情符号会被劈成
+     *     半个，渲染出来是个方框，严重时能让字体渲染器出错
+     *
+     * @param allowLineBreaks 是否保留换行。笔记这类多行文本要留，单行输入
+     *                        （设备名、聊天）一律不留——否则玩家能往里塞
+     *                        换行，把一条消息撑成十行刷屏。
+     *                        保留换行时 \r 仍然丢弃：Windows 粘过来的
+     *                        \r\n 会变成干净的 \n，免得同一段文本在不同
+     *                        系统上行数对不上
+     */
+    public static String sanitize(String raw, int maxLength, boolean allowLineBreaks) {
         if (raw == null) return "";
 
         StringBuilder sb = new StringBuilder(raw.length());
         for (int i = 0; i < raw.length(); i++) {
             char c = raw.charAt(i);
             if (c == '§') continue;              // § 格式符
+            if (c == '\n' && allowLineBreaks) { sb.append(c); continue; }
             if (c < ' ' || c == 0x7F) continue;   // 控制字符（含换行与 DEL）
             sb.append(c);
         }
