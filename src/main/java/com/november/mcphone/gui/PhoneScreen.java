@@ -10,6 +10,7 @@ import net.minecraft.world.InteractionHand;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * 手机主屏幕 GUI。
@@ -22,7 +23,7 @@ import java.util.List;
 public final class PhoneScreen extends Screen {
 
     /** 手机导航模式 */
-    public enum Mode { MAIN, SETTINGS, WALLPAPER_PICKER, APP_MANAGER, MUSIC_PLAYER, APP_STORE, GALLERY, DEVICE_NAME }
+    public enum Mode { MAIN, SETTINGS, WALLPAPER_PICKER, APP_MANAGER, MUSIC_PLAYER, APP_STORE, GALLERY, DEVICE_NAME, CHAT }
 
 
     // ---- 打开动画 ----
@@ -61,6 +62,9 @@ public final class PhoneScreen extends Screen {
 
     // ---- 设备名称 ----
     private final DeviceNameEditor deviceNameEditor = new DeviceNameEditor();
+
+    // ---- 聊天 ----
+    private final ChatList chatList = new ChatList();
 
     /**
      * 手机在玩家哪只手上。
@@ -105,6 +109,10 @@ public final class PhoneScreen extends Screen {
         // 进入命名界面时把当前设备名填进输入框
         if (this.mode == Mode.DEVICE_NAME) deviceNameEditor.close();
         if (target == Mode.DEVICE_NAME) deviceNameEditor.open(hand);
+
+        // 会话列表离开即停止定时刷新，不在后台空转
+        if (this.mode == Mode.CHAT) chatList.close();
+        if (target == Mode.CHAT) chatList.open();
 
         this.mode = target;
         this.hoveredSettingIdx = -1;
@@ -172,6 +180,7 @@ public final class PhoneScreen extends Screen {
             case APP_STORE         -> renderAppStore(g, mouseX, mouseY);
             case GALLERY           -> renderGallery(g, mouseX, mouseY);
             case DEVICE_NAME       -> renderDeviceName(g, mouseX, mouseY, partialTick);
+            case CHAT              -> renderChat(g, mouseX, mouseY);
         }
 
         renderNavBar(g);
@@ -441,6 +450,17 @@ public final class PhoneScreen extends Screen {
                 mx, my, partialTick, font);
     }
 
+    // ============================================================
+    //  聊天
+    // ============================================================
+
+    private void renderChat(GuiGraphics g, int mx, int my) {
+        chatList.render(g, phoneLeft, phoneTop,
+                PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
+                PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT,
+                mx, my, font);
+    }
+
     /** 设置列表右侧显示的当前设备名，未命名时显示占位文案 */
     private String currentDeviceNameLabel() {
         if (minecraft == null || minecraft.player == null) return "";
@@ -620,6 +640,19 @@ public final class PhoneScreen extends Screen {
                 if (deviceNameEditor.mouseClicked(mx, my, button)) navigateTo(Mode.SETTINGS);
                 yield true;
             }
+            case CHAT -> {
+                chatList.mouseClicked(mx, my, button);
+                // 会话列表只提出请求，由这里决定去哪个界面——
+                // 组件不该知道 PhoneScreen 的导航结构
+                UUID open = chatList.consumeOpenRequest();
+                if (open != null) {
+                    // TODO: 会话界面就绪后导航过去
+                }
+                if (chatList.consumeAddContactRequest()) {
+                    // TODO: 加联系人界面就绪后导航过去
+                }
+                yield true;
+            }
         };
     }
 
@@ -630,6 +663,7 @@ public final class PhoneScreen extends Screen {
     @Override
     public boolean mouseScrolled(double mx, double my, double scrollX, double scrollY) {
         if (mode == Mode.GALLERY && gallery.mouseScrolled(scrollY)) return true;
+        if (mode == Mode.CHAT && chatList.mouseScrolled(scrollY)) return true;
         return super.mouseScrolled(mx, my, scrollX, scrollY);
     }
 

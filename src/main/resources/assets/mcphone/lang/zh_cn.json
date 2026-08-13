@@ -54,5 +54,9 @@
   "mcphone.item.tooltip.open": "§7右键打开手机",
   "mcphone.item.tooltip.version": "§8MCphone v%s",
   "mcphone.app.ender_chest": "末影箱",
-  "mcphone.container.ender_chest": "末影箱"
+  "mcphone.container.ender_chest": "末影箱",
+  "mcphone.app.chat": "聊天",
+  "mcphone.chat.empty": "还没有会话",
+  "mcphone.chat.empty_hint": "点右上角 + 添加联系人",
+  "mcphone.chat.no_message": "（还没聊过）"
 }

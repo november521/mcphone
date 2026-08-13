@@ -54,5 +54,9 @@
   "mcphone.item.tooltip.open": "§7Right-click to open phone",
   "mcphone.item.tooltip.version": "§8MCphone v%s",
   "mcphone.app.ender_chest": "Ender Chest",
-  "mcphone.container.ender_chest": "Ender Chest"
+  "mcphone.container.ender_chest": "Ender Chest",
+  "mcphone.app.chat": "Chat",
+  "mcphone.chat.empty": "No conversations yet",
+  "mcphone.chat.empty_hint": "Tap + to add a contact",
+  "mcphone.chat.no_message": "(no messages yet)"
 }
