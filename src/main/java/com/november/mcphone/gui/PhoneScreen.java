@@ -126,6 +126,39 @@ public final class PhoneScreen extends Screen {
         navigateTo(Mode.MAIN);
     }
 
+    /**
+     * 返回上一层。
+     *
+     * ESC 与导航栏的 ◁ 共用这一套规则——分别实现的话，两条路的层级
+     * 关系迟早会不一致：改了一处忘了另一处，玩家按 ESC 和点 ◁ 会去到
+     * 不同的地方。
+     *
+     * @return 真的退了一层才返回 true；已在主屏返回 false，
+     *         由调用方决定要不要关机（ESC 关，导航栏的 ◁ 不关）
+     */
+    private boolean goBackOneLevel() {
+        // 相册的单张查看是相册内的一层，先退回缩略图网格
+        if (mode == Mode.GALLERY && gallery.backToGrid()) return true;
+
+        // 命名界面退回设置列表，而非直接回主屏
+        if (mode == Mode.DEVICE_NAME) {
+            navigateTo(Mode.SETTINGS);
+            return true;
+        }
+
+        // 加联系人是聊天里的一层，退回会话列表
+        if (mode == Mode.CHAT_ADD_CONTACT) {
+            navigateTo(Mode.CHAT);
+            return true;
+        }
+
+        if (mode != Mode.MAIN) {
+            navigateTo(Mode.MAIN);
+            return true;
+        }
+        return false;
+    }
+
     // ============================================================
     //  布局
     // ============================================================
@@ -188,7 +221,7 @@ public final class PhoneScreen extends Screen {
             case CHAT_ADD_CONTACT  -> renderChatAddContact(g, mouseX, mouseY);
         }
 
-        renderNavBar(g);
+        renderNavBar(g, mouseX, mouseY);
         g.pose().popPose();
 
         if (mode == Mode.MAIN)           updateAppHover(mouseX, mouseY);
@@ -209,12 +242,7 @@ public final class PhoneScreen extends Screen {
     // ============================================================
 
     private void renderStatusBar(GuiGraphics g) {
-        // 非主界面显示返回箭头
-        String centerText = null;
-        if (mode != Mode.MAIN) {
-            centerText = Component.translatable("mcphone.gui.back").getString() + " 返回";
-        }
-        PhoneChassis.drawStatusBar(g, font, phoneLeft, phoneTop, centerText);
+        PhoneChassis.drawStatusBar(g, font, phoneLeft, phoneTop);
     }
 
     // ============================================================
@@ -498,8 +526,8 @@ public final class PhoneScreen extends Screen {
     //  底部导航栏
     // ============================================================
 
-    private void renderNavBar(GuiGraphics g) {
-        PhoneChassis.drawNavBar(g, font, phoneLeft, phoneTop);
+    private void renderNavBar(GuiGraphics g, int mouseX, int mouseY) {
+        PhoneChassis.drawNavBar(g, font, phoneLeft, phoneTop, mouseX, mouseY);
     }
 
     // ============================================================
@@ -600,6 +628,25 @@ public final class PhoneScreen extends Screen {
     public boolean mouseClicked(double mx, double my, int button) {
         if (button != 0) return super.mouseClicked(mx, my, button);
 
+        // 导航栏抢在各模式之前：它在每个界面都存在，交给各 case 自己处理
+        // 就得处处重复。各界面的内容都画在导航栏上方，不会争抢同一块区域
+        switch (PhoneChassis.hitTestNavBar(mx, my, phoneLeft, phoneTop)) {
+            case BACK -> {
+                // 主屏上按返回不关机——真实手机就是这样，关机走 ESC 或点机身外
+                goBackOneLevel();
+                return true;
+            }
+            case HOME -> {
+                navigateTo(Mode.MAIN);
+                return true;
+            }
+            case TASKS -> {
+                // 多任务尚未实现，先吃掉点击，免得穿透到下面的界面
+                return true;
+            }
+            case NONE -> { }
+        }
+
         return switch (mode) {
             case MAIN -> {
                 if (hoveredAppIndex >= 0) {
@@ -691,27 +738,8 @@ public final class PhoneScreen extends Screen {
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
         if (keyCode == 256) { // ESC
-            // 相册的单张查看是相册内的一层，ESC 先退回缩略图网格，
-            // 再按一次才离开相册
-            if (mode == Mode.GALLERY && gallery.backToGrid()) return true;
-
-            // 命名界面 ESC＝放弃修改，退回设置列表而非直接回主屏
-            if (mode == Mode.DEVICE_NAME) {
-                navigateTo(Mode.SETTINGS);
-                return true;
-            }
-
-            // 加联系人是聊天里的一层，ESC 退回会话列表而非直接回主屏
-            if (mode == Mode.CHAT_ADD_CONTACT) {
-                navigateTo(Mode.CHAT);
-                return true;
-            }
-
-            if (mode != Mode.MAIN) {
-                navigateTo(Mode.MAIN);
-                return true;
-            }
-            onClose();
+            // 已在主屏时 goBackOneLevel 返回 false，此时 ESC 关机
+            if (!goBackOneLevel()) onClose();
             return true;
         }
         // 命名界面必须抢在背包键判定之前，且无论输入框是否消费都要吃掉按键：

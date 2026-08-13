@@ -88,13 +88,8 @@ public final class PhoneChassis {
         }
     }
 
-    /**
-     * 画顶部状态栏：左侧信号、右侧时钟，中间可选文字。
-     *
-     * @param centerText 中间显示的文字，null 表示不显示
-     */
-    public static void drawStatusBar(GuiGraphics g, Font font, int phoneLeft, int phoneTop,
-                                     String centerText) {
+    /** 画顶部状态栏：左侧信号、右侧时钟 */
+    public static void drawStatusBar(GuiGraphics g, Font font, int phoneLeft, int phoneTop) {
         g.fill(phoneLeft, phoneTop,
                 phoneLeft + PhoneTheme.PHONE_WIDTH,
                 phoneTop + PhoneTheme.STATUS_BAR_HEIGHT, 0x66000000);
@@ -103,26 +98,74 @@ public final class PhoneChassis {
         int tx = phoneLeft + PhoneTheme.PHONE_WIDTH - 6 - font.width(time);
         g.drawString(font, time, tx, phoneTop + 1, PhoneTheme.FONT_COLOR_STATUS, true);
         g.drawString(font, "●●●●", phoneLeft + 4, phoneTop + 1, 0xFFFFFFFF, true);
-
-        if (centerText != null) {
-            g.drawString(font, centerText, phoneLeft + PhoneTheme.PHONE_WIDTH / 2 - 12,
-                    phoneTop + 1, 0xFF88CCFF, true);
-        }
     }
 
-    /** 画底部导航栏：三个虚拟按键 */
-    public static void drawNavBar(GuiGraphics g, Font font, int phoneLeft, int phoneTop) {
+    // ============================================================
+    //  导航栏
+    // ============================================================
+
+    /** 导航栏上的三个虚拟按键 */
+    public enum NavButton {
+        /** 没点在导航栏上 */
+        NONE,
+        /** ◁ 返回上一层 */
+        BACK,
+        /** ○ 回主屏 */
+        HOME,
+        /** □ 多任务，暂未实现 */
+        TASKS
+    }
+
+    /** 三个按键各占屏幕宽度的三分之一 */
+    private static final NavButton[] NAV_ORDER =
+            {NavButton.BACK, NavButton.HOME, NavButton.TASKS};
+
+    private static final String[] NAV_GLYPHS = {"◁", "○", "□"};
+
+    /**
+     * 命中判定 —— 与绘制放在同一个类里，布局一改两边一起改。
+     * 分开写迟早会出现"看得见点不到"或"点得到看不见"。
+     */
+    public static NavButton hitTestNavBar(double mouseX, double mouseY,
+                                          int phoneLeft, int phoneTop) {
+        int ny = phoneTop + PhoneTheme.PHONE_HEIGHT - PhoneTheme.NAV_BAR_HEIGHT;
+        if (mouseY < ny || mouseY >= phoneTop + PhoneTheme.PHONE_HEIGHT) return NavButton.NONE;
+        if (mouseX < phoneLeft || mouseX >= phoneLeft + PhoneTheme.PHONE_WIDTH) return NavButton.NONE;
+
+        int tw = PhoneTheme.PHONE_WIDTH / 3;
+        int idx = (int) ((mouseX - phoneLeft) / tw);
+        // 宽度除不尽时最右侧可能算出 3，夹回最后一个按键
+        if (idx >= NAV_ORDER.length) idx = NAV_ORDER.length - 1;
+        return NAV_ORDER[idx];
+    }
+
+    /**
+     * 画底部导航栏：三个虚拟按键，悬停时高亮。
+     *
+     * 高亮不只是好看：这三个键此前是纯装饰，玩家没有理由认为它们可点。
+     * 鼠标移上去有反馈，才看得出是按钮。
+     */
+    public static void drawNavBar(GuiGraphics g, Font font, int phoneLeft, int phoneTop,
+                                  int mouseX, int mouseY) {
         int ny = phoneTop + PhoneTheme.PHONE_HEIGHT - PhoneTheme.NAV_BAR_HEIGHT;
         g.fill(phoneLeft, ny, phoneLeft + PhoneTheme.PHONE_WIDTH,
                 phoneTop + PhoneTheme.PHONE_HEIGHT, PhoneTheme.COLOR_NAV_BAR);
 
+        NavButton hovered = hitTestNavBar(mouseX, mouseY, phoneLeft, phoneTop);
+
         int cy = ny + PhoneTheme.NAV_BAR_HEIGHT / 2 - font.lineHeight / 2;
         int tw = PhoneTheme.PHONE_WIDTH / 3;
-        String[] btns = {"◁", "○", "□"};
-        for (int i = 0; i < btns.length; i++) {
-            int bw = font.width(btns[i]);
+        for (int i = 0; i < NAV_GLYPHS.length; i++) {
+            boolean isHovered = hovered == NAV_ORDER[i];
+            if (isHovered) {
+                g.fill(phoneLeft + tw * i, ny,
+                        phoneLeft + tw * (i + 1), phoneTop + PhoneTheme.PHONE_HEIGHT,
+                        0x33FFFFFF);
+            }
+            int bw = font.width(NAV_GLYPHS[i]);
             int bx = phoneLeft + tw * i + (tw - bw) / 2;
-            g.drawString(font, btns[i], bx, cy, 0xFF888888, false);
+            g.drawString(font, NAV_GLYPHS[i], bx, cy,
+                    isHovered ? 0xFFFFFFFF : 0xFF888888, false);
         }
     }
 }
