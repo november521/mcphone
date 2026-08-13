@@ -53,5 +53,7 @@
   "mcphone.app.app_store": "App Store",
   "mcphone.item.tooltip.open": "§7Right-click to open phone",
   "mcphone.item.tooltip.version": "§8MCphone v%s",
-  "mcphone.container.tab_inventory": "Inventory"
+  "mcphone.container.tab_inventory": "Inventory",
+  "mcphone.app.ender_chest": "Ender Chest",
+  "mcphone.container.ender_chest": "Ender Chest"
 }
