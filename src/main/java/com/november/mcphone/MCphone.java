@@ -14,7 +14,6 @@ import net.minecraft.world.level.Level;
 import net.minecraft.network.chat.Component;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.common.Mod;
-import net.neoforged.fml.config.ModConfig;
 import net.neoforged.fml.ModContainer;
 import net.neoforged.neoforge.registries.DeferredRegister;
 import net.neoforged.neoforge.registries.DeferredItem;
@@ -38,7 +37,6 @@ public class MCphone {
         ModCreativeTabs.TABS.register(modEventBus);
         com.november.mcphone.network.WallpaperData.ATTACHMENT_TYPES.register(modEventBus);
         modEventBus.addListener(com.november.mcphone.network.NetworkHandler::register);
-        modContainer.registerConfig(ModConfig.Type.COMMON, Config.SPEC);
 
         LOGGER.info("MCphone 模组加载完成 —— 手机已就绪");
     }
