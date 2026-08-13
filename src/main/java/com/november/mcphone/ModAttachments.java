@@ -1,5 +1,6 @@
 package com.november.mcphone;
 
+import com.november.mcphone.chat.ContactsData;
 import com.november.mcphone.network.WallpaperData;
 import net.neoforged.neoforge.attachment.AttachmentType;
 import net.neoforged.neoforge.registries.DeferredRegister;
@@ -29,6 +30,20 @@ public final class ModAttachments {
             "wallpaper_data",
             () -> AttachmentType.builder(() -> WallpaperData.DEFAULT)
                     .serialize(WallpaperData.CODEC)
+                    .build()
+    );
+
+    /**
+     * 联系人列表与已读进度。
+     *
+     * copyOnDeath：玩家死亡重生时附件默认会丢，联系人显然不该因为死一次
+     * 就没了——那不是惩罚，是数据损坏。
+     */
+    public static final Supplier<AttachmentType<ContactsData>> CONTACTS = ATTACHMENT_TYPES.register(
+            "contacts_data",
+            () -> AttachmentType.builder(() -> ContactsData.DEFAULT)
+                    .serialize(ContactsData.CODEC)
+                    .copyOnDeath()
                     .build()
     );
 }
