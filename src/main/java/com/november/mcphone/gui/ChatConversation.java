@@ -202,6 +202,11 @@ public final class ChatConversation {
         PacketDistributor.sendToServer(new RequestMessagesPacket(peer));
     }
 
+    /** 打开的正是与这个人的会话吗 —— 收到消息时据此决定要不要弹通知 */
+    public boolean isViewing(UUID other) {
+        return peer != null && peer.equals(other);
+    }
+
     /** 离开会话：缓存里的消息一并释放，下次进来重新拉 */
     public void close() {
         peer = null;

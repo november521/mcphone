@@ -79,7 +79,23 @@ public final class PhoneSkin {
         CHAT_BUBBLE_PEER("chat_bubble_peer"),
 
         /** 会话界面底部输入栏的底。建议 90×14 */
-        CHAT_INPUT_BAR("chat_input_bar");
+        CHAT_INPUT_BAR("chat_input_bar"),
+
+        /**
+         * 收到消息时右上角弹出的通知底。建议 160×32。
+         *
+         * 160×32 是原版通知的槽位尺寸，照这个画才不会与其他模组的通知
+         * 挤在一起错位。
+         */
+        TOAST_BG("toast_bg"),
+
+        /**
+         * 未读条数的角标底。建议 12×9。
+         *
+         * 会话列表与消息通知共用同一张：两处都是"这里有几条没看"，
+         * 分成两张贴图的话，换肤时容易只换一处，看着像两个模组。
+         */
+        UNREAD_BADGE("unread_badge");
 
         private final ResourceLocation texture;
 

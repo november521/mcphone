@@ -277,7 +277,7 @@ public final class ChatNetworking {
 
     /** 收到一条新消息 */
     private static void handleNewMessage(NewMessagePacket packet, IPayloadContext ctx) {
-        ctx.enqueueWork(() -> ChatClientCache.appendMessage(packet.peer(), packet.message()));
+        ctx.enqueueWork(() -> ChatClientCache.onNewMessage(packet.peer(), packet.message()));
     }
 
     /** 收到在线玩家列表 */

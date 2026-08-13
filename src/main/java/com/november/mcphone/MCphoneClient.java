@@ -1,6 +1,7 @@
 package com.november.mcphone;
 
 import com.november.mcphone.client.CameraHandler;
+import com.november.mcphone.client.ChatNotifier;
 import com.november.mcphone.client.MCphoneKeyBindings;
 import com.november.mcphone.gui.PhoneContainerScreen;
 import com.november.mcphone.gui.PhoneScreenRegistry;
@@ -43,6 +44,10 @@ public class MCphoneClient {
         // 上一个服务器的会话列表——那是别处的数据，既尴尬又可能泄露信息
         NeoForge.EVENT_BUS.addListener(
                 (ClientPlayerNetworkEvent.LoggingOut event) -> ChatClientCache.clear());
+
+        // 收到消息时弹通知。装在这里而不是让网络层直接调 ChatNotifier：
+        // 网络层在专用服务器上也会加载，碰不得客户端的类
+        ChatClientCache.setMessageListener(ChatNotifier::onMessage);
     }
 
     /**

@@ -198,8 +198,10 @@ public final class ChatList {
         if (!right.isEmpty()) {
             int rx = x + w - rightW;
             if (c.unread() > 0) {
-                // 未读用红底白字，一眼能看见；纯红字在深色壁纸上容易糊掉
-                g.fill(rx - 1, y - 1, x + w, y + font.lineHeight, COLOR_UNREAD_BG);
+                // 未读用红底白字，一眼能看见；纯红字在深色壁纸上容易糊掉。
+                // 底走换肤，与消息通知里的角标共用同一张贴图
+                PhoneSkin.drawOrFill(g, PhoneSkin.Element.UNREAD_BADGE,
+                        rx - 1, y - 1, x + w - (rx - 1), font.lineHeight + 1, COLOR_UNREAD_BG);
                 g.drawString(font, right, rx + 1, y, 0xFFFFFFFF, false);
             } else {
                 g.drawString(font, right, rx, y, COLOR_TIME, false);

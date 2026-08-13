@@ -141,6 +141,16 @@ public final class PhoneScreen extends Screen {
     }
 
     /**
+     * 正开着与这个人的会话吗。
+     *
+     * 收到消息时据此决定要不要弹通知：消息已经在眼前了就别再打扰。
+     * 开着别的会话、或停在手机的其他界面，都照常提醒。
+     */
+    public boolean isViewingConversation(UUID peer) {
+        return mode == Mode.CHAT_CONVERSATION && chatConversation.isViewing(peer);
+    }
+
+    /**
      * 返回上一层。
      *
      * ESC 与导航栏的 ◁ 共用这一套规则——分别实现的话，两条路的层级

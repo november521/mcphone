@@ -5,6 +5,7 @@ import com.november.mcphone.chat.ChatMessage;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.function.BiConsumer;
 
 /**
  * 客户端本地的聊天数据缓存 —— 界面每帧从这里读，不发包。
@@ -82,12 +83,39 @@ public final class ChatClientCache {
     }
 
     /**
+     * 新消息到达时的旁听者。
+     *
+     * 用一个只认纯数据类型的回调，而不是让网络层直接去调客户端的通知
+     * 代码：本类与 {@link ChatNetworking} 在专用服务器上也会被加载，
+     * 一旦引入 Minecraft 客户端类就会在类加载时崩掉。
+     *
+     * 客户端启动时装上真正的实现（见 MCphoneClient），专用服务器上这里
+     * 永远是个空实现，什么都不会发生。
+     */
+    private static BiConsumer<UUID, ChatMessage> messageListener = (peer, message) -> {};
+
+    public static void setMessageListener(BiConsumer<UUID, ChatMessage> listener) {
+        messageListener = listener;
+    }
+
+    /**
+     * 收到一条新消息：正开着的会话要追加，旁听者要收到通知。
+     *
+     * 两件事都在这里做，网络层只管把包递进来。追加与通知的条件恰好相反
+     * ——正看着才追加，没看着才提醒——分散在两处容易改一漏一。
+     */
+    static void onNewMessage(UUID peer, ChatMessage message) {
+        appendMessage(peer, message);
+        messageListener.accept(peer, message);
+    }
+
+    /**
      * 收到新消息。
      *
      * 只有正在看这个会话时才追加；否则不动——未读数会在下次拉取会话列表
      * 时由服务端算出来，不必在客户端自行维护一份，那样两边容易对不上。
      */
-    static void appendMessage(UUID peer, ChatMessage message) {
+    private static void appendMessage(UUID peer, ChatMessage message) {
         if (!java.util.Objects.equals(openPeer, peer)) return;
 
         List<ChatMessage> next = new ArrayList<>(messages);
