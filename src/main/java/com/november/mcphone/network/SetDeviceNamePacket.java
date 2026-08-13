@@ -1,6 +1,7 @@
 package com.november.mcphone.network;
 
 import com.november.mcphone.MCphone;
+import com.november.mcphone.util.TextSanitizer;
 import io.netty.buffer.ByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
@@ -53,31 +54,11 @@ public record SetDeviceNamePacket(String name, boolean mainHand) implements Cust
      * 发送端必须先清洗，否则超长字符串在编码阶段就会抛 EncoderException；
      * 接收端也必须再洗一遍，因为客户端可以是伪造的，不能信。
      *
-     * 做三件事：
-     *   - 去掉 § 格式符，否则玩家能把物品名染色或做成乱码
-     *   - 去掉控制字符（含换行），物品名是单行的
-     *   - 截断到 MAX_NAME_LENGTH，且不切开代理对（否则表情符号会被劈成半个）
+     * 规则本身与聊天消息完全一致（只是长度上限不同），故收在
+     * {@link TextSanitizer} 里共用——各写一份的话，日后补一条规则
+     * 必然漏掉另一处。
      */
     public static String sanitize(String raw) {
-        if (raw == null) return "";
-
-        StringBuilder sb = new StringBuilder(raw.length());
-        for (int i = 0; i < raw.length(); i++) {
-            char c = raw.charAt(i);
-            if (c == '§') continue;              // § 格式符
-            if (c < ' ' || c == 0x7F) continue;   // 控制字符（含换行与 DEL）
-            sb.append(c);
-        }
-
-        String out = sb.toString().trim();
-        if (out.length() > MAX_NAME_LENGTH) {
-            out = out.substring(0, MAX_NAME_LENGTH);
-            // 截断点正好落在代理对中间时把落单的高位代理去掉
-            if (Character.isHighSurrogate(out.charAt(out.length() - 1))) {
-                out = out.substring(0, out.length() - 1);
-            }
-            out = out.trim();
-        }
-        return out;
+        return TextSanitizer.sanitize(raw, MAX_NAME_LENGTH);
     }
 }
