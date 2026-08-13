@@ -23,7 +23,7 @@ import java.util.UUID;
 public final class PhoneScreen extends Screen {
 
     /** 手机导航模式 */
-    public enum Mode { MAIN, SETTINGS, WALLPAPER_PICKER, APP_MANAGER, MUSIC_PLAYER, APP_STORE, GALLERY, DEVICE_NAME, CHAT, CHAT_ADD_CONTACT, CHAT_CONVERSATION }
+    public enum Mode { MAIN, SETTINGS, WALLPAPER_PICKER, APP_MANAGER, MUSIC_PLAYER, APP_STORE, GALLERY, DEVICE_NAME, CHAT, CHAT_ADD_CONTACT, CHAT_CONVERSATION, NOTES, NOTE_EDIT }
 
 
     // ---- 打开动画 ----
@@ -67,6 +67,10 @@ public final class PhoneScreen extends Screen {
     private final ChatList chatList = new ChatList();
     private final ChatAddContact chatAddContact = new ChatAddContact();
     private final ChatConversation chatConversation = new ChatConversation();
+
+    // ---- 记事本 ----
+    private final NotesList notesList = new NotesList();
+    private final NoteEditor noteEditor = new NoteEditor();
 
     /**
      * 待打开的会话对端。
@@ -130,6 +134,12 @@ public final class PhoneScreen extends Screen {
         if (this.mode == Mode.CHAT_CONVERSATION) chatConversation.close();
         if (target == Mode.CHAT_CONVERSATION) chatConversation.open(pendingConversationPeer);
 
+        // 进入列表即拉一次笔记；离开编辑界面即释放当前那条的全文
+        if (this.mode == Mode.NOTES) notesList.close();
+        if (target == Mode.NOTES) notesList.open();
+
+        if (this.mode == Mode.NOTE_EDIT) noteEditor.close();
+
         this.mode = target;
         this.hoveredSettingIdx = -1;
     }
@@ -171,6 +181,12 @@ public final class PhoneScreen extends Screen {
         // 加联系人与具体会话都是聊天里的一层，退回会话列表
         if (mode == Mode.CHAT_ADD_CONTACT || mode == Mode.CHAT_CONVERSATION) {
             navigateTo(Mode.CHAT);
+            return true;
+        }
+
+        // 编辑一条笔记是记事本里的一层，退回笔记列表
+        if (mode == Mode.NOTE_EDIT) {
+            navigateTo(Mode.NOTES);
             return true;
         }
 
@@ -242,6 +258,13 @@ public final class PhoneScreen extends Screen {
             case CHAT              -> renderChat(g, mouseX, mouseY);
             case CHAT_ADD_CONTACT  -> renderChatAddContact(g, mouseX, mouseY);
             case CHAT_CONVERSATION -> renderChatConversation(g, mouseX, mouseY, partialTick);
+            case NOTES             -> notesList.render(g, phoneLeft, phoneTop,
+                    PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
+                    PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT, mouseX, mouseY, font);
+            case NOTE_EDIT         -> noteEditor.render(g, phoneLeft, phoneTop,
+                    PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
+                    PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT,
+                    mouseX, mouseY, partialTick, font);
         }
 
         renderNavBar(g, mouseX, mouseY);
@@ -751,6 +774,26 @@ public final class PhoneScreen extends Screen {
                 chatConversation.mouseClicked(mx, my, button);
                 yield true;
             }
+            case NOTES -> {
+                notesList.mouseClicked(mx, my, button);
+                // 列表只提出请求，由这里决定去哪个界面——
+                // 组件不该知道 PhoneScreen 的导航结构
+                Integer open = notesList.consumeOpenRequest();
+                if (open != null) {
+                    noteEditor.open(open);
+                    navigateTo(Mode.NOTE_EDIT);
+                } else if (notesList.consumeNewRequest()) {
+                    noteEditor.openNew();
+                    navigateTo(Mode.NOTE_EDIT);
+                }
+                yield true;
+            }
+            case NOTE_EDIT -> {
+                noteEditor.mouseClicked(mx, my, button);
+                // 存了或删了都退回列表，列表会随服务端回发的新数据刷新
+                if (noteEditor.consumeBackRequest()) navigateTo(Mode.NOTES);
+                yield true;
+            }
         };
     }
 
@@ -759,11 +802,20 @@ public final class PhoneScreen extends Screen {
     // ============================================================
 
     @Override
+    public boolean mouseDragged(double mx, double my, int button, double dx, double dy) {
+        // 多行输入框靠拖动选中文本，不转发的话选不了
+        if (mode == Mode.NOTE_EDIT && noteEditor.mouseDragged(mx, my, button, dx, dy)) return true;
+        return super.mouseDragged(mx, my, button, dx, dy);
+    }
+
+    @Override
     public boolean mouseScrolled(double mx, double my, double scrollX, double scrollY) {
         if (mode == Mode.GALLERY && gallery.mouseScrolled(scrollY)) return true;
         if (mode == Mode.CHAT && chatList.mouseScrolled(scrollY)) return true;
         if (mode == Mode.CHAT_ADD_CONTACT && chatAddContact.mouseScrolled(scrollY)) return true;
         if (mode == Mode.CHAT_CONVERSATION && chatConversation.mouseScrolled(scrollY)) return true;
+        if (mode == Mode.NOTES && notesList.mouseScrolled(scrollY)) return true;
+        if (mode == Mode.NOTE_EDIT && noteEditor.mouseScrolled(mx, my, scrollX, scrollY)) return true;
         return super.mouseScrolled(mx, my, scrollX, scrollY);
     }
 
@@ -791,6 +843,10 @@ public final class PhoneScreen extends Screen {
             chatConversation.keyPressed(keyCode, scanCode, modifiers);
             return true;
         }
+        if (mode == Mode.NOTE_EDIT) {
+            noteEditor.keyPressed(keyCode, scanCode, modifiers);
+            return true;
+        }
 
         if (minecraft != null && minecraft.options.keyInventory.matches(keyCode, scanCode)) {
             if (mode != Mode.MAIN) back();
@@ -814,6 +870,7 @@ public final class PhoneScreen extends Screen {
     public boolean charTyped(char c, int modifiers) {
         if (mode == Mode.DEVICE_NAME && deviceNameEditor.charTyped(c, modifiers)) return true;
         if (mode == Mode.CHAT_CONVERSATION && chatConversation.charTyped(c, modifiers)) return true;
+        if (mode == Mode.NOTE_EDIT && noteEditor.charTyped(c, modifiers)) return true;
         return super.charTyped(c, modifiers);
     }
 
@@ -830,6 +887,7 @@ public final class PhoneScreen extends Screen {
         if (mode == Mode.GALLERY) gallery.close();
         // 同理：手机被顶掉时会话缓存也该放掉，否则新消息还会往里追加
         if (mode == Mode.CHAT_CONVERSATION) chatConversation.close();
+        if (mode == Mode.NOTE_EDIT) noteEditor.close();
         super.removed();
     }
     @Override public boolean isPauseScreen() { return false; }

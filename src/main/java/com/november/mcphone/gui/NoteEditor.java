@@ -1,0 +1,233 @@
+package com.november.mcphone.gui;
+
+import com.november.mcphone.network.notes.DeleteNotePacket;
+import com.november.mcphone.network.notes.NotesClientCache;
+import com.november.mcphone.network.notes.RequestNotePacket;
+import com.november.mcphone.network.notes.SaveNotePacket;
+import com.november.mcphone.notes.Note;
+import com.november.mcphone.notes.NoteService;
+import net.minecraft.client.gui.Font;
+import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.components.MultiLineEditBox;
+import net.minecraft.network.chat.Component;
+import net.neoforged.neoforge.network.PacketDistributor;
+
+/**
+ * 笔记编辑界面。
+ *
+ * ============================================================
+ * 多行输入用原版 MultiLineEditBox
+ * ============================================================
+ *
+ * 它和书与笔的编辑器共用底层的 MultilineTextField：换行、光标上下移动、
+ * 拖动选中、滚动全都现成。自己撸一个多行输入框要把这些重写一遍，
+ * 还容易在代理对上出错。
+ *
+ * 中文能不能打与原版聊天框完全一致，理由见 DeviceNameEditor 的类注释。
+ * 同样地，本界面下所有按键都必须被 PhoneScreen 吞掉，否则打拼音按到 e
+ * 就命中背包键，手机当场关掉。
+ *
+ * ============================================================
+ * 全文是异步到的
+ * ============================================================
+ *
+ * 点进一条笔记时只知道 id，正文要等服务端回包。所以每帧都看一眼缓存里
+ * 到了没有，到了才填进输入框——填过一次就不再填，否则玩家打的字会被
+ * 迟到的回包一遍遍冲掉。
+ */
+public final class NoteEditor {
+
+    private static final int PAD = 4;
+
+    /** 底部按钮行的高度 */
+    private static final int BUTTON_ROW_H = 12;
+
+    private static final int COLOR_SAVE = 0xFF66FF88;
+    private static final int COLOR_DELETE = 0xFFFF8888;
+    private static final int COLOR_HOVER = 0xFFFFFFFF;
+    private static final int COLOR_HINT = 0xFF888888;
+
+    private MultiLineEditBox box;
+
+    /** 正在编辑哪一条；{@link NoteService#NEW_NOTE_ID} 表示新建 */
+    private int noteId = NoteService.NEW_NOTE_ID;
+
+    /** 正文填进输入框了没。异步回包只认第一次，之后不再覆盖玩家的输入 */
+    private boolean filled;
+
+    private boolean saveHovered;
+    private boolean deleteHovered;
+
+    /** 保存或删除后置位，PhoneScreen 取走后退回列表 */
+    private boolean backRequested;
+
+    // ============================================================
+    //  生命周期
+    // ============================================================
+
+    /** 编辑已有的一条：先记下 id 再发请求，回包才不会被丢掉 */
+    public void open(int id) {
+        this.noteId = id;
+        this.filled = false;
+        resetBox();
+
+        NotesClientCache.openNote(id);
+        PacketDistributor.sendToServer(new RequestNotePacket(id));
+    }
+
+    /** 新建一条：没有 id 可等，直接给一张白纸 */
+    public void openNew() {
+        this.noteId = NoteService.NEW_NOTE_ID;
+        this.filled = true;   // 白纸本身就是"填好了"，别再等回包
+        resetBox();
+
+        NotesClientCache.openNewNote();
+    }
+
+    public void close() {
+        saveHovered = false;
+        deleteHovered = false;
+        backRequested = false;
+        if (box != null) box.setFocused(false);
+        NotesClientCache.closeNote();
+    }
+
+    public boolean consumeBackRequest() {
+        if (!backRequested) return false;
+        backRequested = false;
+        return true;
+    }
+
+    private void resetBox() {
+        if (box != null) {
+            box.setValue("");
+            box.setFocused(true);
+        }
+    }
+
+    // ============================================================
+    //  渲染
+    // ============================================================
+
+    public void render(GuiGraphics g, int phoneLeft, int phoneTop,
+                       int screenW, int screenH, int statusH, int navH,
+                       int mouseX, int mouseY, float partialTick, Font font) {
+
+        final int x = phoneLeft + PAD;
+        final int w = screenW - PAD * 2;
+        final int top = phoneTop + statusH + 4;
+        final int buttonY = phoneTop + screenH - navH - BUTTON_ROW_H;
+        final int boxH = buttonY - top - 2;
+
+        // 首次渲染才创建：这里才知道机身坐标。之后每帧同步位置，
+        // 手机居中的位置会随窗口大小变化
+        if (box == null) {
+            box = new MultiLineEditBox(font, x, top, w, boxH,
+                    Component.translatable("mcphone.notes.placeholder"),
+                    Component.translatable("mcphone.app.notes"));
+            box.setCharacterLimit(Note.MAX_BODY_LENGTH);
+            box.setFocused(true);
+        } else {
+            box.setX(x);
+            box.setY(top);
+            box.setWidth(w);
+            box.setHeight(boxH);
+        }
+
+        fillFromCacheOnce();
+        box.render(g, mouseX, mouseY, partialTick);
+
+        renderButtons(g, font, x, buttonY, w, mouseX, mouseY);
+    }
+
+    /**
+     * 全文到了就填进去，只填一次。
+     *
+     * 不判 filled 的话，缓存每帧都在那儿，玩家每打一个字都会被这份旧正文
+     * 覆盖掉——表现为"输入框根本打不进字"，而且极难看出原因。
+     */
+    private void fillFromCacheOnce() {
+        if (filled) return;
+
+        Note note = NotesClientCache.getOpenNote();
+        if (note == null) return;
+
+        box.setValue(note.body());
+        filled = true;
+    }
+
+    private void renderButtons(GuiGraphics g, Font font, int x, int y, int w,
+                               int mouseX, int mouseY) {
+        String save = Component.translatable("mcphone.settings.save").getString();
+        String delete = Component.translatable("mcphone.notes.delete").getString();
+
+        int saveW = font.width(save);
+        int deleteW = font.width(delete);
+        int deleteX = x + w - deleteW;
+
+        saveHovered = mouseX >= x - 2 && mouseX < x + saveW + 2
+                   && mouseY >= y - 2 && mouseY < y + font.lineHeight + 2;
+        deleteHovered = mouseX >= deleteX - 2 && mouseX < deleteX + deleteW + 2
+                     && mouseY >= y - 2 && mouseY < y + font.lineHeight + 2;
+
+        g.drawString(font, save, x, y, saveHovered ? COLOR_HOVER : COLOR_SAVE, false);
+
+        // 新建还没保存过的笔记没什么可删，删除键置灰
+        boolean deletable = noteId != NoteService.NEW_NOTE_ID;
+        g.drawString(font, delete, deleteX, y,
+                !deletable ? COLOR_HINT : (deleteHovered ? COLOR_HOVER : COLOR_DELETE), false);
+    }
+
+    // ============================================================
+    //  交互
+    // ============================================================
+
+    public boolean mouseClicked(double mx, double my, int button) {
+        if (button == 0) {
+            if (saveHovered) { save(); return true; }
+            if (deleteHovered && noteId != NoteService.NEW_NOTE_ID) { delete(); return true; }
+        }
+        return box != null && box.mouseClicked(mx, my, button);
+    }
+
+    public boolean mouseDragged(double mx, double my, int button, double dx, double dy) {
+        return box != null && box.mouseDragged(mx, my, button, dx, dy);
+    }
+
+    public boolean mouseScrolled(double mx, double my, double scrollX, double scrollY) {
+        return box != null && box.mouseScrolled(mx, my, scrollX, scrollY);
+    }
+
+    /**
+     * @return true 表示按键已被消费。
+     *         调用方无论如何都该吃掉按键，别让 e 漏到背包键那边去
+     */
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        // 回车在多行输入里是换行，不能拿来当保存——保存走底部那个按钮
+        return box != null && box.keyPressed(keyCode, scanCode, modifiers);
+    }
+
+    public boolean charTyped(char c, int modifiers) {
+        return box != null && box.charTyped(c, modifiers);
+    }
+
+    /**
+     * 保存并退回列表。
+     *
+     * 只发包、不改本地缓存：服务端保存后会回发新的列表，界面以那份为准。
+     * 本地抢先改的话，一旦服务端因为条数满了而拒绝，界面上就会留着一条
+     * 并不存在的笔记。
+     *
+     * 正文清空后保存等于删除，那条规则在服务端，见 NoteService.saveNote。
+     */
+    private void save() {
+        if (box == null) return;
+        PacketDistributor.sendToServer(new SaveNotePacket(noteId, box.getValue()));
+        backRequested = true;
+    }
+
+    private void delete() {
+        PacketDistributor.sendToServer(new DeleteNotePacket(noteId));
+        backRequested = true;
+    }
+}
