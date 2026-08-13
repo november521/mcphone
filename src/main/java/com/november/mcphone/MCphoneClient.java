@@ -10,6 +10,7 @@ import com.november.mcphone.gui.PhoneSkin;
 import com.november.mcphone.gui.WallpaperStore;
 import com.november.mcphone.menu.ModMenus;
 import com.november.mcphone.network.chat.ChatClientCache;
+import com.november.mcphone.network.notes.NotesClientCache;
 import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 import net.neoforged.neoforge.client.event.RegisterClientReloadListenersEvent;
 import net.neoforged.neoforge.client.event.RegisterMenuScreensEvent;
@@ -47,7 +48,10 @@ public class MCphoneClient {
         // 退出世界时清空聊天缓存。不清的话，换到另一个服务器时会先闪出
         // 上一个服务器的会话列表——那是别处的数据，既尴尬又可能泄露信息
         NeoForge.EVENT_BUS.addListener(
-                (ClientPlayerNetworkEvent.LoggingOut event) -> ChatClientCache.clear());
+                (ClientPlayerNetworkEvent.LoggingOut event) -> {
+                    ChatClientCache.clear();
+                    NotesClientCache.clear();
+                });
 
         // 收到消息时弹通知。装在这里而不是让网络层直接调 ChatNotifier：
         // 网络层在专用服务器上也会加载，碰不得客户端的类

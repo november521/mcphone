@@ -57,9 +57,10 @@ public final class NetworkHandler {
                 NetworkHandler::handleOpenEnderChest
         );
 
-        // 聊天相关的包自成一组，注册与处理都在 ChatNetworking：
+        // 聊天与记事本的包各自成组，注册与处理都在自己的类里：
         // 本类只保留"注册总入口"这一个职责，不做杂物间
         com.november.mcphone.network.chat.ChatNetworking.register(registrar);
+        com.november.mcphone.network.notes.NotesNetworking.register(registrar);
     }
 
     // ============================================================
