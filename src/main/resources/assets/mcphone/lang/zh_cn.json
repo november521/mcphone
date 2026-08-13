@@ -69,5 +69,6 @@
   "mcphone.notes.untitled": "（无标题）",
   "mcphone.notes.placeholder": "写点什么…",
   "mcphone.notes.delete": "删除",
-  "mcphone.notes.delete_confirm": "再点一次删除"
+  "mcphone.notes.delete_confirm": "再点一次删除",
+  "mcphone.cost.item": "%s × %s"
 }

@@ -69,5 +69,6 @@
   "mcphone.notes.untitled": "(Untitled)",
   "mcphone.notes.placeholder": "Write something…",
   "mcphone.notes.delete": "Delete",
-  "mcphone.notes.delete_confirm": "Tap again"
+  "mcphone.notes.delete_confirm": "Tap again",
+  "mcphone.cost.item": "%s × %s"
 }
