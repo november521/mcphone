@@ -95,6 +95,32 @@ public final class ChatClientCache {
         messages = List.copyOf(next);
     }
 
+    // ============================================================
+    //  在线玩家（"加联系人"界面用）
+    // ============================================================
+
+    private static List<OnlinePlayer> onlinePlayers = List.of();
+    private static int totalOnline;
+
+    public static List<OnlinePlayer> getOnlinePlayers() {
+        return onlinePlayers;
+    }
+
+    /** 服务器实际在线人数（不含本人）。大于列表长度即说明被截断过 */
+    public static int getTotalOnline() {
+        return totalOnline;
+    }
+
+    /** 列表是否被截断 —— 界面据此显示"显示前 N 人 / 共 M 人" */
+    public static boolean isOnlineListTruncated() {
+        return totalOnline > onlinePlayers.size();
+    }
+
+    static void setOnlinePlayers(List<OnlinePlayer> list, int total) {
+        onlinePlayers = List.copyOf(list);
+        totalOnline = total;
+    }
+
     /**
      * 退出世界时清空。
      *
@@ -103,6 +129,8 @@ public final class ChatClientCache {
      */
     public static void clear() {
         conversations = List.of();
+        onlinePlayers = List.of();
+        totalOnline = 0;
         closeConversation();
     }
 }

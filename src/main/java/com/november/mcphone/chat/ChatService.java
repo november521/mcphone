@@ -3,6 +3,7 @@ package com.november.mcphone.chat;
 import com.november.mcphone.ModAttachments;
 import com.november.mcphone.PhoneItem;
 import com.november.mcphone.network.chat.ConversationSummary;
+import com.november.mcphone.network.chat.OnlinePlayer;
 import com.november.mcphone.util.TextSanitizer;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
@@ -142,6 +143,82 @@ public final class ChatService {
         if (updated != contacts) {
             self.setData(ModAttachments.CONTACTS.get(), updated);
         }
+    }
+
+    /**
+     * 列出在线玩家，供"加联系人"界面使用。
+     *
+     * 排除本人。超过上限时截断——300 人的服务器全量下发既没意义
+     * （手机屏幕也翻不完），又是白送的攻击面。总人数由调用方另行取得
+     * 一并下发，界面能明确写出被截断了多少，而不是让玩家以为就这些人。
+     *
+     * isContact 由服务端算好带下去：客户端自己比对也能算，但那要求它
+     * 手里有完整联系人表，白白多同步一份数据。
+     */
+    public static List<OnlinePlayer> listOnlinePlayers(ServerPlayer self, int limit) {
+        ContactsData contacts = self.getData(ModAttachments.CONTACTS.get());
+        UUID selfId = self.getUUID();
+
+        List<OnlinePlayer> out = new ArrayList<>();
+        for (ServerPlayer p : self.server.getPlayerList().getPlayers()) {
+            if (p.getUUID().equals(selfId)) continue;
+            if (out.size() >= limit) break;
+
+            out.add(new OnlinePlayer(p.getUUID(), p.getGameProfile().getName(),
+                    contacts.hasContact(p.getUUID())));
+        }
+        return out;
+    }
+
+    /** 在线人数（不含本人），用于告知界面列表被截断了多少 */
+    public static int countOnlineExcludingSelf(ServerPlayer self) {
+        return Math.max(0, self.server.getPlayerList().getPlayerCount() - 1);
+    }
+
+    /**
+     * 加为联系人。
+     *
+     * 名字由服务端自己解析，不采信客户端传来的——否则伪造客户端能把
+     * 联系人存成任意字符串，那是往别人存档里写垃圾。
+     *
+     * 只有"认识的人"能加：在线的，或已经聊过的（陌生人给你发过消息，
+     * 你要能把他加回来）。否则可以对着编造的 UUID 无限加好友。
+     *
+     * @return 真的加上了才返回 true。已存在、超上限、对象不合法都返回 false
+     */
+    public static boolean addContact(ServerPlayer self, UUID targetId) {
+        if (!isHoldingPhone(self)) return false;
+        if (self.getUUID().equals(targetId)) return false;
+
+        ChatData chat = ChatData.get(self.server);
+        if (!isKnownPeer(self, chat, targetId)) return false;
+
+        ContactsData contacts = self.getData(ModAttachments.CONTACTS.get());
+        String name = resolveName(self.server, contacts, targetId,
+                self.server.getPlayerList().getPlayer(targetId));
+
+        ContactsData updated = contacts.withContact(new Contact(targetId, name));
+        if (updated == contacts) return false;   // 已存在或已达上限
+
+        self.setData(ModAttachments.CONTACTS.get(), updated);
+        return true;
+    }
+
+    /**
+     * 删除联系人。
+     *
+     * 只删本人这一侧：对方的联系人列表是他自己的数据。聊天记录也不删，
+     * 那是双方共有的，单方面抹掉等于替对方做决定。
+     */
+    public static boolean removeContact(ServerPlayer self, UUID targetId) {
+        if (!isHoldingPhone(self)) return false;
+
+        ContactsData contacts = self.getData(ModAttachments.CONTACTS.get());
+        ContactsData updated = contacts.withoutContact(targetId);
+        if (updated == contacts) return false;
+
+        self.setData(ModAttachments.CONTACTS.get(), updated);
+        return true;
     }
 
     /** 手上（任意一只手）拿着手机吗 */

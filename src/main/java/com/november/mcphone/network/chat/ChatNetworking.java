@@ -66,6 +66,34 @@ public final class ChatNetworking {
                 NewMessagePacket.STREAM_CODEC,
                 ChatNetworking::handleNewMessage
         );
+
+        // C2S: 打开"加联系人"界面，请求在线玩家
+        registrar.playToServer(
+                RequestOnlinePlayersPacket.TYPE,
+                RequestOnlinePlayersPacket.STREAM_CODEC,
+                ChatNetworking::handleRequestOnlinePlayers
+        );
+
+        // S2C: 下发在线玩家列表
+        registrar.playToClient(
+                SyncOnlinePlayersPacket.TYPE,
+                SyncOnlinePlayersPacket.STREAM_CODEC,
+                ChatNetworking::handleSyncOnlinePlayers
+        );
+
+        // C2S: 加联系人
+        registrar.playToServer(
+                AddContactPacket.TYPE,
+                AddContactPacket.STREAM_CODEC,
+                ChatNetworking::handleAddContact
+        );
+
+        // C2S: 删联系人
+        registrar.playToServer(
+                RemoveContactPacket.TYPE,
+                RemoveContactPacket.STREAM_CODEC,
+                ChatNetworking::handleRemoveContact
+        );
     }
 
     // ============================================================
@@ -137,6 +165,50 @@ public final class ChatNetworking {
         });
     }
 
+    /** 客户端请求在线玩家列表。与拉会话列表同理，读操作不校验手机 */
+    private static void handleRequestOnlinePlayers(RequestOnlinePlayersPacket packet,
+                                                   IPayloadContext ctx) {
+        ctx.enqueueWork(() -> {
+            if (!(ctx.player() instanceof ServerPlayer player)) return;
+            ctx.reply(buildOnlinePlayersPacket(player));
+        });
+    }
+
+    /**
+     * 加联系人。
+     *
+     * 成功与否都回发最新的两份列表：在线玩家列表决定按钮显示"加为联系人"
+     * 还是"已添加"，会话列表决定新联系人是否出现在首页。加失败时
+     * （已存在、超上限）回发的仍是真实状态，界面不会显示成功的假象。
+     */
+    private static void handleAddContact(AddContactPacket packet, IPayloadContext ctx) {
+        ctx.enqueueWork(() -> {
+            if (!(ctx.player() instanceof ServerPlayer player)) return;
+
+            ChatService.addContact(player, packet.target());
+            ctx.reply(buildOnlinePlayersPacket(player));
+            ctx.reply(new SyncConversationsPacket(ChatService.buildConversations(player)));
+        });
+    }
+
+    /** 删联系人。同样回发两份列表让界面归位 */
+    private static void handleRemoveContact(RemoveContactPacket packet, IPayloadContext ctx) {
+        ctx.enqueueWork(() -> {
+            if (!(ctx.player() instanceof ServerPlayer player)) return;
+
+            ChatService.removeContact(player, packet.target());
+            ctx.reply(buildOnlinePlayersPacket(player));
+            ctx.reply(new SyncConversationsPacket(ChatService.buildConversations(player)));
+        });
+    }
+
+    /** 组装在线玩家包：截断到上限，并带上真实总数供界面提示 */
+    private static SyncOnlinePlayersPacket buildOnlinePlayersPacket(ServerPlayer player) {
+        return new SyncOnlinePlayersPacket(
+                ChatService.listOnlinePlayers(player, SyncOnlinePlayersPacket.MAX_PLAYERS),
+                ChatService.countOnlineExcludingSelf(player));
+    }
+
     // ============================================================
     //  客户端处理
     // ============================================================
@@ -155,5 +227,12 @@ public final class ChatNetworking {
     /** 收到一条新消息 */
     private static void handleNewMessage(NewMessagePacket packet, IPayloadContext ctx) {
         ctx.enqueueWork(() -> ChatClientCache.appendMessage(packet.peer(), packet.message()));
+    }
+
+    /** 收到在线玩家列表 */
+    private static void handleSyncOnlinePlayers(SyncOnlinePlayersPacket packet,
+                                                IPayloadContext ctx) {
+        ctx.enqueueWork(() -> ChatClientCache.setOnlinePlayers(
+                packet.players(), packet.totalOnline()));
     }
 }
