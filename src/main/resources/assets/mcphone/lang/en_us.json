@@ -68,5 +68,6 @@
   "mcphone.notes.empty_hint": "Tap + to create one",
   "mcphone.notes.untitled": "(Untitled)",
   "mcphone.notes.placeholder": "Write something…",
-  "mcphone.notes.delete": "Delete"
+  "mcphone.notes.delete": "Delete",
+  "mcphone.notes.delete_confirm": "Tap again"
 }

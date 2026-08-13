@@ -68,5 +68,6 @@
   "mcphone.notes.empty_hint": "点右上角 + 新建一条",
   "mcphone.notes.untitled": "（无标题）",
   "mcphone.notes.placeholder": "写点什么…",
-  "mcphone.notes.delete": "删除"
+  "mcphone.notes.delete": "删除",
+  "mcphone.notes.delete_confirm": "再点一次删除"
 }

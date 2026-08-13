@@ -42,10 +42,22 @@ public final class NoteEditor {
     /** 底部按钮行的高度 */
     private static final int BUTTON_ROW_H = 12;
 
+    /**
+     * 输入框下方要留出的空当。
+     *
+     * MultiLineEditBox 自己会在 getY()+height+4 处右对齐画一行"已用/上限"
+     * 的字数，那是原版 renderDecorations 干的、关不掉。不留这块地方的话，
+     * 它会正好压在删除按钮上。4 是它的偏移，9 是一行字高。
+     */
+    private static final int COUNTER_ROW_H = 13;
+
     private static final int COLOR_SAVE = 0xFF66FF88;
     private static final int COLOR_DELETE = 0xFFFF8888;
     private static final int COLOR_HOVER = 0xFFFFFFFF;
     private static final int COLOR_HINT = 0xFF888888;
+
+    /** 删除已上膛时的颜色 —— 与相册的确认态一致 */
+    private static final int COLOR_ARMED = 0xFFFFDD44;
 
     private MultiLineEditBox box;
 
@@ -58,6 +70,17 @@ public final class NoteEditor {
     private boolean saveHovered;
     private boolean deleteHovered;
 
+    /**
+     * 删除是否已"上膛"。
+     *
+     * 第一次点把按钮变成"再点一次"，第二次才真删。笔记不像照片那样还能
+     * 去文件夹里找回来——删了就是没了，一点就消失太容易误触。
+     * 相册的删除是同一套做法。
+     *
+     * 任何其他操作都会卸掉：点了保存、点进输入框、离开界面。
+     */
+    private boolean deleteArmed;
+
     /** 保存或删除后置位，PhoneScreen 取走后退回列表 */
     private boolean backRequested;
 
@@ -69,6 +92,7 @@ public final class NoteEditor {
     public void open(int id) {
         this.noteId = id;
         this.filled = false;
+        this.deleteArmed = false;
         resetBox();
 
         NotesClientCache.openNote(id);
@@ -79,6 +103,7 @@ public final class NoteEditor {
     public void openNew() {
         this.noteId = NoteService.NEW_NOTE_ID;
         this.filled = true;   // 白纸本身就是"填好了"，别再等回包
+        this.deleteArmed = false;
         resetBox();
 
         NotesClientCache.openNewNote();
@@ -87,6 +112,7 @@ public final class NoteEditor {
     public void close() {
         saveHovered = false;
         deleteHovered = false;
+        deleteArmed = false;
         backRequested = false;
         if (box != null) box.setFocused(false);
         NotesClientCache.closeNote();
@@ -117,7 +143,7 @@ public final class NoteEditor {
         final int w = screenW - PAD * 2;
         final int top = phoneTop + statusH + 4;
         final int buttonY = phoneTop + screenH - navH - BUTTON_ROW_H;
-        final int boxH = buttonY - top - 2;
+        final int boxH = buttonY - top - COUNTER_ROW_H;
 
         // 首次渲染才创建：这里才知道机身坐标。之后每帧同步位置，
         // 手机居中的位置会随窗口大小变化
@@ -159,7 +185,8 @@ public final class NoteEditor {
     private void renderButtons(GuiGraphics g, Font font, int x, int y, int w,
                                int mouseX, int mouseY) {
         String save = Component.translatable("mcphone.settings.save").getString();
-        String delete = Component.translatable("mcphone.notes.delete").getString();
+        String delete = Component.translatable(
+                deleteArmed ? "mcphone.notes.delete_confirm" : "mcphone.notes.delete").getString();
 
         int saveW = font.width(save);
         int deleteW = font.width(delete);
@@ -174,8 +201,11 @@ public final class NoteEditor {
 
         // 新建还没保存过的笔记没什么可删，删除键置灰
         boolean deletable = noteId != NoteService.NEW_NOTE_ID;
-        g.drawString(font, delete, deleteX, y,
-                !deletable ? COLOR_HINT : (deleteHovered ? COLOR_HOVER : COLOR_DELETE), false);
+        // 上膛后用醒目的黄色：这一下点下去就真没了，颜色得先说一声
+        int deleteColor = !deletable ? COLOR_HINT
+                : deleteArmed ? COLOR_ARMED
+                : deleteHovered ? COLOR_HOVER : COLOR_DELETE;
+        g.drawString(font, delete, deleteX, y, deleteColor, false);
     }
 
     // ============================================================
@@ -187,6 +217,8 @@ public final class NoteEditor {
             if (saveHovered) { save(); return true; }
             if (deleteHovered && noteId != NoteService.NEW_NOTE_ID) { delete(); return true; }
         }
+        // 点到别处就卸膛：玩家已经去干别的事了，那一下删除多半是误触
+        deleteArmed = false;
         return box != null && box.mouseClicked(mx, my, button);
     }
 
@@ -222,11 +254,18 @@ public final class NoteEditor {
      */
     private void save() {
         if (box == null) return;
+        deleteArmed = false;
         PacketDistributor.sendToServer(new SaveNotePacket(noteId, box.getValue()));
         backRequested = true;
     }
 
+    /** 第一次点上膛，第二次才真删 —— 理由见 deleteArmed 的注释 */
     private void delete() {
+        if (!deleteArmed) {
+            deleteArmed = true;
+            return;
+        }
+        deleteArmed = false;
         PacketDistributor.sendToServer(new DeleteNotePacket(noteId));
         backRequested = true;
     }
