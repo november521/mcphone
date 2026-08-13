@@ -52,5 +52,5 @@
   "mcphone.app.app_manager": "App管理器",
   "mcphone.app.app_store": "应用商店",
   "mcphone.item.tooltip.open": "§7右键打开手机",
-  "mcphone.item.tooltip.version": "§8MCphone v1.0.0"
+  "mcphone.item.tooltip.version": "§8MCphone v%s"
 }

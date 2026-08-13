@@ -52,5 +52,5 @@
   "mcphone.app.app_manager": "App Manager",
   "mcphone.app.app_store": "App Store",
   "mcphone.item.tooltip.open": "§7Right-click to open phone",
-  "mcphone.item.tooltip.version": "§8MCphone v1.0.0"
+  "mcphone.item.tooltip.version": "§8MCphone v%s"
 }

@@ -72,6 +72,7 @@ public class PhoneItem extends Item {
     public void appendHoverText(ItemStack stack, TooltipContext context,
                                 List<Component> tooltip, TooltipFlag flag) {
         tooltip.add(Component.translatable("mcphone.item.tooltip.open"));
-        tooltip.add(Component.translatable("mcphone.item.tooltip.version"));
+        // 版本号取运行时真值填进 %s，语言文件里不写死，免得升版本时漏改某一份
+        tooltip.add(Component.translatable("mcphone.item.tooltip.version", MCphone.getVersion()));
     }
 }
