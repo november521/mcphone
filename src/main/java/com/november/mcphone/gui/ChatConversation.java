@@ -99,9 +99,13 @@ public final class ChatConversation {
     private static final DateTimeFormatter TIME_FORMAT = DateTimeFormatter.ofPattern("HH:mm");
     private static final DateTimeFormatter DATE_TIME_FORMAT = DateTimeFormatter.ofPattern("MM-dd HH:mm");
 
+    /** 标题头像边长，与会话列表一致 */
+    private static final int AVATAR_SIZE = 16;
+
+    /** 头像与名字之间的空隙 */
+    private static final int AVATAR_GAP = 3;
+
     // ---- 颜色（贴图缺失时的兜底） ----
-    private static final int COLOR_ONLINE = 0xFF55DD55;
-    private static final int COLOR_OFFLINE = 0xFF777777;
     private static final int COLOR_BUBBLE_SELF = 0xFF2E6FDB;
     private static final int COLOR_BUBBLE_PEER = 0xFF3A3A4E;
     private static final int COLOR_TEXT_SELF = 0xFFFFFFFF;
@@ -236,20 +240,23 @@ public final class ChatConversation {
         renderInputBar(g, font, x, inputTop, w, mouseX, mouseY, partialTick);
     }
 
-    /** 标题行：在线圆点 + 对方名字 */
+    /** 标题行：头像（角上带在线状态点）+ 对方名字 */
     private int renderHeader(GuiGraphics g, Font font, int x, int y, int w) {
         ConversationSummary s = summary();
+        boolean online = s != null && s.online();
 
-        int dotSize = 3;
-        int dotY = y + (font.lineHeight - dotSize) / 2 + 1;
-        g.fill(x, dotY, x + dotSize, dotY + dotSize,
-                s != null && s.online() ? COLOR_ONLINE : COLOR_OFFLINE);
+        // peer 为空只可能出现在刚 close 完的那一帧，画不出头像也不该崩
+        if (peer != null) {
+            PlayerAvatar.drawWithStatus(g, peer, x, y, AVATAR_SIZE, online);
+        }
 
-        int nameX = x + dotSize + 3;
+        int nameX = x + AVATAR_SIZE + AVATAR_GAP;
         g.drawString(font, truncate(font, peerName(s), w - (nameX - x)),
-                nameX, y, PhoneTheme.FONT_COLOR_TITLE, true);
+                nameX, y + (AVATAR_SIZE - font.lineHeight) / 2,
+                PhoneTheme.FONT_COLOR_TITLE, true);
 
-        y += font.lineHeight + 4;
+        // 标题行由头像撑高，比原先高 7 像素，消息区相应少一点
+        y += AVATAR_SIZE + 4;
         g.fill(x, y, x + w, y + 1, 0x44FFFFFF);
         return y + 4;
     }

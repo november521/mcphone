@@ -39,6 +39,12 @@ public final class ChatAddContact {
     /** 刷新间隔：玩家会上下线，列表得跟着变 */
     private static final long REFRESH_INTERVAL_MS = 3000L;
 
+    /** 头像边长，与会话列表一致 */
+    private static final int AVATAR_SIZE = 16;
+
+    /** 头像与名字之间的空隙 */
+    private static final int AVATAR_GAP = 3;
+
     private static final int COLOR_NAME = 0xFFFFFFFF;
     private static final int COLOR_ADD = 0xFF66FF88;
     private static final int COLOR_ACCEPT = 0xFFFFDD44;
@@ -102,13 +108,13 @@ public final class ChatAddContact {
             return;
         }
 
-        clampScroll(players.size(), bottom - y, font);
+        clampScroll(players.size(), bottom - y);
         renderRows(g, font, players, x, y, w, bottom, mouseX, mouseY);
     }
 
     private void renderRows(GuiGraphics g, Font font, List<OnlinePlayer> players,
                             int x, int y, int w, int bottom, int mouseX, int mouseY) {
-        final int rowH = rowHeight(font);
+        final int rowH = rowHeight();
         hoveredIdx = -1;
 
         for (int i = scrollOffset; i < players.size(); i++) {
@@ -124,10 +130,17 @@ public final class ChatAddContact {
             String action = Component.translatable(actionKey(p.relation())).getString();
             int actionW = font.width(action);
 
+            // 本界面列的全是在线玩家，状态点画了也全是绿的，纯属占地方
+            int avatarY = y + (rowH - AVATAR_SIZE) / 2;
+            PlayerAvatar.draw(g, p.id(), x, avatarY, AVATAR_SIZE);
+
+            int nameX = x + AVATAR_SIZE + AVATAR_GAP;
+            int textY = y + (rowH - font.lineHeight) / 2;
+
             // 名字按剩余宽度截断，否则长名字会盖住右侧的动作文字
-            String name = truncate(font, p.name(), w - actionW - 8);
-            g.drawString(font, name, x + 2, y + 2, COLOR_NAME, false);
-            g.drawString(font, action, x + w - actionW - 2, y + 2,
+            String name = truncate(font, p.name(), w - (nameX - x) - actionW - 6);
+            g.drawString(font, name, nameX, textY, COLOR_NAME, false);
+            g.drawString(font, action, x + w - actionW - 2, textY,
                     actionColor(p.relation()), false);
 
             y += rowH;
@@ -202,13 +215,19 @@ public final class ChatAddContact {
         PacketDistributor.sendToServer(new RequestOnlinePlayersPacket());
     }
 
-    private static int rowHeight(Font font) {
-        return font.lineHeight + 5;
+    /**
+     * 行高由头像决定，不再由文字决定。
+     *
+     * 16 的头像塞不进原先 14 像素的行，故加到 18，一屏从 10 行减到 8 行。
+     * 宁可少两行也不用 12×12 的头像：那是 1.5 倍放大，像素会毛糙。
+     */
+    private static int rowHeight() {
+        return AVATAR_SIZE + 2;
     }
 
     /** 有人下线导致列表变短时必须夹紧，否则会滚到空白处 */
-    private void clampScroll(int total, int availableHeight, Font font) {
-        int visible = Math.max(1, availableHeight / rowHeight(font));
+    private void clampScroll(int total, int availableHeight) {
+        int visible = Math.max(1, availableHeight / rowHeight());
         int maxOffset = Math.max(0, total - visible);
         if (scrollOffset > maxOffset) scrollOffset = maxOffset;
         if (scrollOffset < 0) scrollOffset = 0;
