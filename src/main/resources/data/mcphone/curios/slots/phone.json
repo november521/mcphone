@@ -1,0 +1,6 @@
+{
+  "order": 220,
+  "size": 1,
+  "icon": "mcphone:slot/empty_phone_slot",
+  "validators": ["curios:tag"]
+}
