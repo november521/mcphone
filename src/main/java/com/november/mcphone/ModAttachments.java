@@ -3,7 +3,6 @@ package com.november.mcphone;
 import com.november.mcphone.chat.ChatReadState;
 import com.november.mcphone.network.WallpaperData;
 import com.november.mcphone.notes.NoteList;
-import com.november.mcphone.notes.NoteScope;
 import net.neoforged.neoforge.attachment.AttachmentType;
 import net.neoforged.neoforge.registries.DeferredRegister;
 import net.neoforged.neoforge.registries.NeoForgeRegistries;
@@ -53,10 +52,11 @@ public final class ModAttachments {
     );
 
     /**
-     * 私人笔记 —— 跟着玩家走的那一半记事本。
+     * 记事本的全部笔记 —— 跟着玩家走。
      *
-     * 另一半（本机笔记）跟着手机走，存在物品的数据组件里，
-     * 见 {@link ModDataComponents#NOTES}。两者的分别见 {@link NoteScope}。
+     * 笔记只存在这里，不挂在手机物品上：物品组件要参与容器每 tick 的
+     * 快照比对，还会随任何一次容器同步整份下发。手机揣在兜里的时候，
+     * 玩家绝大多数时候并没有在看笔记，没理由让它一直占着同步链路。
      *
      * copyOnDeath：死一次日记本就空了，那不是惩罚，是数据损坏。
      * 已读进度那边是同一个理由。

@@ -1,7 +1,6 @@
 package com.november.mcphone;
 
 import com.mojang.serialization.Codec;
-import com.november.mcphone.notes.NoteList;
 import net.minecraft.core.component.DataComponentType;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.codec.ByteBufCodecs;
@@ -47,25 +46,4 @@ public final class ModDataComponents {
                             .networkSynchronized(ByteBufCodecs.STRING_UTF8)
                             .build());
 
-    /**
-     * 本机笔记 —— 跟着手机走的那一半记事本。
-     *
-     * 存在物品上而不是玩家身上，是为了让它跟着手机转手：手机送人、丢在
-     * 地上被捡走，这些笔记也跟着过去，像贴在机身背面的便签。另一半
-     * （私人笔记）跟着玩家走，见 {@link ModAttachments#NOTES}。
-     *
-     * 有了 networkSynchronized，客户端不必发任何网络包就能读到本机笔记
-     * ——物品组件本来就会随背包同步下来。这也是本机笔记的条数与长度收得
-     * 比私人笔记紧得多的原因：它一直挂在物品上跟着背包走，见 NoteScope。
-     *
-     * 没有笔记的手机不带这个组件，而不是带一个空列表：这样"从没写过"
-     * 与"写过又删光了"不会在物品比较时产生差别，堆叠与配方匹配也不受
-     * 干扰。设备名那边是同一个考虑。
-     */
-    public static final DeferredHolder<DataComponentType<?>, DataComponentType<NoteList>> NOTES =
-            COMPONENTS.register("notes",
-                    () -> DataComponentType.<NoteList>builder()
-                            .persistent(NoteList.CODEC)
-                            .networkSynchronized(NoteList.STREAM_CODEC)
-                            .build());
 }

@@ -12,19 +12,19 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * 一组笔记 —— 私人与本机两处共用同一个容器。
+ * 记事本里的一整组笔记。
  *
- * 两者的区别只在"存在哪儿"和"能存多少"，装的东西完全一样，没必要写
- * 两份增删改。上限由调用方按 {@link NoteScope} 传进来，容器自己不预设
- * 立场。
+ * 只有这一种笔记，跟着玩家走。曾经还设想过一种"跟着手机走"的笔记，
+ * 存在物品数据组件里——那条路被性能否掉了：物品组件要参与容器每 tick
+ * 的快照比对，还会随任何一次容器同步整份下发，等于让玩家把并不在看的
+ * 笔记一直背在背包同步链路上。
  *
  * ============================================================
  * 为什么整个是不可变的
  * ============================================================
  *
- * 每次改动都产出一份新的，而不是原地改。这样附件与数据组件都能安心持有
- * 它——数据组件尤其要求值类型不可变，否则两个物品堆共享同一份列表时，
- * 改一个会连另一个一起改掉。
+ * 每次改动都产出一份新的，而不是原地改：附件持有的那一份不该被界面或
+ * 网络层就地改掉，否则谁改了它、什么时候改的，全无从追查。
  *
  * 顺带躲开了另一个坑：Codec 解出来的集合本身就是不可变的，若按可变集合
  * 去用，读过档的世界里第一次增删就抛 UnsupportedOperationException。
@@ -45,15 +45,12 @@ public record NoteList(List<Note> notes) {
             ).apply(instance, NoteList::new)
     );
 
-    /**
-     * 网络传输用。
-     *
-     * 条数上限取两类里更宽的那个：编解码器是最外层的闸门，比实际上限小
-     * 会截断真实数据，各传各的又要维护两个 StreamCodec。真正的条数限制
-     * 在 {@link #save} 里按 scope 施加。
-     */
+    /** 最多存几条。再多也不是记事本该干的事了 */
+    public static final int MAX_COUNT = 50;
+
+    /** 网络传输用。条数上限在编解码器层面就封死，伪造客户端塞不进更多 */
     public static final StreamCodec<ByteBuf, NoteList> STREAM_CODEC = StreamCodec.composite(
-            Note.STREAM_CODEC.apply(ByteBufCodecs.list(NoteScope.PERSONAL.maxCount)),
+            Note.STREAM_CODEC.apply(ByteBufCodecs.list(MAX_COUNT)),
             NoteList::notes,
             NoteList::new
     );
@@ -69,15 +66,15 @@ public record NoteList(List<Note> notes) {
     /**
      * 存一条笔记：id 已存在就是改，不存在就是新增。
      *
-     * 正文按 scope 的上限截断而不是拒绝：玩家打了一长串字，点保存却什么
-     * 都没发生是最气人的。截断至少留下了绝大部分内容。
+     * 正文超长按上限截断而不是拒绝：玩家打了一长串字，点保存却什么都没
+     * 发生是最气人的。截断至少留下了绝大部分内容。
      *
      * 新增时若已经装满，原样返回——这时该由界面告诉玩家"满了"，
      * 数据层悄悄丢掉才是真的坏。
      */
-    public NoteList save(Note note, NoteScope scope) {
-        String body = note.body().length() > scope.maxLength
-                ? note.body().substring(0, scope.maxLength)
+    public NoteList save(Note note) {
+        String body = note.body().length() > Note.MAX_BODY_LENGTH
+                ? note.body().substring(0, Note.MAX_BODY_LENGTH)
                 : note.body();
         Note trimmed = new Note(note.id(), body, note.modified());
 
@@ -89,7 +86,7 @@ public record NoteList(List<Note> notes) {
             }
         }
 
-        if (next.size() >= scope.maxCount) return this;
+        if (next.size() >= MAX_COUNT) return this;
 
         next.add(trimmed);
         return new NoteList(next);

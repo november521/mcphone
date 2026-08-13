@@ -21,19 +21,19 @@ import net.minecraft.network.codec.StreamCodec;
  *
  * @param id       创建时生成，此后不变。列表靠它认人：正文会被改得面目
  *                 全非，用序号则一删就全乱套
- * @param body     正文。长度上限由存储方决定——私人笔记与本机笔记不一样，
- *                 见 {@link NotesData} 与 {@link PhoneNotes}
+ * @param body     正文，长度上限见 {@link #MAX_BODY_LENGTH}
  * @param modified 最后修改时刻，用于列表排序与显示
  */
 public record Note(int id, String body, long modified) {
 
     /**
-     * 正文长度的【绝对】上限，编解码器层面封死。
+     * 正文长度上限，编解码器层面就封死。
      *
-     * 这不是给玩家看的限制，而是防止伪造客户端塞进一段几 MB 的文本——
-     * 私人笔记与本机笔记各自的实际上限都比这个小，见各自的存储类。
+     * 写在编解码器上而不是只在业务层检查：伪造客户端可以绕过界面直接
+     * 发包，让解码阶段就拒收超长文本，才不会白白吃下几十 KB。
+     * 设备名与聊天消息都是同一个路数。
      */
-    public static final int MAX_BODY_LENGTH = 4096;
+    public static final int MAX_BODY_LENGTH = 2000;
 
     public static final Codec<Note> CODEC = RecordCodecBuilder.create(instance ->
             instance.group(
