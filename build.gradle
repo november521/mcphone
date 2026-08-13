@@ -29,6 +29,18 @@ sourceSets.main.resources {
 
 repositories {
     // Add here additional repositories if required by some of the dependencies below.
+
+    // Curios（饰品栏）。作者的 maven.blamejared.com 上已经找不到 1.21.1 的
+    // 构件了，Modrinth 官方 maven 有，且与 Modrinth 上的发布同源。
+    // 用 content 把它限定在 maven.modrinth 这一个 group：不限定的话，
+    // 每解析一个依赖都要先来问它一次，构建平白慢一截。
+    maven {
+        name = "Modrinth"
+        url = "https://api.modrinth.com/maven"
+        content {
+            includeGroup "maven.modrinth"
+        }
+    }
 }
 
 base {
@@ -116,6 +128,17 @@ configurations {
 }
 
 dependencies {
+    // Curios —— 可选依赖：装了就能把手机挂在腰上，没装则一切照旧。
+    //
+    // compileOnly 而不是 implementation：我们只在运行时【如果】Curios 在场
+    // 才去调它，编译期有类型就够了。写成 implementation 会把 Curios 变成
+    // 必需品，没装的玩家直接加载失败。
+    //
+    // localRuntime 让开发环境的 runClient 真的装上 Curios，好把这条路径
+    // 跑一遍；用它而不是 runtimeOnly，是为了不把这份依赖传播给下游。
+    compileOnly "maven.modrinth:curios:${curios_version}"
+    localRuntime "maven.modrinth:curios:${curios_version}"
+
     // Example optional mod dependency with JEI
     // The JEI API is declared for compile time use, while the full JEI artifact is used at runtime
     // compileOnly "mezz.jei:jei-${mc_version}-common-api:${jei_version}"

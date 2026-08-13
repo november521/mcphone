@@ -95,6 +95,18 @@ player, and an open SPI-based app system that add-on mods can plug into.
     ordering="NONE"
     side="BOTH"
 
+# Curios —— 可选：装了就能把手机挂在腰上，没装则一切照旧。
+[[dependencies.${mod_id}]]
+    modId="curios"
+    type="optional"
+    reason="装上后手机可以挂在饰品栏的腰带槽，不占背包格"
+    # 不写下限：我们只用了 getCuriosInventory 与 isEquipped 这两个最老的
+    # 接口，钉死版本只会把用旧版 Curios 的玩家挡在门外。
+    versionRange="[0,)"
+    # 必须在 Curios 之后加载：物品标签要等它把槽位注册好才有意义
+    ordering="AFTER"
+    side="BOTH"
+
 # Features are specific properties of the game environment, that you may want to declare you require. This example declares
 # that your mod requires GL version 3.2 or higher. Other features will be added. They are side aware so declaring this won't
 # stop your mod loading on the server for example.
