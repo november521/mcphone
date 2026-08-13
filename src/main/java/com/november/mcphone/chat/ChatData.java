@@ -1,0 +1,196 @@
+package com.november.mcphone.chat;
+
+import com.mojang.serialization.Codec;
+import com.november.mcphone.MCphone;
+import net.minecraft.core.HolderLookup;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.NbtOps;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.world.level.saveddata.SavedData;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+
+/**
+ * 聊天记录存储 —— 服务端全局，存在世界存档里。
+ *
+ * ============================================================
+ * 为什么不用玩家附件
+ * ============================================================
+ *
+ * 壁纸用玩家附件是对的，那是"这个玩家的偏好"。消息不同：它属于
+ * 【两个玩家之间】，存在谁身上都不对。更要命的是离线投递——给一个
+ * 不在线的人发消息，若消息存在收件人身上，服务端就得去加载并改写
+ * 他的存档文件；用 SavedData 则只是往 map 里加一条。
+ *
+ * ============================================================
+ * 两个必须注意的点
+ * ============================================================
+ *
+ * 1. 会话键要归一化。A→B 与 B→A 必须落到同一个会话，否则同一对人
+ *    会各自看到半截记录。做法是把两个 UUID 按字典序排序后拼接。
+ *
+ * 2. 必须有容量上限。这是"离线可存"的代价：一个跑了几个月的服务器，
+ *    不设上限的话存档会被聊天记录撑爆。每对会话只保留最近
+ *    {@link #MAX_MESSAGES_PER_CONVERSATION} 条，超出丢最旧的。
+ */
+public class ChatData extends SavedData {
+
+    /** 存档中的文件名，位于 world/data/ 下 */
+    private static final String FILE_NAME = MCphone.MODID + "_chat";
+
+    /** 每对会话保留的消息条数上限 */
+    public static final int MAX_MESSAGES_PER_CONVERSATION = 100;
+
+    /** 会话表：归一化后的会话键 → 按时间升序的消息列表 */
+    private final Map<String, List<ChatMessage>> conversations;
+
+    private static final Codec<Map<String, List<ChatMessage>>> CONVERSATIONS_CODEC =
+            Codec.unboundedMap(Codec.STRING, ChatMessage.CODEC.listOf());
+
+    public ChatData() {
+        this.conversations = new HashMap<>();
+    }
+
+    private ChatData(Map<String, List<ChatMessage>> conversations) {
+        this.conversations = conversations;
+    }
+
+    // ============================================================
+    //  存取入口
+    // ============================================================
+
+    /**
+     * 取得全服唯一的聊天存储。
+     *
+     * 刻意挂在主世界的 DataStorage：getDataStorage() 是按维度分的，
+     * 挂错维度的话玩家去了下界就看不到自己的消息。
+     */
+    public static ChatData get(MinecraftServer server) {
+        return server.overworld().getDataStorage().computeIfAbsent(
+                new SavedData.Factory<>(ChatData::new, ChatData::load, null),
+                FILE_NAME);
+    }
+
+    // ============================================================
+    //  会话键
+    // ============================================================
+
+    /**
+     * 把两个玩家 UUID 归一化成同一个会话键。
+     *
+     * 排序是关键：不排的话 A 发给 B 与 B 发给 A 会落进两个不同的会话，
+     * 双方各自只看得到自己发的那一半。
+     */
+    public static String conversationKey(UUID a, UUID b) {
+        String sa = a.toString();
+        String sb = b.toString();
+        return sa.compareTo(sb) <= 0 ? sa + "|" + sb : sb + "|" + sa;
+    }
+
+    // ============================================================
+    //  读写
+    // ============================================================
+
+    /** 取某对玩家之间的消息，按时间升序。没有会话时返回空列表而不是 null */
+    public List<ChatMessage> getMessages(UUID a, UUID b) {
+        List<ChatMessage> list = conversations.get(conversationKey(a, b));
+        return list == null ? List.of() : Collections.unmodifiableList(list);
+    }
+
+    /**
+     * 追加一条消息。超出上限时丢弃最旧的。
+     *
+     * @param from 发送者
+     * @param to   接收者
+     */
+    public void addMessage(UUID from, UUID to, ChatMessage message) {
+        List<ChatMessage> list =
+                conversations.computeIfAbsent(conversationKey(from, to), k -> new ArrayList<>());
+        list.add(message);
+
+        // 只丢最旧的，不做整体截断：正常情况每次只超出一条
+        while (list.size() > MAX_MESSAGES_PER_CONVERSATION) {
+            list.remove(0);
+        }
+        setDirty();
+    }
+
+    /**
+     * 某玩家有消息往来的所有对端 UUID。
+     *
+     * 用于列出会话列表——联系人加了但没聊过的不在此列，
+     * 会话列表由调用方与联系人表合并后决定显示什么。
+     */
+    public List<UUID> getPeers(UUID player) {
+        String self = player.toString();
+        List<UUID> peers = new ArrayList<>();
+        for (String key : conversations.keySet()) {
+            int sep = key.indexOf('|');
+            if (sep < 0) continue;          // 脏数据，跳过而不是抛异常
+            String left = key.substring(0, sep);
+            String right = key.substring(sep + 1);
+
+            String other;
+            if (left.equals(self)) other = right;
+            else if (right.equals(self)) other = left;
+            else continue;
+
+            try {
+                peers.add(UUID.fromString(other));
+            } catch (IllegalArgumentException ignored) {
+                // 存档被手改过，忽略这一条而不是让整个服务端起不来
+            }
+        }
+        return peers;
+    }
+
+    /** 最后一条消息，用于会话列表的摘要行。没有则返回 null */
+    public ChatMessage getLastMessage(UUID a, UUID b) {
+        List<ChatMessage> list = conversations.get(conversationKey(a, b));
+        return (list == null || list.isEmpty()) ? null : list.get(list.size() - 1);
+    }
+
+    /** 晚于 since 的消息条数，用于算未读数 */
+    public int countAfter(UUID a, UUID b, long since) {
+        List<ChatMessage> list = conversations.get(conversationKey(a, b));
+        if (list == null) return 0;
+
+        int n = 0;
+        // 从尾部往前数，未读通常很少，不必遍历整个列表
+        for (int i = list.size() - 1; i >= 0; i--) {
+            if (list.get(i).time() <= since) break;
+            n++;
+        }
+        return n;
+    }
+
+    // ============================================================
+    //  序列化
+    // ============================================================
+
+    @Override
+    public CompoundTag save(CompoundTag tag, HolderLookup.Provider registries) {
+        CONVERSATIONS_CODEC.encodeStart(NbtOps.INSTANCE, conversations)
+                .resultOrPartial(err -> MCphone.LOGGER.error("聊天记录写入失败: {}", err))
+                .ifPresent(encoded -> tag.put("conversations", encoded));
+        return tag;
+    }
+
+    private static ChatData load(CompoundTag tag, HolderLookup.Provider registries) {
+        Map<String, List<ChatMessage>> loaded = CONVERSATIONS_CODEC
+                .parse(NbtOps.INSTANCE, tag.get("conversations"))
+                .resultOrPartial(err -> MCphone.LOGGER.error("聊天记录读取失败: {}", err))
+                .orElse(Map.of());
+
+        // Codec 解出来的是不可变集合，而运行时要往里加消息，
+        // 必须复制成可变的，否则第一条新消息就会抛 UnsupportedOperationException
+        Map<String, List<ChatMessage>> mutable = new HashMap<>();
+        loaded.forEach((k, v) -> mutable.put(k, new ArrayList<>(v)));
+        return new ChatData(mutable);
+    }
+}
