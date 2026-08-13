@@ -151,21 +151,18 @@ public class PhoneContainerMenu extends AbstractContainerMenu {
     /**
      * 菜单是否仍然有效 —— 手机不在身上了就关掉，这才配叫"便携末影箱"。
      *
-     * 不能只查手上：玩家完全可能把手机本身拿起来挪位置，那一瞬间手机
-     * 既不在手上、也不在背包格子里，而是在鼠标上。漏掉光标那一份的话，
-     * 菜单会在拖动途中被关掉，物品可能掉出来。
+     * 判定必须与开箱那道校验用【同一个】方法。两处各写各的，就会出现
+     * "服务端放你开、菜单自检又把你踢出去"——界面一闪而过，而且看不出
+     * 是哪一步拒绝了。手机挂在饰品槽时就正是这样：开箱那边认饰品栏，
+     * 这里原先不认，于是每次都开了又立刻关。
+     *
+     * 光标上那一份要单独查：玩家完全可能把手机本身拿起来挪位置，那一
+     * 瞬间它既不在手上也不在任何格子里，而是在鼠标上。漏掉的话，菜单
+     * 会在拖动途中被关掉，物品可能掉出来。
      */
     @Override
     public boolean stillValid(Player player) {
-        if (getCarried().getItem() instanceof PhoneItem) return true;
-
-        for (ItemStack stack : player.getInventory().items) {
-            if (stack.getItem() instanceof PhoneItem) return true;
-        }
-        for (ItemStack stack : player.getInventory().offhand) {
-            if (stack.getItem() instanceof PhoneItem) return true;
-        }
-        return false;
+        return PhoneItem.isPhone(getCarried()) || PhoneItem.isCarriedBy(player);
     }
 
     @Override
