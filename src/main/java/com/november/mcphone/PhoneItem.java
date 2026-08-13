@@ -56,7 +56,7 @@ public class PhoneItem extends Item {
 
         // 只在客户端打开 GUI
         if (level.isClientSide()) {
-            openPhoneScreen(hand);
+            openPhoneScreen(new PhoneLocation.InHand(hand));
         }
 
         return InteractionResultHolder.success(stack);
@@ -64,18 +64,28 @@ public class PhoneItem extends Item {
 
     /**
      * 在客户端打开手机主屏幕。
-     * 提取为独立方法，方便后续通过其他途径（如快捷键）打开手机。
      *
-     * @param hand 手机在哪只手上。设备名要写回这只手上的物品堆，
-     *             玩家两只手各拿一只手机时不能改错。
+     * @param location 手机在身上的哪个位置。设备名要写回【这一部】手机，
+     *                 玩家身上不止一部时不能改错。
      */
-    public static void openPhoneScreen(InteractionHand hand) {
-        Minecraft.getInstance().setScreen(new PhoneScreen(hand));
+    public static void openPhoneScreen(PhoneLocation location) {
+        Minecraft.getInstance().setScreen(new PhoneScreen(location));
     }
 
-    /** 不指定手时按主手处理 */
-    public static void openPhoneScreen() {
-        openPhoneScreen(InteractionHand.MAIN_HAND);
+    /**
+     * 从玩家身上找一部手机打开，找不到就什么都不做。
+     *
+     * 快捷键走这条路：手上、背包、饰品槽都找，所以手机收在哪儿都能开机。
+     *
+     * @return 真的开了机才返回 true
+     */
+    public static boolean openPhoneScreen(Player player) {
+        return PhoneLocation.find(player)
+                .map(location -> {
+                    openPhoneScreen(location);
+                    return true;
+                })
+                .orElse(false);
     }
 
     /**

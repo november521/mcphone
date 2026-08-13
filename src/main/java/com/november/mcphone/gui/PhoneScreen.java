@@ -6,7 +6,7 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.world.InteractionHand;
+import com.november.mcphone.PhoneLocation;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -78,10 +78,12 @@ public final class PhoneScreen extends Screen {
     private UUID pendingConversationPeer;
 
     /**
-     * 手机在玩家哪只手上。
-     * 设备名要写回这只手上的物品堆——玩家两只手各拿一只手机时不能改错。
+     * 手机在玩家身上的什么位置。
+     *
+     * 设备名要写回【这一部】手机——玩家身上可能不止一部，右键开的、
+     * 快捷键从背包翻出来的、挂在饰品槽里的，改错了就改到别人头上。
      */
-    private final InteractionHand hand;
+    private final PhoneLocation location;
 
     // ---- 主屏幕 hover ----
     private int hoveredAppIndex = -1;
@@ -92,13 +94,9 @@ public final class PhoneScreen extends Screen {
     private boolean layoutDirty = true;
     private long nowMs;
 
-    public PhoneScreen() {
-        this(InteractionHand.MAIN_HAND);
-    }
-
-    public PhoneScreen(InteractionHand hand) {
+    public PhoneScreen(PhoneLocation location) {
         super(Component.translatable("mcphone.gui.home"));
-        this.hand = hand;
+        this.location = location;
         this.openTimeMs = System.currentTimeMillis();
         this.animationDone = PhoneTheme.OPEN_ANIMATION_MS <= 0;
     }
@@ -119,7 +117,7 @@ public final class PhoneScreen extends Screen {
 
         // 进入命名界面时把当前设备名填进输入框
         if (this.mode == Mode.DEVICE_NAME) deviceNameEditor.close();
-        if (target == Mode.DEVICE_NAME) deviceNameEditor.open(hand);
+        if (target == Mode.DEVICE_NAME) deviceNameEditor.open(location);
 
         // 会话列表离开即停止定时刷新，不在后台空转
         if (this.mode == Mode.CHAT) chatList.close();
@@ -536,7 +534,7 @@ public final class PhoneScreen extends Screen {
     /** 设置列表右侧显示的当前设备名，未命名时显示占位文案 */
     private String currentDeviceNameLabel() {
         if (minecraft == null || minecraft.player == null) return "";
-        String name = minecraft.player.getItemInHand(hand)
+        String name = location.resolve(minecraft.player)
                 .get(com.november.mcphone.ModDataComponents.DEVICE_NAME.get());
         return (name == null || name.isBlank())
                 ? Component.translatable("mcphone.settings.device_name_unset").getString()

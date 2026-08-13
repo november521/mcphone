@@ -3,6 +3,7 @@
   "key.categories.mcphone": "MCphone",
   "key.mcphone.camera_shutter": "Take Photo",
   "key.mcphone.camera_exit": "Exit Camera",
+  "key.mcphone.open_phone": "Open Phone",
   "mcphone.camera.hint": "Press %s to take a photo  ·  %s to exit",
   "item.mcphone.phone": "§6Phone",
   "mcphone.loaded": "MCphone mod loaded — phone is ready",

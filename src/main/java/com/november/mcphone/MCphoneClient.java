@@ -3,6 +3,7 @@ package com.november.mcphone;
 import com.november.mcphone.client.CameraHandler;
 import com.november.mcphone.client.ChatNotifier;
 import com.november.mcphone.client.MCphoneKeyBindings;
+import com.november.mcphone.client.PhoneKeyHandler;
 import com.november.mcphone.gui.PhoneContainerScreen;
 import com.november.mcphone.gui.PhoneScreenRegistry;
 import com.november.mcphone.gui.PhoneSkin;
@@ -37,6 +38,9 @@ public class MCphoneClient {
 
         // 相机模式的监听都在【游戏总线】，同样显式挂载
         NeoForge.EVENT_BUS.addListener(CameraHandler::onClientTick);
+
+        // 快捷键开机，同样在游戏总线上读按键
+        NeoForge.EVENT_BUS.addListener(PhoneKeyHandler::onClientTick);
         NeoForge.EVENT_BUS.addListener(CameraHandler::onRenderGui);
         NeoForge.EVENT_BUS.addListener(CameraHandler::onScreenOpening);
 

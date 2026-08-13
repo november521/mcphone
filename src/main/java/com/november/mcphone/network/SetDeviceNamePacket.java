@@ -1,6 +1,7 @@
 package com.november.mcphone.network;
 
 import com.november.mcphone.MCphone;
+import com.november.mcphone.PhoneLocation;
 import com.november.mcphone.util.TextSanitizer;
 import io.netty.buffer.ByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
@@ -9,15 +10,18 @@ import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
 
 /**
- * 网络包：客户端 → 服务端，玩家给手上的手机起了个名字。
+ * 网络包：客户端 → 服务端，玩家给一部手机起了个名字。
  *
- * 带上是哪只手：玩家两只手可能各拿一只手机，
- * 服务端若自己去猜就可能改错那一只。
- * 手机界面由 PhoneItem.use 打开，那里本来就知道是哪只手。
+ * 带上手机在身上的位置：玩家可能同时有好几部——两手各一部、背包里还
+ * 躺着几部、腰上再挂一部。服务端若自己去找就会改错那一部。
+ *
+ * 位置由界面给出（它从一开始就知道开的是哪一部），服务端解析后还要再验
+ * 一次那儿拿到的确实是手机，所以伪造的位置改不出任何东西来。
  *
  * 空名字表示清除设备名，恢复默认物品名。
  */
-public record SetDeviceNamePacket(String name, boolean mainHand) implements CustomPacketPayload {
+public record SetDeviceNamePacket(String name, PhoneLocation location)
+        implements CustomPacketPayload {
 
     /**
      * 设备名长度上限。
@@ -39,8 +43,8 @@ public record SetDeviceNamePacket(String name, boolean mainHand) implements Cust
                     // 由 Utf8String 内部按 utf8MaxBytes 自行换算，不必乘 3
                     ByteBufCodecs.stringUtf8(MAX_NAME_LENGTH),
                     SetDeviceNamePacket::name,
-                    ByteBufCodecs.BOOL,
-                    SetDeviceNamePacket::mainHand,
+                    PhoneLocation.STREAM_CODEC,
+                    SetDeviceNamePacket::location,
                     SetDeviceNamePacket::new
             );
 

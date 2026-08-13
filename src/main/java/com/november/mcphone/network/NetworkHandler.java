@@ -8,7 +8,6 @@ import com.november.mcphone.menu.ModMenus;
 import com.november.mcphone.menu.PhoneContainerMenu;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.InteractionHand;
 import net.minecraft.world.SimpleMenuProvider;
 import net.minecraft.world.inventory.PlayerEnderChestContainer;
 import net.minecraft.world.item.ItemStack;
@@ -82,22 +81,25 @@ public final class NetworkHandler {
     }
 
     /**
-     * 服务端收到：把设备名写进玩家手上那只手机的数据组件。
+     * 服务端收到：把设备名写进玩家指定的那一部手机。
      *
      * 客户端发来的东西一律不信：
-     *   - 手上拿的确实是手机吗（否则就能给任意物品改名了）
+     *   - 那个位置上确实是手机吗（否则就能给任意物品改名了，
+     *     何况位置本身就可能已经失效——手机被丢掉了）
      *   - 名字再清洗一遍（客户端可以是伪造的，绕过界面直接发包）
      *
-     * 改完不必手动同步：玩家背包容器每 tick 会用 ItemStack.matches
-     * 比对上一次的快照，组件变了就会自动下发给客户端。
+     * 手上与背包里的改完不必手动同步：玩家背包容器每 tick 会用
+     * ItemStack.matches 比对上一次的快照，组件变了就自动下发。饰品栏
+     * 不归原版管，故统一调一次 writeBack，由位置自己决定要不要动作。
      */
     private static void handleSetDeviceName(SetDeviceNamePacket packet, IPayloadContext ctx) {
         ctx.enqueueWork(() -> {
             var player = ctx.player();
-            InteractionHand hand = packet.mainHand() ? InteractionHand.MAIN_HAND : InteractionHand.OFF_HAND;
-            ItemStack stack = player.getItemInHand(hand);
+            ItemStack stack = packet.location().resolve(player);
 
-            if (!(stack.getItem() instanceof PhoneItem)) return;
+            // 那个位置上不是手机就什么都不做：位置由客户端给出，可能已经
+            // 失效（手机被丢掉了），也可能是伪造的
+            if (!PhoneItem.isPhone(stack)) return;
 
             String name = SetDeviceNamePacket.sanitize(packet.name());
             if (name.isEmpty()) {
@@ -108,6 +110,9 @@ public final class NetworkHandler {
                 stack.set(ModDataComponents.DEVICE_NAME.get(), name);
             }
 
+            // 手上与背包里的改完原版自会同步，饰品栏得显式写回去通知 Curios
+            packet.location().writeBack(player, stack);
+
             MCphone.LOGGER.debug("玩家 {} 设置设备名: {}", player.getName().getString(),
                     name.isEmpty() ? "(清除)" : name);
         });
@@ -116,7 +121,7 @@ public final class NetworkHandler {
     /**
      * 服务端收到：给玩家打开他自己的末影箱，界面装在手机机身里。
      *
-     * 校验玩家确实拿着手机——包是客户端发的，不能信。没有这道检查，
+     * 校验玩家身上确实带着手机——包是客户端发的，不能信。没有这道检查，
      * 任何人改个客户端就能凭空开末影箱，手机这个前提条件形同虚设。
      *
      * 容器直接用 player.getEnderChestInventory()，就是原版那一个：

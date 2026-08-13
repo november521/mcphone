@@ -1,6 +1,7 @@
 package com.november.mcphone.gui;
 
 import com.november.mcphone.ModDataComponents;
+import com.november.mcphone.PhoneLocation;
 import com.november.mcphone.network.SetDeviceNamePacket;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
@@ -50,9 +51,13 @@ import net.neoforged.neoforge.network.PacketDistributor;
  * 名字存在哪
  * ================================================================
  *
- * 存在手上那只手机的数据组件里，见 {@link ModDataComponents#DEVICE_NAME}。
+ * 存在【正打开的那一部】手机的数据组件里，见
+ * {@link ModDataComponents#DEVICE_NAME}。哪一部由 {@link PhoneLocation}
+ * 指明——玩家身上可能不止一部手机，手上的、背包里的、挂在饰品槽的，
+ * 改错了就改到别人头上。
+ *
  * 客户端只负责显示与发包，真正写入由服务端完成（会再校验一次），
- * 写完经背包同步回来，物品栏里的名字随之更新。
+ * 写完同步回来，物品栏里的名字随之更新。
  */
 public final class DeviceNameEditor {
 
@@ -63,8 +68,8 @@ public final class DeviceNameEditor {
     private static final int COLOR_BTN    = 0xFFCCCCCC;
     private static final int COLOR_BTN_ON = 0xFF88CCFF;
 
-    /** 手机是玩家哪只手上的那一只 */
-    private InteractionHand hand = InteractionHand.MAIN_HAND;
+    /** 正在改名的是身上哪一部手机 */
+    private PhoneLocation location = new PhoneLocation.InHand(InteractionHand.MAIN_HAND);
 
     private EditBox box;
 
@@ -77,8 +82,8 @@ public final class DeviceNameEditor {
     // ============================================================
 
     /** 进入编辑界面：把当前设备名填进输入框 */
-    public void open(InteractionHand hand) {
-        this.hand = hand;
+    public void open(PhoneLocation location) {
+        this.location = location;
         this.hovered = Btn.NONE;
         if (box != null) {
             box.setValue(currentName());
@@ -93,11 +98,11 @@ public final class DeviceNameEditor {
         if (box != null) box.setFocused(false);
     }
 
-    /** 读取手上那只手机的当前设备名，没起过名则为空串 */
+    /** 读取正在改的那一部手机的当前设备名，没起过名则为空串 */
     private String currentName() {
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null) return "";
-        ItemStack stack = mc.player.getItemInHand(hand);
+        ItemStack stack = location.resolve(mc.player);
         String name = stack.get(ModDataComponents.DEVICE_NAME.get());
         return name == null ? "" : name;
     }
@@ -227,6 +232,6 @@ public final class DeviceNameEditor {
         if (box == null) return;
         String name = SetDeviceNamePacket.sanitize(box.getValue());
         PacketDistributor.sendToServer(
-                new SetDeviceNamePacket(name, hand == InteractionHand.MAIN_HAND));
+                new SetDeviceNamePacket(name, location));
     }
 }

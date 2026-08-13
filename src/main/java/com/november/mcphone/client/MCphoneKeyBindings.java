@@ -45,11 +45,25 @@ public final class MCphoneKeyBindings {
             GLFW.GLFW_KEY_X,
             CATEGORY);
 
+    /**
+     * 开机。默认 H —— 原版 1.21.1 未占用。
+     *
+     * 有了它，手机放在背包或饰品槽里也能直接打开，不必先切到手上。
+     * 这个键与 Curios 无关：没装任何附属模组时照样从背包里把手机翻出来。
+     */
+    public static final KeyMapping OPEN_PHONE = new KeyMapping(
+            "key.mcphone.open_phone",
+            KeyConflictContext.IN_GAME,
+            InputConstants.Type.KEYSYM,
+            GLFW.GLFW_KEY_H,
+            CATEGORY);
+
     private MCphoneKeyBindings() {}
 
     /** 由 MCphoneClient 构造函数挂到模组总线 */
     public static void register(RegisterKeyMappingsEvent event) {
         event.register(CAMERA_SHUTTER);
         event.register(CAMERA_EXIT);
+        event.register(OPEN_PHONE);
     }
 }
