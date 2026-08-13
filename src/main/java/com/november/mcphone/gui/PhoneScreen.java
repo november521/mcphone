@@ -23,7 +23,7 @@ import java.util.UUID;
 public final class PhoneScreen extends Screen {
 
     /** 手机导航模式 */
-    public enum Mode { MAIN, SETTINGS, WALLPAPER_PICKER, APP_MANAGER, MUSIC_PLAYER, APP_STORE, GALLERY, DEVICE_NAME, CHAT, CHAT_ADD_CONTACT }
+    public enum Mode { MAIN, SETTINGS, WALLPAPER_PICKER, APP_MANAGER, MUSIC_PLAYER, APP_STORE, GALLERY, DEVICE_NAME, CHAT, CHAT_ADD_CONTACT, CHAT_CONVERSATION }
 
 
     // ---- 打开动画 ----
@@ -66,6 +66,16 @@ public final class PhoneScreen extends Screen {
     // ---- 聊天 ----
     private final ChatList chatList = new ChatList();
     private final ChatAddContact chatAddContact = new ChatAddContact();
+    private final ChatConversation chatConversation = new ChatConversation();
+
+    /**
+     * 待打开的会话对端。
+     *
+     * navigateTo 只认模式、不带参数，而进入会话必须知道是跟谁聊——
+     * 用一个字段把 peer 递进去，别的界面都不需要这种东西，
+     * 所以不值得为它改 navigateTo 的签名。
+     */
+    private UUID pendingConversationPeer;
 
     /**
      * 手机在玩家哪只手上。
@@ -118,6 +128,10 @@ public final class PhoneScreen extends Screen {
         if (this.mode == Mode.CHAT_ADD_CONTACT) chatAddContact.close();
         if (target == Mode.CHAT_ADD_CONTACT) chatAddContact.open();
 
+        // 进入会话即拉取历史消息，离开即释放——聊天记录不留在内存里空占着
+        if (this.mode == Mode.CHAT_CONVERSATION) chatConversation.close();
+        if (target == Mode.CHAT_CONVERSATION) chatConversation.open(pendingConversationPeer);
+
         this.mode = target;
         this.hoveredSettingIdx = -1;
     }
@@ -146,8 +160,8 @@ public final class PhoneScreen extends Screen {
             return true;
         }
 
-        // 加联系人是聊天里的一层，退回会话列表
-        if (mode == Mode.CHAT_ADD_CONTACT) {
+        // 加联系人与具体会话都是聊天里的一层，退回会话列表
+        if (mode == Mode.CHAT_ADD_CONTACT || mode == Mode.CHAT_CONVERSATION) {
             navigateTo(Mode.CHAT);
             return true;
         }
@@ -219,6 +233,7 @@ public final class PhoneScreen extends Screen {
             case DEVICE_NAME       -> renderDeviceName(g, mouseX, mouseY, partialTick);
             case CHAT              -> renderChat(g, mouseX, mouseY);
             case CHAT_ADD_CONTACT  -> renderChatAddContact(g, mouseX, mouseY);
+            case CHAT_CONVERSATION -> renderChatConversation(g, mouseX, mouseY);
         }
 
         renderNavBar(g, mouseX, mouseY);
@@ -501,6 +516,13 @@ public final class PhoneScreen extends Screen {
                 mx, my, font);
     }
 
+    private void renderChatConversation(GuiGraphics g, int mx, int my) {
+        chatConversation.render(g, phoneLeft, phoneTop,
+                PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
+                PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT,
+                mx, my, font);
+    }
+
     /** 设置列表右侧显示的当前设备名，未命名时显示占位文案 */
     private String currentDeviceNameLabel() {
         if (minecraft == null || minecraft.player == null) return "";
@@ -705,7 +727,8 @@ public final class PhoneScreen extends Screen {
                 // 组件不该知道 PhoneScreen 的导航结构
                 UUID open = chatList.consumeOpenRequest();
                 if (open != null) {
-                    // TODO: 会话界面就绪后导航过去
+                    pendingConversationPeer = open;
+                    navigateTo(Mode.CHAT_CONVERSATION);
                 }
                 if (chatList.consumeAddContactRequest()) {
                     navigateTo(Mode.CHAT_ADD_CONTACT);
@@ -716,6 +739,8 @@ public final class PhoneScreen extends Screen {
                 chatAddContact.mouseClicked(mx, my, button);
                 yield true;
             }
+            // 会话界面此刻没有可点的东西，输入框在下个版本加上
+            case CHAT_CONVERSATION -> true;
         };
     }
 
@@ -728,6 +753,7 @@ public final class PhoneScreen extends Screen {
         if (mode == Mode.GALLERY && gallery.mouseScrolled(scrollY)) return true;
         if (mode == Mode.CHAT && chatList.mouseScrolled(scrollY)) return true;
         if (mode == Mode.CHAT_ADD_CONTACT && chatAddContact.mouseScrolled(scrollY)) return true;
+        if (mode == Mode.CHAT_CONVERSATION && chatConversation.mouseScrolled(scrollY)) return true;
         return super.mouseScrolled(mx, my, scrollX, scrollY);
     }
 
@@ -781,6 +807,8 @@ public final class PhoneScreen extends Screen {
     @Override
     public void removed() {
         if (mode == Mode.GALLERY) gallery.close();
+        // 同理：手机被顶掉时会话缓存也该放掉，否则新消息还会往里追加
+        if (mode == Mode.CHAT_CONVERSATION) chatConversation.close();
         super.removed();
     }
     @Override public boolean isPauseScreen() { return false; }

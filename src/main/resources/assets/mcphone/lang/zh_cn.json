@@ -59,5 +59,6 @@
   "mcphone.chat.remove_action": "✕ 解除",
   "mcphone.chat.truncated": "显示前 %s 人（共 %s 人）",
   "mcphone.chat.request_pending": "已申请",
-  "mcphone.chat.accept_action": "✔ 同意"
+  "mcphone.chat.accept_action": "✔ 同意",
+  "mcphone.chat.conversation_empty": "还没有聊过"
 }

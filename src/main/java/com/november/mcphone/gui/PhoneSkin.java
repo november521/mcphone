@@ -65,7 +65,18 @@ public final class PhoneSkin {
         NAV_HOME("nav_home"),
 
         /** 导航栏"多任务"键图标。建议 40×14；没有贴图时画 □ 字符 */
-        NAV_TASKS("nav_tasks");
+        NAV_TASKS("nav_tasks"),
+
+        /**
+         * 自己发出的聊天气泡底。
+         *
+         * 气泡大小随文字长短变化，贴图会被整张拉伸过去，所以纯色或纵向
+         * 渐变最稳妥；带圆角的图会被拉扁，本类没有九宫格拉伸。
+         */
+        CHAT_BUBBLE_SELF("chat_bubble_self"),
+
+        /** 对方发来的聊天气泡底。拉伸方式同 {@link #CHAT_BUBBLE_SELF} */
+        CHAT_BUBBLE_PEER("chat_bubble_peer");
 
         private final ResourceLocation texture;
 
