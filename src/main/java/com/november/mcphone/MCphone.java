@@ -49,7 +49,7 @@ public class MCphone {
         ModDataComponents.COMPONENTS.register(modEventBus);
         ModCreativeTabs.TABS.register(modEventBus);
         com.november.mcphone.menu.ModMenus.MENUS.register(modEventBus);
-        com.november.mcphone.network.WallpaperData.ATTACHMENT_TYPES.register(modEventBus);
+        ModAttachments.ATTACHMENT_TYPES.register(modEventBus);
         modEventBus.addListener(com.november.mcphone.network.NetworkHandler::register);
 
         version = modContainer.getModInfo().getVersion().toString();

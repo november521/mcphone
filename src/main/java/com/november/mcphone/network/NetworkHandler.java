@@ -1,6 +1,7 @@
 package com.november.mcphone.network;
 
 import com.november.mcphone.MCphone;
+import com.november.mcphone.ModAttachments;
 import com.november.mcphone.ModDataComponents;
 import com.november.mcphone.PhoneItem;
 import com.november.mcphone.menu.ModMenus;
@@ -66,7 +67,7 @@ public final class NetworkHandler {
     private static void handleSetWallpaper(SetWallpaperPacket packet, IPayloadContext ctx) {
         ctx.enqueueWork(() -> {
             var player = ctx.player();
-            player.setData(WallpaperData.TYPE.get(), new WallpaperData(packet.wallpaperFileName()));
+            player.setData(ModAttachments.WALLPAPER.get(), new WallpaperData(packet.wallpaperFileName()));
 
             // 发回给该玩家确认
             ctx.reply(new SyncWallpaperPacket(packet.wallpaperFileName()));
