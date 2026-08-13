@@ -25,16 +25,32 @@ public final class PhoneChassis {
     private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
 
     /**
-     * 画外壳与屏幕背景（壁纸或纯色）。
+     * 画外壳与屏幕背景（壁纸或纯色），尺寸为标准竖屏机身。
      *
      * @param phoneLeft 屏幕内区域左上角 X（不含边框）
      * @param phoneTop  屏幕内区域左上角 Y（不含边框）
      */
     public static void drawFrameAndWallpaper(GuiGraphics g, int phoneLeft, int phoneTop) {
+        drawFrameAndWallpaper(g, phoneLeft, phoneTop,
+                PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT);
+    }
+
+    /**
+     * 画任意尺寸的外壳与屏幕背景。
+     *
+     * 容器类界面（末影箱等）不受竖屏机身尺寸约束：格子要 9 列 ×18px，
+     * 120px 宽的机身塞不下，硬塞就得牺牲功能。这类界面自己定尺寸，
+     * 但仍复用同一套外壳与壁纸绘制，视觉上还是同一部手机。
+     *
+     * @param screenW 屏幕内区域宽（不含边框）
+     * @param screenH 屏幕内区域高（不含边框）
+     */
+    public static void drawFrameAndWallpaper(GuiGraphics g, int phoneLeft, int phoneTop,
+                                             int screenW, int screenH) {
         final int fl = phoneLeft - PhoneTheme.PHONE_BORDER;
         final int ft = phoneTop - PhoneTheme.PHONE_BORDER;
-        final int fw = PhoneTheme.PHONE_TOTAL_WIDTH;
-        final int fh = PhoneTheme.PHONE_TOTAL_HEIGHT;
+        final int fw = screenW + PhoneTheme.PHONE_BORDER * 2;
+        final int fh = screenH + PhoneTheme.PHONE_BORDER * 2;
 
         g.fill(fl, ft, fl + fw, ft + fh, PhoneTheme.COLOR_FRAME);
         g.fill(fl, ft, fl + fw, ft + 2, PhoneTheme.COLOR_FRAME_HIGHLIGHT);
@@ -46,11 +62,11 @@ public final class PhoneChassis {
             // 按 cover 方式等比缩放：覆盖整个屏幕，超出部分居中裁剪
             int texW = wp.imageWidth();
             int texH = wp.imageHeight();
-            float sw = (float) PhoneTheme.PHONE_WIDTH / texW;
-            float sh = (float) PhoneTheme.PHONE_HEIGHT / texH;
+            float sw = (float) screenW / texW;
+            float sh = (float) screenH / texH;
             float s = Math.max(sw, sh);
-            int srcW = (int) (PhoneTheme.PHONE_WIDTH / s);
-            int srcH = (int) (PhoneTheme.PHONE_HEIGHT / s);
+            int srcW = (int) (screenW / s);
+            int srcH = (int) (screenH / s);
             int srcX = (texW - srcW) / 2;
             int srcY = (texH - srcH) / 2;
 
@@ -60,14 +76,14 @@ public final class PhoneChassis {
             // 而居中裁剪下二者必有一个为 0，壁纸就整个画不出来
             g.blit(wp.texture(),
                     phoneLeft, phoneTop,
-                    PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
+                    screenW, screenH,
                     srcX, srcY,
                     srcW, srcH,
                     texW, texH);
         } else {
             g.fill(phoneLeft, phoneTop,
-                    phoneLeft + PhoneTheme.PHONE_WIDTH,
-                    phoneTop + PhoneTheme.PHONE_HEIGHT,
+                    phoneLeft + screenW,
+                    phoneTop + screenH,
                     PhoneTheme.COLOR_SCREEN_BG);
         }
     }
