@@ -56,5 +56,10 @@
   "mcphone.app.chat": "聊天",
   "mcphone.chat.empty": "还没有会话",
   "mcphone.chat.empty_hint": "点右上角 + 添加联系人",
-  "mcphone.chat.no_message": "（还没聊过）"
+  "mcphone.chat.no_message": "（还没聊过）",
+  "mcphone.chat.add_contact": "添加联系人",
+  "mcphone.chat.online_empty": "当前没有其他玩家在线",
+  "mcphone.chat.add_action": "+ 添加",
+  "mcphone.chat.remove_action": "✕ 移除",
+  "mcphone.chat.truncated": "显示前 %s 人（共 %s 人）"
 }

@@ -56,5 +56,10 @@
   "mcphone.app.chat": "Chat",
   "mcphone.chat.empty": "No conversations yet",
   "mcphone.chat.empty_hint": "Tap + to add a contact",
-  "mcphone.chat.no_message": "(no messages yet)"
+  "mcphone.chat.no_message": "(no messages yet)",
+  "mcphone.chat.add_contact": "Add Contact",
+  "mcphone.chat.online_empty": "No other players online",
+  "mcphone.chat.add_action": "+ Add",
+  "mcphone.chat.remove_action": "✕ Remove",
+  "mcphone.chat.truncated": "Showing %s of %s players"
 }

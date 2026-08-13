@@ -23,7 +23,7 @@ import java.util.UUID;
 public final class PhoneScreen extends Screen {
 
     /** 手机导航模式 */
-    public enum Mode { MAIN, SETTINGS, WALLPAPER_PICKER, APP_MANAGER, MUSIC_PLAYER, APP_STORE, GALLERY, DEVICE_NAME, CHAT }
+    public enum Mode { MAIN, SETTINGS, WALLPAPER_PICKER, APP_MANAGER, MUSIC_PLAYER, APP_STORE, GALLERY, DEVICE_NAME, CHAT, CHAT_ADD_CONTACT }
 
 
     // ---- 打开动画 ----
@@ -65,6 +65,7 @@ public final class PhoneScreen extends Screen {
 
     // ---- 聊天 ----
     private final ChatList chatList = new ChatList();
+    private final ChatAddContact chatAddContact = new ChatAddContact();
 
     /**
      * 手机在玩家哪只手上。
@@ -113,6 +114,9 @@ public final class PhoneScreen extends Screen {
         // 会话列表离开即停止定时刷新，不在后台空转
         if (this.mode == Mode.CHAT) chatList.close();
         if (target == Mode.CHAT) chatList.open();
+
+        if (this.mode == Mode.CHAT_ADD_CONTACT) chatAddContact.close();
+        if (target == Mode.CHAT_ADD_CONTACT) chatAddContact.open();
 
         this.mode = target;
         this.hoveredSettingIdx = -1;
@@ -181,6 +185,7 @@ public final class PhoneScreen extends Screen {
             case GALLERY           -> renderGallery(g, mouseX, mouseY);
             case DEVICE_NAME       -> renderDeviceName(g, mouseX, mouseY, partialTick);
             case CHAT              -> renderChat(g, mouseX, mouseY);
+            case CHAT_ADD_CONTACT  -> renderChatAddContact(g, mouseX, mouseY);
         }
 
         renderNavBar(g);
@@ -461,6 +466,13 @@ public final class PhoneScreen extends Screen {
                 mx, my, font);
     }
 
+    private void renderChatAddContact(GuiGraphics g, int mx, int my) {
+        chatAddContact.render(g, phoneLeft, phoneTop,
+                PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
+                PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT,
+                mx, my, font);
+    }
+
     /** 设置列表右侧显示的当前设备名，未命名时显示占位文案 */
     private String currentDeviceNameLabel() {
         if (minecraft == null || minecraft.player == null) return "";
@@ -649,8 +661,12 @@ public final class PhoneScreen extends Screen {
                     // TODO: 会话界面就绪后导航过去
                 }
                 if (chatList.consumeAddContactRequest()) {
-                    // TODO: 加联系人界面就绪后导航过去
+                    navigateTo(Mode.CHAT_ADD_CONTACT);
                 }
+                yield true;
+            }
+            case CHAT_ADD_CONTACT -> {
+                chatAddContact.mouseClicked(mx, my, button);
                 yield true;
             }
         };
@@ -664,6 +680,7 @@ public final class PhoneScreen extends Screen {
     public boolean mouseScrolled(double mx, double my, double scrollX, double scrollY) {
         if (mode == Mode.GALLERY && gallery.mouseScrolled(scrollY)) return true;
         if (mode == Mode.CHAT && chatList.mouseScrolled(scrollY)) return true;
+        if (mode == Mode.CHAT_ADD_CONTACT && chatAddContact.mouseScrolled(scrollY)) return true;
         return super.mouseScrolled(mx, my, scrollX, scrollY);
     }
 
@@ -681,6 +698,12 @@ public final class PhoneScreen extends Screen {
             // 命名界面 ESC＝放弃修改，退回设置列表而非直接回主屏
             if (mode == Mode.DEVICE_NAME) {
                 navigateTo(Mode.SETTINGS);
+                return true;
+            }
+
+            // 加联系人是聊天里的一层，ESC 退回会话列表而非直接回主屏
+            if (mode == Mode.CHAT_ADD_CONTACT) {
+                navigateTo(Mode.CHAT);
                 return true;
             }
 
