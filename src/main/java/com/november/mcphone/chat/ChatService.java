@@ -1,10 +1,13 @@
 package com.november.mcphone.chat;
 
 import com.november.mcphone.ModAttachments;
+import com.november.mcphone.PhoneItem;
 import com.november.mcphone.network.chat.ConversationSummary;
+import com.november.mcphone.util.TextSanitizer;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.players.GameProfileCache;
+import net.minecraft.world.InteractionHand;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -76,6 +79,88 @@ public final class ChatService {
         // 有消息的按最后一条时间倒序排在前，没聊过的沉底
         out.sort(Comparator.comparingLong(ConversationSummary::lastTime).reversed());
         return out;
+    }
+
+    /**
+     * 发一条消息。所有规则集中在这里，网络层只管收包与回包。
+     *
+     * 校验逐条都有原因，少一条都能被伪造客户端利用：
+     *
+     *   - 手上得有手机：没有这条，改个客户端就能凭空聊天，
+     *     "掏出手机"这个前提形同虚设
+     *   - 不能发给自己：会话键归一化后 A|A 是合法键，不拦的话会产生
+     *     一个自己跟自己的会话，界面上莫名其妙
+     *   - 收件人必须是"认识的人"（联系人 / 在线 / 已有会话）：
+     *     否则可以对着随便编造的 UUID 发消息，把存档撑满
+     *   - 正文清洗后不能为空：纯空格或纯格式符的消息没有意义
+     *
+     * 时间戳由服务端盖章，不采信客户端——客户端的钟不可信，早一点晚一点
+     * 会打乱会话排序，极端情况下能把自己的消息永远顶在列表最前。
+     *
+     * @return 落库后的消息；未通过校验时返回 null
+     */
+    public static ChatMessage sendMessage(ServerPlayer sender, UUID targetId, String rawText) {
+        if (!isHoldingPhone(sender)) return null;
+
+        UUID senderId = sender.getUUID();
+        if (senderId.equals(targetId)) return null;
+
+        String text = TextSanitizer.sanitize(rawText, ChatMessage.MAX_TEXT_LENGTH);
+        if (text.isEmpty()) return null;
+
+        MinecraftServer server = sender.server;
+        ChatData chat = ChatData.get(server);
+        if (!isKnownPeer(sender, chat, targetId)) return null;
+
+        ChatMessage message = new ChatMessage(senderId, text, System.currentTimeMillis());
+        chat.addMessage(senderId, targetId, message);
+
+        // 自己发的消息对自己而言当然是已读的。不推进已读时刻的话，
+        // 未读数虽已按发件人过滤（见 ChatData.countAfter），但对方回复前
+        // 的这段时间里"上次已读"仍停在旧值，回复一到就会把中间的全算成未读
+        ContactsData contacts = sender.getData(ModAttachments.CONTACTS.get());
+        sender.setData(ModAttachments.CONTACTS.get(),
+                contacts.withLastRead(targetId, message.time()));
+
+        return message;
+    }
+
+    /** 取某个会话的历史消息 */
+    public static List<ChatMessage> getMessages(ServerPlayer self, UUID peer) {
+        return ChatData.get(self.server).getMessages(self.getUUID(), peer);
+    }
+
+    /**
+     * 把与某人的会话标为已读到此刻。
+     *
+     * 已读时刻由服务端盖章而非采信客户端：客户端报一个未来的时间戳就能
+     * 把之后收到的消息全标成已读，红点再也不出现。
+     */
+    public static void markRead(ServerPlayer self, UUID peer) {
+        ContactsData contacts = self.getData(ModAttachments.CONTACTS.get());
+        ContactsData updated = contacts.withLastRead(peer, System.currentTimeMillis());
+        if (updated != contacts) {
+            self.setData(ModAttachments.CONTACTS.get(), updated);
+        }
+    }
+
+    /** 手上（任意一只手）拿着手机吗 */
+    public static boolean isHoldingPhone(ServerPlayer player) {
+        return player.getItemInHand(InteractionHand.MAIN_HAND).getItem() instanceof PhoneItem
+            || player.getItemInHand(InteractionHand.OFF_HAND).getItem() instanceof PhoneItem;
+    }
+
+    /**
+     * 这个人是"认识的"吗 —— 联系人、当前在线、或已经聊过。
+     *
+     * 拦住的是对着随便编造的 UUID 发消息：那既能把存档撑满，
+     * 又能给素未谋面的玩家凭空塞一条会话。
+     */
+    private static boolean isKnownPeer(ServerPlayer self, ChatData chat, UUID peer) {
+        ContactsData contacts = self.getData(ModAttachments.CONTACTS.get());
+        if (contacts.hasContact(peer)) return true;
+        if (self.server.getPlayerList().getPlayer(peer) != null) return true;
+        return chat.getLastMessage(self.getUUID(), peer) != null;
     }
 
     /**

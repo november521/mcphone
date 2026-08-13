@@ -2,7 +2,10 @@ package com.november.mcphone.chat;
 
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
+import io.netty.buffer.ByteBuf;
 import net.minecraft.core.UUIDUtil;
+import net.minecraft.network.codec.ByteBufCodecs;
+import net.minecraft.network.codec.StreamCodec;
 
 import java.util.UUID;
 
@@ -28,4 +31,16 @@ public record ChatMessage(UUID sender, String text, long time) {
                     Codec.LONG.fieldOf("time").forGetter(ChatMessage::time)
             ).apply(instance, ChatMessage::new)
     );
+
+    /**
+     * 网络传输用。长度上限写在编解码器上，伪造客户端塞超长文本会在
+     * 解码阶段就被拒收，轮不到业务层去发现。
+     */
+    public static final StreamCodec<ByteBuf, ChatMessage> STREAM_CODEC =
+            StreamCodec.composite(
+                    UUIDUtil.STREAM_CODEC, ChatMessage::sender,
+                    ByteBufCodecs.stringUtf8(MAX_TEXT_LENGTH), ChatMessage::text,
+                    ByteBufCodecs.VAR_LONG, ChatMessage::time,
+                    ChatMessage::new
+            );
 }

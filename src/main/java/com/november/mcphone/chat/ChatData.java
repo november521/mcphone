@@ -155,16 +155,26 @@ public class ChatData extends SavedData {
         return (list == null || list.isEmpty()) ? null : list.get(list.size() - 1);
     }
 
-    /** 晚于 since 的消息条数，用于算未读数 */
-    public int countAfter(UUID a, UUID b, long since) {
-        List<ChatMessage> list = conversations.get(conversationKey(a, b));
+    /**
+     * 未读条数 —— 会话中由 {@code peer} 发出、且晚于 since 的消息条数。
+     *
+     * 必须只数对方发的：把自己发的也算进去的话，自己发一条消息就会给
+     * 自己涨一个未读，而"已读时刻"要等下次打开会话才会推进，红点就一直
+     * 挂在那儿。
+     *
+     * @param self 本人
+     * @param peer 对端
+     */
+    public int countAfter(UUID self, UUID peer, long since) {
+        List<ChatMessage> list = conversations.get(conversationKey(self, peer));
         if (list == null) return 0;
 
         int n = 0;
         // 从尾部往前数，未读通常很少，不必遍历整个列表
         for (int i = list.size() - 1; i >= 0; i--) {
-            if (list.get(i).time() <= since) break;
-            n++;
+            ChatMessage m = list.get(i);
+            if (m.time() <= since) break;
+            if (m.sender().equals(peer)) n++;
         }
         return n;
     }
