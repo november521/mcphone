@@ -1,7 +1,5 @@
 package com.november.mcphone.gui;
 
-import net.minecraft.resources.ResourceLocation;
-import com.november.mcphone.MCphone;
 
 /**
  * =============================================================
@@ -17,18 +15,27 @@ import com.november.mcphone.MCphone;
  * 贴图放置目录：
  *   src/main/resources/assets/mcphone/textures/gui/
  *
- * ╔══════════════════════════════════════════════════════════╗
- * ║  文件名                  │ 必须尺寸  │ 用途             ║
- * ╠══════════════════════════════════════════════════════════╣
- * ║  phone_background.png   │ 120 × 200 │ 手机屏幕背景      ║
- * ║  app_icon_*.png         │  20 × 20  │ 各App图标(正方形) ║
- * ║  status_bar_bg.png      │ 120 × 10  │ 顶部状态栏背景    ║
- * ╚══════════════════════════════════════════════════════════╝
+ * ╔═══════════════════════════════════════════════════════════════╗
+ * ║  文件名             │ 建议尺寸 │ 用途                        ║
+ * ╠═══════════════════════════════════════════════════════════════╣
+ * ║  app_icon_*.png     │  20 × 20 │ 各 App 图标（正方形）        ║
+ * ║  phone_frame.png    │ 128 ×208 │ 手机外壳（含边框的整机）      ║
+ * ║  status_bar.png     │ 120 × 10 │ 顶部状态栏背景               ║
+ * ║  nav_bar.png        │ 120 × 14 │ 底部导航栏背景               ║
+ * ║  nav_back.png       │  40 × 14 │ 导航栏"返回"键（◁ 的替代）   ║
+ * ║  nav_home.png       │  40 × 14 │ 导航栏"主页"键（○ 的替代）   ║
+ * ║  nav_tasks.png      │  40 × 14 │ 导航栏"多任务"键（□ 的替代） ║
+ * ╚═══════════════════════════════════════════════════════════════╝
+ *
+ * 除 app_icon_* 外，上表各项由 {@link PhoneSkin} 统一处理：放了就用，
+ * 没放就用本文件的 COLOR_* 纯色画，功能完全不受影响。
+ * 新增可换肤元素时，在 PhoneSkin.Element 里加一项即可。
  *
  * 贴图格式要求：
  *   - 格式：PNG（必须，Minecraft 只认 PNG）
  *   - 色深：32位（含透明通道），背景透明部分用 Alpha=0
- *   - 尺寸：必须精确匹配上表，像素不对会导致拉伸/截断
+ *   - 尺寸：【不必】精确匹配，贴图会被拉伸到目标区域。
+ *          想要不变形，按建议尺寸或其等比放大画即可
  *   - 命名：全小写英文 + 下划线，如 app_icon_settings.png
  *
  * 如何制作贴图：
@@ -139,28 +146,8 @@ public final class PhoneTheme {
     /** App 名称字体缩放，1.0=原大小 */
     public static final float APP_NAME_SCALE = 0.6f;
 
-    // ==================== 纹理路径（可选） ====================
-
-    /**
-     * 手机背景纹理（120×200 PNG）
-     * 放置路径: assets/mcphone/textures/gui/phone_background.png
-     */
-    public static final ResourceLocation TEXTURE_BACKGROUND =
-            ResourceLocation.fromNamespaceAndPath(MCphone.MODID, "textures/gui/phone_background.png");
-
-    /**
-     * 默认 App 图标纹理（20×20 PNG）
-     * 放置路径: assets/mcphone/textures/gui/app_icon_default.png
-     */
-    public static final ResourceLocation TEXTURE_APP_DEFAULT =
-            ResourceLocation.fromNamespaceAndPath(MCphone.MODID, "textures/gui/app_icon_default.png");
-
-    /**
-     * 状态栏背景纹理（120×10 PNG）
-     * 放置路径: assets/mcphone/textures/gui/status_bar_bg.png
-     */
-    public static final ResourceLocation TEXTURE_STATUS_BAR =
-            ResourceLocation.fromNamespaceAndPath(MCphone.MODID, "textures/gui/status_bar_bg.png");
+    // 贴图路径不在这里声明：可换肤元素统一由 PhoneSkin.Element 管理，
+    // 一处定义文件名、尺寸建议与兜底行为，不会出现"声明了却没人用"的空头承诺。
 
     // ==================== 动画参数 ====================
 

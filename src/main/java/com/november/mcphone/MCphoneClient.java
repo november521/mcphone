@@ -4,11 +4,14 @@ import com.november.mcphone.client.CameraHandler;
 import com.november.mcphone.client.MCphoneKeyBindings;
 import com.november.mcphone.gui.PhoneContainerScreen;
 import com.november.mcphone.gui.PhoneScreenRegistry;
+import com.november.mcphone.gui.PhoneSkin;
 import com.november.mcphone.gui.WallpaperStore;
 import com.november.mcphone.menu.ModMenus;
 import com.november.mcphone.network.chat.ChatClientCache;
 import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
+import net.neoforged.neoforge.client.event.RegisterClientReloadListenersEvent;
 import net.neoforged.neoforge.client.event.RegisterMenuScreensEvent;
+import net.minecraft.server.packs.resources.ResourceManagerReloadListener;
 import net.minecraft.client.Minecraft;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.neoforge.common.NeoForge;
@@ -40,6 +43,18 @@ public class MCphoneClient {
         // 上一个服务器的会话列表——那是别处的数据，既尴尬又可能泄露信息
         NeoForge.EVENT_BUS.addListener(
                 (ClientPlayerNetworkEvent.LoggingOut event) -> ChatClientCache.clear());
+    }
+
+    /**
+     * 资源重载时清空换肤贴图的探测缓存。
+     *
+     * 不清的话，玩家按 F3+T 重载资源包、或换了资源包之后，界面画的还是
+     * 上一套贴图——而且不报错，只是"改了没反应"，很难想到是缓存。
+     */
+    @SubscribeEvent
+    static void onRegisterReloadListeners(RegisterClientReloadListenersEvent event) {
+        event.registerReloadListener(
+                (ResourceManagerReloadListener) manager -> PhoneSkin.clearCache());
     }
 
     /**

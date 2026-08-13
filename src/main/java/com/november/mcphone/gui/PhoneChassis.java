@@ -52,8 +52,11 @@ public final class PhoneChassis {
         final int fw = screenW + PhoneTheme.PHONE_BORDER * 2;
         final int fh = screenH + PhoneTheme.PHONE_BORDER * 2;
 
-        g.fill(fl, ft, fl + fw, ft + fh, PhoneTheme.COLOR_FRAME);
-        g.fill(fl, ft, fl + fw, ft + 2, PhoneTheme.COLOR_FRAME_HIGHLIGHT);
+        // 外壳可换肤：贴图覆盖整个机身（含边框），没有贴图就画纯色边框加顶部高光
+        if (!PhoneSkin.draw(g, PhoneSkin.Element.FRAME, fl, ft, fw, fh)) {
+            g.fill(fl, ft, fl + fw, ft + fh, PhoneTheme.COLOR_FRAME);
+            g.fill(fl, ft, fl + fw, ft + 2, PhoneTheme.COLOR_FRAME_HIGHLIGHT);
+        }
 
         String wpName = NetworkHandler.WakeholderData.get();
         WallpaperStore.WallpaperEntry wp = WallpaperStore.findEntry(wpName);
@@ -88,11 +91,15 @@ public final class PhoneChassis {
         }
     }
 
-    /** 画顶部状态栏：左侧信号、右侧时钟 */
+    /** 状态栏没有贴图时的兜底底色（半透明黑，压在壁纸上仍看得清） */
+    private static final int COLOR_STATUS_BAR_FALLBACK = 0x66000000;
+
+    /** 画顶部状态栏：左侧信号、右侧时钟。背景可换肤 */
     public static void drawStatusBar(GuiGraphics g, Font font, int phoneLeft, int phoneTop) {
-        g.fill(phoneLeft, phoneTop,
-                phoneLeft + PhoneTheme.PHONE_WIDTH,
-                phoneTop + PhoneTheme.STATUS_BAR_HEIGHT, 0x66000000);
+        PhoneSkin.drawOrFill(g, PhoneSkin.Element.STATUS_BAR,
+                phoneLeft, phoneTop,
+                PhoneTheme.PHONE_WIDTH, PhoneTheme.STATUS_BAR_HEIGHT,
+                COLOR_STATUS_BAR_FALLBACK);
 
         String time = LocalTime.now().format(TIME_FORMATTER);
         int tx = phoneLeft + PhoneTheme.PHONE_WIDTH - 6 - font.width(time);
@@ -122,6 +129,13 @@ public final class PhoneChassis {
 
     private static final String[] NAV_GLYPHS = {"◁", "○", "□"};
 
+    /** 与 NAV_ORDER 一一对应的可换肤图标 */
+    private static final PhoneSkin.Element[] NAV_ICONS = {
+            PhoneSkin.Element.NAV_BACK,
+            PhoneSkin.Element.NAV_HOME,
+            PhoneSkin.Element.NAV_TASKS
+    };
+
     /**
      * 命中判定 —— 与绘制放在同一个类里，布局一改两边一起改。
      * 分开写迟早会出现"看得见点不到"或"点得到看不见"。
@@ -148,8 +162,10 @@ public final class PhoneChassis {
     public static void drawNavBar(GuiGraphics g, Font font, int phoneLeft, int phoneTop,
                                   int mouseX, int mouseY) {
         int ny = phoneTop + PhoneTheme.PHONE_HEIGHT - PhoneTheme.NAV_BAR_HEIGHT;
-        g.fill(phoneLeft, ny, phoneLeft + PhoneTheme.PHONE_WIDTH,
-                phoneTop + PhoneTheme.PHONE_HEIGHT, PhoneTheme.COLOR_NAV_BAR);
+        PhoneSkin.drawOrFill(g, PhoneSkin.Element.NAV_BAR,
+                phoneLeft, ny,
+                PhoneTheme.PHONE_WIDTH, PhoneTheme.NAV_BAR_HEIGHT,
+                PhoneTheme.COLOR_NAV_BAR);
 
         NavButton hovered = hitTestNavBar(mouseX, mouseY, phoneLeft, phoneTop);
 
@@ -162,10 +178,14 @@ public final class PhoneChassis {
                         phoneLeft + tw * (i + 1), phoneTop + PhoneTheme.PHONE_HEIGHT,
                         0x33FFFFFF);
             }
-            int bw = font.width(NAV_GLYPHS[i]);
-            int bx = phoneLeft + tw * i + (tw - bw) / 2;
-            g.drawString(font, NAV_GLYPHS[i], bx, cy,
-                    isHovered ? 0xFFFFFFFF : 0xFF888888, false);
+            // 按键图标可换肤；没有贴图就画原来的字符符号
+            if (!PhoneSkin.draw(g, NAV_ICONS[i],
+                    phoneLeft + tw * i, ny, tw, PhoneTheme.NAV_BAR_HEIGHT)) {
+                int bw = font.width(NAV_GLYPHS[i]);
+                int bx = phoneLeft + tw * i + (tw - bw) / 2;
+                g.drawString(font, NAV_GLYPHS[i], bx, cy,
+                        isHovered ? 0xFFFFFFFF : 0xFF888888, false);
+            }
         }
     }
 }
