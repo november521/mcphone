@@ -66,6 +66,20 @@ jobs:
           fi
           echo "jar_path=$JAR_PATH" >> "$GITHUB_OUTPUT"
 
+      # 同名 tag 已有 Release 时先删掉，否则下面的 gh release create 会直接失败。
+      # 语义是"重推 tag ＝ 重新出这个版本"：强推同名 tag 本身已是明确的破坏性
+      # 动作，不会误触。只删与本次 tag 同名的那一个，不碰其他版本。
+      - name: Remove pre-existing release for this tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            echo "::warning::$GITHUB_REF_NAME 已存在 Release，将删除后重建"
+            gh release delete "$GITHUB_REF_NAME" --yes
+          else
+            echo "$GITHUB_REF_NAME 尚无 Release，直接创建"
+          fi
+
       # 正文取自仓库内与 tag 同名的说明文件，让 Release 描述也进版本控制；
       # 没有对应文件时退回 GitHub 依据提交记录自动生成，不至于发出一个空描述。
       - name: Create GitHub Release
