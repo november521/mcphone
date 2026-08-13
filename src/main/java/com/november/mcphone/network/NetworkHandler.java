@@ -57,6 +57,10 @@ public final class NetworkHandler {
                 OpenEnderChestPacket.STREAM_CODEC,
                 NetworkHandler::handleOpenEnderChest
         );
+
+        // 聊天相关的包自成一组，注册与处理都在 ChatNetworking：
+        // 本类只保留"注册总入口"这一个职责，不做杂物间
+        com.november.mcphone.network.chat.ChatNetworking.register(registrar);
     }
 
     // ============================================================

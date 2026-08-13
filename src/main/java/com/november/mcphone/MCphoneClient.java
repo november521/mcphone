@@ -6,6 +6,8 @@ import com.november.mcphone.gui.PhoneContainerScreen;
 import com.november.mcphone.gui.PhoneScreenRegistry;
 import com.november.mcphone.gui.WallpaperStore;
 import com.november.mcphone.menu.ModMenus;
+import com.november.mcphone.network.chat.ChatClientCache;
+import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 import net.neoforged.neoforge.client.event.RegisterMenuScreensEvent;
 import net.minecraft.client.Minecraft;
 import net.neoforged.bus.api.IEventBus;
@@ -33,6 +35,11 @@ public class MCphoneClient {
         NeoForge.EVENT_BUS.addListener(CameraHandler::onClientTick);
         NeoForge.EVENT_BUS.addListener(CameraHandler::onRenderGui);
         NeoForge.EVENT_BUS.addListener(CameraHandler::onScreenOpening);
+
+        // 退出世界时清空聊天缓存。不清的话，换到另一个服务器时会先闪出
+        // 上一个服务器的会话列表——那是别处的数据，既尴尬又可能泄露信息
+        NeoForge.EVENT_BUS.addListener(
+                (ClientPlayerNetworkEvent.LoggingOut event) -> ChatClientCache.clear());
     }
 
     /**
