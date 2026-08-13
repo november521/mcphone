@@ -76,7 +76,9 @@ player, and an open SPI-based app system that add-on mods can plug into.
     # Optional field describing why the dependency is required or why it is incompatible
     # reason="..."
     # The version range of the dependency
-    versionRange="[${neo_version},)" #mandatory
+    # 用 neo_version_range 而不是 neo_version：前者是"玩家要装哪个版本"，
+    # 后者是"我拿哪个版本编译"，绑在一起会让每次升级开发环境都误伤低版本用户。
+    versionRange="${neo_version_range}" #mandatory
     # An ordering relationship for the dependency.
     # BEFORE - This mod is loaded BEFORE the dependency
     # AFTER - This mod is loaded AFTER the dependency
