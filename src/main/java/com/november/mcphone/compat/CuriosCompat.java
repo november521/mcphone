@@ -5,6 +5,7 @@ import net.minecraft.world.item.ItemStack;
 import net.neoforged.fml.ModList;
 import top.theillusivec4.curios.api.CuriosApi;
 
+import java.util.Optional;
 import java.util.function.Predicate;
 
 /**
@@ -59,5 +60,59 @@ public final class CuriosCompat {
         return CuriosApi.getCuriosInventory(entity)
                 .map(inventory -> inventory.isEquipped(filter))
                 .orElse(false);
+    }
+
+    /**
+     * 饰品栏里的一个位置。
+     *
+     * 刻意不直接返回 Curios 的 SlotResult：那个类型一旦漏到外面，
+     * 外面的代码就跟着碰上了 Curios，本类的隔离也就白做了。
+     */
+    public record CurioSlotRef(String slotId, int index) {}
+
+    /** 找出饰品栏里第一个符合条件的物品在哪。没装 Curios 时一律为空 */
+    public static Optional<CurioSlotRef> findEquipped(LivingEntity entity,
+                                                      Predicate<ItemStack> filter) {
+        if (!isLoaded()) return Optional.empty();
+        return findEquippedInternal(entity, filter);
+    }
+
+    private static Optional<CurioSlotRef> findEquippedInternal(LivingEntity entity,
+                                                               Predicate<ItemStack> filter) {
+        return CuriosApi.getCuriosInventory(entity)
+                .flatMap(inventory -> inventory.findFirstCurio(filter))
+                .map(result -> new CurioSlotRef(
+                        result.slotContext().identifier(), result.slotContext().index()));
+    }
+
+    /** 取饰品栏某个位置上的物品。没装 Curios、位置不存在时都返回空堆 */
+    public static ItemStack getEquipped(LivingEntity entity, String slotId, int index) {
+        if (!isLoaded()) return ItemStack.EMPTY;
+        return getEquippedInternal(entity, slotId, index);
+    }
+
+    private static ItemStack getEquippedInternal(LivingEntity entity, String slotId, int index) {
+        return CuriosApi.getCuriosInventory(entity)
+                .flatMap(inventory -> inventory.findCurio(slotId, index))
+                .map(result -> result.stack())
+                .orElse(ItemStack.EMPTY);
+    }
+
+    /**
+     * 把物品写回饰品栏。
+     *
+     * 直接改 getEquipped 拿到的那个 ItemStack 其实也能改到数据，但改完
+     * 客户端未必看得见——饰品栏的同步归 Curios 管，它得知道东西变了。
+     * 走 setEquippedCurio 就是在通知它。
+     */
+    public static void setEquipped(LivingEntity entity, String slotId, int index, ItemStack stack) {
+        if (!isLoaded()) return;
+        setEquippedInternal(entity, slotId, index, stack);
+    }
+
+    private static void setEquippedInternal(LivingEntity entity, String slotId, int index,
+                                            ItemStack stack) {
+        CuriosApi.getCuriosInventory(entity)
+                .ifPresent(inventory -> inventory.setEquippedCurio(slotId, index, stack));
     }
 }
