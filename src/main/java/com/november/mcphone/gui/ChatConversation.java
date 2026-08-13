@@ -3,6 +3,7 @@ package com.november.mcphone.gui;
 import com.november.mcphone.chat.ChatMessage;
 import com.november.mcphone.network.chat.ChatClientCache;
 import com.november.mcphone.network.chat.ConversationSummary;
+import com.november.mcphone.network.chat.MarkReadPacket;
 import com.november.mcphone.network.chat.RequestConversationsPacket;
 import com.november.mcphone.network.chat.RequestMessagesPacket;
 import com.november.mcphone.network.chat.SendChatMessagePacket;
@@ -136,6 +137,9 @@ public final class ChatConversation {
     /** 本帧鼠标是否停在发送键上 */
     private boolean sendHovered;
 
+    /** 上次上报过已读的那份消息列表，用来发现"又来新消息了" */
+    private List<ChatMessage> markedFrom;
+
     // ---- 排版缓存 ----
     private List<Block> blocks = List.of();
     private int contentH;
@@ -188,6 +192,9 @@ public final class ChatConversation {
         }
 
         ChatClientCache.openConversation(peer);
+        // 刚清空，记下这份空列表作为比对基准
+        this.markedFrom = ChatClientCache.getMessages();
+
         PacketDistributor.sendToServer(new RequestMessagesPacket(peer));
     }
 
@@ -198,6 +205,7 @@ public final class ChatConversation {
         blocks = List.of();
         contentH = 0;
         sendHovered = false;
+        markedFrom = null;
         if (box != null) box.setFocused(false);
         ChatClientCache.closeConversation();
     }
@@ -211,6 +219,7 @@ public final class ChatConversation {
                        int mouseX, int mouseY, float partialTick, Font font) {
 
         maybeRefresh();
+        maybeMarkRead();
 
         final int x = phoneLeft + PAD;
         final int w = screenW - PAD * 2;
@@ -476,6 +485,26 @@ public final class ChatConversation {
 
         lastRequestMs = now;
         PacketDistributor.sendToServer(new RequestConversationsPacket());
+    }
+
+    /**
+     * 会话开着的时候来了新消息，补一次已读上报。
+     *
+     * 服务端只在拉历史时把会话标为已读。玩家就盯着界面看，对方发来的消息
+     * 明明看见了，退出去却还顶着未读红点——这个包就为了堵这个。
+     *
+     * 消息列表换了实例即说明有新消息：{@link ChatClientCache} 每次收包都
+     * 产出新的不可变列表，与排版缓存用的是同一个判据。
+     *
+     * 进会话后历史到达那一下会多报一次（拉历史时服务端已经标过了）。
+     * 一个 UUID 的包而已，不值得为省掉它多养一个"历史到没到"的状态位。
+     */
+    private void maybeMarkRead() {
+        List<ChatMessage> src = ChatClientCache.getMessages();
+        if (src == markedFrom || peer == null) return;
+
+        markedFrom = src;
+        PacketDistributor.sendToServer(new MarkReadPacket(peer));
     }
 
     /** 从会话列表快照里找当前对端那一行，找不到返回 null */

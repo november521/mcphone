@@ -53,6 +53,13 @@ public final class ChatNetworking {
                 ChatNetworking::handleSyncMessages
         );
 
+        // C2S: 会话开着时来了新消息，补一次已读
+        registrar.playToServer(
+                MarkReadPacket.TYPE,
+                MarkReadPacket.STREAM_CODEC,
+                ChatNetworking::handleMarkRead
+        );
+
         // C2S: 发一条消息
         registrar.playToServer(
                 SendChatMessagePacket.TYPE,
@@ -138,6 +145,23 @@ public final class ChatNetworking {
             List<ChatMessage> messages = ChatService.getMessages(player, packet.peer());
             ChatService.markRead(player, packet.peer());
             ctx.reply(new SyncMessagesPacket(packet.peer(), messages));
+        });
+    }
+
+    /**
+     * 客户端报告"这个会话我看着呢"。
+     *
+     * 不回包：已读时刻只影响未读数，而未读数会随下一轮会话列表一起下发，
+     * 单独回一条没人用。
+     *
+     * 不校验对方是不是好友：ChatService.markRead 写的是自己的已读进度，
+     * 对着一个陌生人的 UUID 标已读，最坏也只是在自己的存档里留一条无用
+     * 记录，构不成滥用。
+     */
+    private static void handleMarkRead(MarkReadPacket packet, IPayloadContext ctx) {
+        ctx.enqueueWork(() -> {
+            if (!(ctx.player() instanceof ServerPlayer player)) return;
+            ChatService.markRead(player, packet.peer());
         });
     }
 
