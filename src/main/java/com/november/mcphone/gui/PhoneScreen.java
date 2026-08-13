@@ -1,7 +1,6 @@
 package com.november.mcphone.gui;
 
 import com.november.mcphone.api.IPhoneApp;
-import com.november.mcphone.network.NetworkHandler;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
@@ -9,8 +8,6 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.InteractionHand;
 
-import java.time.LocalTime;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -27,7 +24,6 @@ public final class PhoneScreen extends Screen {
     /** 手机导航模式 */
     public enum Mode { MAIN, SETTINGS, WALLPAPER_PICKER, APP_MANAGER, MUSIC_PLAYER, APP_STORE, GALLERY, DEVICE_NAME }
 
-    private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
 
     // ---- 打开动画 ----
     private final long openTimeMs;
@@ -191,47 +187,7 @@ public final class PhoneScreen extends Screen {
     // ============================================================
 
     private void renderPhoneFrame(GuiGraphics g) {
-        final int fl = phoneLeft - PhoneTheme.PHONE_BORDER;
-        final int ft = phoneTop - PhoneTheme.PHONE_BORDER;
-        final int fw = PhoneTheme.PHONE_TOTAL_WIDTH;
-        final int fh = PhoneTheme.PHONE_TOTAL_HEIGHT;
-
-        g.fill(fl, ft, fl + fw, ft + fh, PhoneTheme.COLOR_FRAME);
-        g.fill(fl, ft, fl + fw, ft + 2, PhoneTheme.COLOR_FRAME_HIGHLIGHT);
-
-        // ---- 壁纸或纯色背景 ----
-        String wpName = NetworkHandler.WakeholderData.get();
-        WallpaperStore.WallpaperEntry wp = WallpaperStore.findEntry(wpName);
-
-        if (wp != null) {
-            // 使用图片原始尺寸做 blit：按比例填充屏幕
-            int texW = wp.imageWidth();
-            int texH = wp.imageHeight();
-            // 计算 cover 缩放：覆盖整个屏幕，超出部分裁剪
-            float sw = (float) PhoneTheme.PHONE_WIDTH / texW;
-            float sh = (float) PhoneTheme.PHONE_HEIGHT / texH;
-            float s = Math.max(sw, sh);
-            int srcW = (int)(PhoneTheme.PHONE_WIDTH / s);
-            int srcH = (int)(PhoneTheme.PHONE_HEIGHT / s);
-            int srcX = (texW - srcW) / 2;
-            int srcY = (texH - srcH) / 2;
-
-            // 参数顺序按 GuiGraphics 的 11 参重载：
-            //   (贴图, x, y, 目标宽, 目标高, u, v, 源区宽, 源区高, 纹理宽, 纹理高)
-            // 目标宽高在前、UV 在后，写反会导致目标矩形取到 srcX/srcY，
-            // 而居中裁剪下二者必有一个为 0，壁纸就整个画不出来
-            g.blit(wp.texture(),
-                    phoneLeft, phoneTop,                              // 屏幕目标位置
-                    PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,  // 目标宽高
-                    srcX, srcY,                                       // 纹理源 UV
-                    srcW, srcH,                                       // 源区域宽高
-                    texW, texH);                                      // 纹理总宽高
-        } else {
-            g.fill(phoneLeft, phoneTop,
-                    phoneLeft + PhoneTheme.PHONE_WIDTH,
-                    phoneTop + PhoneTheme.PHONE_HEIGHT,
-                    PhoneTheme.COLOR_SCREEN_BG);
-        }
+        PhoneChassis.drawFrameAndWallpaper(g, phoneLeft, phoneTop);
     }
 
     // ============================================================
@@ -239,21 +195,12 @@ public final class PhoneScreen extends Screen {
     // ============================================================
 
     private void renderStatusBar(GuiGraphics g) {
-        g.fill(phoneLeft, phoneTop,
-                phoneLeft + PhoneTheme.PHONE_WIDTH,
-                phoneTop + PhoneTheme.STATUS_BAR_HEIGHT, 0x66000000);
-
-        String time = LocalTime.now().format(TIME_FORMATTER);
-        int tx = phoneLeft + PhoneTheme.PHONE_WIDTH - 6 - font.width(time);
-        g.drawString(font, time, tx, phoneTop + 1, PhoneTheme.FONT_COLOR_STATUS, true);
-        g.drawString(font, "●●●●", phoneLeft + 4, phoneTop + 1, 0xFFFFFFFF, true);
-
         // 非主界面显示返回箭头
+        String centerText = null;
         if (mode != Mode.MAIN) {
-            String back = Component.translatable("mcphone.gui.back").getString();
-            g.drawString(font, back + " 返回", phoneLeft + PhoneTheme.PHONE_WIDTH / 2 - 12,
-                    phoneTop + 1, 0xFF88CCFF, true);
+            centerText = Component.translatable("mcphone.gui.back").getString() + " 返回";
         }
+        PhoneChassis.drawStatusBar(g, font, phoneLeft, phoneTop, centerText);
     }
 
     // ============================================================
@@ -520,18 +467,7 @@ public final class PhoneScreen extends Screen {
     // ============================================================
 
     private void renderNavBar(GuiGraphics g) {
-        int ny = phoneTop + PhoneTheme.PHONE_HEIGHT - PhoneTheme.NAV_BAR_HEIGHT;
-        g.fill(phoneLeft, ny, phoneLeft + PhoneTheme.PHONE_WIDTH,
-                phoneTop + PhoneTheme.PHONE_HEIGHT, PhoneTheme.COLOR_NAV_BAR);
-
-        int cy = ny + PhoneTheme.NAV_BAR_HEIGHT / 2 - font.lineHeight / 2;
-        int tw = PhoneTheme.PHONE_WIDTH / 3;
-        String[] btns = {"◁", "○", "□"};
-        for (int i = 0; i < btns.length; i++) {
-            int bw = font.width(btns[i]);
-            int bx = phoneLeft + tw * i + (tw - bw) / 2;
-            g.drawString(font, btns[i], bx, cy, 0xFF888888, false);
-        }
+        PhoneChassis.drawNavBar(g, font, phoneLeft, phoneTop);
     }
 
     // ============================================================
