@@ -2,6 +2,8 @@ package com.november.mcphone;
 
 import com.november.mcphone.chat.ChatReadState;
 import com.november.mcphone.network.WallpaperData;
+import com.november.mcphone.notes.NoteList;
+import com.november.mcphone.notes.NoteScope;
 import net.neoforged.neoforge.attachment.AttachmentType;
 import net.neoforged.neoforge.registries.DeferredRegister;
 import net.neoforged.neoforge.registries.NeoForgeRegistries;
@@ -46,6 +48,23 @@ public final class ModAttachments {
             "chat_read_state",
             () -> AttachmentType.builder(() -> ChatReadState.DEFAULT)
                     .serialize(ChatReadState.CODEC)
+                    .copyOnDeath()
+                    .build()
+    );
+
+    /**
+     * 私人笔记 —— 跟着玩家走的那一半记事本。
+     *
+     * 另一半（本机笔记）跟着手机走，存在物品的数据组件里，
+     * 见 {@link ModDataComponents#NOTES}。两者的分别见 {@link NoteScope}。
+     *
+     * copyOnDeath：死一次日记本就空了，那不是惩罚，是数据损坏。
+     * 已读进度那边是同一个理由。
+     */
+    public static final Supplier<AttachmentType<NoteList>> NOTES = ATTACHMENT_TYPES.register(
+            "personal_notes",
+            () -> AttachmentType.builder(() -> NoteList.EMPTY)
+                    .serialize(NoteList.CODEC)
                     .copyOnDeath()
                     .build()
     );
