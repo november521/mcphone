@@ -1,6 +1,6 @@
 package com.november.mcphone;
 
-import com.november.mcphone.chat.ContactsData;
+import com.november.mcphone.chat.ChatReadState;
 import com.november.mcphone.network.WallpaperData;
 import net.neoforged.neoforge.attachment.AttachmentType;
 import net.neoforged.neoforge.registries.DeferredRegister;
@@ -34,15 +34,18 @@ public final class ModAttachments {
     );
 
     /**
-     * 联系人列表与已读进度。
+     * 聊天的已读进度。
      *
-     * copyOnDeath：玩家死亡重生时附件默认会丢，联系人显然不该因为死一次
-     * 就没了——那不是惩罚，是数据损坏。
+     * 好友关系不在这里——它是双向的、同时属于两个人，见 FriendData。
+     * 这里只留纯属个人私事的已读进度。
+     *
+     * copyOnDeath：玩家死亡重生时附件默认会丢。已读进度丢了的话，
+     * 死一次所有会话都变成未读，红点糊一屏——那不是惩罚，是数据损坏。
      */
-    public static final Supplier<AttachmentType<ContactsData>> CONTACTS = ATTACHMENT_TYPES.register(
-            "contacts_data",
-            () -> AttachmentType.builder(() -> ContactsData.DEFAULT)
-                    .serialize(ContactsData.CODEC)
+    public static final Supplier<AttachmentType<ChatReadState>> CHAT_READ = ATTACHMENT_TYPES.register(
+            "chat_read_state",
+            () -> AttachmentType.builder(() -> ChatReadState.DEFAULT)
+                    .serialize(ChatReadState.CODEC)
                     .copyOnDeath()
                     .build()
     );

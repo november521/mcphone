@@ -28,7 +28,7 @@ import java.util.UUID;
  * 之类就得整个推倒重写。手写只多十来行，字段数不受限。
  *
  * @param id       对端玩家 UUID
- * @param name     对端显示名。离线联系人也有名字，见 Contact 的说明
+ * @param name     对端显示名。好友离线时也有名字，取自 FriendData 的名字缓存
  * @param online   对端此刻是否在线。瞬时状态，服务端现算现发、不落盘
  * @param lastText 最后一条消息的正文，空串表示还没聊过
  * @param lastTime 最后一条消息的时刻，0 表示还没聊过

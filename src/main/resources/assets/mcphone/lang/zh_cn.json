@@ -56,6 +56,8 @@
   "mcphone.chat.add_contact": "添加联系人",
   "mcphone.chat.online_empty": "当前没有其他玩家在线",
   "mcphone.chat.add_action": "+ 添加",
-  "mcphone.chat.remove_action": "✕ 移除",
-  "mcphone.chat.truncated": "显示前 %s 人（共 %s 人）"
+  "mcphone.chat.remove_action": "✕ 解除",
+  "mcphone.chat.truncated": "显示前 %s 人（共 %s 人）",
+  "mcphone.chat.request_pending": "已申请",
+  "mcphone.chat.accept_action": "✔ 同意"
 }

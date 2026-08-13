@@ -81,18 +81,25 @@ public final class ChatNetworking {
                 ChatNetworking::handleSyncOnlinePlayers
         );
 
-        // C2S: 加联系人
+        // C2S: 发出好友申请
         registrar.playToServer(
-                AddContactPacket.TYPE,
-                AddContactPacket.STREAM_CODEC,
-                ChatNetworking::handleAddContact
+                FriendRequestPacket.TYPE,
+                FriendRequestPacket.STREAM_CODEC,
+                ChatNetworking::handleFriendRequest
         );
 
-        // C2S: 删联系人
+        // C2S: 同意或拒绝一条好友申请
         registrar.playToServer(
-                RemoveContactPacket.TYPE,
-                RemoveContactPacket.STREAM_CODEC,
-                ChatNetworking::handleRemoveContact
+                RespondFriendRequestPacket.TYPE,
+                RespondFriendRequestPacket.STREAM_CODEC,
+                ChatNetworking::handleRespondFriendRequest
+        );
+
+        // C2S: 解除好友
+        registrar.playToServer(
+                RemoveFriendPacket.TYPE,
+                RemoveFriendPacket.STREAM_CODEC,
+                ChatNetworking::handleRemoveFriend
         );
     }
 
@@ -175,31 +182,51 @@ public final class ChatNetworking {
     }
 
     /**
-     * 加联系人。
+     * 发出好友申请。
      *
-     * 成功与否都回发最新的两份列表：在线玩家列表决定按钮显示"加为联系人"
-     * 还是"已添加"，会话列表决定新联系人是否出现在首页。加失败时
-     * （已存在、超上限）回发的仍是真实状态，界面不会显示成功的假象。
+     * 成功与否都回发最新的两份列表：在线玩家列表决定按钮显示"添加"、
+     * "已申请"还是"同意"，会话列表决定对方是否出现在首页。失败时
+     * （超上限、对方不存在）回发的仍是真实状态，界面不会显示成功的假象。
      */
-    private static void handleAddContact(AddContactPacket packet, IPayloadContext ctx) {
+    private static void handleFriendRequest(FriendRequestPacket packet, IPayloadContext ctx) {
         ctx.enqueueWork(() -> {
             if (!(ctx.player() instanceof ServerPlayer player)) return;
 
-            ChatService.addContact(player, packet.target());
-            ctx.reply(buildOnlinePlayersPacket(player));
-            ctx.reply(new SyncConversationsPacket(ChatService.buildConversations(player)));
+            ChatService.sendFriendRequest(player, packet.target());
+            replyState(ctx, player);
         });
     }
 
-    /** 删联系人。同样回发两份列表让界面归位 */
-    private static void handleRemoveContact(RemoveContactPacket packet, IPayloadContext ctx) {
+    /** 同意或拒绝一条好友申请 */
+    private static void handleRespondFriendRequest(RespondFriendRequestPacket packet,
+                                                   IPayloadContext ctx) {
         ctx.enqueueWork(() -> {
             if (!(ctx.player() instanceof ServerPlayer player)) return;
 
-            ChatService.removeContact(player, packet.target());
-            ctx.reply(buildOnlinePlayersPacket(player));
-            ctx.reply(new SyncConversationsPacket(ChatService.buildConversations(player)));
+            ChatService.respondFriendRequest(player, packet.requester(), packet.accept());
+            replyState(ctx, player);
         });
+    }
+
+    /** 解除好友。同样回发两份列表让界面归位 */
+    private static void handleRemoveFriend(RemoveFriendPacket packet, IPayloadContext ctx) {
+        ctx.enqueueWork(() -> {
+            if (!(ctx.player() instanceof ServerPlayer player)) return;
+
+            ChatService.removeFriend(player, packet.target());
+            replyState(ctx, player);
+        });
+    }
+
+    /**
+     * 关系变化后统一回发在线列表与会话列表。
+     *
+     * 三个入口都要发同样两份，抽出来免得漏发其中一份——漏了的话界面
+     * 会停在旧状态，玩家以为操作没生效，重复点击。
+     */
+    private static void replyState(IPayloadContext ctx, ServerPlayer player) {
+        ctx.reply(buildOnlinePlayersPacket(player));
+        ctx.reply(new SyncConversationsPacket(ChatService.buildConversations(player)));
     }
 
     /** 组装在线玩家包：截断到上限，并带上真实总数供界面提示 */

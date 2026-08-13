@@ -12,18 +12,17 @@ import java.util.UUID;
  *
  * @param id        玩家 UUID
  * @param name      玩家名
- * @param isContact 是否已经是本人的联系人。由服务端算好带下来，
- *                  界面据此显示"加为联系人"还是"已添加"——让客户端
- *                  自己拿在线列表去比对联系人列表也能算，但那要求
- *                  客户端手里有完整联系人表，白白多同步一份数据
+ * @param relation  本人与他的关系，决定这一行显示什么按钮。
+ *                  原先是个 isContact 布尔量，双向好友表达不了——
+ *                  "我发了申请等他"与"他发了申请等我"必须分得开
  */
-public record OnlinePlayer(UUID id, String name, boolean isContact) {
+public record OnlinePlayer(UUID id, String name, Relation relation) {
 
     public static final StreamCodec<ByteBuf, OnlinePlayer> STREAM_CODEC =
             StreamCodec.composite(
                     UUIDUtil.STREAM_CODEC, OnlinePlayer::id,
                     ByteBufCodecs.stringUtf8(ConversationSummary.MAX_NAME_LENGTH), OnlinePlayer::name,
-                    ByteBufCodecs.BOOL, OnlinePlayer::isContact,
+                    Relation.STREAM_CODEC, OnlinePlayer::relation,
                     OnlinePlayer::new
             );
 }

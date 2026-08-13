@@ -1,10 +1,12 @@
 package com.november.mcphone.gui;
 
-import com.november.mcphone.network.chat.AddContactPacket;
 import com.november.mcphone.network.chat.ChatClientCache;
+import com.november.mcphone.network.chat.FriendRequestPacket;
 import com.november.mcphone.network.chat.OnlinePlayer;
-import com.november.mcphone.network.chat.RemoveContactPacket;
+import com.november.mcphone.network.chat.Relation;
+import com.november.mcphone.network.chat.RemoveFriendPacket;
 import com.november.mcphone.network.chat.RequestOnlinePlayersPacket;
+import com.november.mcphone.network.chat.RespondFriendRequestPacket;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
@@ -18,10 +20,15 @@ import java.util.List;
  * 为什么从在线玩家里选而不是打名字：Minecraft 的 GUI 不支持输入法，
  * 中文名只能靠粘贴。点选完全绕开了这个问题，也不会打错字。
  *
- * 已经是联系人的显示"移除"，同一行完成加与删——列表就那么点地方，
- * 再开一个"我的联系人"界面不值当。
+ * 好友是双向的，所以同一行要表达四种状态：
+ *   陌生人      → "+ 添加"，点了发出申请
+ *   已发出申请  → "已申请"，灰色不可点，等对方处理
+ *   收到对方申请 → "✔ 同意"，点了直接成为好友
+ *   已是好友    → "✕ 解除"
  *
- * 加删都只发包、不改本地状态：服务端处理完会回发新的在线列表，
+ * 一个布尔量表达不了这四种，故服务端下发的是 {@link Relation}。
+ *
+ * 所有操作都只发包、不改本地状态：服务端处理完会回发新的在线列表，
  * 按钮状态以那份为准。本地抢先改的话，一旦服务端因为超上限拒绝了，
  * 界面就会显示成功的假象。
  */
@@ -34,6 +41,8 @@ public final class ChatAddContact {
 
     private static final int COLOR_NAME = 0xFFFFFFFF;
     private static final int COLOR_ADD = 0xFF66FF88;
+    private static final int COLOR_ACCEPT = 0xFFFFDD44;
+    private static final int COLOR_PENDING = 0xFF888888;
     private static final int COLOR_REMOVE = 0xFFFF8888;
     private static final int COLOR_ROW_HOVER = 0x33FFFFFF;
 
@@ -112,15 +121,14 @@ public final class ChatAddContact {
                 g.fill(x, y, x + w, y + rowH, COLOR_ROW_HOVER);
             }
 
-            String action = Component.translatable(p.isContact()
-                    ? "mcphone.chat.remove_action" : "mcphone.chat.add_action").getString();
+            String action = Component.translatable(actionKey(p.relation())).getString();
             int actionW = font.width(action);
 
             // 名字按剩余宽度截断，否则长名字会盖住右侧的动作文字
             String name = truncate(font, p.name(), w - actionW - 8);
             g.drawString(font, name, x + 2, y + 2, COLOR_NAME, false);
             g.drawString(font, action, x + w - actionW - 2, y + 2,
-                    p.isContact() ? COLOR_REMOVE : COLOR_ADD, false);
+                    actionColor(p.relation()), false);
 
             y += rowH;
         }
@@ -138,12 +146,36 @@ public final class ChatAddContact {
 
         OnlinePlayer p = players.get(hoveredIdx);
         // 只发包，不改本地状态：服务端会回发新列表，按钮以那份为准
-        if (p.isContact()) {
-            PacketDistributor.sendToServer(new RemoveContactPacket(p.id()));
-        } else {
-            PacketDistributor.sendToServer(new AddContactPacket(p.id()));
+        switch (p.relation()) {
+            case NONE -> PacketDistributor.sendToServer(new FriendRequestPacket(p.id()));
+            case REQUEST_RECEIVED ->
+                    PacketDistributor.sendToServer(new RespondFriendRequestPacket(p.id(), true));
+            case FRIEND -> PacketDistributor.sendToServer(new RemoveFriendPacket(p.id()));
+            // 已发出的申请只能等对方处理，点了不做任何事——
+            // 重复发包既没用，又会让服务端白跑一遍校验
+            case REQUEST_SENT -> { }
         }
         return true;
+    }
+
+    /** 每种关系对应的按钮文案 */
+    private static String actionKey(Relation relation) {
+        return switch (relation) {
+            case NONE -> "mcphone.chat.add_action";
+            case REQUEST_SENT -> "mcphone.chat.request_pending";
+            case REQUEST_RECEIVED -> "mcphone.chat.accept_action";
+            case FRIEND -> "mcphone.chat.remove_action";
+        };
+    }
+
+    /** 待处理的申请用灰色：它不可点，颜色要说明这一点 */
+    private static int actionColor(Relation relation) {
+        return switch (relation) {
+            case NONE -> COLOR_ADD;
+            case REQUEST_SENT -> COLOR_PENDING;
+            case REQUEST_RECEIVED -> COLOR_ACCEPT;
+            case FRIEND -> COLOR_REMOVE;
+        };
     }
 
     public boolean mouseScrolled(double scrollY) {
