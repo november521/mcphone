@@ -1,7 +1,10 @@
 package com.november.mcphone.network.notes;
 
+import com.november.mcphone.PhoneItem;
 import com.november.mcphone.notes.Note;
+import com.november.mcphone.notes.NotePrinter;
 import com.november.mcphone.notes.NoteService;
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 import net.neoforged.neoforge.network.registration.PayloadRegistrar;
@@ -62,6 +65,13 @@ public final class NotesNetworking {
                 DeleteNotePacket.STREAM_CODEC,
                 NotesNetworking::handleDeleteNote
         );
+
+        // C2S: 印成一本书
+        registrar.playToServer(
+                PrintNotePacket.TYPE,
+                PrintNotePacket.STREAM_CODEC,
+                NotesNetworking::handlePrintNote
+        );
     }
 
     // ============================================================
@@ -116,6 +126,29 @@ public final class NotesNetworking {
 
             NoteService.deleteNote(player, packet.id());
             ctx.reply(new SyncNoteListPacket(NoteService.buildSummaries(player)));
+        });
+    }
+
+    /**
+     * 客户端要把一条笔记印成书。
+     *
+     * 正文取服务端存的那份，不采信包里的内容——否则改个客户端就能印出
+     * 任意内容的书。
+     *
+     * 结果用动作栏告诉玩家：成了说印好了，没成说缺一本空白的书与笔。
+     * 静默失败最糟——玩家会以为按钮坏了，反复去点。
+     */
+    private static void handlePrintNote(PrintNotePacket packet, IPayloadContext ctx) {
+        ctx.enqueueWork(() -> {
+            if (!(ctx.player() instanceof ServerPlayer player)) return;
+            if (!PhoneItem.isCarriedBy(player)) return;
+
+            boolean done = NoteService.getNote(player, packet.id())
+                    .map(note -> NotePrinter.print(player, note))
+                    .orElse(false);
+
+            player.displayClientMessage(Component.translatable(
+                    done ? "mcphone.notes.print_done" : "mcphone.notes.print_failed"), true);
         });
     }
 

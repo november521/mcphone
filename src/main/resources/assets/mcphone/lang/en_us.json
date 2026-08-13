@@ -70,5 +70,9 @@
   "mcphone.notes.placeholder": "Write something…",
   "mcphone.notes.delete": "Delete",
   "mcphone.notes.delete_confirm": "Tap again",
-  "mcphone.cost.item": "%s × %s"
+  "mcphone.cost.item": "%s × %s",
+  "mcphone.notes.print": "Print",
+  "mcphone.notes.print_done": "Printed into a book",
+  "mcphone.notes.print_failed": "Needs a blank book and quill",
+  "mcphone.cost.blank_book": "Blank book and quill"
 }

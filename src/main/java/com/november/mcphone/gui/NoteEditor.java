@@ -2,6 +2,7 @@ package com.november.mcphone.gui;
 
 import com.november.mcphone.network.notes.DeleteNotePacket;
 import com.november.mcphone.network.notes.NotesClientCache;
+import com.november.mcphone.network.notes.PrintNotePacket;
 import com.november.mcphone.network.notes.RequestNotePacket;
 import com.november.mcphone.network.notes.SaveNotePacket;
 import com.november.mcphone.notes.Note;
@@ -52,6 +53,7 @@ public final class NoteEditor {
     private static final int COUNTER_ROW_H = 13;
 
     private static final int COLOR_SAVE = 0xFF66FF88;
+    private static final int COLOR_PRINT = 0xFF88CCFF;
     private static final int COLOR_DELETE = 0xFFFF8888;
     private static final int COLOR_HOVER = 0xFFFFFFFF;
     private static final int COLOR_HINT = 0xFF888888;
@@ -68,6 +70,7 @@ public final class NoteEditor {
     private boolean filled;
 
     private boolean saveHovered;
+    private boolean printHovered;
     private boolean deleteHovered;
 
     /**
@@ -111,6 +114,7 @@ public final class NoteEditor {
 
     public void close() {
         saveHovered = false;
+        printHovered = false;
         deleteHovered = false;
         deleteArmed = false;
         backRequested = false;
@@ -188,16 +192,25 @@ public final class NoteEditor {
         String delete = Component.translatable(
                 deleteArmed ? "mcphone.notes.delete_confirm" : "mcphone.notes.delete").getString();
 
+        String print = Component.translatable("mcphone.notes.print").getString();
+
         int saveW = font.width(save);
+        int printW = font.width(print);
         int deleteW = font.width(delete);
         int deleteX = x + w - deleteW;
+        int printX = x + (w - printW) / 2;   // 摆中间，与左右两个按钮都拉开距离
 
-        saveHovered = mouseX >= x - 2 && mouseX < x + saveW + 2
-                   && mouseY >= y - 2 && mouseY < y + font.lineHeight + 2;
-        deleteHovered = mouseX >= deleteX - 2 && mouseX < deleteX + deleteW + 2
-                     && mouseY >= y - 2 && mouseY < y + font.lineHeight + 2;
+        boolean inRow = mouseY >= y - 2 && mouseY < y + font.lineHeight + 2;
+        saveHovered = inRow && mouseX >= x - 2 && mouseX < x + saveW + 2;
+        printHovered = inRow && mouseX >= printX - 2 && mouseX < printX + printW + 2;
+        deleteHovered = inRow && mouseX >= deleteX - 2 && mouseX < deleteX + deleteW + 2;
 
         g.drawString(font, save, x, y, saveHovered ? COLOR_HOVER : COLOR_SAVE, false);
+
+        // 没保存过的新笔记印不出东西来，与删除一样置灰
+        boolean printable = noteId != NoteService.NEW_NOTE_ID;
+        g.drawString(font, print, printX, y,
+                !printable ? COLOR_HINT : (printHovered ? COLOR_HOVER : COLOR_PRINT), false);
 
         // 新建还没保存过的笔记没什么可删，删除键置灰
         boolean deletable = noteId != NoteService.NEW_NOTE_ID;
@@ -215,6 +228,7 @@ public final class NoteEditor {
     public boolean mouseClicked(double mx, double my, int button) {
         if (button == 0) {
             if (saveHovered) { save(); return true; }
+            if (printHovered && noteId != NoteService.NEW_NOTE_ID) { print(); return true; }
             if (deleteHovered && noteId != NoteService.NEW_NOTE_ID) { delete(); return true; }
         }
         // 点到别处就卸膛：玩家已经去干别的事了，那一下删除多半是误触
@@ -257,6 +271,19 @@ public final class NoteEditor {
         deleteArmed = false;
         PacketDistributor.sendToServer(new SaveNotePacket(noteId, box.getValue()));
         backRequested = true;
+    }
+
+    /**
+     * 印成一本书。
+     *
+     * 只发 id，正文以服务端存的那份为准。留在编辑界面不退回列表：打印
+     * 不改变笔记本身，把人踢回列表反而像是出了什么事。
+     *
+     * 成没成由服务端用动作栏回话——它才知道玩家有没有那本空白的书。
+     */
+    private void print() {
+        deleteArmed = false;
+        PacketDistributor.sendToServer(new PrintNotePacket(noteId));
     }
 
     /** 第一次点上膛，第二次才真删 —— 理由见 deleteArmed 的注释 */
