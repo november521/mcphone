@@ -9,7 +9,6 @@ import com.november.mcphone.util.TextSanitizer;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.players.GameProfileCache;
-import net.minecraft.world.InteractionHand;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -96,7 +95,7 @@ public final class ChatService {
      * @return 落库后的消息；未通过校验时返回 null
      */
     public static ChatMessage sendMessage(ServerPlayer sender, UUID targetId, String rawText) {
-        if (!isHoldingPhone(sender)) return null;
+        if (!PhoneItem.isCarriedBy(sender)) return null;
 
         UUID senderId = sender.getUUID();
         if (!FriendData.get(sender.server).areFriends(senderId, targetId)) return null;
@@ -151,7 +150,7 @@ public final class ChatService {
      * @return 是否产生了变化（发出申请，或直接成为好友）
      */
     public static boolean sendFriendRequest(ServerPlayer self, UUID targetId) {
-        if (!isHoldingPhone(self)) return false;
+        if (!PhoneItem.isCarriedBy(self)) return false;
 
         UUID selfId = self.getUUID();
         if (selfId.equals(targetId)) return false;
@@ -190,7 +189,7 @@ public final class ChatService {
      * @return 这条申请是否真的存在并被处理
      */
     public static boolean respondFriendRequest(ServerPlayer self, UUID requesterId, boolean accept) {
-        if (!isHoldingPhone(self)) return false;
+        if (!PhoneItem.isCarriedBy(self)) return false;
 
         UUID selfId = self.getUUID();
         FriendData friends = FriendData.get(self.server);
@@ -221,7 +220,7 @@ public final class ChatService {
      * 聊天记录不删：那是双方共有的，单方面抹掉等于替对方做决定。
      */
     public static boolean removeFriend(ServerPlayer self, UUID targetId) {
-        if (!isHoldingPhone(self)) return false;
+        if (!PhoneItem.isCarriedBy(self)) return false;
 
         FriendData friends = FriendData.get(self.server);
         if (!friends.removeFriendship(self.getUUID(), targetId)) return false;
@@ -282,12 +281,6 @@ public final class ChatService {
     // ============================================================
     //  内部
     // ============================================================
-
-    /** 手上（任意一只手）拿着手机吗 */
-    public static boolean isHoldingPhone(ServerPlayer player) {
-        return player.getItemInHand(InteractionHand.MAIN_HAND).getItem() instanceof PhoneItem
-            || player.getItemInHand(InteractionHand.OFF_HAND).getItem() instanceof PhoneItem;
-    }
 
     /** 服务端见过这个人吗 —— 在线，或名字缓存/资料缓存里有记录 */
     private static boolean isKnownPlayer(MinecraftServer server, FriendData friends, UUID id) {

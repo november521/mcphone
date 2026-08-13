@@ -1,19 +1,15 @@
 package com.november.mcphone.client;
 
-import com.november.mcphone.MCphone;
+import com.november.mcphone.PhoneItem;
 import com.november.mcphone.chat.ChatMessage;
-import com.november.mcphone.compat.CuriosCompat;
 import com.november.mcphone.gui.PhoneScreen;
 import com.november.mcphone.gui.PhoneToast;
 import com.november.mcphone.network.chat.ChatClientCache;
 import com.november.mcphone.network.chat.ConversationSummary;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.toasts.ToastComponent;
-import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.item.ItemStack;
 
 import java.util.UUID;
-import java.util.function.Predicate;
 
 /**
  * 收到消息时在游戏里提醒玩家。
@@ -51,7 +47,7 @@ public final class ChatNotifier {
 
         if (message.sender().equals(mc.player.getUUID())) return;
         if (isViewing(peer)) return;
-        if (!hasPhone(mc.player)) return;
+        if (!PhoneItem.isCarriedBy(mc.player)) return;
 
         show(mc, peer, message);
     }
@@ -61,25 +57,6 @@ public final class ChatNotifier {
         return Minecraft.getInstance().screen instanceof PhoneScreen phone
                 && phone.isViewingConversation(peer);
     }
-
-    /**
-     * 手机在不在身上。
-     *
-     * 用背包整体检索而不是只看手上：玩家不会一直把手机举着，"带着"就该
-     * 算数。原版的 contains 会连主背包、盔甲栏、副手一起扫。
-     *
-     * 装了 Curios 的话，挂在腰上的那只也算——那本来就是"带着"的更好写照，
-     * 何况玩家特意把手机挂上去，多半就是图个随身。没装 Curios 时
-     * {@link CuriosCompat} 直接返回 false，不会碰到任何 Curios 的类。
-     */
-    private static boolean hasPhone(Player player) {
-        if (player.getInventory().contains(PHONE_FILTER)) return true;
-        return CuriosCompat.isEquipped(player, PHONE_FILTER);
-    }
-
-    /** 认手机这一件事只写一遍，背包与饰品栏共用 */
-    private static final Predicate<ItemStack> PHONE_FILTER =
-            stack -> stack.is(MCphone.PHONE.get());
 
     /**
      * 弹通知，同一个人已有一条就合并进去。

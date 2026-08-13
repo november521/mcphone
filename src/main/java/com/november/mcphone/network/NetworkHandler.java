@@ -127,11 +127,8 @@ public final class NetworkHandler {
         ctx.enqueueWork(() -> {
             if (!(ctx.player() instanceof ServerPlayer player)) return;
 
-            boolean holdingPhone =
-                    player.getItemInHand(InteractionHand.MAIN_HAND).getItem() instanceof PhoneItem
-                 || player.getItemInHand(InteractionHand.OFF_HAND).getItem() instanceof PhoneItem;
-            if (!holdingPhone) {
-                MCphone.LOGGER.debug("玩家 {} 请求开末影箱但手上没有手机，已忽略",
+            if (!PhoneItem.isCarriedBy(player)) {
+                MCphone.LOGGER.debug("玩家 {} 请求开末影箱但身上没有手机，已忽略",
                         player.getName().getString());
                 return;
             }

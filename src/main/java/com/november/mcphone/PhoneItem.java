@@ -1,5 +1,6 @@
 package com.november.mcphone;
 
+import com.november.mcphone.compat.CuriosCompat;
 import com.november.mcphone.gui.PhoneScreen;
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.InteractionHand;
@@ -20,6 +21,33 @@ public class PhoneItem extends Item {
 
     public PhoneItem(Properties properties) {
         super(properties);
+    }
+
+    /** 这一堆物品是不是手机。判定只写一遍，各处共用 */
+    public static boolean isPhone(ItemStack stack) {
+        return stack.getItem() instanceof PhoneItem;
+    }
+
+    /**
+     * 这个玩家身上带着手机吗 —— 拿在手上、放在背包、挂在饰品槽都算。
+     *
+     * ============================================================
+     * 为什么不再要求"拿在手上"
+     * ============================================================
+     *
+     * 原先服务端各处校验的是"手上有手机"，因为界面只能靠右键手机打开，
+     * 手上必然拿着。有了饰品槽之后这个前提不成立了：手机挂在腰上，
+     * 手里空空，照样该能用。
+     *
+     * 放宽到"身上带着"并不削弱这道校验的意义——它防的是伪造客户端凭空
+     * 发消息、凭空开末影箱，而那种客户端同样变不出一部手机来。
+     *
+     * 原版的 contains 会连主背包、盔甲栏、副手一起扫，手上那只自然也在内。
+     * 没装 Curios 时 {@link CuriosCompat} 直接返回 false，不碰它的类。
+     */
+    public static boolean isCarriedBy(Player player) {
+        if (player.getInventory().contains(PhoneItem::isPhone)) return true;
+        return CuriosCompat.isEquipped(player, PhoneItem::isPhone);
     }
 
     @Override
