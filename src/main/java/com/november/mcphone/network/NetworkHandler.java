@@ -57,6 +57,17 @@ public final class NetworkHandler {
                 NetworkHandler::handleOpenEnderChest
         );
 
+        // C2S: 玩家在手机里点了传送石
+        //
+        // 无条件注册，不看服务端装没装 Waystones：网络包类型的注册两端必须
+        // 对称，少注册一个，装了 Waystones 的客户端发来这个包时，服务端会
+        // 因为不认识它而把玩家踢下线。装没装的判断放在处理函数里。
+        registrar.playToServer(
+                OpenWaystoneSelectionPacket.TYPE,
+                OpenWaystoneSelectionPacket.STREAM_CODEC,
+                NetworkHandler::handleOpenWaystoneSelection
+        );
+
         // 聊天与记事本的包各自成组，注册与处理都在自己的类里：
         // 本类只保留"注册总入口"这一个职责，不做杂物间
         com.november.mcphone.network.chat.ChatNetworking.register(registrar);
@@ -145,6 +156,31 @@ public final class NetworkHandler {
                             ModMenus.ENDER_CHEST.get(), containerId, inventory,
                             enderChest, ModMenus.ENDER_CHEST_SIZE),
                     Component.translatable("mcphone.container.ender_chest")));
+        });
+    }
+
+    /**
+     * 服务端收到：给玩家打开传送石碑的选点界面。
+     *
+     * 校验与末影箱一致——身上得真有手机。包是客户端发的，不能信；没有这道
+     * 检查，任何人改个客户端就能凭空传送，手机这个前提条件形同虚设。
+     *
+     * 界面与传送全交给 Waystones，我们只负责发起。它没装时静默忽略：正常
+     * 客户端根本不会发这个包（没装 Waystones 时那个 App 压根不登记），能收到
+     * 就说明两端装的模组不一致，或者对方在伪造——两种情况都不值得回话。
+     */
+    private static void handleOpenWaystoneSelection(OpenWaystoneSelectionPacket packet,
+                                                    IPayloadContext ctx) {
+        ctx.enqueueWork(() -> {
+            if (!(ctx.player() instanceof ServerPlayer player)) return;
+
+            if (!PhoneItem.isCarriedBy(player)) {
+                MCphone.LOGGER.debug("玩家 {} 请求开传送石但身上没有手机，已忽略",
+                        player.getName().getString());
+                return;
+            }
+
+            com.november.mcphone.compat.WaystonesCompat.openSelection(player);
         });
     }
 
