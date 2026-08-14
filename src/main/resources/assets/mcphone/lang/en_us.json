@@ -105,5 +105,6 @@
   "mcphone.about.apps": "Apps",
   "mcphone.about.compat": "Compatibility",
   "mcphone.about.installed": "Installed",
-  "mcphone.about.missing": "Not installed"
+  "mcphone.about.missing": "Not installed",
+  "mcphone.store.not_purchased": "You have not purchased this app yet"
 }

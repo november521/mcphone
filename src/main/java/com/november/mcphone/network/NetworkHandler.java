@@ -4,6 +4,9 @@ import com.november.mcphone.MCphone;
 import com.november.mcphone.ModAttachments;
 import com.november.mcphone.ModDataComponents;
 import com.november.mcphone.PhoneItem;
+import com.november.mcphone.cost.AppAccess;
+import net.minecraft.ChatFormatting;
+import net.minecraft.resources.ResourceLocation;
 import com.november.mcphone.menu.ModMenus;
 import com.november.mcphone.menu.PhoneContainerMenu;
 import net.minecraft.network.chat.Component;
@@ -24,6 +27,26 @@ import net.neoforged.neoforge.network.registration.PayloadRegistrar;
 public final class NetworkHandler {
 
     private NetworkHandler() {}
+
+    // 两个要服务端干活、且已定价的内建 App。id 写在这里而不是每处现拼：
+    // 拼错了不会报错，只会变成"未定价"从而静默放行——那正好是这道闸要防的事
+    private static final ResourceLocation APP_ENDER_CHEST =
+            ResourceLocation.fromNamespaceAndPath(MCphone.MODID, "ender_chest");
+    private static final ResourceLocation APP_WAYSTONE =
+            ResourceLocation.fromNamespaceAndPath(MCphone.MODID, "waystone");
+
+    /**
+     * 告诉玩家这个 App 还没买。
+     *
+     * 正常客户端走不到这里——没买过的付费 App 会被客户端从主屏摘掉（见
+     * PhoneScreenRegistry.enforcePurchases），点都点不着。能走到这里说明
+     * 客户端状态没对上，或者有人在伪造包，两种情况都值得回一句话。
+     */
+    private static void notPurchased(ServerPlayer player) {
+        player.displayClientMessage(
+                Component.translatable("mcphone.store.not_purchased")
+                        .withStyle(ChatFormatting.RED), true);
+    }
 
     // ---- 由 MCphone 构造函数调用 ----
     public static void register(final RegisterPayloadHandlersEvent event) {
@@ -151,6 +174,13 @@ public final class NetworkHandler {
                 return;
             }
 
+            // 买过了吗。安装是纯客户端动作，改个客户端就能把 App 塞进主屏，
+            // 购买那一步完全绕开——所以服务端必须自己问一句
+            if (!AppAccess.canUse(player, APP_ENDER_CHEST)) {
+                notPurchased(player);
+                return;
+            }
+
             PlayerEnderChestContainer enderChest = player.getEnderChestInventory();
             player.openMenu(new SimpleMenuProvider(
                     (containerId, inventory, p) -> new PhoneContainerMenu(
@@ -184,6 +214,11 @@ public final class NetworkHandler {
             if (!PhoneItem.isCarriedBy(player)) {
                 MCphone.LOGGER.debug("玩家 {} 请求开传送石但身上没有手机，已忽略",
                         player.getName().getString());
+                return;
+            }
+
+            if (!AppAccess.canUse(player, APP_WAYSTONE)) {
+                notPurchased(player);
                 return;
             }
 

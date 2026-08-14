@@ -30,10 +30,26 @@ public final class StoreClientCache {
     /** 有没有收到过服务端的答复。没收到时界面显示"加载中"而不是"未购买" */
     private static boolean synced = false;
 
+    /**
+     * 同步到达时通知谁。
+     *
+     * 用监听器而不是让本类直接调 PhoneScreenRegistry：本类被两端都加载的
+     * StoreNetworking 引用，而那个注册表现在含客户端类型（Minecraft、
+     * ServerData）。直接引用会让专用服务器在注册网络包时崩。
+     * ChatClientCache 通知 ChatNotifier 用的是同一个办法。
+     */
+    private static Runnable syncListener = null;
+
+    /** 由 MCphoneClient 挂上 */
+    public static void setSyncListener(Runnable listener) {
+        syncListener = listener;
+    }
+
     /** 由 S2C 同步包调用 */
     static void set(PurchasedApps value) {
         purchased = value == null ? PurchasedApps.EMPTY : value;
         synced = true;
+        if (syncListener != null) syncListener.run();
     }
 
     public static boolean isSynced() {

@@ -61,8 +61,17 @@ public class MCphoneClient {
         // 进世界时读这个存档自己的安装状态。不能在客户端启动时读——那会儿
         // 还不知道玩家要进哪个世界
         NeoForge.EVENT_BUS.addListener(
-                (ClientPlayerNetworkEvent.LoggingIn event) ->
-                        PhoneScreenRegistry.loadForCurrentWorld());
+                (ClientPlayerNetworkEvent.LoggingIn event) -> {
+                    PhoneScreenRegistry.loadForCurrentWorld();
+                    // 顺手要一份购买记录：没买过的付费 App 要从主屏摘掉，
+                    // 而那要等这份记录到了才知道
+                    com.november.mcphone.network.store.StoreClientCache.request();
+                });
+
+        // 购买记录一到就核对主屏。走监听器而不是让网络层直接调注册表：
+        // 那个类现在含客户端类型，网络层两端都会加载，碰不得
+        com.november.mcphone.network.store.StoreClientCache.setSyncListener(
+                PhoneScreenRegistry::enforcePurchases);
 
         // 收到消息时弹通知。装在这里而不是让网络层直接调 ChatNotifier：
         // 网络层在专用服务器上也会加载，碰不得客户端的类

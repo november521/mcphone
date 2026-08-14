@@ -4,6 +4,8 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.november.mcphone.MCphone;
 import com.november.mcphone.api.client.IPhoneApp;
+import com.november.mcphone.cost.AppPriceRegistry;
+import com.november.mcphone.network.store.StoreClientCache;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ServerData;
 import net.minecraft.resources.ResourceLocation;
@@ -318,6 +320,41 @@ public final class PhoneScreenRegistry {
     // ================================================================
     //  按存档加载 / 卸载
     // ================================================================
+
+    /**
+     * 把没买过的付费 App 从主屏摘掉。收到服务端的购买记录后调用。
+     *
+     * ============================================================
+     * 不做这一步会造出一个死胡同
+     * ============================================================
+     *
+     * 服务端现在会拦住"没买过却要用"的请求（见 AppAccess）。而 1.1.9 之前
+     * 根本没有购买这回事，老玩家主屏上装着末影箱 App、却从没买过——点开被
+     * 拒，转身去应用商店买，商店里却没有它：商店列的是"目录减去已安装"，
+     * 而它已安装。买不到、又用不了，卡死。
+     *
+     * 所以立一条规则：没买过的付费 App 不该待在主屏上。摘掉之后它自然回到
+     * 商店的可下载列表里，玩家买完再装回来，路就通了。
+     *
+     * 顺带也让客户端状态与服务端那本账对齐：换台电脑登录、或在别处退了款，
+     * 主屏都会跟着修正。
+     */
+    public static void enforcePurchases() {
+        if (stateFile == null) return;   // 还没进世界，此时的 INSTALLED 不代表任何存档
+
+        List<ResourceLocation> revoked = new ArrayList<>();
+        for (ResourceLocation id : INSTALLED) {
+            if (!AppPriceRegistry.isPaid(id)) continue;
+            if (StoreClientCache.has(id)) continue;
+            revoked.add(id);
+        }
+        if (revoked.isEmpty()) return;
+
+        INSTALLED.removeAll(revoked);
+        saveState();
+        MCphone.LOGGER.info("[MCphone] 有 {} 个付费 App 未购买，已从主屏移除: {}",
+                revoked.size(), revoked);
+    }
 
     /**
      * 进世界时调用：算出当前存档的标识，读它自己那份状态。
