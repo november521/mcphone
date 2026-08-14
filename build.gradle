@@ -154,6 +154,16 @@ dependencies {
     localRuntime "maven.modrinth:waystones:${waystones_version}"
     localRuntime "maven.modrinth:balm:${balm_version}"
 
+    // MCEF —— 可选依赖：装了就多一个「浏览器」App，没装则该 App 不出现。
+    //
+    // 它是【客户端】库（把 Chromium 渲染成一张 GL 纹理）。所有引用都关在
+    // client/browser 包里，服务端一个字节都不会碰到。
+    //
+    // 只写 compileOnly、不写 localRuntime：它首次运行要下载约 200 MB 的
+    // java-cef 原生库，开发环境里每次 runClient 都可能触发，代价太大。真要跑
+    // 浏览器时把 jar 手动丢进 run/mods 即可。
+    compileOnly "maven.modrinth:mcef:${mcef_version}"
+
     // Example optional mod dependency with JEI
     // The JEI API is declared for compile time use, while the full JEI artifact is used at runtime
     // compileOnly "mezz.jei:jei-${mc_version}-common-api:${jei_version}"
