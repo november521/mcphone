@@ -76,5 +76,9 @@
   "mcphone.notes.print": "Print",
   "mcphone.notes.print_done": "Printed into a book",
   "mcphone.notes.print_failed": "Needs a blank book and quill",
-  "mcphone.cost.blank_book": "Blank book and quill"
+  "mcphone.cost.blank_book": "Blank book and quill",
+  "mcphone.cost.emc": "%s EMC",
+  "mcphone.cost.emc_unavailable": "%s EMC (%s)",
+  "mcphone.emc.unavailable": "No EMC system connected",
+  "mcphone.emc.no_balance": "—"
 }

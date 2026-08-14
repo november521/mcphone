@@ -77,6 +77,17 @@ public interface ICost {
     }
 
     /**
+     * 要多少 EMC。
+     *
+     * 真正扣钱的是当前接上的 {@link IEmcWallet}。**目前还没有任何实现**
+     * ——没人接的时候这项代价永远付不起，界面会把按钮画灰并说明原因，
+     * 不会崩也不会白送。接法见 {@link EmcWallets}。
+     */
+    static ICost emc(long amount) {
+        return new EmcCost(amount);
+    }
+
+    /**
      * 自定规则的物品消耗 —— 物品种类之外还要看别的条件时用这个。
      *
      * 比如"空白的书与笔"：书与笔和写过字的是同一种物品，区别在数据组件，

@@ -76,5 +76,9 @@
   "mcphone.notes.print": "打印",
   "mcphone.notes.print_done": "已印成一本书",
   "mcphone.notes.print_failed": "需要一本空白的书与笔",
-  "mcphone.cost.blank_book": "空白的书与笔"
+  "mcphone.cost.blank_book": "空白的书与笔",
+  "mcphone.cost.emc": "%s EMC",
+  "mcphone.cost.emc_unavailable": "%s EMC（%s）",
+  "mcphone.emc.unavailable": "EMC 系统未接入",
+  "mcphone.emc.no_balance": "—"
 }
