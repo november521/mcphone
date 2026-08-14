@@ -117,6 +117,34 @@ public final class PhoneTheme {
     /** 主标题文字颜色 */
     public static final int FONT_COLOR_TITLE = 0xFFFFFFFF;
 
+    // -- 应用商店与详情页 --
+    // 这几项都是【兜底】色：放了对应贴图时由 PhoneSkin 覆盖，见
+    // PhoneSkin.Element 里的 STORE_BUTTON / STORE_BUTTON_DISABLED。
+
+    /** 可点按钮的底色 */
+    public static final int COLOR_BUTTON = 0xFF2E7D32;
+
+    /** 鼠标悬停时的按钮底色 */
+    public static final int COLOR_BUTTON_HOVER = 0xFF43A047;
+
+    /** 点不动的按钮底色（已安装、买不起） */
+    public static final int COLOR_BUTTON_DISABLED = 0xFF3A3A3A;
+
+    /** 按钮上的文字 */
+    public static final int FONT_COLOR_BUTTON = 0xFFFFFFFF;
+
+    /** 点不动的按钮上的文字 */
+    public static final int FONT_COLOR_BUTTON_DISABLED = 0xFF888888;
+
+    /** 正文（App 简介之类） */
+    public static final int FONT_COLOR_BODY = 0xFFCCCCCC;
+
+    /** 次要信息（作者、版本、分页页码） */
+    public static final int FONT_COLOR_SUBTLE = 0xFF888888;
+
+    /** 价格 */
+    public static final int FONT_COLOR_PRICE = 0xFFFFD54F;
+
     // ==================== 布局参数 ====================
 
     /** 状态栏高度 */

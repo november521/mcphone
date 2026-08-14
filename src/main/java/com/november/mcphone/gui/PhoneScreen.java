@@ -1,6 +1,7 @@
 package com.november.mcphone.gui;
 
 import com.november.mcphone.api.client.IPhoneApp;
+import com.november.mcphone.api.client.store.AppInfo;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
@@ -23,7 +24,7 @@ import java.util.UUID;
 public final class PhoneScreen extends Screen {
 
     /** 手机导航模式 */
-    public enum Mode { MAIN, SETTINGS, WALLPAPER_PICKER, APP_MANAGER, MUSIC_PLAYER, APP_STORE, GALLERY, DEVICE_NAME, CHAT, CHAT_ADD_CONTACT, CHAT_CONVERSATION, NOTES, NOTE_EDIT }
+    public enum Mode { MAIN, SETTINGS, WALLPAPER_PICKER, APP_MANAGER, MUSIC_PLAYER, APP_STORE, APP_DETAIL, GALLERY, DEVICE_NAME, CHAT, CHAT_ADD_CONTACT, CHAT_CONVERSATION, NOTES, NOTE_EDIT }
 
 
     // ---- 打开动画 ----
@@ -56,6 +57,7 @@ public final class PhoneScreen extends Screen {
 
     // ---- 应用商店 ----
     private final AppStore appStore = new AppStore();
+    private final AppDetail appDetail = new AppDetail();
 
     // ---- 相册 ----
     private final Gallery gallery = new Gallery();
@@ -113,7 +115,12 @@ public final class PhoneScreen extends Screen {
         if (this.mode == target) return;
 
         // 离开商店时清掉上次的列表与提示，下次进入重新拉取
-        if (this.mode == Mode.APP_STORE && target != Mode.APP_STORE) appStore.reset();
+        // 进详情页不算离开商店：reset 会清掉页码与列表，从详情页退回来
+        // 时玩家会莫名其妙回到第一页
+        if (this.mode == Mode.APP_STORE
+                && target != Mode.APP_STORE && target != Mode.APP_DETAIL) {
+            appStore.reset();
+        }
 
         // 相册进出都要动作：进入时重扫目录，离开时释放缩略图贴图
         if (this.mode == Mode.GALLERY) gallery.close();
@@ -190,6 +197,12 @@ public final class PhoneScreen extends Screen {
             return true;
         }
 
+        // App 详情是商店里的一层，退回商店首页
+        if (mode == Mode.APP_DETAIL) {
+            navigateTo(Mode.APP_STORE);
+            return true;
+        }
+
         if (mode != Mode.MAIN) {
             navigateTo(Mode.MAIN);
             return true;
@@ -253,6 +266,7 @@ public final class PhoneScreen extends Screen {
             case APP_MANAGER       -> renderAppManager(g, mouseX, mouseY);
             case MUSIC_PLAYER      -> renderMusicPlayer(g, mouseX, mouseY);
             case APP_STORE         -> renderAppStore(g, mouseX, mouseY);
+            case APP_DETAIL        -> renderAppDetail(g, mouseX, mouseY);
             case GALLERY           -> renderGallery(g, mouseX, mouseY);
             case DEVICE_NAME       -> renderDeviceName(g, mouseX, mouseY, partialTick);
             case CHAT              -> renderChat(g, mouseX, mouseY);
@@ -524,6 +538,13 @@ public final class PhoneScreen extends Screen {
                 mx, my, font);
     }
 
+    private void renderAppDetail(GuiGraphics g, int mx, int my) {
+        appDetail.render(g, phoneLeft, phoneTop,
+                PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
+                PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT,
+                mx, my, font);
+    }
+
     // ============================================================
     //  设备名称
     // ============================================================
@@ -747,6 +768,22 @@ public final class PhoneScreen extends Screen {
             }
             case APP_STORE -> {
                 appStore.mouseClicked(mx, my, button);
+                // 商店只提出请求，由这里决定去哪个界面——
+                // 组件不该知道 PhoneScreen 的导航结构
+                AppInfo open = appStore.consumeOpenRequest();
+                if (open != null) {
+                    appDetail.open(open);
+                    navigateTo(Mode.APP_DETAIL);
+                }
+                yield true;
+            }
+            case APP_DETAIL -> {
+                appDetail.mouseClicked(mx, my, button);
+                // 装成功了要让商店把它从可下载列表里去掉，再退回列表。
+                // 顺序不能反：先 navigateTo 的话，那次 reset 会把刷新
+                // 请求一起清掉
+                if (appDetail.consumeInstalledRequest()) appStore.onInstalled();
+                if (appDetail.consumeBackRequest()) navigateTo(Mode.APP_STORE);
                 yield true;
             }
             case GALLERY -> {

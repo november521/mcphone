@@ -95,7 +95,24 @@ public final class PhoneSkin {
          * 会话列表与消息通知共用同一张：两处都是"这里有几条没看"，
          * 分成两张贴图的话，换肤时容易只换一处，看着像两个模组。
          */
-        UNREAD_BADGE("unread_badge");
+        UNREAD_BADGE("unread_badge"),
+
+        /**
+         * 应用详情页上那个可点的按钮底（购买 / 下载）。建议 100×16。
+         *
+         * 与聊天气泡同理，整张拉伸，没有九宫格，所以纯色或纵向渐变最稳妥。
+         * 没有贴图时用 {@link PhoneTheme#COLOR_BUTTON} 填。
+         */
+        STORE_BUTTON("store_button"),
+
+        /**
+         * 点不动时的按钮底（已安装、买不起）。建议 100×16。
+         *
+         * 单独一张而不是把可点的那张调暗：调暗是我们替美术做的决定，而
+         * "不可点"该长什么样应该由画贴图的人说了算。没有贴图时用
+         * {@link PhoneTheme#COLOR_BUTTON_DISABLED} 填。
+         */
+        STORE_BUTTON_DISABLED("store_button_disabled");
 
         private final ResourceLocation texture;
 

@@ -83,5 +83,12 @@
   "mcphone.emc.no_balance": "—",
   "mcphone.store.error.cannot_afford": "买不起：需要 %s",
   "mcphone.store.error.purchase_failed": "购买失败",
-  "mcphone.store.error.too_many": "买过的 App 太多了"
+  "mcphone.store.error.too_many": "买过的 App 太多了",
+  "mcphone.store.buy": "购买",
+  "mcphone.store.cant_afford": "买不起",
+  "mcphone.store.loading": "加载中…",
+  "mcphone.store.installed_label": "已安装",
+  "mcphone.store.free": "免费",
+  "mcphone.store.purchasing": "正在购买…",
+  "mcphone.store.no_description": "这个 App 还没有写介绍。"
 }

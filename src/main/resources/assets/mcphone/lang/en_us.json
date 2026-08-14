@@ -83,5 +83,12 @@
   "mcphone.emc.no_balance": "—",
   "mcphone.store.error.cannot_afford": "Can't afford it: needs %s",
   "mcphone.store.error.purchase_failed": "Purchase failed",
-  "mcphone.store.error.too_many": "Too many purchased apps"
+  "mcphone.store.error.too_many": "Too many purchased apps",
+  "mcphone.store.buy": "Buy",
+  "mcphone.store.cant_afford": "Can't afford",
+  "mcphone.store.loading": "Loading…",
+  "mcphone.store.installed_label": "Installed",
+  "mcphone.store.free": "Free",
+  "mcphone.store.purchasing": "Purchasing…",
+  "mcphone.store.no_description": "No description yet."
 }
