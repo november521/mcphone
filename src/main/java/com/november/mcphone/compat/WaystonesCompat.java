@@ -2,13 +2,15 @@ package com.november.mcphone.compat;
 
 import com.november.mcphone.MCphone;
 import net.blay09.mods.balm.api.Balm;
-import net.blay09.mods.waystones.api.TeleportFlags;
 import net.blay09.mods.waystones.menu.WaystoneSelectionListBuilder;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.neoforged.fml.ModList;
-
-import java.util.Set;
 
 /**
  * Waystones（传送石碑）兼容层 —— 让手机里的「传送石」App 打开它的选点界面。
@@ -40,19 +42,41 @@ import java.util.Set;
  * 我们有自己的入口，就不该被它的显示开关挡住。
  *
  * ============================================================
- * 为什么带 INVENTORY_BUTTON 这个标记
+ * 为什么把 warpItem 设成一块传送石
  * ============================================================
  *
- * 它决定玩家要付出什么。Waystones 默认的 warpRequirements 里有这么一条：
+ * 因为 Waystones 判断"这次传送算哪种来源"，靠的不是菜单类型，而是 warpItem：
+ *
+ *     registerConditionResolver("source_is_warp_stone",
+ *             (context, parameters) -&gt; context.getWarpItem().is(ModItemTags.WARP_STONES));
+ *
+ * 服主写在 warpRequirements 里的规则几乎都带这类条件。warpItem 空着的话，
+ * 他为传送石配的任何规则我们一条都不命中——冷却、代价、豁免全都对不上，
+ * 而且是静默对不上，不报错，只是"配了没效果"。
+ *
+ * 1.1.4 曾经把这个 App 声明成 INVENTORY_BUTTON，那是错的。它会命中默认
+ * 规则里的
  *
  *     [source_is_inventory_button] add_cooldown(inventory_button, 300)
  *
- * 也就是说，对方认为"从界面里随时能传送"比"掏出一块石头"更强，所以额外
- * 压了 5 分钟冷却。手机 App 正是前者，带上这个标记等于自觉接受它为这类
- * 入口定的价——经验按距离扣（跨维度 27 级封顶）之外，再加冷却。
+ * 于是 App 无端多出 5 分钟冷却，而传送石本身默认【没有】冷却——它付的是
+ * 耐久。玩家按的是"传送石"，拿到的却是背包按钮的价，这不是平衡取舍，
+ * 是归错了类。
  *
- * 好处是我们一个平衡参数都不用发明：服主改 warpRequirements 就能调，
- * 改法与他调整背包按钮时完全一致，不需要另外学一套 MCphone 的配置。
+ * 现在设成传送石，服主怎么配传送石，这个 App 就怎么走。
+ *
+ * ============================================================
+ * 但不扣耐久
+ * ============================================================
+ *
+ * 扣耐久只发生在物品自己的 postTeleportHandler 里（见对方
+ * WarpStoneItem.finishUsingItem），我们不注册那个回调就不会扣。warpItem
+ * 在别处不会被消耗——全仓的 shrink/hurtAndBreak 只出现在背包代价解析器、
+ * 墓碑与传送板，都与它无关。
+ *
+ * 后果得认：在"无冷却＋扣耐久"这类配置下，本 App 比真传送石更强——真石头
+ * 128 次就碎，手机不会。这是刻意的取舍：手机里本来就没有那块石头，凭空
+ * 拿玩家背包里另一块石头的耐久去抵，比不扣更难解释。
  *
  * ============================================================
  * 类型隔离的规矩，和 CuriosCompat 一模一样
@@ -124,19 +148,42 @@ public final class WaystonesCompat {
      * 别把它并回去。
      */
     private static void openSelectionInternal(ServerPlayer player) {
-        // withInventoryButtonTargets：玩家已激活的传送点 + 双生羽的目标。
-        // 刻意不用 withTargetsForItem——那个额外含"返回传送门"，是给手持
-        // 传送石的场景准备的，手机里没有那块石头，列进来只会让人困惑。
+        // withTargetsForItem 内部会顺带 withWarpItem，所以这一句同时定下了
+        // "去哪些点"和"按哪种来源计价"。目标 = 已激活的传送点 + 双生羽 +
+        // 返回传送门，与手持传送石时一字不差。
+        //
+        // 不带任何 flag。flag 必须与菜单类型对齐：warpStoneSelection 在对方
+        // 的 ModMenus 里是用 Set.of() 注册的，客户端重建菜单时用的就是那个
+        // 空集合。这里多传一个 flag，服务端与客户端的菜单会带着不同的标记，
+        // 是自找的不一致。
         //
         // 标题直接用对方的翻译键：玩家看到的界面就是 Waystones 的界面，
         // 顶上却写着 MCphone 的字样反而割裂，何况那样还得我们自己翻两份。
         var menuProvider = new WaystoneSelectionListBuilder(player)
-                .withInventoryButtonTargets()
-                .withFlags(Set.of(TeleportFlags.INVENTORY_BUTTON))
+                .withTargetsForItem(warpStoneStack())
                 .buildMenuProvider(
-                        net.blay09.mods.waystones.menu.ModMenus.inventorySelection.get(),
+                        net.blay09.mods.waystones.menu.ModMenus.warpStoneSelection.get(),
                         Component.translatable("container.waystones.waystone_selection"));
 
         Balm.networking().openMenu(player, menuProvider);
+    }
+
+    /**
+     * 造一块传送石，只用来告诉 Waystones"这次按传送石计价"。
+     *
+     * 它不进玩家背包、不被消耗、也不会掉耐久——扣耐久的回调我们没注册。
+     *
+     * 走注册表按 id 取，而不是引用对方的 ModItems.warpStone：那是它的内部
+     * 类，字段改个名我们就编译不过；而 waystones:warp_stone 这个注册名被
+     * 配方、标签、命令引用着，是对方事实上的公开契约，稳得多。
+     *
+     * 取不到时返回空堆——那说明对方改了注册名，此时退化成"没有来源物品"，
+     * 界面照开、经验照扣，只是与传送石绑定的规则不再命中。比抛异常好：
+     * 玩家至少还能传送。
+     */
+    private static ItemStack warpStoneStack() {
+        Item item = BuiltInRegistries.ITEM.get(
+                ResourceLocation.fromNamespaceAndPath(WAYSTONES_MODID, "warp_stone"));
+        return item == Items.AIR ? ItemStack.EMPTY : new ItemStack(item);
     }
 }

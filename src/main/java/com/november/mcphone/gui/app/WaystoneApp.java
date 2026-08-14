@@ -13,9 +13,9 @@ import net.neoforged.neoforge.network.PacketDistributor;
  * 点击只发包、不自己开界面：与末影箱同理，容器菜单必须由服务端建立才有
  * 权威性；何况目标列表、经验扣除、冷却、维度校验也只有服务端说了算。
  *
- * 代价沿用对方为"界面入口"定的那一套——经验按距离扣（跨维度 27 级封顶），
- * 外加 5 分钟冷却。我们没有发明任何平衡参数，服主改 Waystones 的
- * warpRequirements 就能调。细节见 {@link WaystonesCompat}。
+ * 代价按【传送石】计，不按背包按钮：服主怎么配传送石，这个 App 就怎么走。
+ * 唯一的出入是不扣耐久——手机里本来就没有那块石头。我们没有发明任何平衡
+ * 参数，要调就去改 Waystones 的 warpRequirements。细节见 {@link WaystonesCompat}。
  *
  * 贴图: assets/mcphone/textures/gui/app_icon_waystone.png (20×20)
  */
