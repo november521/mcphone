@@ -2,6 +2,7 @@ package com.november.mcphone.api.client.store;
 
 import com.november.mcphone.api.client.IPhoneApp;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
 
 import java.util.List;
 import java.util.function.Consumer;
@@ -55,8 +56,13 @@ import java.util.function.Consumer;
  */
 public interface IAppSource {
 
-    /** 来源唯一标识，如 "local"、"official_repo" */
-    String getId();
+    /**
+     * 来源唯一标识，形如 {@code mymod:official_repo}。
+     *
+     * 与 {@link IPhoneApp#getId()} 同理：来源表也是全服共用的一张表，
+     * 带命名空间才不会跟别的模组撞名。命名空间请用你自己的 modid。
+     */
+    ResourceLocation getId();
 
     /** 来源显示名称，展示在商店的分组标题上 */
     Component getDisplayName();

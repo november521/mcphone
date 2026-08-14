@@ -27,17 +27,17 @@ import net.minecraft.resources.ResourceLocation;
  * @param sourceId     提供此 App 的来源 id，见 {@link IAppSource#getId()}
  */
 public record AppInfo(
-        String id,
+        ResourceLocation id,
         Component displayName,
         ResourceLocation iconTexture,
         String version,
         String author,
         String description,
-        String sourceId
+        ResourceLocation sourceId
 ) {
 
     /** 从一个已存在的 App 实例生成元数据 —— 本地来源用 */
-    public static AppInfo of(IPhoneApp app, String sourceId) {
+    public static AppInfo of(IPhoneApp app, ResourceLocation sourceId) {
         return new AppInfo(
                 app.getId(),
                 app.getDisplayName(),

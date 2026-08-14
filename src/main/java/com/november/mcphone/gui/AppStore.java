@@ -121,7 +121,7 @@ public final class AppStore {
         AppInfo info = available.get(hoveredIdx);
         IAppSource source = AppSourceRegistry.getSource(info.sourceId());
         if (source == null) {
-            message = Component.translatable("mcphone.store.error.no_source", info.sourceId());
+            message = Component.translatable("mcphone.store.error.no_source", info.sourceId().toString());
             return true;
         }
 

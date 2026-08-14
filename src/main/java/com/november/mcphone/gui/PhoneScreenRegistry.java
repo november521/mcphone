@@ -4,6 +4,7 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.november.mcphone.MCphone;
 import com.november.mcphone.api.client.IPhoneApp;
+import net.minecraft.resources.ResourceLocation;
 
 import java.io.IOException;
 import java.io.Reader;
@@ -47,9 +48,13 @@ import java.util.*;
  * 状态文件: config/mcphone/installed.json
  *
  *   {
- *     "installed": ["settings", "music"],   已装 id
- *     "known":     ["settings", "music", "camera"]   目录中出现过的全部 id
+ *     "installed": ["mcphone:settings", "mcphone:music"],   已装 id
+ *     "known":     ["mcphone:settings", "mcphone:music", "mcphone:camera"]
  *   }
+ *
+ * 1.0.47 起 id 带命名空间。老文件里是裸串（"settings"），读取时一律按
+ * mcphone 补全——详见 parseStoredId，那里说明了为什么不能用
+ * ResourceLocation.parse。
  *
  * 记录 known 是为了区分两种"不在 installed 里"的情况：
  *   - 在 known 中但不在 installed → 玩家主动卸载过，保持卸载
@@ -59,10 +64,10 @@ import java.util.*;
 public final class PhoneScreenRegistry {
 
     /** 目录：SPI 发现的全部 App，启动时写入一次，此后永不移除 */
-    private static final Map<String, IPhoneApp> CATALOG = new LinkedHashMap<>();
+    private static final Map<ResourceLocation, IPhoneApp> CATALOG = new LinkedHashMap<>();
 
     /** 已安装 App 的 id 集合，决定主屏显示什么 */
-    private static final Set<String> INSTALLED = new LinkedHashSet<>();
+    private static final Set<ResourceLocation> INSTALLED = new LinkedHashSet<>();
 
     private static final Path STATE_FILE = Path.of("config/mcphone/installed.json");
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
@@ -84,7 +89,7 @@ public final class PhoneScreenRegistry {
      * @return true 表示登记成功
      */
     public static boolean register(IPhoneApp app) {
-        if (app == null || app.getId() == null || app.getId().isEmpty()) {
+        if (app == null || app.getId() == null) {
             MCphone.LOGGER.warn("[MCphone] App 登记失败: id 为空");
             return false;
         }
@@ -119,9 +124,9 @@ public final class PhoneScreenRegistry {
      * 安装目录中已有的 App。
      * @return true 表示本次调用真正改变了安装状态
      */
-    public static boolean install(String id) {
+    public static boolean install(ResourceLocation id) {
         ensureLoaded();
-        if (id == null || id.isEmpty()) return false;
+        if (id == null) return false;
 
         IPhoneApp app = CATALOG.get(id);
         if (app == null) {
@@ -141,9 +146,9 @@ public final class PhoneScreenRegistry {
      *
      * @return true 表示卸载成功
      */
-    public static boolean uninstall(String id) {
+    public static boolean uninstall(ResourceLocation id) {
         ensureLoaded();
-        if (id == null || id.isEmpty()) return false;
+        if (id == null) return false;
 
         IPhoneApp app = CATALOG.get(id);
         if (app == null || !INSTALLED.contains(id)) {
@@ -170,7 +175,7 @@ public final class PhoneScreenRegistry {
     public static List<IPhoneApp> getApps() {
         ensureLoaded();
         List<IPhoneApp> out = new ArrayList<>();
-        for (Map.Entry<String, IPhoneApp> e : CATALOG.entrySet()) {
+        for (Map.Entry<ResourceLocation, IPhoneApp> e : CATALOG.entrySet()) {
             if (INSTALLED.contains(e.getKey())) out.add(e.getValue());
         }
         return List.copyOf(out);
@@ -186,14 +191,14 @@ public final class PhoneScreenRegistry {
     public static List<IPhoneApp> getAvailable() {
         ensureLoaded();
         List<IPhoneApp> out = new ArrayList<>();
-        for (Map.Entry<String, IPhoneApp> e : CATALOG.entrySet()) {
+        for (Map.Entry<ResourceLocation, IPhoneApp> e : CATALOG.entrySet()) {
             if (!INSTALLED.contains(e.getKey())) out.add(e.getValue());
         }
         return List.copyOf(out);
     }
 
     /** 按 id 查找目录中的 App（不论是否已安装） */
-    public static IPhoneApp getApp(String id) {
+    public static IPhoneApp getApp(ResourceLocation id) {
         ensureLoaded();
         return CATALOG.get(id);
     }
@@ -207,7 +212,7 @@ public final class PhoneScreenRegistry {
     /** 已安装 App 数量 */
     public static int getAppCount() { return getApps().size(); }
 
-    public static boolean isInstalled(String id) {
+    public static boolean isInstalled(ResourceLocation id) {
         ensureLoaded();
         return INSTALLED.contains(id);
     }
@@ -242,16 +247,49 @@ public final class PhoneScreenRegistry {
         List<String> known;
     }
 
+    /**
+     * 把状态文件里的一条 id 解析成 ResourceLocation。
+     *
+     * 1.0.47 之前 id 是不带命名空间的裸串（"settings"、"music"），
+     * 而那个时候目录里只可能有内建 App，所以裸串一律归到 mcphone 名下。
+     *
+     * 这里【不能】直接用 ResourceLocation.parse：它会把裸串补成
+     * minecraft:settings，与新写法的 mcphone:settings 对不上，结果是
+     * 老玩家的安装/卸载选择全部作废、主屏一夜回到默认状态。这种数据丢失
+     * 不会报错，只会让人觉得"更新完 App 全乱了"。
+     *
+     * @return 解析不了时返回 null，调用方跳过该条
+     */
+    private static ResourceLocation parseStoredId(String raw) {
+        if (raw == null || raw.isBlank()) return null;
+        String s = raw.trim();
+        ResourceLocation id = ResourceLocation.tryParse(
+                s.indexOf(':') < 0 ? MCphone.MODID + ":" + s : s);
+        if (id == null) {
+            MCphone.LOGGER.warn("[MCphone] 状态文件中有无法解析的 App id '{}'，已忽略", raw);
+        }
+        return id;
+    }
+
+    /** 把状态文件里的一串 id 解析进目标集合，跳过解析不了的 */
+    private static void parseStoredIds(List<String> raw, Set<ResourceLocation> out) {
+        if (raw == null) return;
+        for (String s : raw) {
+            ResourceLocation id = parseStoredId(s);
+            if (id != null) out.add(id);
+        }
+    }
+
     private static void loadState() {
-        Set<String> known = new HashSet<>();
-        Set<String> installed = new HashSet<>();
+        Set<ResourceLocation> known = new HashSet<>();
+        Set<ResourceLocation> installed = new HashSet<>();
 
         if (Files.isRegularFile(STATE_FILE)) {
             try (Reader r = Files.newBufferedReader(STATE_FILE, StandardCharsets.UTF_8)) {
                 State s = GSON.fromJson(r, State.class);
                 if (s != null) {
-                    if (s.installed != null) installed.addAll(s.installed);
-                    if (s.known != null) known.addAll(s.known);
+                    parseStoredIds(s.installed, installed);
+                    parseStoredIds(s.known, known);
                 }
             } catch (Exception e) {
                 MCphone.LOGGER.warn("[MCphone] 读取 {} 失败，按默认安装状态处理: {}",
@@ -260,8 +298,8 @@ public final class PhoneScreenRegistry {
         }
 
         INSTALLED.clear();
-        for (Map.Entry<String, IPhoneApp> e : CATALOG.entrySet()) {
-            String id = e.getKey();
+        for (Map.Entry<ResourceLocation, IPhoneApp> e : CATALOG.entrySet()) {
+            ResourceLocation id = e.getKey();
             // 目录中出现过 → 沿用玩家的选择；首次出现 → 看是否预装
             boolean on = known.contains(id)
                     ? installed.contains(id)
@@ -278,8 +316,8 @@ public final class PhoneScreenRegistry {
 
     private static void saveState() {
         State s = new State();
-        s.installed = new ArrayList<>(INSTALLED);
-        s.known = new ArrayList<>(CATALOG.keySet());
+        s.installed = INSTALLED.stream().map(ResourceLocation::toString).toList();
+        s.known = CATALOG.keySet().stream().map(ResourceLocation::toString).toList();
         try {
             Path parent = STATE_FILE.getParent();
             if (parent != null) Files.createDirectories(parent);

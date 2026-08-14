@@ -1,10 +1,12 @@
 package com.november.mcphone.store;
 
+import com.november.mcphone.MCphone;
 import com.november.mcphone.api.client.IPhoneApp;
 import com.november.mcphone.api.client.store.AppInfo;
 import com.november.mcphone.api.client.store.IAppSource;
 import com.november.mcphone.gui.PhoneScreenRegistry;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -22,10 +24,11 @@ import java.util.function.Consumer;
  */
 public final class LocalAppSource implements IAppSource {
 
-    public static final String ID = "local";
+    public static final ResourceLocation ID =
+            ResourceLocation.fromNamespaceAndPath(MCphone.MODID, "local");
 
     @Override
-    public String getId() { return ID; }
+    public ResourceLocation getId() { return ID; }
 
     @Override
     public Component getDisplayName() {
@@ -45,11 +48,11 @@ public final class LocalAppSource implements IAppSource {
     public void install(AppInfo info, Consumer<IPhoneApp> onSuccess, Consumer<Component> onError) {
         IPhoneApp app = PhoneScreenRegistry.getApp(info.id());
         if (app == null) {
-            onError.accept(Component.translatable("mcphone.store.error.not_found", info.id()));
+            onError.accept(Component.translatable("mcphone.store.error.not_found", info.id().toString()));
             return;
         }
         if (!PhoneScreenRegistry.install(info.id())) {
-            onError.accept(Component.translatable("mcphone.store.error.install_failed", info.id()));
+            onError.accept(Component.translatable("mcphone.store.error.install_failed", info.id().toString()));
             return;
         }
         onSuccess.accept(app);

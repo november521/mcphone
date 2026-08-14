@@ -29,7 +29,9 @@ import net.minecraft.resources.ResourceLocation;
  *   public final class CalculatorApp implements IPhoneApp {
  *
  *       @Override
- *       public String getId() { return "calculator"; }
+ *       public ResourceLocation getId() {
+ *           return ResourceLocation.fromNamespaceAndPath("mymod", "calculator");
+ *       }
  *
  *       @Override
  *       public Component getDisplayName() {
@@ -75,8 +77,25 @@ public interface IPhoneApp {
     //  必须实现
     // ================================================================
 
-    /** App 唯一标识符，如 "calculator", "weather"。全小写英文+下划线。 */
-    String getId();
+    /**
+     * App 唯一标识，形如 {@code mymod:calculator}。
+     *
+     * ================================================================
+     * 为什么是 ResourceLocation 而不是一个字符串
+     * ================================================================
+     *
+     * 因为 App 目录是全服共用的一张表，而"计算器"这个名字谁都想用。
+     * 光靠字符串的话，两个模组各自注册一个 "calculator"，后注册的那个
+     * 会被目录直接丢弃——玩家只会看到自己装的某个模组"App 没出现"，
+     * 而两边作者谁都没写错。
+     *
+     * 带上命名空间之后，{@code amod:calculator} 与 {@code bmod:calculator}
+     * 天然是两个东西，撞车在结构上就不可能发生。这也是 Minecraft 里所有
+     * 注册表的一贯做法。
+     *
+     * 命名空间请用你自己的 modid。
+     */
+    ResourceLocation getId();
 
     /**
      * App 显示名称。

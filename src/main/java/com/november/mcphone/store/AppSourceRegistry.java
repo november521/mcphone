@@ -3,6 +3,7 @@ package com.november.mcphone.store;
 import com.november.mcphone.MCphone;
 import com.november.mcphone.api.client.store.AppInfo;
 import com.november.mcphone.api.client.store.IAppSource;
+import net.minecraft.resources.ResourceLocation;
 
 import java.util.*;
 import java.util.function.Consumer;
@@ -15,14 +16,14 @@ import java.util.function.Consumer;
  */
 public final class AppSourceRegistry {
 
-    private static final Map<String, IAppSource> SOURCES = new LinkedHashMap<>();
+    private static final Map<ResourceLocation, IAppSource> SOURCES = new LinkedHashMap<>();
     private static boolean loaded = false;
 
     private AppSourceRegistry() {}
 
     /** 注册一个来源。同 id 冲突时保留先注册者并告警。 */
     public static boolean register(IAppSource source) {
-        if (source == null || source.getId() == null || source.getId().isEmpty()) {
+        if (source == null || source.getId() == null) {
             MCphone.LOGGER.warn("[MCphone] 应用来源注册失败: id 为空");
             return false;
         }
@@ -43,7 +44,7 @@ public final class AppSourceRegistry {
         return List.copyOf(SOURCES.values());
     }
 
-    public static IAppSource getSource(String id) {
+    public static IAppSource getSource(ResourceLocation id) {
         ensureLoaded();
         return SOURCES.get(id);
     }
