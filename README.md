@@ -95,4 +95,7 @@ App 系统通过 SPI 开放，你的模组不需要被 MCphone 感知也能往�
 
 ## 许可
 
-All Rights Reserved（见 `gradle.properties` 的 `mod_license`）。
+[MIT](LICENSE)。
+
+仓库根目录的 `TEMPLATE_LICENSE.txt` 是另一回事：那是 NeoForged 给 MDK
+模板文件的 MIT 声明，按其署名要求保留，与本模组自身的许可无关。

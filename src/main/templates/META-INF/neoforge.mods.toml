@@ -11,7 +11,7 @@ modLoader="javafml" #mandatory
 loaderVersion="${loader_version_range}" #mandatory
 
 # The license for you mod. This is mandatory metadata and allows for easier comprehension of your redistributive properties.
-# Review your options at https://choosealicense.com/. All rights reserved is the default copyright stance, and is thus the default here.
+# 取自 gradle.properties 的 mod_license，与仓库根目录的 LICENSE 保持一致。
 license="${mod_license}"
 
 # A URL to refer people to when problems occur with this mod
