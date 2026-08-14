@@ -65,6 +65,7 @@
   "mcphone.chat.send": "发送",
   "mcphone.app.notes": "记事本",
   "mcphone.app.waystone": "传送石",
+  "mcphone.waystone.unavailable": "传送石用不了：服务端没装传送石碑，或版本不兼容",
   "mcphone.notes.empty": "还没有笔记",
   "mcphone.notes.empty_hint": "点右上角 + 新建一条",
   "mcphone.notes.untitled": "（无标题）",

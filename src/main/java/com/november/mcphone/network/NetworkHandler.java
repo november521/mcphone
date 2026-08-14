@@ -165,9 +165,15 @@ public final class NetworkHandler {
      * 校验与末影箱一致——身上得真有手机。包是客户端发的，不能信；没有这道
      * 检查，任何人改个客户端就能凭空传送，手机这个前提条件形同虚设。
      *
-     * 界面与传送全交给 Waystones，我们只负责发起。它没装时静默忽略：正常
-     * 客户端根本不会发这个包（没装 Waystones 时那个 App 压根不登记），能收到
-     * 就说明两端装的模组不一致，或者对方在伪造——两种情况都不值得回话。
+     * 界面与传送全交给 Waystones，我们只负责发起。
+     *
+     * 开不成时给一句 actionbar 提示。玩家点了图标、界面却没弹出来，什么都不
+     * 说是最糟的一种失败——他会以为是自己点错了，反复点，然后来报"手机坏了"。
+     * 一句话就能把他引向真正的原因：服务端没装传送石碑，或者版本对不上。
+     *
+     * 这条路在正常情况下走不到：没装 Waystones 时那个 App 压根不登记，客户端
+     * 也就发不出这个包。能走到这里，说明两端装的模组不一致、对方改了 API，
+     * 或者有人在伪造包——前两种玩家有权知道，第三种告诉他也无妨。
      */
     private static void handleOpenWaystoneSelection(OpenWaystoneSelectionPacket packet,
                                                     IPayloadContext ctx) {
@@ -180,7 +186,12 @@ public final class NetworkHandler {
                 return;
             }
 
-            com.november.mcphone.compat.WaystonesCompat.openSelection(player);
+            if (!com.november.mcphone.compat.WaystonesCompat.openSelection(player)) {
+                // true = 显示在物品栏上方那一行，不占聊天记录。与 Waystones
+                // 自己报传送失败时的位置一致，玩家不会觉得是两个模组在说话
+                player.displayClientMessage(
+                        Component.translatable("mcphone.waystone.unavailable"), true);
+            }
         });
     }
 

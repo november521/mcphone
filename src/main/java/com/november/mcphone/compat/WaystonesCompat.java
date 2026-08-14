@@ -120,8 +120,12 @@ public final class WaystonesCompat {
     /**
      * 给玩家打开传送石选点界面。
      *
-     * @return true 表示菜单已交给对方打开；没装 Waystones、或对方的 API
-     *         变了导致调用失败时返回 false，调用方据此决定要不要提示玩家
+     * 只回答"开成了没有"，不管提示玩家——那是措辞与翻译键的事，属于调用方。
+     * 兼容层沾上 UX，以后想换提示方式就得动这里，而这里是最不该频繁改的地方。
+     *
+     * @return true 表示菜单已交给对方打开；没装 Waystones、或对方的 API 变了
+     *         导致调用失败时返回 false。调用方必须处理 false——玩家点了图标，
+     *         界面却没弹出来，什么都不说是最糟的一种失败
      */
     public static boolean openSelection(ServerPlayer player) {
         if (!isLoaded()) return false;
