@@ -41,7 +41,7 @@ public final class CompatModules {
 
     /** 全部兼容模块。加新的就往这里加一行 */
     private static final List<CompatModule> MODULES = List.of(
-            // 目前为空，下一步加入 IntegratedDynamicsCompat
+            new IntegratedDynamicsCompat()
     );
 
     /**
