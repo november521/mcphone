@@ -54,6 +54,19 @@ public final class AppDetail {
     /** 操作结果提示 */
     private Component message = null;
 
+    /**
+     * 上一帧的按钮状态，用来判断"事情有结果了"。
+     *
+     * 点了购买之后这里会显示"正在购买…"，而结果是异步回来的——服务端扣完
+     * 东西才发同步包。买成了状态会变成 DOWNLOAD，那行字就该撤掉；买不起则
+     * 状态原地不动（服务端另发一条 actionbar 说明原因），这行字也不该继续
+     * 赖着，否则看起来像卡住了。
+     *
+     * 规则就一条：状态一变就清提示。没有计时器，也不需要——提示本来就只在
+     * 等结果的那一小会儿存在。
+     */
+    private State lastState = null;
+
     /** 请求退回商店首页，等 PhoneScreen 来取 */
     private boolean backRequest = false;
 
@@ -63,6 +76,7 @@ public final class AppDetail {
     public void open(AppInfo target) {
         this.info = target;
         this.message = null;
+        this.lastState = null;
         this.backRequest = false;
         this.installedRequest = false;
     }
@@ -132,6 +146,15 @@ public final class AppDetail {
             return;
         }
 
+        // 状态一变就说明上一次操作有结果了，"正在购买…"该撤掉。
+        //
+        // 这条规则盖不住所有情况：服务端在少数路径上（身上没手机、id 未定价）
+        // 直接静默驳回，状态不会变，那行字会留到玩家离开这一页为止。那几条
+        // 路径正常客户端根本走不到，为它们加一套超时机制不值当。
+        State s = state();
+        if (lastState != null && s != lastState) message = null;
+        lastState = s;
+
         // ---- 大图标 + 名称 ----
         if (info.iconTexture() != null) {
             g.blit(info.iconTexture(), x, y, 0, 0, BIG_ICON, BIG_ICON, BIG_ICON, BIG_ICON);
@@ -175,7 +198,6 @@ public final class AppDetail {
         }
 
         // ---- 价格 ----
-        State s = state();
         ICost price = AppPriceRegistry.priceOf(info.id());
         String priceText = price == ICost.FREE
                 ? Component.translatable("mcphone.store.free").getString()
