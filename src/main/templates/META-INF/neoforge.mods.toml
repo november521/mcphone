@@ -107,6 +107,21 @@ player, and an open SPI-based app system that add-on mods can plug into.
     ordering="AFTER"
     side="BOTH"
 
+# Waystones（传送石碑）—— 可选：装了就多一个「传送石」App，没装则该 App
+# 连应用商店里都不会出现。
+[[dependencies.${mod_id}]]
+    modId="waystones"
+    type="optional"
+    reason="装上后手机里会多一个「传送石」App，点开就是传送石碑自己的选点界面"
+    # 不写下限，和 Curios 同一个道理：我们用的 WaystoneSelectionListBuilder、
+    # ModMenus.inventorySelection、TeleportFlags.INVENTORY_BUTTON 都存在很久了，
+    # 钉死版本只会误伤用旧版的服主。真碰上对方改了 API，兼容层里兜着
+    # Throwable，最坏结果是这一个 App 不可用，不是崩服。
+    versionRange="[0,)"
+    # 必须在 Waystones 之后加载：我们要用它的菜单类型，那东西得先注册好
+    ordering="AFTER"
+    side="BOTH"
+
 # Features are specific properties of the game environment, that you may want to declare you require. This example declares
 # that your mod requires GL version 3.2 or higher. Other features will be added. They are side aware so declaring this won't
 # stop your mod loading on the server for example.

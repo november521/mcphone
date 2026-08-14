@@ -139,6 +139,21 @@ dependencies {
     compileOnly "maven.modrinth:curios:${curios_version}"
     localRuntime "maven.modrinth:curios:${curios_version}"
 
+    // Waystones（传送石碑）+ Balm —— 可选依赖：装了就多一个「传送石」App，
+    // 没装则该 App 连应用商店里都不会出现。
+    //
+    // 同样是 compileOnly：所有调用都关在 WaystonesCompat 里，运行期由
+    // ModList 判断在不在场。
+    //
+    // Balm 必须单独写一行。它是 Waystones 的前置【模组】而不是被打包进去的
+    // 库，Waystones 的 jar 里没有 net.blay09.mods.balm.*——漏了这行，编译期
+    // 就找不到 Balm.networking()，而错误信息只会说某个符号找不到，不会提示
+    // 你少加了一个依赖。
+    compileOnly "maven.modrinth:waystones:${waystones_version}"
+    compileOnly "maven.modrinth:balm:${balm_version}"
+    localRuntime "maven.modrinth:waystones:${waystones_version}"
+    localRuntime "maven.modrinth:balm:${balm_version}"
+
     // Example optional mod dependency with JEI
     // The JEI API is declared for compile time use, while the full JEI artifact is used at runtime
     // compileOnly "mezz.jei:jei-${mc_version}-common-api:${jei_version}"
