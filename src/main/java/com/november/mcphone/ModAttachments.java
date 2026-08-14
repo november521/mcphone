@@ -1,6 +1,7 @@
 package com.november.mcphone;
 
 import com.november.mcphone.chat.ChatReadState;
+import com.november.mcphone.cost.PurchasedApps;
 import com.november.mcphone.network.WallpaperData;
 import com.november.mcphone.notes.NoteList;
 import net.neoforged.neoforge.attachment.AttachmentType;
@@ -68,4 +69,23 @@ public final class ModAttachments {
                     .copyOnDeath()
                     .build()
     );
+
+    /**
+     * 玩家在应用商店买过哪些 App。
+     *
+     * 存在服务端而不是客户端的 installed.json 里：购买要扣真物品，而那个
+     * 文件就在玩家自己的电脑上，能被改写的话价格就形同虚设。安装状态
+     * （主屏摆哪几个图标）仍然是客户端偏好，两者是不同的东西。
+     *
+     * copyOnDeath：买 App 花掉的末影箱是真的，死一次就要重买属于数据损坏，
+     * 与笔记、已读进度同一个理由。
+     */
+    public static final Supplier<AttachmentType<PurchasedApps>> PURCHASED_APPS =
+            ATTACHMENT_TYPES.register(
+                    "purchased_apps",
+                    () -> AttachmentType.builder(() -> PurchasedApps.EMPTY)
+                            .serialize(PurchasedApps.CODEC)
+                            .copyOnDeath()
+                            .build()
+            );
 }

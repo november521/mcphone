@@ -80,5 +80,8 @@
   "mcphone.cost.emc": "%s EMC",
   "mcphone.cost.emc_unavailable": "%s EMC（%s）",
   "mcphone.emc.unavailable": "EMC 系统未接入",
-  "mcphone.emc.no_balance": "—"
+  "mcphone.emc.no_balance": "—",
+  "mcphone.store.error.cannot_afford": "买不起：需要 %s",
+  "mcphone.store.error.purchase_failed": "购买失败",
+  "mcphone.store.error.too_many": "买过的 App 太多了"
 }

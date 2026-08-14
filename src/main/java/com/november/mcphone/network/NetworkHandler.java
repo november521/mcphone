@@ -72,6 +72,7 @@ public final class NetworkHandler {
         // 本类只保留"注册总入口"这一个职责，不做杂物间
         com.november.mcphone.network.chat.ChatNetworking.register(registrar);
         com.november.mcphone.network.notes.NotesNetworking.register(registrar);
+        com.november.mcphone.network.store.StoreNetworking.register(registrar);
     }
 
     // ============================================================

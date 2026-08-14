@@ -51,6 +51,7 @@ public class MCphoneClient {
                 (ClientPlayerNetworkEvent.LoggingOut event) -> {
                     ChatClientCache.clear();
                     NotesClientCache.clear();
+                    com.november.mcphone.network.store.StoreClientCache.clear();
                 });
 
         // 收到消息时弹通知。装在这里而不是让网络层直接调 ChatNotifier：
