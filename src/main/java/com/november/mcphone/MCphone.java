@@ -51,6 +51,10 @@ public class MCphone {
         ModAttachments.ATTACHMENT_TYPES.register(modEventBus);
         modEventBus.addListener(com.november.mcphone.network.NetworkHandler::register);
 
+        // 与外部模组的兼容处理。放在自家注册之后：兼容模块可能要看我们已经
+        // 注册了什么，反过来则不成立。
+        com.november.mcphone.compat.CompatModules.init(modEventBus);
+
         version = modContainer.getModInfo().getVersion().toString();
 
         LOGGER.info("MCphone 模组加载完成 —— 手机已就绪");
