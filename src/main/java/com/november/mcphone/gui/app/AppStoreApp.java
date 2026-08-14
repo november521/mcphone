@@ -7,7 +7,7 @@ import net.minecraft.client.Minecraft;
  * 应用商店 App —— 下载安装其他 App。
  *
  * 目前只列出本机已发现但未安装的 App（未预装的、或被玩家卸载过的）。
- * 来源可拓展，见 com.november.mcphone.api.store.IAppSource。
+ * 来源可拓展，见 com.november.mcphone.api.client.store.IAppSource。
  *
  * 贴图: assets/mcphone/textures/gui/app_icon_app_store.png (20×20)
  */

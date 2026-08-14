@@ -1,8 +1,8 @@
 package com.november.mcphone.store;
 
 import com.november.mcphone.MCphone;
-import com.november.mcphone.api.store.AppInfo;
-import com.november.mcphone.api.store.IAppSource;
+import com.november.mcphone.api.client.store.AppInfo;
+import com.november.mcphone.api.client.store.IAppSource;
 
 import java.util.*;
 import java.util.function.Consumer;
@@ -11,7 +11,7 @@ import java.util.function.Consumer;
  * 应用来源注册表 —— 通过 SPI 发现所有 {@link IAppSource}。
  *
  * 与 App 本身的发现机制保持一致：ServiceLoader 扫描所有已加载 jar 中的
- * META-INF/services/com.november.mcphone.api.store.IAppSource
+ * META-INF/services/com.november.mcphone.api.client.store.IAppSource
  */
 public final class AppSourceRegistry {
 

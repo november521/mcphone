@@ -3,7 +3,7 @@ package com.november.mcphone.gui;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.november.mcphone.MCphone;
-import com.november.mcphone.api.IPhoneApp;
+import com.november.mcphone.api.client.IPhoneApp;
 
 import java.io.IOException;
 import java.io.Reader;
@@ -222,7 +222,7 @@ public final class PhoneScreenRegistry {
 
         // 所有 App 均通过 SPI 发现，包括内建 App
         // ServiceLoader 会扫描所有已加载 jar 包中的
-        // META-INF/services/com.november.mcphone.api.IPhoneApp
+        // META-INF/services/com.november.mcphone.api.client.IPhoneApp
         int count = 0;
         for (IPhoneApp app : ServiceLoader.load(IPhoneApp.class)) {
             if (register(app)) count++;

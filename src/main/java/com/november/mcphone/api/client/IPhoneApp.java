@@ -1,4 +1,4 @@
-package com.november.mcphone.api;
+package com.november.mcphone.api.client;
 
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
@@ -53,7 +53,7 @@ import net.minecraft.resources.ResourceLocation;
  *
  * 在 src/main/resources/META-INF/services/ 创建文件：
  *
- *   文件名: com.november.mcphone.api.IPhoneApp
+ *   文件名: com.november.mcphone.api.client.IPhoneApp
  *   内容:   com.yourmod.CalculatorApp
  *
  * 如果有多个 App，一行一个类名。

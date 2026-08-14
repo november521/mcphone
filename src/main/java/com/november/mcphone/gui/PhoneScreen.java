@@ -1,6 +1,6 @@
 package com.november.mcphone.gui;
 
-import com.november.mcphone.api.IPhoneApp;
+import com.november.mcphone.api.client.IPhoneApp;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;

@@ -1,6 +1,6 @@
 package com.november.mcphone.gui.app;
 
-import com.november.mcphone.api.IPhoneApp;
+import com.november.mcphone.api.client.IPhoneApp;
 import com.november.mcphone.MCphone;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
@@ -10,7 +10,7 @@ import net.minecraft.resources.ResourceLocation;
  * 手机内建 App 基类 —— 实现 IPhoneApp 接口。
  *
  * 仅用于 MCphone 内建 App。附属模组开发者请直接实现
- * {@link com.november.mcphone.api.IPhoneApp} 接口。
+ * {@link com.november.mcphone.api.client.IPhoneApp} 接口。
  *
  * 每个内建 App 只需提供 id，名称自动从翻译键获取：
  *   translation key: mcphone.app.<id>

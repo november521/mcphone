@@ -1,6 +1,6 @@
-package com.november.mcphone.api.store;
+package com.november.mcphone.api.client.store;
 
-import com.november.mcphone.api.IPhoneApp;
+import com.november.mcphone.api.client.IPhoneApp;
 import net.minecraft.network.chat.Component;
 
 import java.util.List;
@@ -26,7 +26,7 @@ import java.util.function.Consumer;
  * 与 {@link IPhoneApp} 完全相同的 SPI 机制：
  *
  *   文件: src/main/resources/META-INF/services/
- *         com.november.mcphone.api.store.IAppSource
+ *         com.november.mcphone.api.client.store.IAppSource
  *   内容: com.yourmod.YourAppSource
  *
  * ================================================================

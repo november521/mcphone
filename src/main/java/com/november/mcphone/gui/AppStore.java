@@ -1,7 +1,7 @@
 package com.november.mcphone.gui;
 
-import com.november.mcphone.api.store.AppInfo;
-import com.november.mcphone.api.store.IAppSource;
+import com.november.mcphone.api.client.store.AppInfo;
+import com.november.mcphone.api.client.store.IAppSource;
 import com.november.mcphone.store.AppSourceRegistry;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;

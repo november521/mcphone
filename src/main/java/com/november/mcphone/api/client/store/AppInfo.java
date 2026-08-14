@@ -1,6 +1,6 @@
-package com.november.mcphone.api.store;
+package com.november.mcphone.api.client.store;
 
-import com.november.mcphone.api.IPhoneApp;
+import com.november.mcphone.api.client.IPhoneApp;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 
