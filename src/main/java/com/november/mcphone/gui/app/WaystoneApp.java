@@ -37,6 +37,17 @@ public final class WaystoneApp extends PhoneApp {
         return WaystonesCompat.isLoaded();
     }
 
+    /**
+     * 不预装 —— 要从应用商店买，价格是一块传送石（见 BuiltinAppPrices）。
+     *
+     * 理由与末影箱 App 一样：预装的话它本来就在主屏上，永远进不了商店，
+     * 价格也就永远不会被触发。老存档不受影响，已经装着的不会被收走。
+     */
+    @Override
+    public boolean isPreinstalled() {
+        return false;
+    }
+
     @Override
     public void onPress() {
         PacketDistributor.sendToServer(new OpenWaystoneSelectionPacket());

@@ -19,6 +19,20 @@ public final class EnderChestApp extends PhoneApp {
         super("ender_chest");
     }
 
+    /**
+     * 不预装 —— 要从应用商店买，价格是一个末影箱（见 BuiltinAppPrices）。
+     *
+     * 预装的话它本来就在主屏上，永远不会出现在商店里，那条价格也就永远
+     * 不会被触发，等于一套看不见的机制。
+     *
+     * 老存档不受影响：PhoneScreenRegistry.loadState 靠 known 记住每个玩家
+     * 的历史选择，已经装着的不会被收走。这个改动只对新玩家生效。
+     */
+    @Override
+    public boolean isPreinstalled() {
+        return false;
+    }
+
     @Override
     public void onPress() {
         PacketDistributor.sendToServer(new OpenEnderChestPacket());
