@@ -106,5 +106,11 @@
   "mcphone.about.compat": "兼容",
   "mcphone.about.installed": "已装",
   "mcphone.about.missing": "未装",
-  "mcphone.store.not_purchased": "这个 App 还没买，去应用商店看看"
+  "mcphone.store.not_purchased": "这个 App 还没买，去应用商店看看",
+  "mcphone.app.browser": "浏览器",
+  "mcphone.app.browser.desc": "在手机里上网。点开后是一块比手机大得多的面板，网页在里面。需要装有 MCEF。",
+  "mcphone.browser.url": "地址",
+  "mcphone.browser.no_backend": "浏览器后端不可用",
+  "mcphone.browser.mcef_not_ready": "MCEF 还没准备好",
+  "mcphone.browser.need_mcef": "首次使用需要下载约 200 MB 的运行库，稍后再试"
 }

@@ -106,5 +106,11 @@
   "mcphone.about.compat": "Compatibility",
   "mcphone.about.installed": "Installed",
   "mcphone.about.missing": "Not installed",
-  "mcphone.store.not_purchased": "You have not purchased this app yet"
+  "mcphone.store.not_purchased": "You have not purchased this app yet",
+  "mcphone.app.browser": "Browser",
+  "mcphone.app.browser.desc": "Browse the web from your phone. Opens a panel much larger than the phone screen. Requires MCEF.",
+  "mcphone.browser.url": "Address",
+  "mcphone.browser.no_backend": "No browser backend available",
+  "mcphone.browser.mcef_not_ready": "MCEF is not ready yet",
+  "mcphone.browser.need_mcef": "First use downloads about 200 MB of runtime; try again shortly"
 }

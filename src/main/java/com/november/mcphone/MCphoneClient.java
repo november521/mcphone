@@ -103,6 +103,10 @@ public class MCphoneClient {
 
     @SubscribeEvent
     static void onClientSetup(FMLClientSetupEvent event) {
+        // 装了 MCEF 就把浏览器后端接上。必须在 App 目录构建【之前】：
+        // BrowserApp 登记时会问后端在不在
+        com.november.mcphone.client.browser.BrowserBackends.installDefault();
+
         // 扫描壁纸目录
         WallpaperStore.scan();
 

@@ -112,7 +112,18 @@ public final class PhoneSkin {
          * "不可点"该长什么样应该由画贴图的人说了算。没有贴图时用
          * {@link PhoneTheme#COLOR_BUTTON_DISABLED} 填。
          */
-        STORE_BUTTON_DISABLED("store_button_disabled");
+        STORE_BUTTON_DISABLED("store_button_disabled"),
+
+        /**
+         * 浏览器那块大面板的底。建议 320×200，会被整张拉伸到面板大小。
+         *
+         * 绝大部分会被网页盖住，真正看得见的只有地址栏那一条和加载中的空白期，
+         * 所以纯色即可。没有贴图时用 {@link PhoneTheme#COLOR_SCREEN_BG} 填。
+         */
+        BROWSER_PANEL("browser_panel"),
+
+        /** 浏览器顶部地址栏那一条的底。建议 320×18 */
+        BROWSER_BAR("browser_bar");
 
         private final ResourceLocation texture;
 
