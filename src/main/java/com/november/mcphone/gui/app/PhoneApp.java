@@ -3,6 +3,7 @@ package com.november.mcphone.gui.app;
 import com.november.mcphone.api.client.IPhoneApp;
 import com.november.mcphone.MCphone;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.resources.language.I18n;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 
@@ -77,6 +78,23 @@ public abstract class PhoneApp implements IPhoneApp {
         if (tex != null) {
             g.blit(tex, x, y, 0, 0, size, size, size, size);
         }
+    }
+
+    /**
+     * 应用详情页里的简介。翻译键: mcphone.app.&lt;path&gt;.desc
+     *
+     * 先查键在不在，不在就返回空串——查不到的翻译键不会报错，只会把键本身
+     * 原样画出来。详情页上出现一行 "mcphone.app.music.desc" 比什么都不写
+     * 难看得多，而且玩家还以为是坏了。
+     *
+     * 用 I18n 而不是 Component.translatable：本方法返回 String（IPhoneApp
+     * 就是这么定的），而且只有它能问"这个键存在吗"。I18n 是客户端类，本类
+     * 在 gui 包下，本来就只在客户端加载。
+     */
+    @Override
+    public String getDescription() {
+        String key = "mcphone.app." + path + ".desc";
+        return I18n.exists(key) ? I18n.get(key) : "";
     }
 
     @Override

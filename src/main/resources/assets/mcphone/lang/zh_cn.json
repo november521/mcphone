@@ -90,5 +90,14 @@
   "mcphone.store.installed_label": "已安装",
   "mcphone.store.free": "免费",
   "mcphone.store.purchasing": "正在购买…",
-  "mcphone.store.no_description": "这个 App 还没有写介绍。"
+  "mcphone.store.no_description": "这个 App 还没有写介绍。",
+  "mcphone.app.settings.desc": "管理壁纸、设备名和已装的 App。",
+  "mcphone.app.app_store.desc": "下载新的 App。",
+  "mcphone.app.chat.desc": "和服务器上的其他玩家聊天，对方不在线也能收到。",
+  "mcphone.app.camera.desc": "拍下眼前的景色，存进相册。",
+  "mcphone.app.gallery.desc": "翻看拍过的照片。",
+  "mcphone.app.music.desc": "播放游戏里的唱片。",
+  "mcphone.app.ender_chest.desc": "随身打开自己的末影箱。就是原版那一个，与方块末影箱、跨维度完全互通。",
+  "mcphone.app.notes.desc": "随手记点东西。笔记跟着你走，死了也不会丢，写完还能印成一本书递给别人。",
+  "mcphone.app.waystone.desc": "打开传送石碑的选点界面，去任何一个已激活的传送点。需要装有传送石碑。"
 }
