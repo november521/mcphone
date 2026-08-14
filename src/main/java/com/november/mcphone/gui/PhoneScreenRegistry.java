@@ -94,6 +94,14 @@ public final class PhoneScreenRegistry {
             return false;
         }
 
+        // App 自己说不该存在（典型是它依赖的模组没装）就到此为止。
+        // 这里必须在写入目录【之前】：让它进了目录，应用商店就会把一个
+        // 点了必然报错的东西列成"可下载"，比它压根不出现更糟。
+        if (!app.isAvailable()) {
+            MCphone.LOGGER.info("[MCphone] App 跳过登记: {}（自称当前不可用）", app.getId());
+            return false;
+        }
+
         IPhoneApp old = CATALOG.get(app.getId());
         if (old != null) {
             MCphone.LOGGER.warn("[MCphone] App id 冲突: '{}' 已由 {} 注册，忽略 {}",
