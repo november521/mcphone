@@ -1,6 +1,5 @@
 package com.november.mcphone.client;
 
-import com.november.mcphone.PhoneItem;
 import net.minecraft.client.Minecraft;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
 
@@ -45,6 +44,6 @@ public final class PhoneKeyHandler {
 
         // 身上没有手机就什么都不做。不提示：按错键是很常见的事，
         // 为此弹一句"你没有手机"反而聒噪
-        PhoneItem.openPhoneScreen(mc.player);
+        PhoneScreenOpener.open(mc.player);
     }
 }

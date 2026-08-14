@@ -1,8 +1,7 @@
 package com.november.mcphone;
 
+import com.november.mcphone.client.PhoneScreenOpener;
 import com.november.mcphone.compat.CuriosCompat;
-import com.november.mcphone.gui.PhoneScreen;
-import net.minecraft.client.Minecraft;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResultHolder;
 import net.minecraft.world.entity.player.Player;
@@ -55,37 +54,17 @@ public class PhoneItem extends Item {
         ItemStack stack = player.getItemInHand(hand);
 
         // 只在客户端打开 GUI
+        //
+        // 开界面的代码在 PhoneScreenOpener 里，不在本类——这不是为了整洁，
+        // 是本类【必须】不出现任何客户端类型：注册物品时服务端要加载并校验
+        // 它，校验器碰上 setScreen(Screen) 这类签名就会去加载 Screen，专用
+        // 服务器上当场抛异常。光是写着就会崩，不执行也一样，1.0.44 就是这么
+        // 崩的。详见 PhoneScreenOpener 的类注释，别把那两个方法搬回来。
         if (level.isClientSide()) {
-            openPhoneScreen(new PhoneLocation.InHand(hand));
+            PhoneScreenOpener.open(new PhoneLocation.InHand(hand));
         }
 
         return InteractionResultHolder.success(stack);
-    }
-
-    /**
-     * 在客户端打开手机主屏幕。
-     *
-     * @param location 手机在身上的哪个位置。设备名要写回【这一部】手机，
-     *                 玩家身上不止一部时不能改错。
-     */
-    public static void openPhoneScreen(PhoneLocation location) {
-        Minecraft.getInstance().setScreen(new PhoneScreen(location));
-    }
-
-    /**
-     * 从玩家身上找一部手机打开，找不到就什么都不做。
-     *
-     * 快捷键走这条路：手上、背包、饰品槽都找，所以手机收在哪儿都能开机。
-     *
-     * @return 真的开了机才返回 true
-     */
-    public static boolean openPhoneScreen(Player player) {
-        return PhoneLocation.find(player)
-                .map(location -> {
-                    openPhoneScreen(location);
-                    return true;
-                })
-                .orElse(false);
     }
 
     /**
