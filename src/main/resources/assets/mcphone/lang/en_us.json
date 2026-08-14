@@ -99,5 +99,11 @@
   "mcphone.app.music.desc": "Play the game’s music discs.",
   "mcphone.app.ender_chest.desc": "Open your ender chest anywhere. It is the vanilla one — fully shared with block ender chests, across dimensions.",
   "mcphone.app.notes.desc": "Jot things down. Notes follow you, survive death, and can be printed into a book to hand to someone.",
-  "mcphone.app.waystone.desc": "Open the Waystones selection screen and travel to any activated waystone. Requires Waystones."
+  "mcphone.app.waystone.desc": "Open the Waystones selection screen and travel to any activated waystone. Requires Waystones.",
+  "mcphone.about.author": "Author",
+  "mcphone.about.game": "Game",
+  "mcphone.about.apps": "Apps",
+  "mcphone.about.compat": "Compatibility",
+  "mcphone.about.installed": "Installed",
+  "mcphone.about.missing": "Not installed"
 }

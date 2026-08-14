@@ -24,7 +24,7 @@ import java.util.UUID;
 public final class PhoneScreen extends Screen {
 
     /** 手机导航模式 */
-    public enum Mode { MAIN, SETTINGS, WALLPAPER_PICKER, APP_MANAGER, MUSIC_PLAYER, APP_STORE, APP_DETAIL, GALLERY, DEVICE_NAME, CHAT, CHAT_ADD_CONTACT, CHAT_CONVERSATION, NOTES, NOTE_EDIT }
+    public enum Mode { MAIN, SETTINGS, WALLPAPER_PICKER, APP_MANAGER, MUSIC_PLAYER, APP_STORE, APP_DETAIL, ABOUT, GALLERY, DEVICE_NAME, CHAT, CHAT_ADD_CONTACT, CHAT_CONVERSATION, NOTES, NOTE_EDIT }
 
 
     // ---- 打开动画 ----
@@ -203,6 +203,12 @@ public final class PhoneScreen extends Screen {
             return true;
         }
 
+        // 关于是设置里的一层，退回设置列表而非主屏
+        if (mode == Mode.ABOUT) {
+            navigateTo(Mode.SETTINGS);
+            return true;
+        }
+
         if (mode != Mode.MAIN) {
             navigateTo(Mode.MAIN);
             return true;
@@ -267,6 +273,9 @@ public final class PhoneScreen extends Screen {
             case MUSIC_PLAYER      -> renderMusicPlayer(g, mouseX, mouseY);
             case APP_STORE         -> renderAppStore(g, mouseX, mouseY);
             case APP_DETAIL        -> renderAppDetail(g, mouseX, mouseY);
+            case ABOUT             -> AboutPage.render(g, phoneLeft, phoneTop,
+                    PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
+                    PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT, font);
             case GALLERY           -> renderGallery(g, mouseX, mouseY);
             case DEVICE_NAME       -> renderDeviceName(g, mouseX, mouseY, partialTick);
             case CHAT              -> renderChat(g, mouseX, mouseY);
@@ -371,12 +380,7 @@ public final class PhoneScreen extends Screen {
                 () -> navigateTo(Mode.APP_MANAGER)));
         settingItems.add(new SettingItem(
                 Component.translatable("mcphone.gui.about").getString(),
-                () -> {
-            if (minecraft != null && minecraft.player != null) {
-                minecraft.player.displayClientMessage(
-                        Component.literal("§eMCphone v1.0.0 §7by november"), false);
-            }
-        }));
+                () -> navigateTo(Mode.ABOUT)));
     }
 
     private void renderSettingsList(GuiGraphics g, int mouseX, int mouseY) {
@@ -775,6 +779,11 @@ public final class PhoneScreen extends Screen {
                     appDetail.open(open);
                     navigateTo(Mode.APP_DETAIL);
                 }
+                yield true;
+            }
+            case ABOUT -> {
+                // 这一页只有信息，没有可点的东西。仍然 yield true 把点击吃掉，
+                // 否则会落到下面的默认分支去，行为不好预料
                 yield true;
             }
             case APP_DETAIL -> {
