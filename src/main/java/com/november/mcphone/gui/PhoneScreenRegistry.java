@@ -4,7 +4,11 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.november.mcphone.MCphone;
 import com.november.mcphone.api.client.IPhoneApp;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ServerData;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.world.level.storage.LevelResource;
 
 import java.io.IOException;
 import java.io.Reader;
@@ -45,7 +49,7 @@ import java.util.*;
  * 持久化
  * ================================================================
  *
- * 状态文件: config/mcphone/installed.json
+ * 状态文件: config/mcphone/installed/<存档标识>.json —— 每个存档/服务器一份
  *
  *   {
  *     "installed": ["mcphone:settings", "mcphone:music"],   已装 id
@@ -69,10 +73,28 @@ public final class PhoneScreenRegistry {
     /** 已安装 App 的 id 集合，决定主屏显示什么 */
     private static final Set<ResourceLocation> INSTALLED = new LinkedHashSet<>();
 
-    private static final Path STATE_FILE = Path.of("config/mcphone/installed.json");
+    /**
+     * 每个存档 / 每个服务器一份状态文件。
+     *
+     * 1.1.13 之前是 config/mcphone/installed.json 一个文件走天下——整个游戏
+     * 实例共用，于是在存档 A 买了并安装的 App，换到存档 B 主屏上还在。购买
+     * 记录本身是按存档记的（服务端附件），漏就漏在这个文件上。
+     */
+    private static final Path STATE_DIR = Path.of("config/mcphone/installed");
+
+    /** 1.1.13 之前那个全局文件。只用于一次性迁移，见 migrateLegacyIfNeeded */
+    private static final Path LEGACY_STATE_FILE = Path.of("config/mcphone/installed.json");
+
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
 
+    /** 目录是否已扫描。与"状态是否已加载"是两件事，前者一辈子只做一次 */
     private static boolean loaded = false;
+
+    /**
+     * 当前存档的状态文件。没进世界时为 null——那时候 INSTALLED 是空的，
+     * 而手机本来就打不开。
+     */
+    private static Path stateFile = null;
 
     private PhoneScreenRegistry() {}
 
@@ -229,6 +251,13 @@ public final class PhoneScreenRegistry {
     //  延迟初始化（SPI 统一扫描）
     // ================================================================
 
+    /**
+     * 扫描 App 目录。一辈子只做一次。
+     *
+     * 【不】在这里读安装状态：状态是按存档分的，而这个方法在客户端启动时
+     * 就会被触发，那会儿还不知道玩家要进哪个世界。读状态改由
+     * {@link #loadForCurrentWorld()} 在进世界时做。
+     */
     private static void ensureLoaded() {
         if (loaded) return;
         loaded = true;
@@ -241,8 +270,6 @@ public final class PhoneScreenRegistry {
             if (register(app)) count++;
         }
         MCphone.LOGGER.info("[MCphone] SPI 扫描完成，目录中共 {} 个 App", count);
-
-        loadState();
     }
 
     // ================================================================
@@ -288,12 +315,105 @@ public final class PhoneScreenRegistry {
         }
     }
 
+    // ================================================================
+    //  按存档加载 / 卸载
+    // ================================================================
+
+    /**
+     * 进世界时调用：算出当前存档的标识，读它自己那份状态。
+     *
+     * 客户端登录事件触发，见 MCphoneClient。
+     */
+    public static void loadForCurrentWorld() {
+        ensureLoaded();
+
+        String key = currentWorldKey();
+        stateFile = STATE_DIR.resolve(key + ".json");
+        migrateLegacyIfNeeded();
+        loadState();
+
+        MCphone.LOGGER.info("[MCphone] 已加载存档 '{}' 的 App 安装状态", key);
+    }
+
+    /**
+     * 退出世界时调用：把安装状态清空。
+     *
+     * 不清的话，下一个存档在自己的状态读进来之前会先显示上一个存档的主屏。
+     * 那一瞬间玩家看到的是别处的数据，而且如果他恰好在这时点了什么，还会
+     * 被写进新存档的文件里。
+     */
+    public static void unloadWorld() {
+        INSTALLED.clear();
+        stateFile = null;
+    }
+
+    /**
+     * 当前存档/服务器的标识。
+     *
+     * 联机用服务器地址，单机用存档目录名——两者都是玩家心里"这一局"的
+     * 天然边界。不用世界显示名：两个存档可以重名，那样会让它们共用一份
+     * 状态，等于没隔离。
+     */
+    private static String currentWorldKey() {
+        Minecraft mc = Minecraft.getInstance();
+
+        ServerData server = mc.getCurrentServer();
+        if (server != null && server.ip != null && !server.ip.isBlank()) {
+            return "server_" + sanitize(server.ip);
+        }
+
+        MinecraftServer single = mc.getSingleplayerServer();
+        if (single != null) {
+            Path dir = single.getWorldPath(LevelResource.ROOT).toAbsolutePath().normalize();
+            Path name = dir.getFileName();
+            if (name != null) return "world_" + sanitize(name.toString());
+        }
+
+        // 两种都取不到（理论上不该发生）时用一个固定名字，而不是抛异常：
+        // 手机是个玩具，取不到存档名的代价应该是"状态存到了一个共用文件"，
+        // 不是"游戏崩了"
+        return "unknown";
+    }
+
+    /** 只留文件名安全的字符。冒号、斜杠这些在各平台上的下场不一样，一律换掉 */
+    private static String sanitize(String raw) {
+        String s = raw.replaceAll("[^a-zA-Z0-9._-]", "_");
+        return s.length() > 64 ? s.substring(0, 64) : s;
+    }
+
+    /**
+     * 一次性迁移：把 1.1.13 之前那个全局文件搬给当前存档。
+     *
+     * 不迁移的话，所有老玩家进游戏会发现主屏被清空了——而末影箱与传送石
+     * 现在不预装，等于连买过的东西一起没收，还得再花一次钱。
+     *
+     * 只搬给【第一个进入的存档】，搬完把旧文件改名。不删是留条后路；不复制
+     * 给每个存档是因为那就等于把要修的 bug 换个形式保留下来。
+     */
+    private static void migrateLegacyIfNeeded() {
+        if (stateFile == null || Files.exists(stateFile)) return;
+        if (!Files.isRegularFile(LEGACY_STATE_FILE)) return;
+
+        try {
+            Path parent = stateFile.getParent();
+            if (parent != null) Files.createDirectories(parent);
+            Files.copy(LEGACY_STATE_FILE, stateFile);
+            Files.move(LEGACY_STATE_FILE,
+                    LEGACY_STATE_FILE.resolveSibling("installed.json.migrated"));
+            MCphone.LOGGER.info("[MCphone] 已把旧的全局安装状态迁移给当前存档，"
+                    + "旧文件改名为 installed.json.migrated");
+        } catch (IOException e) {
+            // 迁移失败不是中断的理由：大不了这个存档按默认安装状态开局
+            MCphone.LOGGER.warn("[MCphone] 迁移旧安装状态失败: {}", e.toString());
+        }
+    }
+
     private static void loadState() {
         Set<ResourceLocation> known = new HashSet<>();
         Set<ResourceLocation> installed = new HashSet<>();
 
-        if (Files.isRegularFile(STATE_FILE)) {
-            try (Reader r = Files.newBufferedReader(STATE_FILE, StandardCharsets.UTF_8)) {
+        if (stateFile != null && Files.isRegularFile(stateFile)) {
+            try (Reader r = Files.newBufferedReader(stateFile, StandardCharsets.UTF_8)) {
                 State s = GSON.fromJson(r, State.class);
                 if (s != null) {
                     parseStoredIds(s.installed, installed);
@@ -301,7 +421,7 @@ public final class PhoneScreenRegistry {
                 }
             } catch (Exception e) {
                 MCphone.LOGGER.warn("[MCphone] 读取 {} 失败，按默认安装状态处理: {}",
-                        STATE_FILE, e.toString());
+                        stateFile, e.toString());
             }
         }
 
@@ -323,17 +443,21 @@ public final class PhoneScreenRegistry {
     }
 
     private static void saveState() {
+        // 没进世界就没有归属的文件，此时的 INSTALLED 也不代表任何存档。
+        // 写下去只会污染上一个存档的状态
+        if (stateFile == null) return;
+
         State s = new State();
         s.installed = INSTALLED.stream().map(ResourceLocation::toString).toList();
         s.known = CATALOG.keySet().stream().map(ResourceLocation::toString).toList();
         try {
-            Path parent = STATE_FILE.getParent();
+            Path parent = stateFile.getParent();
             if (parent != null) Files.createDirectories(parent);
-            try (Writer w = Files.newBufferedWriter(STATE_FILE, StandardCharsets.UTF_8)) {
+            try (Writer w = Files.newBufferedWriter(stateFile, StandardCharsets.UTF_8)) {
                 GSON.toJson(s, w);
             }
         } catch (IOException e) {
-            MCphone.LOGGER.warn("[MCphone] 写入 {} 失败: {}", STATE_FILE, e.toString());
+            MCphone.LOGGER.warn("[MCphone] 写入 {} 失败: {}", stateFile, e.toString());
         }
     }
 }

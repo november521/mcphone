@@ -52,7 +52,17 @@ public class MCphoneClient {
                     ChatClientCache.clear();
                     NotesClientCache.clear();
                     com.november.mcphone.network.store.StoreClientCache.clear();
+                    // 安装状态是按存档存的，退出时必须一并卸下。留着的话，
+                    // 下一个存档在自己的状态读进来之前会先显示上一个的主屏，
+                    // 玩家若恰好这时点了什么，还会被写进新存档的文件里
+                    PhoneScreenRegistry.unloadWorld();
                 });
+
+        // 进世界时读这个存档自己的安装状态。不能在客户端启动时读——那会儿
+        // 还不知道玩家要进哪个世界
+        NeoForge.EVENT_BUS.addListener(
+                (ClientPlayerNetworkEvent.LoggingIn event) ->
+                        PhoneScreenRegistry.loadForCurrentWorld());
 
         // 收到消息时弹通知。装在这里而不是让网络层直接调 ChatNotifier：
         // 网络层在专用服务器上也会加载，碰不得客户端的类
