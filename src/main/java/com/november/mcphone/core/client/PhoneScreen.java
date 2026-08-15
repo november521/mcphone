@@ -1,7 +1,10 @@
 package com.november.mcphone.core.client;
 
+import com.november.mcphone.MCphone;
 import com.november.mcphone.api.client.app.IPhoneApp;
 import com.november.mcphone.api.client.store.AppInfo;
+import com.november.mcphone.api.client.ui.IPhonePage;
+import com.november.mcphone.api.client.ui.PhoneCanvas;
 import com.november.mcphone.core.PhoneLocation;
 import com.november.mcphone.feature.chat.client.ChatAddContact;
 import com.november.mcphone.feature.chat.client.ChatConversation;
@@ -37,7 +40,7 @@ import java.util.UUID;
 public final class PhoneScreen extends Screen {
 
     /** 手机导航模式 */
-    public enum Mode { MAIN, SETTINGS, WALLPAPER_PICKER, APP_MANAGER, MUSIC_PLAYER, APP_STORE, APP_DETAIL, COMPANION_APPS, ABOUT, GALLERY, DEVICE_NAME, CHAT, CHAT_ADD_CONTACT, CHAT_CONVERSATION, NOTES, NOTE_EDIT }
+    public enum Mode { MAIN, SETTINGS, WALLPAPER_PICKER, APP_MANAGER, MUSIC_PLAYER, APP_STORE, APP_DETAIL, COMPANION_APPS, ADDON_PAGE, ABOUT, GALLERY, DEVICE_NAME, CHAT, CHAT_ADD_CONTACT, CHAT_CONVERSATION, NOTES, NOTE_EDIT }
 
 
     // ---- 打开动画 ----
@@ -72,6 +75,14 @@ public final class PhoneScreen extends Screen {
     private final AppStore appStore = new AppStore();
     private final AppDetail appDetail = new AppDetail();
     private final CompanionApps companionApps = new CompanionApps();
+
+    /**
+     * 附属 App 当前打开的那一页。为 null 表示没有。
+     *
+     * 它是唯一一处"界面由别人写"的地方，所以每一个回调都得兜住 Throwable——
+     * 附属的页面抛异常只该让这一页关掉，不该拖垮整个手机界面。
+     */
+    private IPhonePage addonPage = null;
 
     // ---- 相册 ----
     private final Gallery gallery = new Gallery();
@@ -139,6 +150,10 @@ public final class PhoneScreen extends Screen {
 
         // 联动页进出都要动作：进入时重扫一遍（模组装没装只在这时问一次就够），
         // 离开时清掉页码，下次进来从第一页开始
+        // 离开附属页面就把它关掉：它可能占着资源，而玩家已经走了。
+        // onClose() 一定会被调到——返回键、ESC、关手机、断线，全从 navigateTo 过
+        if (this.mode == Mode.ADDON_PAGE && target != Mode.ADDON_PAGE) closeAddonPage();
+
         if (this.mode == Mode.COMPANION_APPS) companionApps.reset();
         if (target == Mode.COMPANION_APPS) companionApps.refresh();
 
@@ -195,6 +210,143 @@ public final class PhoneScreen extends Screen {
      * @return 真的退了一层才返回 true；已在主屏返回 false，
      *         由调用方决定要不要关机（ESC 关，导航栏的 ◁ 不关）
      */
+
+    // ============================================================
+    //  附属 App 的页面
+    // ============================================================
+    //
+    // 这里是整个界面里唯一一处"代码由别人写"的地方。每一个进出口都要兜住
+    // Throwable：附属的页面抛异常只该让这一页被关掉并记一条日志，不该拖垮
+    // 手机界面，更不该崩游戏。
+    //
+    // 兜 Throwable 而不是 Exception 是刻意的：附属最常见的死法是引用了没装的
+    // 模组里的类，那抛的是 NoClassDefFoundError——属于 Error，Exception 接不住。
+
+    /**
+     * 点开一个 App。
+     *
+     * 先问它要不要一页画在手机里（openPage）；不要就走老路调 onPress()，
+     * 由它自己 setScreen 跳出去。1.2.13 之前只有后者。
+     */
+    private void launchApp(IPhoneApp app) {
+        IPhonePage page;
+        try {
+            page = app.openPage();
+        } catch (Throwable t) {
+            MCphone.LOGGER.error("[MCphone] App {} 的 openPage() 抛异常，改用 onPress()",
+                    app.getId(), t);
+            page = null;
+        }
+
+        if (page != null) {
+            openAddonPage(page);
+            return;
+        }
+
+        try {
+            app.onPress();
+        } catch (Throwable t) {
+            MCphone.LOGGER.error("[MCphone] App {} 的 onPress() 抛异常", app.getId(), t);
+        }
+    }
+
+    /** 打开一页附属界面 */
+    private void openAddonPage(IPhonePage page) {
+        closeAddonPage();
+        addonPage = page;
+        try {
+            page.onOpen();
+        } catch (Throwable t) {
+            MCphone.LOGGER.error("[MCphone] 附属页面 {} 的 onOpen() 抛异常",
+                    page.getClass().getName(), t);
+        }
+        navigateTo(Mode.ADDON_PAGE);
+    }
+
+    /**
+     * 关掉当前这一页。
+     *
+     * 先把字段清空再回调，不是反过来：onClose() 里要是又去开一页（附属完全
+     * 可能这么写），后清空会把新开的那页一起抹掉，表现成"点了没反应"。
+     */
+    private void closeAddonPage() {
+        IPhonePage page = addonPage;
+        addonPage = null;
+        if (page == null) return;
+        try {
+            page.onClose();
+        } catch (Throwable t) {
+            MCphone.LOGGER.error("[MCphone] 附属页面 {} 的 onClose() 抛异常",
+                    page.getClass().getName(), t);
+        }
+    }
+
+    /**
+     * 调一次页面的回调，兜住异常。
+     *
+     * 抛异常的页面会被【当场关掉并退回主屏】，而不是留着每帧再抛一次——那样
+     * 日志一秒钟能刷几千行，真正的第一条错误反而被冲掉了。
+     *
+     * @return 页面说它处理了没有；出异常时算没处理
+     */
+    private boolean callPage(java.util.function.Predicate<IPhonePage> call) {
+        IPhonePage page = addonPage;
+        if (page == null) return false;
+        try {
+            return call.test(page);
+        } catch (Throwable t) {
+            MCphone.LOGGER.error("[MCphone] 附属页面 {} 抛异常，已关闭该页",
+                    page.getClass().getName(), t);
+            closeAddonPage();
+            navigateTo(Mode.MAIN);
+            return false;
+        }
+    }
+
+    /** 这一页有没有输入框。问不出来就当没有——那是更安全的一侧 */
+    private boolean pageCapturesKeyboard() {
+        IPhonePage page = addonPage;
+        if (page == null) return false;
+        try {
+            return page.capturesKeyboard();
+        } catch (Throwable t) {
+            MCphone.LOGGER.error("[MCphone] 附属页面 {} 的 capturesKeyboard() 抛异常",
+                    page.getClass().getName(), t);
+            return false;
+        }
+    }
+
+    /**
+     * 画附属那一页。
+     *
+     * 给它的是【内容区】——状态栏与导航栏已经扣掉，附属不需要知道那两条多高，
+     * 我们改了它们的高度它也不受影响。
+     */
+    private void renderAddonPage(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
+        IPhonePage page = addonPage;
+        if (page == null) {
+            navigateTo(Mode.MAIN);
+            return;
+        }
+
+        int contentY = phoneTop + PhoneTheme.STATUS_BAR_HEIGHT;
+        int contentH = PhoneTheme.PHONE_HEIGHT
+                - PhoneTheme.STATUS_BAR_HEIGHT - PhoneTheme.NAV_BAR_HEIGHT;
+
+        PhoneCanvas canvas = new PhoneCanvas(g, font,
+                phoneLeft, contentY, PhoneTheme.PHONE_WIDTH, contentH,
+                mouseX, mouseY, partialTick, ThemeStyle.INSTANCE);
+
+        try {
+            page.render(canvas);
+        } catch (Throwable t) {
+            MCphone.LOGGER.error("[MCphone] 附属页面 {} 渲染抛异常，已关闭该页",
+                    page.getClass().getName(), t);
+            closeAddonPage();
+            navigateTo(Mode.MAIN);
+        }
+    }
+
     private boolean goBackOneLevel() {
         // 相册的单张查看是相册内的一层，先退回缩略图网格
         if (mode == Mode.GALLERY && gallery.backToGrid()) return true;
@@ -214,6 +366,13 @@ public final class PhoneScreen extends Screen {
         // 编辑一条笔记是记事本里的一层，退回笔记列表
         if (mode == Mode.NOTE_EDIT) {
             navigateTo(Mode.NOTES);
+            return true;
+        }
+
+        // 附属页面：先问它自己要不要拦，不拦就退回主屏
+        if (mode == Mode.ADDON_PAGE) {
+            if (callPage(IPhonePage::onBack)) return true;
+            navigateTo(Mode.MAIN);
             return true;
         }
 
@@ -293,6 +452,7 @@ public final class PhoneScreen extends Screen {
             case MUSIC_PLAYER      -> renderMusicPlayer(g, mouseX, mouseY);
             case APP_STORE         -> renderAppStore(g, mouseX, mouseY);
             case APP_DETAIL        -> renderAppDetail(g, mouseX, mouseY);
+            case ADDON_PAGE        -> renderAddonPage(g, mouseX, mouseY, partialTick);
             case COMPANION_APPS    -> companionApps.render(g, phoneLeft, phoneTop,
                     PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
                     PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT,
@@ -759,7 +919,7 @@ public final class PhoneScreen extends Screen {
             case MAIN -> {
                 if (hoveredAppIndex >= 0) {
                     IPhoneApp app = PhoneScreenRegistry.getApp(hoveredAppIndex);
-                    if (app != null) { app.onPress(); yield true; }
+                    if (app != null) { launchApp(app); yield true; }
                 }
                 // 只有点在手机机身外才关闭；机身内的空白处不响应
                 if (!isInsidePhone(mx, my)) onClose();
@@ -808,6 +968,12 @@ public final class PhoneScreen extends Screen {
             }
             case COMPANION_APPS -> {
                 companionApps.mouseClicked(mx, my, button);
+                yield true;
+            }
+            case ADDON_PAGE -> {
+                // 返回 false 时不再往下落：下面的默认分支里"点手机外面＝关机"，
+                // 而附属页面里的一次空点击不该把手机关掉
+                callPage(p -> p.mouseClicked(mx, my, button));
                 yield true;
             }
             case ABOUT -> {
@@ -897,6 +1063,8 @@ public final class PhoneScreen extends Screen {
         if (mode == Mode.CHAT_CONVERSATION && chatConversation.mouseScrolled(scrollY)) return true;
         if (mode == Mode.NOTES && notesList.mouseScrolled(scrollY)) return true;
         if (mode == Mode.NOTE_EDIT && noteEditor.mouseScrolled(mx, my, scrollX, scrollY)) return true;
+        if (mode == Mode.ADDON_PAGE
+                && callPage(p -> p.mouseScrolled(mx, my, scrollY))) return true;
         return super.mouseScrolled(mx, my, scrollX, scrollY);
     }
 
@@ -928,6 +1096,12 @@ public final class PhoneScreen extends Screen {
             noteEditor.keyPressed(keyCode, scanCode, modifiers);
             return true;
         }
+        // 附属页面自称有输入框时，同样要抢在背包键之前——理由与上面三处一样：
+        // 打拼音一定会按到 e，落到背包键判定上手机当场关掉、内容全丢
+        if (mode == Mode.ADDON_PAGE && pageCapturesKeyboard()) {
+            callPage(p -> p.keyPressed(keyCode, scanCode, modifiers));
+            return true;
+        }
 
         if (minecraft != null && minecraft.options.keyInventory.matches(keyCode, scanCode)) {
             if (mode != Mode.MAIN) back();
@@ -937,6 +1111,8 @@ public final class PhoneScreen extends Screen {
         // 相册的方向键翻页放在最后：ESC 与背包键优先，
         // 免得有人把背包键绑成方向键时被相册吃掉
         if (mode == Mode.GALLERY && gallery.keyPressed(keyCode)) return true;
+        if (mode == Mode.ADDON_PAGE
+                && callPage(p -> p.keyPressed(keyCode, scanCode, modifiers))) return true;
 
         return super.keyPressed(keyCode, scanCode, modifiers);
     }
@@ -949,6 +1125,8 @@ public final class PhoneScreen extends Screen {
      */
     @Override
     public boolean charTyped(char c, int modifiers) {
+        if (mode == Mode.ADDON_PAGE
+                && callPage(p -> p.charTyped(c, modifiers))) return true;
         if (mode == Mode.DEVICE_NAME && deviceNameEditor.charTyped(c, modifiers)) return true;
         if (mode == Mode.CHAT_CONVERSATION && chatConversation.charTyped(c, modifiers)) return true;
         if (mode == Mode.NOTE_EDIT && noteEditor.charTyped(c, modifiers)) return true;
@@ -969,6 +1147,15 @@ public final class PhoneScreen extends Screen {
         // 同理：手机被顶掉时会话缓存也该放掉，否则新消息还会往里追加
         if (mode == Mode.CHAT_CONVERSATION) chatConversation.close();
         if (mode == Mode.NOTE_EDIT) noteEditor.close();
+
+        // 附属页面同理，而且更要紧：IPhonePage.onClose() 的文档里写着"一定会被
+        // 调用——返回键、ESC、关手机、断线都会走到"。那句承诺就靠这一行兑现。
+        //
+        // 只挂在 navigateTo 上是不够的：关手机、被别的界面顶掉、退出世界这几条
+        // 路径根本不经过 navigateTo，附属那边的资源就永远不会被释放。这与 1.1.28
+        // 修掉的"浏览器只在 onClose 释放"是同一类坑
+        closeAddonPage();
+
         super.removed();
     }
     @Override public boolean isPauseScreen() { return false; }

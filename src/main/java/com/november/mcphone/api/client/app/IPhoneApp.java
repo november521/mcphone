@@ -1,5 +1,6 @@
 package com.november.mcphone.api.client.app;
 
+import com.november.mcphone.api.client.ui.IPhonePage;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
@@ -179,6 +180,34 @@ public interface IPhoneApp {
             g.blit(tex, x, y, 0, 0, size, size, size, size);
         }
     }
+
+    /**
+     * 点开这个 App 时，要画在手机屏幕【里】的那一页。
+     *
+     * ================================================================
+     * 覆盖它，你的 App 就不再是二等公民
+     * ================================================================
+     *
+     * 返回一页 {@link IPhonePage}，MCphone 就把它画在手机屏幕里，共用状态栏、
+     * 导航栏、壁纸与返回键——和内建的聊天、记事本、相册完全一样的待遇。
+     *
+     * 返回 null（默认）时走老路：调用 {@link #onPress()}，你自己
+     * {@code Minecraft.setScreen(...)} 整个跳出手机。1.2.13 之前只有这一条路，
+     * 所以默认值是 null——已经写好的 App 一行都不用改。
+     *
+     * ================================================================
+     * 什么时候该继续用 onPress
+     * ================================================================
+     *
+     * 你的界面在 120×200 的屏幕里根本放不下的时候。内建的浏览器就是这样：
+     * 网页塞进手机屏幕一行正文占不下十个字，所以它老老实实跳出去开一块大面板。
+     *
+     * 除此之外都建议用 openPage——跳出手机对玩家来说是"离开了手机"，而他明明
+     * 只是点开了一个 App。
+     *
+     * @return 要显示的页面；返回 null 表示走 {@link #onPress()} 那条老路
+     */
+    default IPhonePage openPage() { return null; }
 
     /** App 被卸载时调用。在此清理持久化数据。 */
     default void onUninstall() {}
