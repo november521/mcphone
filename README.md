@@ -4,6 +4,16 @@
 
 **Minecraft 1.21.1** · **NeoForge 21.1.200+** · 客户端与服务端都需安装
 
+**可选依赖**（装了多点东西，不装一切照常）：
+
+| 模组 | 装了会怎样 |
+| --- | --- |
+| [Curios](https://modrinth.com/mod/curios) | 手机多一个饰品栏槽位，可以挂在腰上 |
+| [Waystones](https://modrinth.com/mod/waystones) | 多一个「传送石」App |
+| [MCEF](https://modrinth.com/mod/mcef) | 多一个「浏览器」App |
+
+没装对应模组时，依赖它的 App 不会出现在主屏和应用商店里——商店里躺着一个点了会报错的东西，比它不存在更糟。
+
 ---
 
 ## 怎么拿到手机
@@ -28,10 +38,22 @@
 | 🏪 应用商店 | 安装 / 卸载 App，安装状态持久化；系统 App 标灰不可卸载 |
 | ⚙️ 设置 | 更换壁纸、设备命名、App 管理器 |
 | 💬 聊天 | 双向好友（申请 / 同意 / 拒绝）、会话列表（未读数、在线状态、最后一条预览）、气泡式会话界面。消息存进世界存档，对方离线也能发 |
+| 📝 记事本 | 随手记点东西。笔记跟着玩家走，死了也不会丢，写完能印成一本书递给别人 |
+| 📦 末影箱 | 随身打开自己的末影箱。就是原版那一个，与方块末影箱、跨维度完全互通。**付费 App**，售价 1 × 末影箱 |
+| 🗿 传送石 | 打开传送石碑的选点界面，去任何一个已激活的传送点。**需要 Waystones**，**付费 App**，售价 1 × 传送石 |
+| 🌐 浏览器 | 在手机里上网。点开是一块占屏幕九成的面板，地址栏兼搜索框。**需要 MCEF**，详见下方 |
 
 **聊天**：加好友要对方点头。在聊天 App 右上角的「+」里从当前在线的玩家中点选，对方在同一个界面里同意或拒绝；两个人同时点「添加」会直接成为好友。聊天限定在好友之间，陌生人发不进来。消息存进世界存档，对方不在线也能发，他下次上线就能看到；解除好友后聊天记录不删，重新加回来历史就回来了。
 
 上限：好友 100 人，每人待处理申请 50 条，每对会话保留最近 100 条消息，单条 256 字。
+
+**浏览器**：唯一一个跳出机身的 App —— 手机屏幕是 120×200 像素，网页塞进去一行正文占不下十个字，所以它点开是一块占屏幕九成的居中面板，退出回到手机。上方一条工具条：后退、前进、刷新、地址栏，右侧那个点是加载指示。
+
+地址栏兼搜索框：打网址就开网址，打关键词就搜（带 `://` 的原样打开；带空格的当搜索词；剩下看有没有点，有点补 `https://`，没点去搜）。MCEF 自带的快捷键可用：`Ctrl`+滚轮 或 `Ctrl`+`=`/`-`/`0` 缩放、`Alt`+`←`/`→` 前进后退、`Ctrl`+`R` 刷新，macOS 上用 `⌘`。
+
+装了 MCEF 之后**第一次用还要等它下载约 200 MB 的原生库**，这期间会显示「MCEF 还没准备好」，不是坏了。
+
+**已知限制**：`target="_blank"` 的链接点了没反应，搜索结果里这种链接很常见。这是 MCEF 的缺口——它没有注册 `CefLifeSpanHandler`，而离屏渲染下也没有窗口可开，于是点了什么都不发生。眼下的办法是把地址复制进地址栏手动打开。
 
 **自定义壁纸**：把任意尺寸的 PNG 放进 `config/mcphone/wallpapers/`，在「设置 → 更换壁纸」里选。壁纸选择由服务端保存并同步，多人游戏中每位玩家的壁纸各自独立。
 
@@ -60,12 +82,18 @@
 | `chat_input_bar.png` | 会话界面输入栏底 | 90×14 | 纯色 |
 | `toast_bg.png` | 收到消息时右上角的通知底 | 160×32 | 纯色加一圈描边 |
 | `unread_badge.png` | 未读条数的角标底 | 12×9 | 纯色 |
+| `store_button.png` | 应用详情页上可点的按钮底（购买 / 下载） | 100×16 | 纯色 |
+| `store_button_disabled.png` | 点不动时的按钮底（已安装 / 买不起） | 100×16 | 纯色 |
+| `browser_panel.png` | 浏览器那块大面板的底 | 320×200 | 纯色 |
+| `browser_bar.png` | 浏览器工具条那一条的底 | 320×22 | 纯色 |
 
 几点说明：
 
 - **尺寸不必精确匹配**，贴图会被拉伸到目标区域。想要不变形，按建议尺寸或其等比放大画即可。
 - **气泡与输入栏没有九宫格拉伸**，整张图会被拉伸到实际大小——做成纯色或纵向渐变最稳妥，带圆角的图会被拉扁。
 - `unread_badge.png` **两处共用**：会话列表里的未读数和消息通知右上角的计数是同一张图，换一次两处都变。
+- `store_button_disabled.png` 是单独一张，而不是把可点的那张调暗——调暗是我们替美术做的决定，「不可点」该长什么样应该由画贴图的人说了算。
+- `browser_panel.png` 绝大部分会被网页盖住，真正看得见的只有加载中的空白期，纯色就够。`browser_bar.png` 那一条**在面板外面**，浮在面板上方的留白里，不占网页高度。
 - `toast_bg.png` 的 160×32 是原版通知的槽位尺寸，照这个画才不会和其他模组的通知挤在一起错位。
 - 玩家头像**不在换肤范围内** —— 那是玩家自己的皮肤，取自 Tab 玩家列表，资源包不该覆盖。
 - 改完按 **F3+T** 重载资源包即可看到效果，不用重启游戏。
@@ -77,9 +105,15 @@
 
 App 系统通过 SPI 开放，你的模组不需要被 MCphone 感知也能往手机里装 App。内建 App 走的是同一套机制，没有走后门。
 
-**注册一个 App**：实现 `com.november.mcphone.api.IPhoneApp`，在 `META-INF/services/com.november.mcphone.api.IPhoneApp` 中登记实现类，App 即自动出现。
+**注册一个 App**：实现 `com.november.mcphone.api.client.IPhoneApp`，在 `META-INF/services/com.november.mcphone.api.client.IPhoneApp` 中登记实现类，App 即自动出现。
 
-**自定义商店来源**：实现 `com.november.mcphone.api.store.IAppSource`，用 `AppInfo` 描述可下载的 App，在 `META-INF/services/com.november.mcphone.api.store.IAppSource` 中登记。
+**自定义商店来源**：实现 `com.november.mcphone.api.client.store.IAppSource`，用 `AppInfo` 描述可下载的 App，在 `META-INF/services/com.november.mcphone.api.client.store.IAppSource` 中登记。
+
+这两个接口在 `api.client` 下，签名里有 `GuiGraphics` 之类的客户端类型，**只能被客户端加载**。给 App 定价用的 `com.november.mcphone.api.cost.IAppPriceProvider` 则不在 `client` 下：价格两端都要用，客户端画详情页，服务端在扣东西前核对，所以实现类里不许出现客户端类型。
+
+**条件登记**：你的 App 依赖另一个可选模组时，覆盖 `IPhoneApp.isAvailable()`，对方没装就不进目录，主屏与商店里都不出现。内建的「传送石」和「浏览器」走的就是这条。
+
+**换浏览器后端**：`com.november.mcphone.client.browser` 下的 `IBrowser` / `IBrowserBackend` 是一层不含 MCEF、JCEF 类型的抽象，画面以 GL 纹理 id 交出来。想换成别的实现，在 MCphone 装上默认后端之前调 `BrowserBackends.set()` 即可；已经有人接管时再 set 会被拒绝并告警，不静默顶掉。
 
 ---
 
