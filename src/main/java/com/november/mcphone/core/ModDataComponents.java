@@ -7,6 +7,7 @@ import net.minecraft.network.codec.ByteBufCodecs;
 import net.neoforged.neoforge.registries.DeferredHolder;
 import net.neoforged.neoforge.registries.DeferredRegister;
 import com.november.mcphone.MCphone;
+import com.november.mcphone.feature.settings.WallpaperData;
 
 /**
  * MCphone 的数据组件注册。

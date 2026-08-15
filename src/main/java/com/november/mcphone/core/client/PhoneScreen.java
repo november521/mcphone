@@ -12,19 +12,19 @@ import com.november.mcphone.core.PhoneLocation;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
-import com.november.mcphone.gui.AboutPage;
-import com.november.mcphone.gui.AppDetail;
-import com.november.mcphone.gui.AppStore;
+import com.november.mcphone.feature.settings.client.AboutPage;
+import com.november.mcphone.feature.store.client.AppDetail;
+import com.november.mcphone.feature.store.client.AppStore;
 import com.november.mcphone.feature.chat.client.ChatAddContact;
 import com.november.mcphone.feature.chat.client.ChatConversation;
 import com.november.mcphone.feature.chat.client.ChatList;
-import com.november.mcphone.gui.CompanionApps;
-import com.november.mcphone.gui.DeviceNameEditor;
-import com.november.mcphone.gui.Gallery;
-import com.november.mcphone.gui.MusicPlayer;
-import com.november.mcphone.gui.NoteEditor;
-import com.november.mcphone.gui.NotesList;
-import com.november.mcphone.gui.WallpaperPicker;
+import com.november.mcphone.feature.store.client.CompanionApps;
+import com.november.mcphone.feature.settings.client.DeviceNameEditor;
+import com.november.mcphone.feature.gallery.client.Gallery;
+import com.november.mcphone.feature.music.client.MusicPlayer;
+import com.november.mcphone.feature.notes.client.NoteEditor;
+import com.november.mcphone.feature.notes.client.NotesList;
+import com.november.mcphone.feature.settings.client.WallpaperPicker;
 
 /**
  * 手机主屏幕 GUI。

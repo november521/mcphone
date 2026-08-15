@@ -5,8 +5,8 @@ import com.google.gson.GsonBuilder;
 import com.november.mcphone.MCphone;
 import com.november.mcphone.api.client.IPhoneApp;
 import com.november.mcphone.api.client.RequiredMod;
-import com.november.mcphone.cost.AppPriceRegistry;
-import com.november.mcphone.network.store.StoreClientCache;
+import com.november.mcphone.feature.store.AppPriceRegistry;
+import com.november.mcphone.feature.store.net.StoreClientCache;
 import com.november.mcphone.util.SpiLoader;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ServerData;
@@ -21,6 +21,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
+import com.november.mcphone.feature.store.AppAccess;
 
 /**
  * 手机 App 注册表 —— 模拟手机操作系统的 App 目录与安装状态。

@@ -15,6 +15,7 @@ import net.neoforged.neoforge.network.PacketDistributor;
 import java.util.List;
 import com.november.mcphone.core.client.PhoneTheme;
 import com.november.mcphone.core.client.PlayerAvatar;
+import com.november.mcphone.feature.settings.client.DeviceNameEditor;
 
 /**
  * 加联系人界面 —— 列出当前在线的玩家，点一下加为联系人。

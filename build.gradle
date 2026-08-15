@@ -237,3 +237,134 @@ idea {
         downloadJavadoc = true
     }
 }
+
+// ============================================================
+//  SPI 服务文件校验
+// ============================================================
+//
+// META-INF/services/ 里写的是全限定类名，纯文本，编译器一个字都不看。类改名
+// 或搬包之后忘了同步这里，构建照样成功，jar 照样能装——只是运行时 ServiceLoader
+// 一个实现都找不到，手机里空空如也，而且不报错。
+//
+// 1.2.11 那次把 128 个文件重排包结构时就差点这么发出去。这个失败模式没有任何
+// 现成的东西挡得住，只能自己在构建期校验一遍：文件里写的每一个类，编译产物里
+// 必须真的存在。
+//
+// 挂在 check 上而不是只在发版时跑：这种错要在本地 build 就炸出来，而不是等到
+// CI 或者玩家装上之后。
+tasks.register('verifyServiceFiles') {
+    description = '校验 META-INF/services 里写的类都真实存在'
+    group = 'verification'
+
+    dependsOn tasks.named('compileJava')
+
+    def servicesDir = file('src/main/resources/META-INF/services')
+    def classesDir = layout.buildDirectory.dir('classes/java/main')
+
+    inputs.dir(servicesDir).optional()
+    inputs.dir(classesDir).optional()
+
+    doLast {
+        if (!servicesDir.exists()) return
+
+        def missing = []
+        def total = 0
+        servicesDir.eachFile { f ->
+            f.eachLine('UTF-8') { line ->
+                def cls = line.replaceAll('#.*', '').trim()
+                if (cls.isEmpty()) return
+                total++
+                def classFile = classesDir.get().file(cls.replace('.', '/') + '.class').asFile
+                if (!classFile.exists()) {
+                    missing << "${f.name} -> ${cls}"
+                }
+            }
+        }
+
+        if (!missing.isEmpty()) {
+            throw new GradleException(
+                    "META-INF/services 里有 ${missing.size()} 个类不存在（多半是改名或搬包后忘了同步）:\n  "
+                            + missing.join('\n  '))
+        }
+        logger.lifecycle("SPI 服务文件校验通过：${total} 个类全部存在")
+    }
+}
+
+tasks.named('check').configure { dependsOn tasks.named('verifyServiceFiles') }
+
+// ============================================================
+//  dist 隔离校验
+// ============================================================
+//
+// 专用服务器上没有客户端类。NeoForge 的 RuntimeDistCleaner 在加载
+// net.minecraft.client.* 时直接抛异常——而触发它的不是"执行到了那句代码"，
+// 是"JVM 校验那个类"。一个类只要【常量池里写着】客户端类型，哪怕那段代码被
+// isClientSide() 挡得死死的、服务端永远执行不到，只要它在服务端被加载，
+// 就会当场崩服。1.0.44 就是这么把一台 453 个模组的服务器打崩的。
+//
+// 1.2.11 重排包结构之后，这条界线终于能用一条规则表达：
+//
+//     路径里有 /client/ 的类才准引用客户端类型，其余一概不准。
+//
+// 原来靠 gui/ 与 client/ 两个顶层包名判断，而 gui/app/BrowserApp 这种东西
+// 靠包名根本推断不出该不该算客户端——现在是断言，不是推断。
+//
+// 校验直接在 .class 字节里搜常量池：类型名在常量池里以 modified-UTF8 存着，
+// 原样搜字符串就够，不必解析 class 结构。这比读源码可靠——import 看不出
+// 校验期会加载什么。
+tasks.register('verifyDistIsolation') {
+    description = '校验非 client 包的类没有引用客户端类型'
+    group = 'verification'
+
+    dependsOn tasks.named('compileJava')
+
+    // 客户端专属的标记：常量池里出现这些就说明这个类碰了客户端
+    def clientMarkers = [
+            'net/minecraft/client/',
+            'com/mojang/blaze3d/',
+            'com/cinemamod/mcef',
+            'org/cef/',
+    ]
+
+    // 白名单。加进来的每一条都要写清楚为什么它是安全的
+    def allowed = [
+            // 客户端入口，@Mod(dist = Dist.CLIENT) 标注，服务端根本不会构造它
+            'com/november/mcphone/MCphoneClient.class',
+    ]
+
+    def classesDir = layout.buildDirectory.dir('classes/java/main')
+    inputs.dir(classesDir).optional()
+
+    doLast {
+        def root = classesDir.get().asFile
+        if (!root.exists()) return
+
+        def offenders = []
+        def checked = 0
+
+        root.eachFileRecurse { f ->
+            if (!f.name.endsWith('.class')) return
+            def rel = root.toPath().relativize(f.toPath()).toString().replace('\\', '/')
+            if (rel.contains('/client/')) return          // 这些包本来就准
+            if (allowed.contains(rel)) return
+            checked++
+
+            def bytes = f.getBytes()
+            def text = new String(bytes, 'ISO-8859-1')    // 逐字节，不解码
+            def hit = clientMarkers.find { text.contains(it) }
+            if (hit != null) {
+                offenders << "${rel}  （引用了 ${hit}）"
+            }
+        }
+
+        if (!offenders.isEmpty()) {
+            throw new GradleException(
+                    "dist 隔离被破坏：${offenders.size()} 个非 client 包的类引用了客户端类型。\n"
+                            + "这些类一旦在专用服务器上被加载就会当场崩服。\n  "
+                            + offenders.join('\n  '))
+        }
+        logger.lifecycle("dist 隔离校验通过：${checked} 个非 client 类，无一引用客户端类型")
+    }
+}
+
+tasks.named('check').configure { dependsOn tasks.named('verifyDistIsolation') }

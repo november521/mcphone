@@ -7,6 +7,7 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.resources.language.I18n;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
+import com.november.mcphone.feature.settings.client.SettingsApp;
 
 /**
  * 手机内建 App 基类 —— 实现 IPhoneApp 接口。

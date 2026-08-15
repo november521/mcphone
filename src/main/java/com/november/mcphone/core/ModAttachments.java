@@ -1,9 +1,9 @@
 package com.november.mcphone.core;
 
 import com.november.mcphone.feature.chat.ChatReadState;
-import com.november.mcphone.cost.PurchasedApps;
-import com.november.mcphone.network.WallpaperData;
-import com.november.mcphone.notes.NoteList;
+import com.november.mcphone.feature.store.PurchasedApps;
+import com.november.mcphone.feature.settings.WallpaperData;
+import com.november.mcphone.feature.notes.NoteList;
 import net.neoforged.neoforge.attachment.AttachmentType;
 import net.neoforged.neoforge.registries.DeferredRegister;
 import net.neoforged.neoforge.registries.NeoForgeRegistries;

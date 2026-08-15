@@ -1,16 +1,16 @@
 package com.november.mcphone;
 
-import com.november.mcphone.client.CameraHandler;
+import com.november.mcphone.feature.camera.client.CameraHandler;
 import com.november.mcphone.feature.chat.client.ChatNotifier;
 import com.november.mcphone.core.client.MCphoneKeyBindings;
 import com.november.mcphone.core.client.PhoneKeyHandler;
 import com.november.mcphone.core.client.PhoneContainerScreen;
 import com.november.mcphone.core.client.PhoneScreenRegistry;
 import com.november.mcphone.core.client.PhoneSkin;
-import com.november.mcphone.gui.WallpaperStore;
+import com.november.mcphone.feature.settings.client.WallpaperStore;
 import com.november.mcphone.core.menu.ModMenus;
 import com.november.mcphone.feature.chat.net.ChatClientCache;
-import com.november.mcphone.network.notes.NotesClientCache;
+import com.november.mcphone.feature.notes.net.NotesClientCache;
 import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 import net.neoforged.neoforge.client.event.RegisterClientReloadListenersEvent;
 import net.neoforged.neoforge.client.event.RegisterMenuScreensEvent;
@@ -26,6 +26,7 @@ import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
 import net.neoforged.neoforge.client.gui.ConfigurationScreen;
 import net.neoforged.neoforge.client.gui.IConfigScreenFactory;
+import com.november.mcphone.feature.browser.client.BrowserApp;
 
 @Mod(value = MCphone.MODID, dist = Dist.CLIENT)
 @EventBusSubscriber(modid = MCphone.MODID, value = Dist.CLIENT)
@@ -51,7 +52,7 @@ public class MCphoneClient {
                 (ClientPlayerNetworkEvent.LoggingOut event) -> {
                     ChatClientCache.clear();
                     NotesClientCache.clear();
-                    com.november.mcphone.network.store.StoreClientCache.clear();
+                    com.november.mcphone.feature.store.net.StoreClientCache.clear();
                     // 安装状态是按存档存的，退出时必须一并卸下。留着的话，
                     // 下一个存档在自己的状态读进来之前会先显示上一个的主屏，
                     // 玩家若恰好这时点了什么，还会被写进新存档的文件里
@@ -65,12 +66,12 @@ public class MCphoneClient {
                     PhoneScreenRegistry.loadForCurrentWorld();
                     // 顺手要一份购买记录：没买过的付费 App 要从主屏摘掉，
                     // 而那要等这份记录到了才知道
-                    com.november.mcphone.network.store.StoreClientCache.request();
+                    com.november.mcphone.feature.store.net.StoreClientCache.request();
                 });
 
         // 购买记录一到就核对主屏。走监听器而不是让网络层直接调注册表：
         // 那个类现在含客户端类型，网络层两端都会加载，碰不得
-        com.november.mcphone.network.store.StoreClientCache.setSyncListener(
+        com.november.mcphone.feature.store.net.StoreClientCache.setSyncListener(
                 PhoneScreenRegistry::enforcePurchases);
 
         // 收到消息时弹通知。装在这里而不是让网络层直接调 ChatNotifier：
@@ -105,7 +106,7 @@ public class MCphoneClient {
     static void onClientSetup(FMLClientSetupEvent event) {
         // 装了 MCEF 就把浏览器后端接上。必须在 App 目录构建【之前】：
         // BrowserApp 登记时会问后端在不在
-        com.november.mcphone.client.browser.BrowserBackends.installDefault();
+        com.november.mcphone.feature.browser.client.BrowserBackends.installDefault();
 
         // 扫描壁纸目录
         WallpaperStore.scan();

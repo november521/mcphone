@@ -4,7 +4,7 @@ import com.november.mcphone.MCphone;
 import com.november.mcphone.core.ModAttachments;
 import com.november.mcphone.core.ModDataComponents;
 import com.november.mcphone.core.PhoneItem;
-import com.november.mcphone.cost.AppAccess;
+import com.november.mcphone.feature.store.AppAccess;
 import net.minecraft.ChatFormatting;
 import net.minecraft.resources.ResourceLocation;
 import com.november.mcphone.core.menu.ModMenus;
@@ -19,12 +19,12 @@ import net.neoforged.neoforge.network.handling.IPayloadContext;
 import net.neoforged.neoforge.network.registration.PayloadRegistrar;
 import com.november.mcphone.core.client.PhoneScreen;
 import com.november.mcphone.core.client.PhoneScreenRegistry;
-import com.november.mcphone.network.OpenEnderChestPacket;
-import com.november.mcphone.network.OpenWaystoneSelectionPacket;
-import com.november.mcphone.network.SetDeviceNamePacket;
-import com.november.mcphone.network.SetWallpaperPacket;
-import com.november.mcphone.network.SyncWallpaperPacket;
-import com.november.mcphone.network.WallpaperData;
+import com.november.mcphone.feature.enderchest.net.OpenEnderChestPacket;
+import com.november.mcphone.feature.waystone.net.OpenWaystoneSelectionPacket;
+import com.november.mcphone.feature.settings.net.SetDeviceNamePacket;
+import com.november.mcphone.feature.settings.net.SetWallpaperPacket;
+import com.november.mcphone.feature.settings.net.SyncWallpaperPacket;
+import com.november.mcphone.feature.settings.WallpaperData;
 
 /**
  * 网络包处理 —— 注册并处理所有 MCphone 网络包。
@@ -102,8 +102,8 @@ public final class NetworkHandler {
         // 聊天与记事本的包各自成组，注册与处理都在自己的类里：
         // 本类只保留"注册总入口"这一个职责，不做杂物间
         com.november.mcphone.feature.chat.net.ChatNetworking.register(registrar);
-        com.november.mcphone.network.notes.NotesNetworking.register(registrar);
-        com.november.mcphone.network.store.StoreNetworking.register(registrar);
+        com.november.mcphone.feature.notes.net.NotesNetworking.register(registrar);
+        com.november.mcphone.feature.store.net.StoreNetworking.register(registrar);
     }
 
     // ============================================================

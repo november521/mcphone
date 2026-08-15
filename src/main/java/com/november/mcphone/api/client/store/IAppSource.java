@@ -6,6 +6,7 @@ import net.minecraft.resources.ResourceLocation;
 
 import java.util.List;
 import java.util.function.Consumer;
+import com.november.mcphone.feature.store.client.LocalAppSource;
 
 /**
  * 应用来源 —— 应用商店的 App 从哪来。
