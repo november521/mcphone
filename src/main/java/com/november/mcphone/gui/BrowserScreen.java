@@ -95,6 +95,27 @@ public final class BrowserScreen extends Screen {
      */
     private boolean writingUrl = false;
 
+    /**
+     * 哪些鼠标键是在视口里按下的，按位记（第 n 位对应 button n）。
+     *
+     * ============================================================
+     * 为什么非记不可
+     * ============================================================
+     *
+     * MCEF 内部维护一个 btnMask：sendMousePress 把对应的位【或】进去，
+     * sendMouseRelease 才把它清掉，而 sendMouseMove 每次都把当前的 btnMask
+     * 当作 modifier 发给 Chromium。
+     *
+     * 于是漏送一次松手的代价不是"这一下没生效"，而是那个位再也清不掉——此后
+     * 【每一次鼠标移动都会被网页当成"按住键在拖"】：满页乱选文字、点什么都变成
+     * 拖拽，而且不会自己恢复。
+     *
+     * 而漏送是很容易发生的：玩家在网页里选中一段文字往外拖一点再松手，指针已经
+     * 不在视口里了。所以判断"这次松手要不要送"不能看指针现在在哪，要看当初是在
+     * 哪按下的。
+     */
+    private int viewportButtons = 0;
+
     public BrowserScreen(Screen parent) {
         super(Component.translatable("mcphone.app.browser"));
         this.parent = parent;
@@ -370,10 +391,20 @@ public final class BrowserScreen extends Screen {
         return hit(mx, my, viewX, viewY, viewW, viewH);
     }
 
-    /** GUI 坐标 → 相对视口左上角的真实像素 */
-    private int browserX(double mouseX) { return toPx(mouseX - viewX); }
+    /**
+     * GUI 坐标 → 相对视口左上角的真实像素。
+     *
+     * 先把坐标【夹回视口内】再换算。指针在视口里时夹取什么也没做；跑到外面时
+     * （拖拽会有这种情况，见 viewportButtons）网页拿到的是边界上的一个合法坐标，
+     * 而不是负数或者超出画面的值。
+     */
+    private int browserX(double mouseX) {
+        return toPx(Math.max(viewX, Math.min(mouseX, viewX + viewW)) - viewX);
+    }
 
-    private int browserY(double mouseY) { return toPx(mouseY - viewY); }
+    private int browserY(double mouseY) {
+        return toPx(Math.max(viewY, Math.min(mouseY, viewY + viewH)) - viewY);
+    }
 
     // ============================================================
     //  输入
@@ -394,6 +425,8 @@ public final class BrowserScreen extends Screen {
             urlBox.setFocused(false);
             urlEdited = false;
             browser.setFocus(true);
+            // 记下这个键是在视口里按的，松手时无论指针在哪都得送过去
+            viewportButtons |= 1 << button;
             browser.mousePress(browserX(mouseX), browserY(mouseY), button);
             return true;
         }
@@ -413,9 +446,18 @@ public final class BrowserScreen extends Screen {
         urlEdited = false;
     }
 
+    /**
+     * 松手看的是"当初在哪按的"，不是"现在指针在哪"。
+     *
+     * 拖出视口再松手是常事（选中一段文字往外一带），照指针位置判断的话这一次
+     * 松手就丢了，而丢掉的后果不止这一下——理由见 viewportButtons 的注释。
+     */
     @Override
     public boolean mouseReleased(double mouseX, double mouseY, int button) {
-        if (browser != null && inViewport(mouseX, mouseY)) {
+        boolean pressedHere = (viewportButtons & (1 << button)) != 0;
+        viewportButtons &= ~(1 << button);
+
+        if (pressedHere && browser != null) {
             browser.mouseRelease(browserX(mouseX), browserY(mouseY), button);
             return true;
         }
@@ -424,7 +466,9 @@ public final class BrowserScreen extends Screen {
 
     @Override
     public void mouseMoved(double mouseX, double mouseY) {
-        if (browser != null && inViewport(mouseX, mouseY)) {
+        // 正拖着的时候即使指针出了视口也要接着送：网页靠这些移动更新选区，
+        // 断了的话选中范围会停在边界上，玩家看着像"拖不动了"
+        if (browser != null && (viewportButtons != 0 || inViewport(mouseX, mouseY))) {
             browser.mouseMove(browserX(mouseX), browserY(mouseY));
         }
         super.mouseMoved(mouseX, mouseY);
