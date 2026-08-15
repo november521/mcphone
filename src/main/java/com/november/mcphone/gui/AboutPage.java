@@ -1,12 +1,18 @@
 package com.november.mcphone.gui;
 
 import com.november.mcphone.MCphone;
+import com.november.mcphone.api.client.IPhoneApp;
+import com.november.mcphone.api.client.RequiredMod;
 import com.november.mcphone.compat.CuriosCompat;
-import com.november.mcphone.compat.WaystonesCompat;
 import net.minecraft.SharedConstants;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
+import net.neoforged.fml.ModList;
+
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 
 /**
  * 关于页 —— 这部手机是什么、哪一版、跟谁配合得上。
@@ -75,13 +81,44 @@ public final class AboutPage {
         g.fill(x, y, x + w, y + 1, 0x22FFFFFF);
         y += 4;
 
-        // ---- 兼容状态 ----
+        // ---- 联动模组 ----
         g.drawString(font, Component.translatable("mcphone.about.compat").getString(),
                 x, y, PhoneTheme.FONT_COLOR_SUBTLE, false);
         y += font.lineHeight + 2;
 
-        y = compatRow(g, font, x, y, w, "Curios", CuriosCompat.isLoaded());
-        compatRow(g, font, x, y, w, "Waystones", WaystonesCompat.isLoaded());
+        // Curios 是"能力型"联动：装了手机能挂腰上，它不对应任何一个 App，
+        // 所以从 App 的前置声明里汇总不出来，只能单独写这一行
+        y = compatRow(g, font, x, y, w, "Curios（饰品栏）", CuriosCompat.isLoaded());
+
+        // 其余从各 App 声明的前置汇总。这一段【不能】改回手写清单：
+        // v1.2.0 加了浏览器 App 却忘了往这儿加 MCEF，玩家看不到自己缺什么，
+        // 只会把"App 不见了"当成 bug 来报。汇总出来就漏不掉了。
+        int bottom = phoneTop + screenH - navH - 2;
+        for (RequiredMod mod : companionMods()) {
+            if (y + font.lineHeight > bottom) {
+                g.drawString(font, "…", x, y, PhoneTheme.FONT_COLOR_SUBTLE, false);
+                break;
+            }
+            y = compatRow(g, font, x, y, w, mod.displayName(),
+                    ModList.get().isLoaded(mod.modId()));
+        }
+    }
+
+    /**
+     * 所有 App 声明过的前置模组，按 modId 去重。
+     *
+     * 去重是必须的：两个 App 依赖同一个模组时（比如将来又来一个用 Waystones
+     * 的），这一页不该把它列两遍。用 LinkedHashMap 而不是 HashMap，是为了让
+     * 顺序稳定——每次进这一页顺序都不一样的话，玩家会以为自己看错了。
+     */
+    private static List<RequiredMod> companionMods() {
+        Map<String, RequiredMod> byId = new LinkedHashMap<>();
+        for (IPhoneApp app : PhoneScreenRegistry.getCompanionApps()) {
+            for (RequiredMod mod : PhoneScreenRegistry.requiredModsOf(app)) {
+                byId.putIfAbsent(mod.modId(), mod);
+            }
+        }
+        return List.copyOf(byId.values());
     }
 
     /** 一行"标签 …… 值"，值靠右 */
