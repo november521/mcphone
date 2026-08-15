@@ -68,8 +68,17 @@ public final class NotesList {
     /** 提示停留时长。够读完一行短句，又不至于赖着不走 */
     private static final long TOAST_MS = 2500L;
 
-    /** 提示与打印键的颜色，与本文件其余几处保持一致 */
+    /** 临时提示的颜色 */
     private static final int COLOR_TOAST = 0xFFFFDD44;
+
+    /**
+     * 打印键的颜色。
+     *
+     * 与编辑页那个「保存」是同一个绿：手机里这两个都是"点了会有结果"的动作键，
+     * 用同一种颜色，玩家扫一眼就知道哪些字是能点的。预览文字是灰的，绿色跳出来
+     * 正好把可点的那部分标出来。
+     */
+    private static final int COLOR_PRINT = 0xFF66FF88;
 
     /** 待消费的"打开某条"请求，null 表示没有 */
     private Integer pendingOpen;
@@ -210,7 +219,7 @@ public final class NotesList {
             // 每一行都画，不是只在悬停那行画：只给悬停行画的话，鼠标一进来
             // 预览就突然被截短，整行文字跳一下，比多几个字更闹
             g.drawString(font, print, printX, y + font.lineHeight + 1,
-                    printHover ? COLOR_TITLE : COLOR_TIME, false);
+                    printHover ? COLOR_TITLE : COLOR_PRINT, false);
 
             y += rowH;
         }
