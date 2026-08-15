@@ -54,10 +54,13 @@ public final class BrowserScreen extends Screen {
     private static final float MARGIN_RATIO = 0.05f;
 
     /** 顶部地址栏那一条的高度 */
-    private static final int BAR_H = 18;
+    private static final int BAR_H = 22;
 
-    /** 导航按钮的宽度 */
-    private static final int NAV_BTN_W = 14;
+    /** 导航按钮的宽度。三个键并排，够手指头找得到 */
+    private static final int NAV_BTN_W = 22;
+
+    /** 导航图标的放大倍数。默认字号在这块大面板上显得像针尖 */
+    private static final float NAV_GLYPH_SCALE = 1.6f;
 
     /** 退出后回到哪儿。通常是手机界面 */
     private final Screen parent;
@@ -83,6 +86,15 @@ public final class BrowserScreen extends Screen {
     /** 地址栏里显示的是不是玩家正在编辑的内容。是的话就别用网页地址覆盖它 */
     private boolean urlEdited = false;
 
+    /**
+     * 正在由代码写入地址栏，此刻的回调不算"玩家在编辑"。
+     *
+     * 不加这个开关的话：setValue 会触发 EditBox 的 responder，responder 把
+     * urlEdited 置真，于是从第一次同步网页地址开始，地址栏就再也不更新了——
+     * 玩家点了链接、页面跳了，地址栏却停在首页，看起来像"跳转没发生"。
+     */
+    private boolean writingUrl = false;
+
     public BrowserScreen(Screen parent) {
         super(Component.translatable("mcphone.app.browser"));
         this.parent = parent;
@@ -97,11 +109,12 @@ public final class BrowserScreen extends Screen {
         super.init();
         layout();
 
-        urlBox = new EditBox(font, panelX + NAV_BTN_W * 3 + 6, barY + 3,
-                panelW - NAV_BTN_W * 3 - 10, BAR_H - 6,
+        urlBox = new EditBox(font, panelX + NAV_BTN_W * 3 + 6, barY + 4,
+                panelW - NAV_BTN_W * 3 - 20, BAR_H - 8,
                 Component.translatable("mcphone.browser.url"));
         urlBox.setMaxLength(2000);
-        urlBox.setResponder(s -> urlEdited = true);
+        // 只有玩家自己敲进去的才算编辑，代码写入不算——理由见 writingUrl 的注释
+        urlBox.setResponder(s -> { if (!writingUrl) urlEdited = true; });
         addRenderableWidget(urlBox);
 
         // init() 在窗口大小变化时会被再调一次。浏览器只建一次，之后只改尺寸——
@@ -264,25 +277,65 @@ public final class BrowserScreen extends Screen {
         drawNavButton(g, 0, "◀", mouseX, mouseY, browser != null && browser.canGoBack());
         drawNavButton(g, 1, "▶", mouseX, mouseY, browser != null && browser.canGoForward());
         drawNavButton(g, 2, "↻", mouseX, mouseY, browser != null);
+        drawLoadingDot(g);
 
         // 玩家没在编辑时，地址栏跟着网页走——点了链接、跳转之后要能看到新地址。
         // 正在编辑时不覆盖，否则打字打到一半会被网页刷掉
         if (browser != null && !urlEdited && !urlBox.isFocused()) {
             String current = browser.currentUrl();
-            if (!current.equals(urlBox.getValue())) urlBox.setValue(current);
+            if (!current.equals(urlBox.getValue())) {
+                writingUrl = true;
+                urlBox.setValue(current);
+                writingUrl = false;
+            }
         }
     }
 
+    /**
+     * 一个导航键。
+     *
+     * 图标要放大画：默认字号在这块大面板上像针尖，尤其刷新那个 ↻。放大用的是
+     * 与主屏 App 名同一套写法——先 translate 到目标位置再 scale，最后在原点画。
+     * 缩放一个非原点坐标会让图标越大偏得越多，1.0.42 在 App 名上栽过一次。
+     */
     private void drawNavButton(GuiGraphics g, int index, String glyph,
                                int mouseX, int mouseY, boolean enabled) {
         int x = panelX + 2 + index * NAV_BTN_W;
         int y = barY + 2;
-        boolean hovered = enabled && hit(mouseX, mouseY, x, y, NAV_BTN_W, BAR_H - 4);
+        int h = BAR_H - 4;
+        boolean hovered = enabled && hit(mouseX, mouseY, x, y, NAV_BTN_W, h);
+
+        // 悬停时给个底，让人看得出这是个键而不是一个字
+        if (hovered) g.fill(x, y, x + NAV_BTN_W, y + h, PhoneTheme.COLOR_APP_PRESSED);
 
         int color = !enabled ? PhoneTheme.COLOR_BUTTON_DISABLED
                 : hovered ? PhoneTheme.FONT_COLOR_TITLE
                 : PhoneTheme.FONT_COLOR_BODY;
-        g.drawCenteredString(font, glyph, x + NAV_BTN_W / 2, y + 3, color);
+
+        float sc = NAV_GLYPH_SCALE;
+        float gw = font.width(glyph) * sc;
+        float gh = font.lineHeight * sc;
+
+        g.pose().pushPose();
+        g.pose().translate(x + (NAV_BTN_W - gw) / 2f, y + (h - gh) / 2f, 0);
+        g.pose().scale(sc, sc, 1f);
+        g.drawString(font, glyph, 0, 0, color, false);
+        g.pose().popPose();
+    }
+
+    /**
+     * 加载指示 —— 正在加载时右上角亮一个点。
+     *
+     * 它不只是装饰：点了链接之后这里亮一下，就说明点击送到了、导航发起了；
+     * 没亮说明点击根本没到网页。少了它，这两种毛病在玩家眼里长得一模一样，
+     * 只能靠翻日志区分。
+     */
+    private void drawLoadingDot(GuiGraphics g) {
+        if (browser == null || !browser.isLoading()) return;
+        int size = 5;
+        int x = panelX + panelW - size - 3;
+        int y = barY + (BAR_H - size) / 2;
+        g.fill(x, y, x + size, y + size, PhoneTheme.FONT_COLOR_PRICE);
     }
 
     private static boolean hit(double mx, double my, int x, int y, int w, int h) {

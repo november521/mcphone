@@ -138,6 +138,8 @@ public final class McefBackend implements IBrowserBackend {
 
         @Override public void reload() { handle.reload(); }
 
+        @Override public boolean isLoading() { return handle.isLoading(); }
+
         @Override
         public void close() {
             if (closed) return;
