@@ -152,6 +152,16 @@ public final class BrowserScreen extends Screen {
         urlBox.setResponder(s -> { if (!writingUrl) urlEdited = true; });
         addRenderableWidget(urlBox);
 
+        // 新的地址栏是空的，"玩家正在编辑"这个状态也得跟着清掉。
+        //
+        // init() 在窗口大小变化时会被再调一次：rebuildWidgets 清掉旧部件，上面
+        // new 出一个空的 EditBox——而 urlEdited 是实例字段，活了下来。玩家如果
+        // 正好在改地址栏时拖了一下窗口，它就永远停在 true，同步条件 !urlEdited
+        // 再也不成立，地址栏从此空着、不跟随网页，除非点一下视口才复位。
+        //
+        // 与 1.1.24 修掉的"地址栏冻死"是同一类毛病，只是触发条件换成了 resize。
+        urlEdited = false;
+
         // init() 在窗口大小变化时会被再调一次。浏览器只建一次，之后只改尺寸——
         // 每次重建都会丢掉玩家的浏览历史与页面状态，而窗口拖一下就触发
         if (browser == null && failure == null) {
