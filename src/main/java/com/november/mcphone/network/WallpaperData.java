@@ -8,7 +8,7 @@ import com.mojang.serialization.codecs.RecordCodecBuilder;
  *
  * 空字符串 "" 表示不使用壁纸（纯色背景）。
  *
- * 注册在 {@link com.november.mcphone.ModAttachments#WALLPAPER}：
+ * 注册在 {@link com.november.mcphone.core.ModAttachments#WALLPAPER}：
  * 本类只负责"是什么、怎么序列化"，注册表归属统一放在注册类里。
  */
 public record WallpaperData(String wallpaperFileName) {

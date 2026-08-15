@@ -16,6 +16,10 @@ import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.ModContainer;
 import net.neoforged.neoforge.registries.DeferredRegister;
 import net.neoforged.neoforge.registries.DeferredItem;
+import com.november.mcphone.core.ModAttachments;
+import com.november.mcphone.core.ModCreativeTabs;
+import com.november.mcphone.core.ModDataComponents;
+import com.november.mcphone.core.PhoneItem;
 
 @Mod(MCphone.MODID)
 public class MCphone {
@@ -47,9 +51,9 @@ public class MCphone {
         ITEMS.register(modEventBus);
         ModDataComponents.COMPONENTS.register(modEventBus);
         ModCreativeTabs.TABS.register(modEventBus);
-        com.november.mcphone.menu.ModMenus.MENUS.register(modEventBus);
+        com.november.mcphone.core.menu.ModMenus.MENUS.register(modEventBus);
         ModAttachments.ATTACHMENT_TYPES.register(modEventBus);
-        modEventBus.addListener(com.november.mcphone.network.NetworkHandler::register);
+        modEventBus.addListener(com.november.mcphone.core.net.NetworkHandler::register);
 
         // 与外部模组的兼容处理。放在自家注册之后：兼容模块可能要看我们已经
         // 注册了什么，反过来则不成立。

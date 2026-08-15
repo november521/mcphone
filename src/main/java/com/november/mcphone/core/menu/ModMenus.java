@@ -1,4 +1,4 @@
-package com.november.mcphone.menu;
+package com.november.mcphone.core.menu;
 
 import com.november.mcphone.MCphone;
 import net.minecraft.core.registries.Registries;

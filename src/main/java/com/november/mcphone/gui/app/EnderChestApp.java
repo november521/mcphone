@@ -2,6 +2,8 @@ package com.november.mcphone.gui.app;
 
 import com.november.mcphone.network.OpenEnderChestPacket;
 import net.neoforged.neoforge.network.PacketDistributor;
+import com.november.mcphone.core.client.PhoneApp;
+import com.november.mcphone.core.client.PhoneScreenRegistry;
 
 /**
  * 便携末影箱 App —— 在手机里打开自己的末影箱。

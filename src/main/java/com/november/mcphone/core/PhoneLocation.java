@@ -1,4 +1,4 @@
-package com.november.mcphone;
+package com.november.mcphone.core;
 
 import com.november.mcphone.compat.CuriosCompat;
 import io.netty.buffer.ByteBuf;

@@ -1,7 +1,7 @@
 package com.november.mcphone.notes;
 
-import com.november.mcphone.ModAttachments;
-import com.november.mcphone.PhoneItem;
+import com.november.mcphone.core.ModAttachments;
+import com.november.mcphone.core.PhoneItem;
 import com.november.mcphone.util.TextSanitizer;
 import net.minecraft.server.level.ServerPlayer;
 

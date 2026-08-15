@@ -1,9 +1,10 @@
-package com.november.mcphone.client;
+package com.november.mcphone.core.client;
 
-import com.november.mcphone.PhoneLocation;
-import com.november.mcphone.gui.PhoneScreen;
+import com.november.mcphone.core.PhoneLocation;
+import com.november.mcphone.core.client.PhoneScreen;
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.entity.player.Player;
+import com.november.mcphone.core.PhoneItem;
 
 /**
  * 打开手机主界面。客户端专用。

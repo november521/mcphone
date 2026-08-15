@@ -32,7 +32,7 @@
  * 而校验期会检查的参数类型，这里全是两端安全的。于是
  * MyModClientHooks 在服务端从头到尾不会被加载。
  *
- * MCphone 自己的 com.november.mcphone.client.PhoneScreenOpener 就是
+ * MCphone 自己的 com.november.mcphone.core.client.PhoneScreenOpener 就是
  * 这个写法的实例，可以照抄。
  */
 package com.november.mcphone.api.client;

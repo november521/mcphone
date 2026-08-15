@@ -1,10 +1,11 @@
-package com.november.mcphone;
+package com.november.mcphone.core;
 
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.CreativeModeTab;
 import net.neoforged.neoforge.registries.DeferredRegister;
 import net.neoforged.neoforge.registries.DeferredHolder;
+import com.november.mcphone.MCphone;
 
 public class ModCreativeTabs {
 

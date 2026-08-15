@@ -1,4 +1,4 @@
-package com.november.mcphone.client;
+package com.november.mcphone.core.client;
 
 import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.client.KeyMapping;

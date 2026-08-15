@@ -1,4 +1,4 @@
-package com.november.mcphone.gui;
+package com.november.mcphone.core.client;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;

@@ -1,6 +1,6 @@
-package com.november.mcphone.menu;
+package com.november.mcphone.core.menu;
 
-import com.november.mcphone.PhoneItem;
+import com.november.mcphone.core.PhoneItem;
 import net.minecraft.world.Container;
 import net.minecraft.world.SimpleContainer;
 import net.minecraft.world.entity.player.Inventory;

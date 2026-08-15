@@ -1,4 +1,4 @@
-package com.november.mcphone.gui;
+package com.november.mcphone.core.client;
 
 import com.november.mcphone.api.client.IPhoneApp;
 import com.november.mcphone.api.client.store.AppInfo;
@@ -7,11 +7,24 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
-import com.november.mcphone.PhoneLocation;
+import com.november.mcphone.core.PhoneLocation;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import com.november.mcphone.gui.AboutPage;
+import com.november.mcphone.gui.AppDetail;
+import com.november.mcphone.gui.AppStore;
+import com.november.mcphone.gui.ChatAddContact;
+import com.november.mcphone.gui.ChatConversation;
+import com.november.mcphone.gui.ChatList;
+import com.november.mcphone.gui.CompanionApps;
+import com.november.mcphone.gui.DeviceNameEditor;
+import com.november.mcphone.gui.Gallery;
+import com.november.mcphone.gui.MusicPlayer;
+import com.november.mcphone.gui.NoteEditor;
+import com.november.mcphone.gui.NotesList;
+import com.november.mcphone.gui.WallpaperPicker;
 
 /**
  * 手机主屏幕 GUI。
@@ -600,7 +613,7 @@ public final class PhoneScreen extends Screen {
     private String currentDeviceNameLabel() {
         if (minecraft == null || minecraft.player == null) return "";
         String name = location.resolve(minecraft.player)
-                .get(com.november.mcphone.ModDataComponents.DEVICE_NAME.get());
+                .get(com.november.mcphone.core.ModDataComponents.DEVICE_NAME.get());
         return (name == null || name.isBlank())
                 ? Component.translatable("mcphone.settings.device_name_unset").getString()
                 : name;

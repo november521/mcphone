@@ -15,6 +15,8 @@ import javax.sound.sampled.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
+import com.november.mcphone.core.client.PhoneScreen;
+import com.november.mcphone.core.client.PhoneTheme;
 
 /**
  * 音乐播放器 —— 由 PhoneScreen 嵌入渲染。

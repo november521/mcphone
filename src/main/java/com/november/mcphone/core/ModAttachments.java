@@ -1,4 +1,4 @@
-package com.november.mcphone;
+package com.november.mcphone.core;
 
 import com.november.mcphone.chat.ChatReadState;
 import com.november.mcphone.cost.PurchasedApps;
@@ -9,6 +9,7 @@ import net.neoforged.neoforge.registries.DeferredRegister;
 import net.neoforged.neoforge.registries.NeoForgeRegistries;
 
 import java.util.function.Supplier;
+import com.november.mcphone.MCphone;
 
 /**
  * 玩家附着数据（Attachment）注册。

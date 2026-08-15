@@ -1,8 +1,8 @@
-package com.november.mcphone.gui.app;
+package com.november.mcphone.core.client;
 
 import com.november.mcphone.api.client.IPhoneApp;
 import com.november.mcphone.MCphone;
-import com.november.mcphone.gui.PhoneSkin;
+import com.november.mcphone.core.client.PhoneSkin;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.resources.language.I18n;
 import net.minecraft.network.chat.Component;

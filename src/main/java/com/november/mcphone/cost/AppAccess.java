@@ -1,6 +1,6 @@
 package com.november.mcphone.cost;
 
-import com.november.mcphone.ModAttachments;
+import com.november.mcphone.core.ModAttachments;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 

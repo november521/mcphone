@@ -1,7 +1,8 @@
 package com.november.mcphone.gui.app;
 
-import com.november.mcphone.gui.PhoneScreen;
+import com.november.mcphone.core.client.PhoneScreen;
 import net.minecraft.client.Minecraft;
+import com.november.mcphone.core.client.PhoneApp;
 
 /**
  * 聊天 App —— 联系人与消息合并在一起，形如常见的即时通讯软件。

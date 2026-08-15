@@ -1,9 +1,9 @@
 package com.november.mcphone.client;
 
-import com.november.mcphone.PhoneItem;
+import com.november.mcphone.core.PhoneItem;
 import com.november.mcphone.chat.ChatMessage;
-import com.november.mcphone.gui.PhoneScreen;
-import com.november.mcphone.gui.PhoneToast;
+import com.november.mcphone.core.client.PhoneScreen;
+import com.november.mcphone.core.client.PhoneToast;
 import com.november.mcphone.network.chat.ChatClientCache;
 import com.november.mcphone.network.chat.ConversationSummary;
 import net.minecraft.client.Minecraft;

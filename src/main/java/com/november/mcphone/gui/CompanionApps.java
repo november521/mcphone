@@ -11,6 +11,8 @@ import net.neoforged.fml.ModList;
 
 import java.util.ArrayList;
 import java.util.List;
+import com.november.mcphone.core.client.PhoneScreenRegistry;
+import com.november.mcphone.core.client.PhoneTheme;
 
 /**
  * 联动 App 那一页 —— 哪些 App 靠别的模组撑着，以及那些模组装没装。

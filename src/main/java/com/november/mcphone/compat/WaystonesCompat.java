@@ -11,6 +11,7 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.neoforged.fml.ModList;
+import com.november.mcphone.core.menu.ModMenus;
 
 /**
  * Waystones（传送石碑）兼容层 —— 让手机里的「传送石」App 打开它的选点界面。

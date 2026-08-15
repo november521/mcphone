@@ -18,6 +18,8 @@ import org.joml.Matrix4f;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import com.november.mcphone.core.client.PhoneSkin;
+import com.november.mcphone.core.client.PhoneTheme;
 
 /**
  * 浏览器界面 —— 一块比手机大得多的面板，装整个网页。

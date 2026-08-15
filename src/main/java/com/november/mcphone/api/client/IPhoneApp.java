@@ -6,6 +6,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.neoforged.fml.ModList;
 
 import java.util.List;
+import com.november.mcphone.core.client.PhoneApp;
 
 /**
  * MCphone App API —— 开放的 App 接口。

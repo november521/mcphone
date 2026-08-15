@@ -3,6 +3,7 @@ package com.november.mcphone.network.store;
 import com.november.mcphone.cost.PurchasedApps;
 import net.minecraft.resources.ResourceLocation;
 import net.neoforged.neoforge.network.PacketDistributor;
+import com.november.mcphone.core.client.PhoneScreenRegistry;
 
 /**
  * 客户端这一侧记着"我买过哪些 App"。

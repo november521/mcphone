@@ -1,6 +1,6 @@
-package com.november.mcphone.gui;
+package com.november.mcphone.core.client;
 
-import com.november.mcphone.menu.PhoneContainerMenu;
+import com.november.mcphone.core.menu.PhoneContainerMenu;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.network.chat.Component;

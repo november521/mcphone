@@ -43,3 +43,6 @@
  * {@code api.cost} 下的东西没有这个限制，随便用。
  */
 package com.november.mcphone.api;
+
+import com.november.mcphone.core.PhoneItem;
+import com.november.mcphone.core.client.PhoneScreen;

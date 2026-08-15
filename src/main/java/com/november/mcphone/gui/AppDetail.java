@@ -10,6 +10,10 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
+import com.november.mcphone.core.client.PhoneScreen;
+import com.november.mcphone.core.client.PhoneScreenRegistry;
+import com.november.mcphone.core.client.PhoneSkin;
+import com.november.mcphone.core.client.PhoneTheme;
 
 
 /**

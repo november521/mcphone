@@ -1,4 +1,4 @@
-package com.november.mcphone.gui;
+package com.november.mcphone.core.client;
 
 import com.november.mcphone.chat.ChatMessage;
 import net.minecraft.client.gui.Font;

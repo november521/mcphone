@@ -1,7 +1,7 @@
 package com.november.mcphone.chat;
 
-import com.november.mcphone.ModAttachments;
-import com.november.mcphone.PhoneItem;
+import com.november.mcphone.core.ModAttachments;
+import com.november.mcphone.core.PhoneItem;
 import com.november.mcphone.network.chat.ConversationSummary;
 import com.november.mcphone.network.chat.OnlinePlayer;
 import com.november.mcphone.network.chat.Relation;

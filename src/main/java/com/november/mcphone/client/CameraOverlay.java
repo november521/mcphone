@@ -4,6 +4,7 @@ import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.Mth;
+import com.november.mcphone.core.client.MCphoneKeyBindings;
 
 /**
  * 相机取景框覆盖层 —— 代码绘制版。

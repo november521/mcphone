@@ -15,6 +15,9 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.UUID;
+import com.november.mcphone.core.client.PhoneSkin;
+import com.november.mcphone.core.client.PhoneTheme;
+import com.november.mcphone.core.client.PlayerAvatar;
 
 /**
  * 聊天 App 的会话列表。

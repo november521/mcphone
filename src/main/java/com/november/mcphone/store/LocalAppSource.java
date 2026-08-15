@@ -4,7 +4,7 @@ import com.november.mcphone.MCphone;
 import com.november.mcphone.api.client.IPhoneApp;
 import com.november.mcphone.api.client.store.AppInfo;
 import com.november.mcphone.api.client.store.IAppSource;
-import com.november.mcphone.gui.PhoneScreenRegistry;
+import com.november.mcphone.core.client.PhoneScreenRegistry;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 

@@ -1,7 +1,8 @@
-package com.november.mcphone.client;
+package com.november.mcphone.core.client;
 
 import net.minecraft.client.Minecraft;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
+import com.november.mcphone.core.PhoneLocation;
 
 /**
  * 快捷键开机。

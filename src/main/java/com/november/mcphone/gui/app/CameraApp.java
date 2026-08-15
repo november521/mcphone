@@ -2,6 +2,7 @@ package com.november.mcphone.gui.app;
 
 import com.november.mcphone.client.CameraMode;
 import net.minecraft.client.Minecraft;
+import com.november.mcphone.core.client.PhoneApp;
 
 /**
  * 相机 App —— 进入相机模式拍照。
@@ -11,7 +12,7 @@ import net.minecraft.client.Minecraft;
  * 存入 <游戏目录>/screenshots/，与 F2 完全一致。
  *
  * 按键可在原版「选项 → 按键设置 → MCphone」中修改，
- * 见 {@link com.november.mcphone.client.MCphoneKeyBindings}。
+ * 见 {@link com.november.mcphone.core.client.MCphoneKeyBindings}。
  *
  * 贴图: assets/mcphone/textures/app/camera.png (20×20)
  */

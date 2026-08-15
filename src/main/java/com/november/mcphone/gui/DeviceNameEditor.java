@@ -1,7 +1,7 @@
 package com.november.mcphone.gui;
 
-import com.november.mcphone.ModDataComponents;
-import com.november.mcphone.PhoneLocation;
+import com.november.mcphone.core.ModDataComponents;
+import com.november.mcphone.core.PhoneLocation;
 import com.november.mcphone.network.SetDeviceNamePacket;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
@@ -11,6 +11,8 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.item.ItemStack;
 import net.neoforged.neoforge.network.PacketDistributor;
+import com.november.mcphone.core.client.PhoneScreen;
+import com.november.mcphone.core.client.PhoneTheme;
 
 /**
  * 设备名称编辑界面 —— 由 PhoneScreen 嵌入渲染。

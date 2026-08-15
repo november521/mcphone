@@ -5,6 +5,7 @@ import net.minecraft.client.Screenshot;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.neoforge.client.event.RenderGuiEvent;
 import net.neoforged.neoforge.client.event.ScreenEvent;
+import com.november.mcphone.core.client.MCphoneKeyBindings;
 
 /**
  * 相机模式的游戏总线监听。

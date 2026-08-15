@@ -8,6 +8,7 @@ import net.neoforged.neoforge.network.handling.IPayloadContext;
 import net.neoforged.neoforge.network.registration.PayloadRegistrar;
 
 import java.util.List;
+import com.november.mcphone.core.net.NetworkHandler;
 
 /**
  * 聊天相关网络包的注册与处理。

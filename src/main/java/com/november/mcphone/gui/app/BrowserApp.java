@@ -6,6 +6,7 @@ import com.november.mcphone.gui.BrowserScreen;
 import net.minecraft.client.Minecraft;
 
 import java.util.List;
+import com.november.mcphone.core.client.PhoneApp;
 
 /**
  * 浏览器 App —— 在手机里上网。

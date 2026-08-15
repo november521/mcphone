@@ -1,4 +1,4 @@
-package com.november.mcphone;
+package com.november.mcphone.core;
 
 import com.mojang.serialization.Codec;
 import net.minecraft.core.component.DataComponentType;
@@ -6,6 +6,7 @@ import net.minecraft.core.registries.Registries;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.neoforged.neoforge.registries.DeferredHolder;
 import net.neoforged.neoforge.registries.DeferredRegister;
+import com.november.mcphone.MCphone;
 
 /**
  * MCphone 的数据组件注册。

@@ -1,14 +1,14 @@
-package com.november.mcphone.network;
+package com.november.mcphone.core.net;
 
 import com.november.mcphone.MCphone;
-import com.november.mcphone.ModAttachments;
-import com.november.mcphone.ModDataComponents;
-import com.november.mcphone.PhoneItem;
+import com.november.mcphone.core.ModAttachments;
+import com.november.mcphone.core.ModDataComponents;
+import com.november.mcphone.core.PhoneItem;
 import com.november.mcphone.cost.AppAccess;
 import net.minecraft.ChatFormatting;
 import net.minecraft.resources.ResourceLocation;
-import com.november.mcphone.menu.ModMenus;
-import com.november.mcphone.menu.PhoneContainerMenu;
+import com.november.mcphone.core.menu.ModMenus;
+import com.november.mcphone.core.menu.PhoneContainerMenu;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.SimpleMenuProvider;
@@ -17,6 +17,14 @@ import net.minecraft.world.item.ItemStack;
 import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 import net.neoforged.neoforge.network.registration.PayloadRegistrar;
+import com.november.mcphone.core.client.PhoneScreen;
+import com.november.mcphone.core.client.PhoneScreenRegistry;
+import com.november.mcphone.network.OpenEnderChestPacket;
+import com.november.mcphone.network.OpenWaystoneSelectionPacket;
+import com.november.mcphone.network.SetDeviceNamePacket;
+import com.november.mcphone.network.SetWallpaperPacket;
+import com.november.mcphone.network.SyncWallpaperPacket;
+import com.november.mcphone.network.WallpaperData;
 
 /**
  * 网络包处理 —— 注册并处理所有 MCphone 网络包。

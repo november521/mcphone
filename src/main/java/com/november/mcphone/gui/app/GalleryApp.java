@@ -1,7 +1,8 @@
 package com.november.mcphone.gui.app;
 
-import com.november.mcphone.gui.PhoneScreen;
+import com.november.mcphone.core.client.PhoneScreen;
 import net.minecraft.client.Minecraft;
+import com.november.mcphone.core.client.PhoneApp;
 
 /**
  * 相册 App —— 浏览 <游戏目录>/screenshots/ 下的照片。

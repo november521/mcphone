@@ -6,6 +6,7 @@ import com.november.mcphone.network.OpenWaystoneSelectionPacket;
 import net.neoforged.neoforge.network.PacketDistributor;
 
 import java.util.List;
+import com.november.mcphone.core.client.PhoneApp;
 
 /**
  * 传送石 App —— 在手机里打开传送石碑（Waystones）的选点界面。

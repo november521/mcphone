@@ -13,6 +13,8 @@ import net.neoforged.fml.ModList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import com.november.mcphone.core.client.PhoneScreenRegistry;
+import com.november.mcphone.core.client.PhoneTheme;
 
 /**
  * 关于页 —— 这部手机是什么、哪一版、跟谁配合得上。

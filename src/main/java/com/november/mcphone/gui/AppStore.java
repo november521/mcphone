@@ -10,6 +10,10 @@ import net.minecraft.network.chat.Component;
 
 import java.util.ArrayList;
 import java.util.List;
+import com.november.mcphone.core.client.PhoneScreen;
+import com.november.mcphone.core.client.PhoneScreenRegistry;
+import com.november.mcphone.core.client.PhoneSkin;
+import com.november.mcphone.core.client.PhoneTheme;
 
 /**
  * 应用商店首页 —— 可下载 App 的图标网格。

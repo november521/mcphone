@@ -1,6 +1,6 @@
-package com.november.mcphone;
+package com.november.mcphone.core;
 
-import com.november.mcphone.client.PhoneScreenOpener;
+import com.november.mcphone.core.client.PhoneScreenOpener;
 import com.november.mcphone.compat.CuriosCompat;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResultHolder;
@@ -12,6 +12,7 @@ import net.minecraft.world.level.Level;
 import net.minecraft.network.chat.Component;
 
 import java.util.List;
+import com.november.mcphone.MCphone;
 
 /**
  * MCphone 核心物品 —— 右键打开手机主界面

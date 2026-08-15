@@ -1,7 +1,7 @@
 package com.november.mcphone.network;
 
 import com.november.mcphone.MCphone;
-import com.november.mcphone.PhoneLocation;
+import com.november.mcphone.core.PhoneLocation;
 import com.november.mcphone.util.TextSanitizer;
 import io.netty.buffer.ByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
