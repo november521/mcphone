@@ -1,8 +1,11 @@
 package com.november.mcphone.gui.app;
 
+import com.november.mcphone.api.client.RequiredMod;
 import com.november.mcphone.client.browser.BrowserBackends;
 import com.november.mcphone.gui.BrowserScreen;
 import net.minecraft.client.Minecraft;
+
+import java.util.List;
 
 /**
  * 浏览器 App —— 在手机里上网。
@@ -22,18 +25,24 @@ public final class BrowserApp extends PhoneApp {
     }
 
     /**
-     * 没装 MCEF 就当这个 App 不存在——主屏与应用商店里都不出现。
+     * 硬前置：MCEF。没装就当这个 App 不存在——主屏与商店的普通列表里都不出现，
+     * 只在商店的「联动 App」那一页里标着"未装"露个面，让玩家知道装了能多个什么。
      *
-     * 这里问的是"模组装没装"，不是"后端此刻能不能用"：MCEF 要先下载约 200 MB
-     * 原生库才算就绪，那可能要等几分钟。按"能不能用"来登记的话，玩家进游戏时
-     * App 不在，几分钟后又冒出来——而目录只在启动时构建一次，实际结果是它这一
-     * 局都不会出现。
+     * ============================================================
+     * 这里说的是"装没装"，不是"此刻能不能用"
+     * ============================================================
      *
-     * 所以登记看装没装，"还没就绪"由界面自己说明。
+     * MCEF 要先下载约 200 MB 原生库才算就绪，可能要等几分钟。按"能不能用"来
+     * 登记的话，玩家进游戏时 App 不在，几分钟后又冒出来——而目录只在启动时
+     * 构建一次，实际结果是它这一局都不会出现。
+     *
+     * 所以登记只看装没装，"还没就绪"由浏览器界面自己说明。
+     *
+     * modid 取 BrowserBackends 的常量，不在这儿再写一遍字符串。
      */
     @Override
-    public boolean isAvailable() {
-        return BrowserBackends.isMcefLoaded();
+    public List<RequiredMod> requiredMods() {
+        return List.of(new RequiredMod(BrowserBackends.MCEF_MODID, "MCEF"));
     }
 
     @Override

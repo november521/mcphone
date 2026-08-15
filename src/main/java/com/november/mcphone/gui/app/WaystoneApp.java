@@ -1,8 +1,11 @@
 package com.november.mcphone.gui.app;
 
+import com.november.mcphone.api.client.RequiredMod;
 import com.november.mcphone.compat.WaystonesCompat;
 import com.november.mcphone.network.OpenWaystoneSelectionPacket;
 import net.neoforged.neoforge.network.PacketDistributor;
+
+import java.util.List;
 
 /**
  * 传送石 App —— 在手机里打开传送石碑（Waystones）的选点界面。
@@ -26,15 +29,21 @@ public final class WaystoneApp extends PhoneApp {
     }
 
     /**
-     * 没装 Waystones 就当这个 App 不存在——主屏与应用商店里都不出现。
+     * 硬前置：Waystones。没装就当这个 App 不存在——主屏与商店的普通列表里都
+     * 不出现，只在商店的「联动 App」那一页里标着"未装"露个面，让玩家知道装了
+     * 能多个什么。
      *
-     * 判断委托给兼容层而不是在这里直接查 ModList：modid 字符串只该有一处
-     * 权威来源，两处各写一份，改动时漏一处就会出现"商店里有、点了没反应"
-     * 这种最难查的状态。
+     * 声明前置而不是覆盖 isAvailable()：这样"可用性"与"缺什么"是同一个来源，
+     * 不会出现界面说缺 A、实际判断查的是 B。默认的 isAvailable() 就按这份声明
+     * 回答，关于页的联动模组列表也从这里汇总。
+     *
+     * modid 取兼容层的常量，不在这儿再写一遍字符串。
      */
     @Override
-    public boolean isAvailable() {
-        return WaystonesCompat.isLoaded();
+    public List<RequiredMod> requiredMods() {
+        return List.of(new RequiredMod(
+                WaystonesCompat.WAYSTONES_MODID,
+                "Waystones（传送石碑）"));
     }
 
     /**

@@ -105,7 +105,14 @@ public final class WaystonesCompat {
 
     private WaystonesCompat() {}
 
-    private static final String WAYSTONES_MODID = "waystones";
+    /**
+     * 传送石碑的 modid。
+     *
+     * 公开的：传送石 App 要拿它声明前置（{@code IPhoneApp.requiredMods()}），
+     * 而这个字符串只该有一处权威来源。各写一份的话，改动时漏一处就会出现
+     * "商店里有、点了没反应"这种最难查的状态。
+     */
+    public static final String WAYSTONES_MODID = "waystones";
 
     /**
      * 装没装 Waystones。

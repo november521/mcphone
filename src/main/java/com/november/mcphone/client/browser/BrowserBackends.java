@@ -18,7 +18,13 @@ public final class BrowserBackends {
 
     private BrowserBackends() {}
 
-    private static final String MCEF_MODID = "mcef";
+    /**
+     * MCEF 的 modid。
+     *
+     * 公开的：浏览器 App 要拿它声明前置（{@code IPhoneApp.requiredMods()}），
+     * 而这个字符串只该有一处权威来源。
+     */
+    public static final String MCEF_MODID = "mcef";
 
     /**
      * 默认后端：永远不可用。

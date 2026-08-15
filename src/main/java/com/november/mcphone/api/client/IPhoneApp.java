@@ -3,6 +3,9 @@ package com.november.mcphone.api.client;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
+import net.neoforged.fml.ModList;
+
+import java.util.List;
 
 /**
  * MCphone App API —— 开放的 App 接口。
@@ -184,7 +187,50 @@ public interface IPhoneApp {
     default boolean isSystemApp() { return false; }
 
     /**
+     * 这个 App 需要哪些外部模组才能用。默认不需要任何。
+     *
+     * ================================================================
+     * 声明了它，三件事自动发生
+     * ================================================================
+     *
+     * 一、{@link #isAvailable()} 默认就按"是不是全装了"回答，你不用自己写。
+     * 二、你的 App 会出现在应用商店的「联动 App」那一页，缺哪个模组写得
+     *     明明白白——没装的时候也在，玩家才知道装了能多个什么。
+     * 三、手机里「设置 → 关于」的联动模组列表会自动带上它们。
+     *
+     * 第三条是这个方法存在的直接原因：那份列表原来是手写的，加了浏览器
+     * App 却忘了往里加 MCEF，于是玩家看不到自己缺什么，只会当成 bug 来报。
+     * 手写的清单迟早会漏，所以改成从这里汇总。
+     *
+     * ================================================================
+     * 例子
+     * ================================================================
+     *
+     * {@snippet :
+     * @Override
+     * public List<RequiredMod> requiredMods() {
+     *     return List.of(new RequiredMod("waystones", "Waystones（传送石碑）"));
+     * }
+     * }
+     *
+     * 显示名自己写死，别在运行时查——要显示它的时候那个模组多半没装，
+     * 理由见 {@link RequiredMod}。
+     *
+     * ================================================================
+     * 什么时候【不】该用它
+     * ================================================================
+     *
+     * 你的 App 对某个模组是"锦上添花"而非"没它就不能用"时，别写在这里。
+     * 这里列的是硬前置：缺了就整个 App 不可用。可选的增强属于运行时判断。
+     */
+    default List<RequiredMod> requiredMods() { return List.of(); }
+
+    /**
      * 这个 App 在当前环境下存不存在。返回 false 则连目录都不进。
+     *
+     * 默认按 {@link #requiredMods()} 回答：声明的模组全装了才算可用。绝大多数
+     * 情况下声明前置就够了，不必再覆盖本方法——覆盖了反而会让「联动 App」页
+     * 与真实可用性对不上。判断条件确实说不清时（比如还要看对方的版本）再覆盖。
      *
      * ================================================================
      * 什么时候需要它
@@ -222,7 +268,12 @@ public interface IPhoneApp {
      * 从"可用"变成"不可用"（玩家卸了依赖的模组）时，该 App 会安静地从目录
      * 消失，玩家的安装记录也随之作废；重新装回那个模组，它按首次出现处理。
      */
-    default boolean isAvailable() { return true; }
+    default boolean isAvailable() {
+        for (RequiredMod required : requiredMods()) {
+            if (!ModList.get().isLoaded(required.modId())) return false;
+        }
+        return true;
+    }
 
     /**
      * 是否预装。决定该 App 首次被发现时的初始安装状态：
