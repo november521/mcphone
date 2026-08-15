@@ -54,6 +54,37 @@ public final class NoteEditor {
      */
     private static final int COUNTER_ROW_H = 13;
 
+    /**
+     * 给输入框右侧的滚动条留出的宽度。
+     *
+     * ============================================================
+     * 不留这块地方，滚动条会画到手机外面去
+     * ============================================================
+     *
+     * 原版 AbstractScrollWidget.renderScrollBar 是这么画的：
+     *
+     *     int j = this.getX() + this.width;
+     *     guiGraphics.blitSprite(SCROLLER_SPRITE, j, k, 8, i);
+     *
+     * 起点是控件右边缘，也就是画在控件【外面】，宽度写死 8。
+     *
+     * 手机屏幕宽 120，左右各留 4 的边距，输入框原来直接占满 112——滚动条于是
+     * 落在 116～124，而屏幕右边界是 120，有 4 像素压在机身边框上。
+     *
+     * ============================================================
+     * 为什么不把它改细
+     * ============================================================
+     *
+     * 改不了。renderScrollBar 是 private，子类覆盖不到；那个 8 是方法里的字面量，
+     * 不走 scrollbarWidth()（那个方法虽然是 public，但渲染压根没调它）。
+     *
+     * 要改只能把整个 MultiLineEditBox 重写一遍，而我们用它正是图它自带的换行、
+     * 光标移动、拖选、滚动——为了一条滚动条的粗细把这些全接过来不划算。
+     *
+     * 所以只解决越界：输入框让出这 8 像素，滚动条正好落在右边距以内。
+     */
+    private static final int SCROLL_BAR_W = 8;
+
     private static final int COLOR_SAVE = 0xFF66FF88;
     private static final int COLOR_PRINT = 0xFF88CCFF;
     private static final int COLOR_DELETE = 0xFFFF8888;
@@ -169,10 +200,14 @@ public final class NoteEditor {
         final int buttonY = phoneTop + screenH - navH - BUTTON_ROW_H;
         final int boxH = buttonY - top - COUNTER_ROW_H;
 
+        // 输入框比内容区窄一条滚动条：那东西画在控件外面，不让位就伸出屏幕。
+        // 按钮行仍然用整个 w，它没有这个问题
+        final int boxW = w - SCROLL_BAR_W;
+
         // 首次渲染才创建：这里才知道机身坐标。之后每帧同步位置，
         // 手机居中的位置会随窗口大小变化
         if (box == null) {
-            box = new MultiLineEditBox(font, x, top, w, boxH,
+            box = new MultiLineEditBox(font, x, top, boxW, boxH,
                     Component.translatable("mcphone.notes.placeholder"),
                     Component.translatable("mcphone.app.notes"));
             box.setCharacterLimit(Note.MAX_BODY_LENGTH);
@@ -180,7 +215,7 @@ public final class NoteEditor {
         } else {
             box.setX(x);
             box.setY(top);
-            box.setWidth(w);
+            box.setWidth(boxW);
             box.setHeight(boxH);
         }
 
