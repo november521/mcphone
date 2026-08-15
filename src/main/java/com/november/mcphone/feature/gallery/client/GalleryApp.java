@@ -21,10 +21,6 @@ public final class GalleryApp extends PhoneApp {
         super("gallery");
     }
 
-    /** 非预装：默认不在主屏，玩家可从应用商店下载 */
-    @Override
-    public boolean isPreinstalled() { return false; }
-
     @Override
     public void onPress() {
         // 与音乐、商店一致：相册是手机内的一个模式，不另开 Screen。

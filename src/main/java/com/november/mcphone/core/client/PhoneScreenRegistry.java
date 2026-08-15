@@ -556,10 +556,10 @@ public final class PhoneScreenRegistry {
         INSTALLED.clear();
         for (Map.Entry<ResourceLocation, IPhoneApp> e : CATALOG.entrySet()) {
             ResourceLocation id = e.getKey();
-            // 目录中出现过 → 沿用玩家的选择；首次出现 → 看是否预装
+            // 目录中出现过 → 沿用玩家的选择；首次出现 → 看该不该预装
             boolean on = known.contains(id)
                     ? installed.contains(id)
-                    : e.getValue().isPreinstalled();
+                    : shouldPreinstall(id, e.getValue());
             if (on) INSTALLED.add(id);
         }
 
@@ -568,6 +568,40 @@ public final class PhoneScreenRegistry {
 
         // 把本次新发现的 App 写回 known，下次启动才能区分"卸载过"和"首次出现"
         saveState();
+    }
+
+
+    /**
+     * 一个首次出现的 App 该不该直接躺在主屏上。
+     *
+     * ============================================================
+     * 两个条件，问的是两件事
+     * ============================================================
+     *
+     * isPreinstalled() 是【App 自己的意愿】——"我想不想默认出现在主屏"。
+     * 附属完全可能有个免费 App 却希望它从商店里开始，那是它的选择，我们不越权。
+     *
+     * 价格是【硬约束】——付费 App 不能白送。这一条不看谁的意愿：一个 App 声明了
+     * 价格却忘了把 isPreinstalled 改成 false，玩家就会白得一个本该花钱的东西。
+     * 内建的两个付费 App 各自也覆盖了 isPreinstalled，两道都在，是刻意的：这里
+     * 出错的代价是"付费内容白送"，值得多一层。
+     *
+     * ============================================================
+     * 为什么免费的一律预装
+     * ============================================================
+     *
+     * 新玩家第一次打开手机，看到的应该是一部能用的手机，而不是一个几乎空的
+     * 主屏加一句"去商店下载"。免费的东西让他先去商店走一趟，这一趟没有任何
+     * 意义——他不需要做决定，也没有别的选项。
+     *
+     * 相机与相册在 1.3.3 之前就卡在这儿：明明免费，却要先进商店装一次。
+     *
+     * 玩家自己卸载过的不受影响：那属于"目录中出现过"，走的是上面 known 那条
+     * 分支，沿用他的选择。
+     */
+    private static boolean shouldPreinstall(ResourceLocation id, IPhoneApp app) {
+        if (AppPriceRegistry.isPaid(id)) return false;
+        return app.isPreinstalled();
     }
 
     private static void saveState() {
