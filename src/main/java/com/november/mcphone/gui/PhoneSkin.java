@@ -122,7 +122,11 @@ public final class PhoneSkin {
          */
         BROWSER_PANEL("browser_panel"),
 
-        /** 浏览器顶部地址栏那一条的底。建议 320×18 */
+        /**
+         * 浏览器工具条那一条的底（后退/前进/刷新 + 地址栏）。建议 320×22。
+         *
+         * 它在面板【外面】，浮在面板上方的留白里，不占网页的高度。
+         */
         BROWSER_BAR("browser_bar");
 
         private final ResourceLocation texture;
