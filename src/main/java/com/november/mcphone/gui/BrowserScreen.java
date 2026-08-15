@@ -69,9 +69,13 @@ public final class BrowserScreen extends Screen {
 
     private EditBox urlBox;
 
-    // 面板与视口的几何，每帧 layout 时算一次，输入处理复用
+    // 面板与视口的几何，每帧 layout 时算一次，输入处理复用。
+    // 1.1.22 起视口就是整块面板——工具条挪到了面板【上方】的留白里
     private int panelX, panelY, panelW, panelH;
     private int viewX, viewY, viewW, viewH;
+
+    /** 工具条那一行的 y。它在面板外面，不占网页空间 */
+    private int barY;
 
     /** 上一次告诉浏览器的尺寸，用来避免每帧都 resize */
     private int lastPxW = -1, lastPxH = -1;
@@ -93,7 +97,7 @@ public final class BrowserScreen extends Screen {
         super.init();
         layout();
 
-        urlBox = new EditBox(font, viewX + NAV_BTN_W * 3 + 6, panelY + 3,
+        urlBox = new EditBox(font, panelX + NAV_BTN_W * 3 + 6, barY + 3,
                 panelW - NAV_BTN_W * 3 - 10, BAR_H - 6,
                 Component.translatable("mcphone.browser.url"));
         urlBox.setMaxLength(2000);
@@ -114,18 +118,34 @@ public final class BrowserScreen extends Screen {
         syncBrowserSize();
     }
 
-    /** 算出面板与视口的位置。init 与每帧渲染前都要保证它是新的 */
+    /**
+     * 算出工具条、面板与视口的位置。init 与每帧渲染前都要保证它是新的。
+     *
+     * 工具条【不在】面板里，而是浮在面板上方的留白里。原先它嵌在面板顶部，
+     * 一来吃掉网页的高度，二来看着像网页自己的一部分。挪出来之后面板整块都是
+     * 网页，工具条也真的"更上方"了。
+     *
+     * 上留白因此要保证放得下它，所以单独算，不跟左右底共用一个值。
+     */
     private void layout() {
-        int margin = Math.max(8, (int) (Math.min(width, height) * MARGIN_RATIO));
-        panelX = margin;
-        panelY = margin;
-        panelW = width - margin * 2;
-        panelH = height - margin * 2;
+        int base = (int) (Math.min(width, height) * MARGIN_RATIO);
+        int side = Math.max(8, base);
+        int top = Math.max(BAR_H + 6, base);
+        int bottom = Math.max(8, base);
 
+        panelX = side;
+        panelW = width - side * 2;
+        panelY = top;
+        panelH = height - top - bottom;
+
+        // 工具条贴着面板上沿往上放，留 3 像素缝
+        barY = panelY - BAR_H - 3;
+
+        // 视口＝整块面板
         viewX = panelX;
-        viewY = panelY + BAR_H;
+        viewY = panelY;
         viewW = panelW;
-        viewH = panelH - BAR_H;
+        viewH = panelH;
     }
 
     /** GUI 坐标 → 真实像素 */
@@ -170,6 +190,12 @@ public final class BrowserScreen extends Screen {
         layout();
         syncBrowserSize();
 
+        // 暗化与模糊只画这一次。
+        //
+        // 【别在末尾调 super.render()】：Screen.render 的第一行就是
+        // this.renderBackground(...)，那会把这层暗化【再画一遍，盖在网页上】——
+        // 表现就是网页糊了一层雾，而且只有在网页上才看得出来。部件（地址栏）
+        // 由本方法末尾自己画，不借 super 的手。
         renderBackground(g, mouseX, mouseY, partialTick);
 
         // 面板底 —— 贴图优先，没贴图用主题色兜底
@@ -189,8 +215,8 @@ public final class BrowserScreen extends Screen {
                     viewX + viewW / 2, viewY + viewH / 2 + 2, PhoneTheme.FONT_COLOR_SUBTLE);
         }
 
-        // 部件（地址栏）画在最后，免得被网页盖住
-        super.render(g, mouseX, mouseY, partialTick);
+        // 地址栏自己画。见上面那段注释：这里【不能】调 super.render()
+        urlBox.render(g, mouseX, mouseY, partialTick);
     }
 
     /**
@@ -233,7 +259,7 @@ public final class BrowserScreen extends Screen {
     /** 顶部那一条：后退、前进、刷新，加地址栏 */
     private void renderBar(GuiGraphics g, int mouseX, int mouseY) {
         PhoneSkin.drawOrFill(g, PhoneSkin.Element.BROWSER_BAR,
-                panelX, panelY, panelW, BAR_H, PhoneTheme.COLOR_STATUS_BAR);
+                panelX, barY, panelW, BAR_H, PhoneTheme.COLOR_STATUS_BAR);
 
         drawNavButton(g, 0, "◀", mouseX, mouseY, browser != null && browser.canGoBack());
         drawNavButton(g, 1, "▶", mouseX, mouseY, browser != null && browser.canGoForward());
@@ -250,7 +276,7 @@ public final class BrowserScreen extends Screen {
     private void drawNavButton(GuiGraphics g, int index, String glyph,
                                int mouseX, int mouseY, boolean enabled) {
         int x = panelX + 2 + index * NAV_BTN_W;
-        int y = panelY + 2;
+        int y = barY + 2;
         boolean hovered = enabled && hit(mouseX, mouseY, x, y, NAV_BTN_W, BAR_H - 4);
 
         int color = !enabled ? PhoneTheme.COLOR_BUTTON_DISABLED
@@ -281,7 +307,7 @@ public final class BrowserScreen extends Screen {
         // 导航按钮
         for (int i = 0; i < 3; i++) {
             int x = panelX + 2 + i * NAV_BTN_W;
-            if (hit(mouseX, mouseY, x, panelY + 2, NAV_BTN_W, BAR_H - 4)) {
+            if (hit(mouseX, mouseY, x, barY + 2, NAV_BTN_W, BAR_H - 4)) {
                 onNavButton(i);
                 return true;
             }
