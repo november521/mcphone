@@ -65,7 +65,7 @@ public final class AboutPage {
         g.drawString(font, "v" + MCphone.getVersion(), x, y, PhoneTheme.FONT_COLOR_PRICE, false);
         y += font.lineHeight + 4;
 
-        y = row(g, font, x, y, w, "mcphone.about.author", "november");
+        y = row(g, font, x, y, w, "mcphone.about.author", "november521");
         y = row(g, font, x, y, w, "mcphone.about.game",
                 SharedConstants.getCurrentVersion().getName());
         y = row(g, font, x, y, w, "mcphone.about.apps",
