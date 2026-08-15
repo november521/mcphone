@@ -4,6 +4,7 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.november.mcphone.MCphone;
 import com.november.mcphone.api.client.IPhoneApp;
+import com.november.mcphone.api.client.RequiredMod;
 import com.november.mcphone.cost.AppPriceRegistry;
 import com.november.mcphone.network.store.StoreClientCache;
 import net.minecraft.client.Minecraft;
@@ -72,6 +73,33 @@ public final class PhoneScreenRegistry {
     /** 目录：SPI 发现的全部 App，启动时写入一次，此后永不移除 */
     private static final Map<ResourceLocation, IPhoneApp> CATALOG = new LinkedHashMap<>();
 
+    /**
+     * 前置模组没装、因而没能进目录的 App。
+     *
+     * ============================================================
+     * 为什么留着，而不是像原来那样直接丢掉
+     * ============================================================
+     *
+     * 因为「没装 MCEF 所以没有浏览器」这件事，只有这里知道。丢掉之后玩家再
+     * 也无从得知手机里还能多出什么——他甚至不知道有这么个 App 存在过。
+     *
+     * 应用商店的「联动 App」那一页就是从这儿取数据：把它们标着"未装 XXX"
+     * 列出来，玩家才有机会发现装了对应模组能多个什么。
+     *
+     * ============================================================
+     * 它们【不】进目录，这一点不能松
+     * ============================================================
+     *
+     * 这里的 App 不可安装、不可点开、不出现在主屏与商店的普通列表里。原来
+     * 那句注释仍然成立：商店里躺着一个点了必然报错的东西，比它压根不出现
+     * 更糟。留着只为"说明它需要什么"，不为让它能用。
+     *
+     * 还有一点：这里的实例是活的 Java 对象，而它依赖的模组正好不在。读它的
+     * 名字、图标、简介时必须兜住 Throwable——附属模组完全可能在
+     * getDisplayName() 里碰对方的类，那会抛 NoClassDefFoundError。
+     */
+    private static final Map<ResourceLocation, IPhoneApp> UNAVAILABLE = new LinkedHashMap<>();
+
     /** 已安装 App 的 id 集合，决定主屏显示什么 */
     private static final Set<ResourceLocation> INSTALLED = new LinkedHashSet<>();
 
@@ -121,7 +149,11 @@ public final class PhoneScreenRegistry {
         // App 自己说不该存在（典型是它依赖的模组没装）就到此为止。
         // 这里必须在写入目录【之前】：让它进了目录，应用商店就会把一个
         // 点了必然报错的东西列成"可下载"，比它压根不出现更糟。
+        //
+        // 但不丢掉——记进 UNAVAILABLE，好让「联动 App」那一页能说出它缺什么。
+        // 理由见那个字段的注释。
         if (!app.isAvailable()) {
+            UNAVAILABLE.put(app.getId(), app);
             MCphone.LOGGER.info("[MCphone] App 跳过登记: {}（自称当前不可用）", app.getId());
             return false;
         }
@@ -227,6 +259,53 @@ public final class PhoneScreenRegistry {
             if (!INSTALLED.contains(e.getKey())) out.add(e.getValue());
         }
         return List.copyOf(out);
+    }
+
+    /**
+     * 全部联动 App —— 声明了外部模组前置的那些，不论前置装没装。
+     *
+     * 可用的（前置装了，在目录里）排在前面，不可用的排在后面。这个顺序是有
+     * 意的：玩家一眼先看到"我已经有的"，再看到"还能有的"，而不是从一堆灰条
+     * 里找哪个是亮的。
+     *
+     * @see #requiredModsOf(IPhoneApp) 读前置要走那个方法，不要直接调
+     */
+    public static List<IPhoneApp> getCompanionApps() {
+        ensureLoaded();
+        List<IPhoneApp> out = new ArrayList<>();
+        for (IPhoneApp app : CATALOG.values()) {
+            if (!requiredModsOf(app).isEmpty()) out.add(app);
+        }
+        out.addAll(UNAVAILABLE.values());   // 不可用的必定声明了前置，不必再筛
+        return List.copyOf(out);
+    }
+
+    /** 这个 App 是不是因为前置没装而没能进目录 */
+    public static boolean isUnavailable(IPhoneApp app) {
+        return app != null && UNAVAILABLE.containsKey(app.getId());
+    }
+
+    /**
+     * 读一个 App 声明的前置，读不出来就当没有。
+     *
+     * 兜 Throwable 不是谨慎，是必须：UNAVAILABLE 里的 App 依赖的模组正好不在，
+     * 而附属模组完全可能在 requiredMods() 里引用对方的类（比如拿对方的常量拼
+     * 显示名）。那抛出来的是 NoClassDefFoundError——属于 Error 不是 Exception，
+     * 用后者接不住。
+     *
+     * 接不住的代价是：玩家点开「联动 App」那一页，整个手机界面崩掉——而这一页
+     * 存在的意义只是告诉他缺个模组，这个代价完全不成比例。
+     */
+    public static List<RequiredMod> requiredModsOf(IPhoneApp app) {
+        if (app == null) return List.of();
+        try {
+            List<RequiredMod> mods = app.requiredMods();
+            return mods == null ? List.of() : mods;
+        } catch (Throwable t) {
+            MCphone.LOGGER.warn("[MCphone] 读取 {} 的前置声明失败，当作没有声明",
+                    app.getClass().getName(), t);
+            return List.of();
+        }
     }
 
     /** 按 id 查找目录中的 App（不论是否已安装） */
