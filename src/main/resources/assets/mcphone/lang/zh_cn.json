@@ -112,5 +112,8 @@
   "mcphone.browser.url": "地址",
   "mcphone.browser.no_backend": "浏览器后端不可用",
   "mcphone.browser.mcef_not_ready": "MCEF 还没准备好",
-  "mcphone.browser.need_mcef": "首次使用需要下载约 200 MB 的运行库，稍后再试"
+  "mcphone.browser.need_mcef": "首次使用需要下载约 200 MB 的运行库，稍后再试",
+  "mcphone.store.companion": "联动App",
+  "mcphone.store.companion.empty": "没有联动 App",
+  "mcphone.store.companion.requires": "需要 %s"
 }

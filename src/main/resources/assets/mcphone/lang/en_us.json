@@ -112,5 +112,8 @@
   "mcphone.browser.url": "Address",
   "mcphone.browser.no_backend": "No browser backend available",
   "mcphone.browser.mcef_not_ready": "MCEF is not ready yet",
-  "mcphone.browser.need_mcef": "First use downloads about 200 MB of runtime; try again shortly"
+  "mcphone.browser.need_mcef": "First use downloads about 200 MB of runtime; try again shortly",
+  "mcphone.store.companion": "Integrations",
+  "mcphone.store.companion.empty": "No integration apps",
+  "mcphone.store.companion.requires": "Requires %s"
 }

@@ -24,7 +24,7 @@ import java.util.UUID;
 public final class PhoneScreen extends Screen {
 
     /** 手机导航模式 */
-    public enum Mode { MAIN, SETTINGS, WALLPAPER_PICKER, APP_MANAGER, MUSIC_PLAYER, APP_STORE, APP_DETAIL, ABOUT, GALLERY, DEVICE_NAME, CHAT, CHAT_ADD_CONTACT, CHAT_CONVERSATION, NOTES, NOTE_EDIT }
+    public enum Mode { MAIN, SETTINGS, WALLPAPER_PICKER, APP_MANAGER, MUSIC_PLAYER, APP_STORE, APP_DETAIL, COMPANION_APPS, ABOUT, GALLERY, DEVICE_NAME, CHAT, CHAT_ADD_CONTACT, CHAT_CONVERSATION, NOTES, NOTE_EDIT }
 
 
     // ---- 打开动画 ----
@@ -58,6 +58,7 @@ public final class PhoneScreen extends Screen {
     // ---- 应用商店 ----
     private final AppStore appStore = new AppStore();
     private final AppDetail appDetail = new AppDetail();
+    private final CompanionApps companionApps = new CompanionApps();
 
     // ---- 相册 ----
     private final Gallery gallery = new Gallery();
@@ -118,9 +119,15 @@ public final class PhoneScreen extends Screen {
         // 进详情页不算离开商店：reset 会清掉页码与列表，从详情页退回来
         // 时玩家会莫名其妙回到第一页
         if (this.mode == Mode.APP_STORE
-                && target != Mode.APP_STORE && target != Mode.APP_DETAIL) {
+                && target != Mode.APP_STORE && target != Mode.APP_DETAIL
+                && target != Mode.COMPANION_APPS) {
             appStore.reset();
         }
+
+        // 联动页进出都要动作：进入时重扫一遍（模组装没装只在这时问一次就够），
+        // 离开时清掉页码，下次进来从第一页开始
+        if (this.mode == Mode.COMPANION_APPS) companionApps.reset();
+        if (target == Mode.COMPANION_APPS) companionApps.refresh();
 
         // 相册进出都要动作：进入时重扫目录，离开时释放缩略图贴图
         if (this.mode == Mode.GALLERY) gallery.close();
@@ -197,8 +204,8 @@ public final class PhoneScreen extends Screen {
             return true;
         }
 
-        // App 详情是商店里的一层，退回商店首页
-        if (mode == Mode.APP_DETAIL) {
+        // App 详情与联动 App 都是商店里的一层，退回商店首页
+        if (mode == Mode.APP_DETAIL || mode == Mode.COMPANION_APPS) {
             navigateTo(Mode.APP_STORE);
             return true;
         }
@@ -273,6 +280,10 @@ public final class PhoneScreen extends Screen {
             case MUSIC_PLAYER      -> renderMusicPlayer(g, mouseX, mouseY);
             case APP_STORE         -> renderAppStore(g, mouseX, mouseY);
             case APP_DETAIL        -> renderAppDetail(g, mouseX, mouseY);
+            case COMPANION_APPS    -> companionApps.render(g, phoneLeft, phoneTop,
+                    PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
+                    PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT,
+                    mouseX, mouseY, font);
             case ABOUT             -> AboutPage.render(g, phoneLeft, phoneTop,
                     PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
                     PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT, font);
@@ -779,6 +790,11 @@ public final class PhoneScreen extends Screen {
                     appDetail.open(open);
                     navigateTo(Mode.APP_DETAIL);
                 }
+                if (appStore.consumeCompanionRequest()) navigateTo(Mode.COMPANION_APPS);
+                yield true;
+            }
+            case COMPANION_APPS -> {
+                companionApps.mouseClicked(mx, my, button);
                 yield true;
             }
             case ABOUT -> {

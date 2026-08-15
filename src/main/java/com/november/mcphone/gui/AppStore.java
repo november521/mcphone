@@ -66,6 +66,17 @@ public final class AppStore {
     /** 玩家点开了哪个 App，等 PhoneScreen 来取 */
     private AppInfo openRequest = null;
 
+    /**
+     * 玩家点了「联动 App」那个格子，等 PhoneScreen 来取。
+     *
+     * 与 openRequest 一样只是个请求：本类不知道 PhoneScreen 的导航结构，
+     * 去哪个界面由那边决定。
+     */
+    private boolean companionRequest = false;
+
+    /** 有没有联动 App。没有就不画那个入口格子 */
+    private boolean hasCompanion = false;
+
     /** 错误提示，显示在标题下方 */
     private Component message = null;
 
@@ -82,6 +93,11 @@ public final class AppStore {
     public void refresh() {
         requested = true;
         StoreClientCache.request();
+
+        // 一个联动 App 都没有时不画那个入口格子。空手点进去看到一句"没有联动
+        // App"，比压根没有这个入口更让人费解
+        hasCompanion = !PhoneScreenRegistry.getCompanionApps().isEmpty();
+
         AppSourceRegistry.listAllAvailable(list -> {
             available.clear();
             if (list != null) available.addAll(list);
@@ -96,12 +112,20 @@ public final class AppStore {
         hoveredIdx = -1;
         page = 0;
         openRequest = null;
+        companionRequest = false;
     }
 
     /** 取走"打开某个 App 详情"的请求，取走即清空 */
     public AppInfo consumeOpenRequest() {
         AppInfo r = openRequest;
         openRequest = null;
+        return r;
+    }
+
+    /** 取走"打开联动 App 那一页"的请求，取走即清空 */
+    public boolean consumeCompanionRequest() {
+        boolean r = companionRequest;
+        companionRequest = false;
         return r;
     }
 
@@ -120,7 +144,31 @@ public final class AppStore {
 
     private int pageCount() {
         int per = perPage();
-        return Math.max(1, (available.size() + per - 1) / per);
+        return Math.max(1, (cellCount() + per - 1) / per);
+    }
+
+    // ============================================================
+    //  格子索引 —— 「联动 App」入口占掉第 0 格
+    // ============================================================
+    //
+    // 网格里画的东西不再与 available 一一对应：第 0 格是联动入口，往后才是
+    // 可下载的 App。分页、命中判定全都走这套合并后的索引，只在真要取 AppInfo
+    // 时才换算回去。
+    //
+    // 放第一格而不是末尾：末尾那个位置会随可下载列表增减来回挪——买完装上一个
+    // App 它就往前跳一格——玩家每次进来都得重新找。第一格是固定的。
+
+    private int cellCount() {
+        return available.size() + (hasCompanion ? 1 : 0);
+    }
+
+    private boolean isCompanionCell(int cell) {
+        return hasCompanion && cell == 0;
+    }
+
+    /** 格子索引 → available 的下标 */
+    private int appIndex(int cell) {
+        return hasCompanion ? cell - 1 : cell;
     }
 
     /**
@@ -163,7 +211,7 @@ public final class AppStore {
             y += font.lineHeight + 2;
         }
 
-        if (available.isEmpty()) {
+        if (cellCount() == 0) {
             g.drawString(font, Component.translatable("mcphone.store.empty").getString(),
                     x, y, PhoneTheme.FONT_COLOR_SUBTLE, false);
             hoveredIdx = -1;
@@ -189,7 +237,7 @@ public final class AppStore {
 
         int per = perPage();
         int from = page * per;
-        int to = Math.min(available.size(), from + per);
+        int to = Math.min(cellCount(), from + per);
 
         hoveredIdx = -1;
         for (int i = from; i < to; i++) {
@@ -204,7 +252,12 @@ public final class AppStore {
                 g.fill(ix - 2, iy - 2, ix + is + 2, iy + is + 2, PhoneTheme.COLOR_APP_PRESSED);
             }
 
-            AppInfo info = available.get(i);
+            if (isCompanionCell(i)) {
+                drawCompanionCell(g, font, ix, iy, is);
+                continue;
+            }
+
+            AppInfo info = available.get(appIndex(i));
             drawIcon(g, info, ix, iy, is);
             drawName(g, font, info.displayName().getString(), ix, iy, is);
         }
@@ -225,6 +278,31 @@ public final class AppStore {
         } else {
             g.fill(x, y, x + size, y + size, PhoneTheme.COLOR_BUTTON_DISABLED);
         }
+    }
+
+    /**
+     * 「联动 App」那个入口格子。
+     *
+     * 贴图优先、纯色兜底：没放 store_companion.png 时画一个纯色底加三个小方块，
+     * 暗示"这里头装着好几个 App"。不画字符——好看的符号在部分字体下会掉成方框，
+     * 而这是玩家进商店第一眼看到的格子，理由见 PhoneSkin.Element.STORE_COMPANION。
+     */
+    private void drawCompanionCell(GuiGraphics g, Font font, int x, int y, int size) {
+        if (!PhoneSkin.draw(g, PhoneSkin.Element.STORE_COMPANION, x, y, size, size)) {
+            g.fill(x, y, x + size, y + size, PhoneTheme.COLOR_STATUS_BAR);
+
+            int s = Math.max(2, size / 6);
+            int gap = Math.max(1, s / 2);
+            int total = s * 3 + gap * 2;
+            int bx = x + (size - total) / 2;
+            int by = y + (size - s) / 2;
+            for (int i = 0; i < 3; i++) {
+                int sx = bx + i * (s + gap);
+                g.fill(sx, by, sx + s, by + s, PhoneTheme.FONT_COLOR_SUBTLE);
+            }
+        }
+        drawName(g, font, Component.translatable("mcphone.store.companion").getString(),
+                x, y, size);
     }
 
     /**
@@ -296,9 +374,15 @@ public final class AppStore {
             return true;
         }
 
-        if (hoveredIdx < 0 || hoveredIdx >= available.size()) return false;
+        if (hoveredIdx < 0 || hoveredIdx >= cellCount()) return false;
 
-        AppInfo info = available.get(hoveredIdx);
+        // 联动入口只提请求，去哪个界面由 PhoneScreen 决定
+        if (isCompanionCell(hoveredIdx)) {
+            companionRequest = true;
+            return true;
+        }
+
+        AppInfo info = available.get(appIndex(hoveredIdx));
         IAppSource source = AppSourceRegistry.getSource(info.sourceId());
         if (source == null) {
             // 来源都找不到就别放人进详情页了：那边的"下载"按钮点下去

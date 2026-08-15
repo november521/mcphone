@@ -115,6 +115,16 @@ public final class PhoneSkin {
         STORE_BUTTON_DISABLED("store_button_disabled"),
 
         /**
+         * 应用商店里「联动 App」那个入口格子的图标。建议 20×20，与 App 图标同尺寸。
+         *
+         * 没有贴图时画一个纯色底加三个小方块，不画字符。理由与"已装/未装"用文字
+         * 而不用 ✓✗ 一样：好看的符号（❖ ⚭ 之类）在部分字体下会掉成方框，而这是
+         * 玩家进商店第一眼看到的格子。没有贴图时用
+         * {@link PhoneTheme#COLOR_STATUS_BAR} 填。
+         */
+        STORE_COMPANION("store_companion"),
+
+        /**
          * 浏览器那块大面板的底。建议 320×200，会被整张拉伸到面板大小。
          *
          * 绝大部分会被网页盖住，真正看得见的只有地址栏那一条和加载中的空白期，
