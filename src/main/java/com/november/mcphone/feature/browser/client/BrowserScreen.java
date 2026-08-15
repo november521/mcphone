@@ -6,6 +6,8 @@ import com.mojang.blaze3d.vertex.BufferUploader;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.Tesselator;
 import com.mojang.blaze3d.vertex.VertexFormat;
+import com.november.mcphone.core.client.PhoneSkin;
+import com.november.mcphone.core.client.PhoneTheme;
 import com.november.mcphone.feature.browser.client.BrowserBackends;
 import com.november.mcphone.feature.browser.client.IBrowser;
 import com.november.mcphone.feature.browser.client.IBrowserBackend;
@@ -18,8 +20,6 @@ import org.joml.Matrix4f;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
-import com.november.mcphone.core.client.PhoneSkin;
-import com.november.mcphone.core.client.PhoneTheme;
 
 /**
  * 浏览器界面 —— 一块比手机大得多的面板，装整个网页。

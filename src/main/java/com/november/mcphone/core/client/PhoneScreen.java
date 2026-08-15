@@ -1,30 +1,30 @@
 package com.november.mcphone.core.client;
 
-import com.november.mcphone.api.client.IPhoneApp;
+import com.november.mcphone.api.client.app.IPhoneApp;
 import com.november.mcphone.api.client.store.AppInfo;
+import com.november.mcphone.core.PhoneLocation;
+import com.november.mcphone.feature.chat.client.ChatAddContact;
+import com.november.mcphone.feature.chat.client.ChatConversation;
+import com.november.mcphone.feature.chat.client.ChatList;
+import com.november.mcphone.feature.gallery.client.Gallery;
+import com.november.mcphone.feature.music.client.MusicPlayer;
+import com.november.mcphone.feature.notes.client.NoteEditor;
+import com.november.mcphone.feature.notes.client.NotesList;
+import com.november.mcphone.feature.settings.client.AboutPage;
+import com.november.mcphone.feature.settings.client.DeviceNameEditor;
+import com.november.mcphone.feature.settings.client.WallpaperPicker;
+import com.november.mcphone.feature.store.client.AppDetail;
+import com.november.mcphone.feature.store.client.AppStore;
+import com.november.mcphone.feature.store.client.CompanionApps;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
-import com.november.mcphone.core.PhoneLocation;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
-import com.november.mcphone.feature.settings.client.AboutPage;
-import com.november.mcphone.feature.store.client.AppDetail;
-import com.november.mcphone.feature.store.client.AppStore;
-import com.november.mcphone.feature.chat.client.ChatAddContact;
-import com.november.mcphone.feature.chat.client.ChatConversation;
-import com.november.mcphone.feature.chat.client.ChatList;
-import com.november.mcphone.feature.store.client.CompanionApps;
-import com.november.mcphone.feature.settings.client.DeviceNameEditor;
-import com.november.mcphone.feature.gallery.client.Gallery;
-import com.november.mcphone.feature.music.client.MusicPlayer;
-import com.november.mcphone.feature.notes.client.NoteEditor;
-import com.november.mcphone.feature.notes.client.NotesList;
-import com.november.mcphone.feature.settings.client.WallpaperPicker;
 
 /**
  * 手机主屏幕 GUI。

@@ -1,11 +1,11 @@
 package com.november.mcphone.feature.notes.net;
 
 import com.november.mcphone.MCphone;
+import com.november.mcphone.feature.notes.Note;
 import io.netty.buffer.ByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
-import com.november.mcphone.feature.notes.Note;
 
 /**
  * 网络包：服务端 → 客户端，某一条笔记的全文。

@@ -1,32 +1,31 @@
 package com.november.mcphone;
 
-import com.november.mcphone.feature.camera.client.CameraHandler;
-import com.november.mcphone.feature.chat.client.ChatNotifier;
 import com.november.mcphone.core.client.MCphoneKeyBindings;
-import com.november.mcphone.core.client.PhoneKeyHandler;
 import com.november.mcphone.core.client.PhoneContainerScreen;
+import com.november.mcphone.core.client.PhoneKeyHandler;
 import com.november.mcphone.core.client.PhoneScreenRegistry;
 import com.november.mcphone.core.client.PhoneSkin;
-import com.november.mcphone.feature.settings.client.WallpaperStore;
 import com.november.mcphone.core.menu.ModMenus;
+import com.november.mcphone.feature.camera.client.CameraHandler;
+import com.november.mcphone.feature.chat.client.ChatNotifier;
 import com.november.mcphone.feature.chat.net.ChatClientCache;
 import com.november.mcphone.feature.notes.net.NotesClientCache;
-import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
-import net.neoforged.neoforge.client.event.RegisterClientReloadListenersEvent;
-import net.neoforged.neoforge.client.event.RegisterMenuScreensEvent;
-import net.minecraft.server.packs.resources.ResourceManagerReloadListener;
+import com.november.mcphone.feature.settings.client.WallpaperStore;
 import net.minecraft.client.Minecraft;
-import net.neoforged.bus.api.IEventBus;
-import net.neoforged.neoforge.common.NeoForge;
+import net.minecraft.server.packs.resources.ResourceManagerReloadListener;
 import net.neoforged.api.distmarker.Dist;
+import net.neoforged.bus.api.IEventBus;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
+import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
+import net.neoforged.neoforge.client.event.RegisterClientReloadListenersEvent;
+import net.neoforged.neoforge.client.event.RegisterMenuScreensEvent;
 import net.neoforged.neoforge.client.gui.ConfigurationScreen;
 import net.neoforged.neoforge.client.gui.IConfigScreenFactory;
-import com.november.mcphone.feature.browser.client.BrowserApp;
+import net.neoforged.neoforge.common.NeoForge;
 
 @Mod(value = MCphone.MODID, dist = Dist.CLIENT)
 @EventBusSubscriber(modid = MCphone.MODID, value = Dist.CLIENT)

@@ -1,12 +1,11 @@
 package com.november.mcphone.api.client.store;
 
-import com.november.mcphone.api.client.IPhoneApp;
+import com.november.mcphone.api.client.app.IPhoneApp;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 
 import java.util.List;
 import java.util.function.Consumer;
-import com.november.mcphone.feature.store.client.LocalAppSource;
 
 /**
  * 应用来源 —— 应用商店的 App 从哪来。

@@ -1,8 +1,10 @@
 package com.november.mcphone.feature.store.client;
 
 import com.november.mcphone.MCphone;
-import com.november.mcphone.api.client.IPhoneApp;
-import com.november.mcphone.api.client.RequiredMod;
+import com.november.mcphone.api.client.app.IPhoneApp;
+import com.november.mcphone.api.client.app.RequiredMod;
+import com.november.mcphone.core.client.PhoneScreenRegistry;
+import com.november.mcphone.core.client.PhoneTheme;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
@@ -11,8 +13,6 @@ import net.neoforged.fml.ModList;
 
 import java.util.ArrayList;
 import java.util.List;
-import com.november.mcphone.core.client.PhoneScreenRegistry;
-import com.november.mcphone.core.client.PhoneTheme;
 
 /**
  * 联动 App 那一页 —— 哪些 App 靠别的模组撑着，以及那些模组装没装。

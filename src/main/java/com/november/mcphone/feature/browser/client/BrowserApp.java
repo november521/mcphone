@@ -1,12 +1,12 @@
 package com.november.mcphone.feature.browser.client;
 
-import com.november.mcphone.api.client.RequiredMod;
+import com.november.mcphone.api.client.app.RequiredMod;
+import com.november.mcphone.core.client.PhoneApp;
 import com.november.mcphone.feature.browser.client.BrowserBackends;
 import com.november.mcphone.feature.browser.client.BrowserScreen;
 import net.minecraft.client.Minecraft;
 
 import java.util.List;
-import com.november.mcphone.core.client.PhoneApp;
 
 /**
  * 浏览器 App —— 在手机里上网。

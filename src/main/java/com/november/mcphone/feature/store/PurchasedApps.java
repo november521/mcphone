@@ -10,9 +10,6 @@ import net.minecraft.resources.ResourceLocation;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-import com.november.mcphone.feature.chat.ChatData;
-import com.november.mcphone.feature.chat.FriendData;
-import com.november.mcphone.feature.notes.NoteList;
 
 /**
  * 一名玩家买过哪些 App。

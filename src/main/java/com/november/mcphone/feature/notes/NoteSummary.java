@@ -3,7 +3,6 @@ package com.november.mcphone.feature.notes;
 import io.netty.buffer.ByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
-import com.november.mcphone.feature.chat.net.ConversationSummary;
 
 /**
  * 笔记列表里的一行 —— 打开记事本时看到的摘要。

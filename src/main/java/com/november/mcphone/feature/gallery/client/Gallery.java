@@ -1,12 +1,11 @@
 package com.november.mcphone.feature.gallery.client;
 
+import com.november.mcphone.core.client.PhoneTheme;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 
 import java.util.List;
-import com.november.mcphone.core.client.PhoneScreen;
-import com.november.mcphone.core.client.PhoneTheme;
 
 /**
  * 相册界面 —— 由 PhoneScreen 嵌入渲染。

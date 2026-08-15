@@ -1,5 +1,7 @@
 package com.november.mcphone.feature.chat.client;
 
+import com.november.mcphone.core.client.PhoneTheme;
+import com.november.mcphone.core.client.PlayerAvatar;
 import com.november.mcphone.feature.chat.net.ChatClientCache;
 import com.november.mcphone.feature.chat.net.FriendRequestPacket;
 import com.november.mcphone.feature.chat.net.OnlinePlayer;
@@ -13,9 +15,6 @@ import net.minecraft.network.chat.Component;
 import net.neoforged.neoforge.network.PacketDistributor;
 
 import java.util.List;
-import com.november.mcphone.core.client.PhoneTheme;
-import com.november.mcphone.core.client.PlayerAvatar;
-import com.november.mcphone.feature.settings.client.DeviceNameEditor;
 
 /**
  * 加联系人界面 —— 列出当前在线的玩家，点一下加为联系人。

@@ -1,13 +1,13 @@
 package com.november.mcphone.feature.notes.net;
 
 import com.november.mcphone.MCphone;
+import com.november.mcphone.feature.notes.NoteList;
+import com.november.mcphone.feature.notes.NoteSummary;
 import io.netty.buffer.ByteBuf;
+import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
-import com.november.mcphone.feature.notes.NoteList;
-import com.november.mcphone.feature.notes.NoteSummary;
-import net.minecraft.network.codec.ByteBufCodecs;
 
 import java.util.List;
 

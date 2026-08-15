@@ -1,13 +1,12 @@
 package com.november.mcphone.feature.waystone.client;
 
-import com.november.mcphone.api.client.RequiredMod;
+import com.november.mcphone.api.client.app.RequiredMod;
 import com.november.mcphone.compat.WaystonesCompat;
+import com.november.mcphone.core.client.PhoneApp;
 import com.november.mcphone.feature.waystone.net.OpenWaystoneSelectionPacket;
 import net.neoforged.neoforge.network.PacketDistributor;
 
 import java.util.List;
-import com.november.mcphone.core.client.PhoneApp;
-import com.november.mcphone.feature.store.BuiltinAppPrices;
 
 /**
  * 传送石 App —— 在手机里打开传送石碑（Waystones）的选点界面。

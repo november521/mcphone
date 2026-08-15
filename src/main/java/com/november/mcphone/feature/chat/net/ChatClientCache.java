@@ -1,14 +1,13 @@
 package com.november.mcphone.feature.chat.net;
 
 import com.november.mcphone.feature.chat.ChatMessage;
+import com.november.mcphone.feature.chat.net.ConversationSummary;
+import com.november.mcphone.feature.chat.net.OnlinePlayer;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.function.BiConsumer;
-import com.november.mcphone.feature.chat.net.ChatNetworking;
-import com.november.mcphone.feature.chat.net.ConversationSummary;
-import com.november.mcphone.feature.chat.net.OnlinePlayer;
 
 /**
  * 客户端本地的聊天数据缓存 —— 界面每帧从这里读，不发包。

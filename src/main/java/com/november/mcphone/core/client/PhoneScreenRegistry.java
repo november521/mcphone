@@ -3,8 +3,8 @@ package com.november.mcphone.core.client;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.november.mcphone.MCphone;
-import com.november.mcphone.api.client.IPhoneApp;
-import com.november.mcphone.api.client.RequiredMod;
+import com.november.mcphone.api.client.app.IPhoneApp;
+import com.november.mcphone.api.client.app.RequiredMod;
 import com.november.mcphone.feature.store.AppPriceRegistry;
 import com.november.mcphone.feature.store.net.StoreClientCache;
 import com.november.mcphone.util.SpiLoader;
@@ -21,7 +21,6 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
-import com.november.mcphone.feature.store.AppAccess;
 
 /**
  * 手机 App 注册表 —— 模拟手机操作系统的 App 目录与安装状态。
@@ -347,7 +346,7 @@ public final class PhoneScreenRegistry {
 
         // 所有 App 均通过 SPI 发现，包括内建 App
         // ServiceLoader 会扫描所有已加载 jar 包中的
-        // META-INF/services/com.november.mcphone.api.client.IPhoneApp
+        // META-INF/services/com.november.mcphone.api.client.app.IPhoneApp
         //
         // 走 SpiLoader 而不是直接 for-each ServiceLoader：一个附属的 App 构造失败
         // 会让整个扫描中断，内建 App 一个都登记不上，玩家的手机变成空的。理由

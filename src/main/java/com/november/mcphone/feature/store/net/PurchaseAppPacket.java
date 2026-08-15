@@ -5,7 +5,6 @@ import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
-import com.november.mcphone.feature.store.AppPriceRegistry;
 
 /**
  * 网络包：客户端 → 服务端，"我要买这个 App"。

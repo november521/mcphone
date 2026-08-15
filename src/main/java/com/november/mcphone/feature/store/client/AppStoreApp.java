@@ -1,8 +1,8 @@
 package com.november.mcphone.feature.store.client;
 
+import com.november.mcphone.core.client.PhoneApp;
 import com.november.mcphone.core.client.PhoneScreen;
 import net.minecraft.client.Minecraft;
-import com.november.mcphone.core.client.PhoneApp;
 
 /**
  * 应用商店 App —— 下载安装其他 App。

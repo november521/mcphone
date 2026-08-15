@@ -1,8 +1,8 @@
 package com.november.mcphone.feature.notes.client;
 
+import com.november.mcphone.core.client.PhoneApp;
 import com.november.mcphone.core.client.PhoneScreen;
 import net.minecraft.client.Minecraft;
-import com.november.mcphone.core.client.PhoneApp;
 
 /**
  * 记事本 App —— 写点东西记下来。

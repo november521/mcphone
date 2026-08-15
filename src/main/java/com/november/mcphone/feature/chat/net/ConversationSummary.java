@@ -7,7 +7,6 @@ import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 
 import java.util.UUID;
-import com.november.mcphone.feature.chat.FriendData;
 
 /**
  * 会话列表里的一行 —— 打开聊天 App 时看到的摘要。

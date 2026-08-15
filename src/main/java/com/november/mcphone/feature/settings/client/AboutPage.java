@@ -1,9 +1,11 @@
 package com.november.mcphone.feature.settings.client;
 
 import com.november.mcphone.MCphone;
-import com.november.mcphone.api.client.IPhoneApp;
-import com.november.mcphone.api.client.RequiredMod;
+import com.november.mcphone.api.client.app.IPhoneApp;
+import com.november.mcphone.api.client.app.RequiredMod;
 import com.november.mcphone.compat.CuriosCompat;
+import com.november.mcphone.core.client.PhoneScreenRegistry;
+import com.november.mcphone.core.client.PhoneTheme;
 import net.minecraft.SharedConstants;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
@@ -13,8 +15,6 @@ import net.neoforged.fml.ModList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import com.november.mcphone.core.client.PhoneScreenRegistry;
-import com.november.mcphone.core.client.PhoneTheme;
 
 /**
  * 关于页 —— 这部手机是什么、哪一版、跟谁配合得上。

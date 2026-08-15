@@ -1,8 +1,8 @@
 package com.november.mcphone.feature.gallery.client;
 
+import com.november.mcphone.core.client.PhoneApp;
 import com.november.mcphone.core.client.PhoneScreen;
 import net.minecraft.client.Minecraft;
-import com.november.mcphone.core.client.PhoneApp;
 
 /**
  * 相册 App —— 浏览 <游戏目录>/screenshots/ 下的照片。

@@ -4,12 +4,18 @@ import com.november.mcphone.MCphone;
 import com.november.mcphone.core.ModAttachments;
 import com.november.mcphone.core.ModDataComponents;
 import com.november.mcphone.core.PhoneItem;
-import com.november.mcphone.feature.store.AppAccess;
-import net.minecraft.ChatFormatting;
-import net.minecraft.resources.ResourceLocation;
 import com.november.mcphone.core.menu.ModMenus;
 import com.november.mcphone.core.menu.PhoneContainerMenu;
+import com.november.mcphone.feature.enderchest.net.OpenEnderChestPacket;
+import com.november.mcphone.feature.settings.WallpaperData;
+import com.november.mcphone.feature.settings.net.SetDeviceNamePacket;
+import com.november.mcphone.feature.settings.net.SetWallpaperPacket;
+import com.november.mcphone.feature.settings.net.SyncWallpaperPacket;
+import com.november.mcphone.feature.store.AppAccess;
+import com.november.mcphone.feature.waystone.net.OpenWaystoneSelectionPacket;
+import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.SimpleMenuProvider;
 import net.minecraft.world.inventory.PlayerEnderChestContainer;
@@ -17,14 +23,6 @@ import net.minecraft.world.item.ItemStack;
 import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 import net.neoforged.neoforge.network.registration.PayloadRegistrar;
-import com.november.mcphone.core.client.PhoneScreen;
-import com.november.mcphone.core.client.PhoneScreenRegistry;
-import com.november.mcphone.feature.enderchest.net.OpenEnderChestPacket;
-import com.november.mcphone.feature.waystone.net.OpenWaystoneSelectionPacket;
-import com.november.mcphone.feature.settings.net.SetDeviceNamePacket;
-import com.november.mcphone.feature.settings.net.SetWallpaperPacket;
-import com.november.mcphone.feature.settings.net.SyncWallpaperPacket;
-import com.november.mcphone.feature.settings.WallpaperData;
 
 /**
  * 网络包处理 —— 注册并处理所有 MCphone 网络包。

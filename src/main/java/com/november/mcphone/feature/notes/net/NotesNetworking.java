@@ -8,8 +8,6 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 import net.neoforged.neoforge.network.registration.PayloadRegistrar;
-import com.november.mcphone.core.net.NetworkHandler;
-import com.november.mcphone.feature.chat.net.ChatNetworking;
 
 /**
  * 记事本相关网络包的注册与处理。

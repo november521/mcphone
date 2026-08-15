@@ -1,9 +1,9 @@
 package com.november.mcphone.feature.store.net;
 
 import com.november.mcphone.MCphone;
+import com.november.mcphone.api.cost.ICost;
 import com.november.mcphone.core.ModAttachments;
 import com.november.mcphone.core.PhoneItem;
-import com.november.mcphone.api.cost.ICost;
 import com.november.mcphone.feature.store.AppPriceRegistry;
 import com.november.mcphone.feature.store.PurchasedApps;
 import net.minecraft.ChatFormatting;
@@ -12,8 +12,6 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 import net.neoforged.neoforge.network.registration.PayloadRegistrar;
-import com.november.mcphone.core.client.PhoneScreenRegistry;
-import com.november.mcphone.core.net.NetworkHandler;
 
 /**
  * 应用商店购买流程的网络层。

@@ -1,21 +1,19 @@
 package com.november.mcphone.feature.notes.client;
 
+import com.november.mcphone.feature.notes.Note;
+import com.november.mcphone.feature.notes.NotePrinter;
+import com.november.mcphone.feature.notes.NoteService;
 import com.november.mcphone.feature.notes.net.DeleteNotePacket;
 import com.november.mcphone.feature.notes.net.NotesClientCache;
 import com.november.mcphone.feature.notes.net.PrintNotePacket;
 import com.november.mcphone.feature.notes.net.RequestNotePacket;
 import com.november.mcphone.feature.notes.net.SaveNotePacket;
-import com.november.mcphone.feature.notes.Note;
-import com.november.mcphone.feature.notes.NoteService;
-import com.november.mcphone.feature.notes.NotePrinter;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.MultiLineEditBox;
 import net.minecraft.network.chat.Component;
 import net.neoforged.neoforge.network.PacketDistributor;
-import com.november.mcphone.core.client.PhoneScreen;
-import com.november.mcphone.feature.settings.client.DeviceNameEditor;
 
 /**
  * 笔记编辑界面。

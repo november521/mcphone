@@ -1,8 +1,8 @@
 package com.november.mcphone.feature.camera.client;
 
+import com.november.mcphone.core.client.PhoneApp;
 import com.november.mcphone.feature.camera.client.CameraMode;
 import net.minecraft.client.Minecraft;
-import com.november.mcphone.core.client.PhoneApp;
 
 /**
  * 相机 App —— 进入相机模式拍照。

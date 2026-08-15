@@ -13,6 +13,23 @@
  *   其余（如 {@code api.cost.*}）  两端安全。可以被服务端代码引用，
  *                          也可以被客户端代码引用。
  *
+ * 客户端那一半再按主题分：
+ *
+ *   {@code api.client.app}     写一个 App（IPhoneApp、RequiredMod）
+ *   {@code api.client.store}   接入应用商店（IAppSource、AppInfo）
+ *
+ * 这条规则不靠自觉：构建期的 verifyDistIsolation 会扫产物字节码，路径里没有
+ * {@code /client/} 的类只要常量池里出现客户端类型就直接构建失败。1.2.12 那次
+ * 想把 IPhoneApp 挪去 {@code api.app}，当场就被它拦下来了——路径里的 client
+ * 一丢，这条编码也就没了。
+ *
+ * ================================================================
+ * 兼容承诺
+ * ================================================================
+ *
+ * 见 {@link com.november.mcphone.api.MCphoneApi}：那里写着 API 代号，以及
+ * "以后加功能不打断附属"具体是靠哪几条规矩做到的。改 API 之前先读它。
+ *
  * ================================================================
  * 为什么这条规则值得单独用包名来表达
  * ================================================================
@@ -44,5 +61,3 @@
  */
 package com.november.mcphone.api;
 
-import com.november.mcphone.core.PhoneItem;
-import com.november.mcphone.core.client.PhoneScreen;

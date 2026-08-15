@@ -1,4 +1,4 @@
-package com.november.mcphone.api.client;
+package com.november.mcphone.api.client.app;
 
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
@@ -6,7 +6,6 @@ import net.minecraft.resources.ResourceLocation;
 import net.neoforged.fml.ModList;
 
 import java.util.List;
-import com.november.mcphone.core.client.PhoneApp;
 
 /**
  * MCphone App API —— 开放的 App 接口。
@@ -95,7 +94,7 @@ import com.november.mcphone.core.client.PhoneApp;
  *
  * 在 src/main/resources/META-INF/services/ 创建文件：
  *
- *   文件名: com.november.mcphone.api.client.IPhoneApp
+ *   文件名: com.november.mcphone.api.client.app.IPhoneApp
  *   内容:   com.yourmod.CalculatorApp
  *
  * 如果有多个 App，一行一个类名。

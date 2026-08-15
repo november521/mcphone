@@ -1,10 +1,8 @@
 package com.november.mcphone.feature.enderchest.client;
 
+import com.november.mcphone.core.client.PhoneApp;
 import com.november.mcphone.feature.enderchest.net.OpenEnderChestPacket;
 import net.neoforged.neoforge.network.PacketDistributor;
-import com.november.mcphone.core.client.PhoneApp;
-import com.november.mcphone.core.client.PhoneScreenRegistry;
-import com.november.mcphone.feature.store.BuiltinAppPrices;
 
 /**
  * 便携末影箱 App —— 在手机里打开自己的末影箱。

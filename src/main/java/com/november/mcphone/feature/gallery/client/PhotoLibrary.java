@@ -8,7 +8,6 @@ import net.minecraft.resources.ResourceLocation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.imageio.ImageIO;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
@@ -24,7 +23,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import com.november.mcphone.feature.settings.client.WallpaperStore;
+import javax.imageio.ImageIO;
 
 /**
  * 相册照片库 —— 扫描 <游戏目录>/screenshots/，按需提供缩略图。

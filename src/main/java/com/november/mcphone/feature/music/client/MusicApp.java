@@ -1,8 +1,8 @@
 package com.november.mcphone.feature.music.client;
 
-import net.minecraft.client.Minecraft;
-import com.november.mcphone.core.client.PhoneScreen;
 import com.november.mcphone.core.client.PhoneApp;
+import com.november.mcphone.core.client.PhoneScreen;
+import net.minecraft.client.Minecraft;
 
 /**
  * 音乐 App —— 手机音乐播放器。

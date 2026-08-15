@@ -3,10 +3,6 @@ package com.november.mcphone.feature.store.net;
 import com.november.mcphone.feature.store.PurchasedApps;
 import net.minecraft.resources.ResourceLocation;
 import net.neoforged.neoforge.network.PacketDistributor;
-import com.november.mcphone.core.client.PhoneScreenRegistry;
-import com.november.mcphone.feature.chat.net.ChatClientCache;
-import com.november.mcphone.feature.chat.client.ChatNotifier;
-import com.november.mcphone.feature.notes.net.NotesClientCache;
 
 /**
  * 客户端这一侧记着"我买过哪些 App"。

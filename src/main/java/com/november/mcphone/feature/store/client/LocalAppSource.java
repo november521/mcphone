@@ -1,7 +1,7 @@
 package com.november.mcphone.feature.store.client;
 
 import com.november.mcphone.MCphone;
-import com.november.mcphone.api.client.IPhoneApp;
+import com.november.mcphone.api.client.app.IPhoneApp;
 import com.november.mcphone.api.client.store.AppInfo;
 import com.november.mcphone.api.client.store.IAppSource;
 import com.november.mcphone.core.client.PhoneScreenRegistry;

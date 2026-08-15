@@ -1,4 +1,4 @@
-package com.november.mcphone.api.client;
+package com.november.mcphone.api.client.app;
 
 /**
  * 一个 App 依赖的外部模组 —— 「联动 App」那一页显示的就是它。

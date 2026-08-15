@@ -1,16 +1,15 @@
 package com.november.mcphone.core;
 
+import com.november.mcphone.MCphone;
 import com.november.mcphone.feature.chat.ChatReadState;
-import com.november.mcphone.feature.store.PurchasedApps;
-import com.november.mcphone.feature.settings.WallpaperData;
 import com.november.mcphone.feature.notes.NoteList;
+import com.november.mcphone.feature.settings.WallpaperData;
+import com.november.mcphone.feature.store.PurchasedApps;
 import net.neoforged.neoforge.attachment.AttachmentType;
 import net.neoforged.neoforge.registries.DeferredRegister;
 import net.neoforged.neoforge.registries.NeoForgeRegistries;
 
 import java.util.function.Supplier;
-import com.november.mcphone.MCphone;
-import com.november.mcphone.feature.chat.FriendData;
 
 /**
  * 玩家附着数据（Attachment）注册。

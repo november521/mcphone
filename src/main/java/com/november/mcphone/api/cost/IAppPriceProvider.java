@@ -34,7 +34,7 @@ import java.util.Map;
  * ================================================================
  *
  * 因为价格两端都要用：客户端拿它画详情页上的"要花什么"，服务端拿它在
- * 真正扣东西前核对。而 {@link com.november.mcphone.api.client.IPhoneApp}
+ * 真正扣东西前核对。而 {@link com.november.mcphone.api.client.app.IPhoneApp}
  * 是客户端专用的（签名里有 GuiGraphics），服务端根本读不到它——所以价格
  * 不能挂在 App 上，必须单独走这条两端安全的路。
  *

@@ -1,14 +1,12 @@
 package com.november.mcphone.feature.settings.client;
 
-import com.november.mcphone.core.net.NetworkHandler;
+import com.november.mcphone.core.client.PhoneTheme;
 import com.november.mcphone.feature.settings.net.SetWallpaperPacket;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.resources.ResourceLocation;
 import net.neoforged.neoforge.network.PacketDistributor;
 
 import java.util.List;
-import com.november.mcphone.core.client.PhoneScreen;
-import com.november.mcphone.core.client.PhoneTheme;
 
 /**
  * 壁纸选择器 —— 在手机屏幕区域内展示壁纸缩略图列表。

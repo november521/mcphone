@@ -1,13 +1,12 @@
 package com.november.mcphone.feature.notes.net;
 
 import com.november.mcphone.MCphone;
+import com.november.mcphone.feature.notes.Note;
 import io.netty.buffer.ByteBuf;
+import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
-import com.november.mcphone.feature.notes.Note;
-import net.minecraft.network.codec.ByteBufCodecs;
-import com.november.mcphone.feature.notes.NoteService;
 
 /**
  * 网络包：客户端 → 服务端，保存一条笔记。

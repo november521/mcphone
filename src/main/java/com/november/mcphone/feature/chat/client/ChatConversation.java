@@ -1,5 +1,8 @@
 package com.november.mcphone.feature.chat.client;
 
+import com.november.mcphone.core.client.PhoneSkin;
+import com.november.mcphone.core.client.PhoneTheme;
+import com.november.mcphone.core.client.PlayerAvatar;
 import com.november.mcphone.feature.chat.ChatMessage;
 import com.november.mcphone.feature.chat.net.ChatClientCache;
 import com.november.mcphone.feature.chat.net.ConversationSummary;
@@ -22,11 +25,6 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
-import com.november.mcphone.core.client.PhoneScreen;
-import com.november.mcphone.core.client.PhoneSkin;
-import com.november.mcphone.core.client.PhoneTheme;
-import com.november.mcphone.core.client.PlayerAvatar;
-import com.november.mcphone.feature.chat.net.ChatNetworking;
 
 /**
  * 单个会话界面 —— 和某一位好友的聊天记录。

@@ -10,7 +10,6 @@ import net.minecraft.world.item.Items;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
-import com.november.mcphone.feature.waystone.client.WaystoneApp;
 
 /**
  * MCphone 内建 App 的报价。

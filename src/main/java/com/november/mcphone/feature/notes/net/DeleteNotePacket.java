@@ -2,10 +2,10 @@ package com.november.mcphone.feature.notes.net;
 
 import com.november.mcphone.MCphone;
 import io.netty.buffer.ByteBuf;
+import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.network.codec.ByteBufCodecs;
 
 /**
  * 网络包：客户端 → 服务端，删掉一条笔记。
