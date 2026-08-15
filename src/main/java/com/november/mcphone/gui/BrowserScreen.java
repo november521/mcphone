@@ -62,6 +62,20 @@ public final class BrowserScreen extends Screen {
     /** 导航图标的放大倍数。默认字号在这块大面板上显得像针尖 */
     private static final float NAV_GLYPH_SCALE = 1.6f;
 
+    // ============================================================
+    //  送给网页的修饰键掩码 —— 用 GLFW 那一套，不是 AWT 的
+    // ============================================================
+    //
+    // 这件事必须写在这儿：MCEF 把我们给的 modifiers 原样塞进 CefKeyEvent 与
+    // CefMouseWheelEvent，而它自己判断时用的就是 GLFW 的值——字节码里 Alt 判的是
+    // 4，那是 GLFW_MOD_ALT；AWT 的 InputEvent 里 4 是 META、ALT 是 8。
+    //
+    // 混用不会报错，只会让快捷键永远不触发，而这种毛病极难查。
+
+    private static final int MOD_SHIFT = 1;   // GLFW_MOD_SHIFT
+    private static final int MOD_CTRL = 2;    // GLFW_MOD_CONTROL
+    private static final int MOD_ALT = 4;     // GLFW_MOD_ALT
+
     /** 退出后回到哪儿。通常是手机界面 */
     private final Screen parent;
 
@@ -477,10 +491,27 @@ public final class BrowserScreen extends Screen {
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
         if (browser != null && inViewport(mouseX, mouseY)) {
-            browser.mouseWheel(browserX(mouseX), browserY(mouseY), scrollY);
+            browser.mouseWheel(browserX(mouseX), browserY(mouseY), scrollY, currentModifiers());
             return true;
         }
         return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
+    }
+
+    /**
+     * 此刻按着哪些修饰键。
+     *
+     * mouseScrolled 的签名里没有 modifiers，只能自己查——而不查的代价是
+     * Ctrl+滚轮缩放永远不触发（后端拿它区分"滚动"和"缩放"）。
+     *
+     * Screen 这三个静态方法在 macOS 上把 Command 当作 Ctrl，正好对上"Mac 上用
+     * ⌘ 缩放"的习惯，不用另外分平台。
+     */
+    private static int currentModifiers() {
+        int mods = 0;
+        if (hasShiftDown()) mods |= MOD_SHIFT;
+        if (hasControlDown()) mods |= MOD_CTRL;
+        if (hasAltDown()) mods |= MOD_ALT;
+        return mods;
     }
 
     @Override

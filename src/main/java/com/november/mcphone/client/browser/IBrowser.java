@@ -47,8 +47,13 @@ public interface IBrowser {
 
     void mouseRelease(int x, int y, int button);
 
-    /** @param amount 滚动量，正数向上 */
-    void mouseWheel(int x, int y, double amount);
+    /**
+     * @param amount    滚动量，正数向上
+     * @param modifiers 此刻按着的修饰键，用 GLFW 掩码（SHIFT=1 / CTRL=2 / ALT=4）。
+     *                  必须传真值：后端可能拿它做 Ctrl+滚轮缩放这类事，写死成 0
+     *                  的话那些功能会静默失效——不报错，只是永远不触发。
+     */
+    void mouseWheel(int x, int y, double amount, int modifiers);
 
     void keyPress(int keyCode, long scanCode, int modifiers);
 

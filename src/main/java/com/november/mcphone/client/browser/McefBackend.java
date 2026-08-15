@@ -97,9 +97,17 @@ public final class McefBackend implements IBrowserBackend {
 
         @Override public void mouseRelease(int x, int y, int button) { handle.sendMouseRelease(x, y, button); }
 
+        /**
+         * modifiers 要原样传下去，不能图省事写 0。
+         *
+         * MCEF 的 sendMouseWheel 第一件事就是查它：Ctrl 位置上了就改缩放级别
+         * （getZoomLevel / setZoomLevel，范围 ±9）而不是滚动页面。这个开关
+         * （browserControls）在 MCEFBrowser 的构造器里默认就是开的，也就是说
+         * 缩放本来就能用——1.1.30 之前传 0，等于把它锁死了。
+         */
         @Override
-        public void mouseWheel(int x, int y, double amount) {
-            handle.sendMouseWheel(x, y, amount, 0);
+        public void mouseWheel(int x, int y, double amount, int modifiers) {
+            handle.sendMouseWheel(x, y, amount, modifiers);
         }
 
         @Override
