@@ -12,7 +12,7 @@ import net.minecraft.client.Minecraft;
  *
  * 数据全在服务端，本地只有一份用于渲染的快照，见 ChatClientCache。
  *
- * 贴图: assets/mcphone/textures/gui/app_icon_chat.png (20×20)
+ * 贴图: assets/mcphone/textures/app/chat.png (20×20)
  */
 public final class ChatApp extends PhoneApp {
 

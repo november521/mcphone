@@ -20,7 +20,7 @@ import java.util.List;
  * 唯一的出入是不扣耐久——手机里本来就没有那块石头。我们没有发明任何平衡
  * 参数，要调就去改 Waystones 的 warpRequirements。细节见 {@link WaystonesCompat}。
  *
- * 贴图: assets/mcphone/textures/gui/app_icon_waystone.png (20×20)
+ * 贴图: assets/mcphone/textures/app/waystone.png (20×20)
  */
 public final class WaystoneApp extends PhoneApp {
 

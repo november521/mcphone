@@ -13,7 +13,7 @@ package com.november.mcphone.gui;
  * =============================================================
  *
  * 贴图放置目录：
- *   src/main/resources/assets/mcphone/textures/gui/
+ *   src/main/resources/assets/mcphone/textures/
  *
  * ╔═══════════════════════════════════════════════════════════════╗
  * ║  文件名             │ 建议尺寸 │ 用途                        ║

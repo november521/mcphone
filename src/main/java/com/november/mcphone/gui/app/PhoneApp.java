@@ -2,6 +2,7 @@ package com.november.mcphone.gui.app;
 
 import com.november.mcphone.api.client.IPhoneApp;
 import com.november.mcphone.MCphone;
+import com.november.mcphone.gui.PhoneSkin;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.resources.language.I18n;
 import net.minecraft.network.chat.Component;
@@ -56,16 +57,25 @@ public abstract class PhoneApp implements IPhoneApp {
     }
 
     /**
-     * 内建 App 图标路径: mcphone:textures/gui/app_icon_{path}.png
-     * 贴图放在: assets/mcphone/textures/gui/app_icon_{path}.png (20×20, PNG)
+     * 内建 App 图标: {@code mcphone:textures/app/<path>.png}（20×20 PNG）。
      *
-     * 同样只能用 path：ResourceLocation 的路径段不允许出现冒号，
+     * 1.2.7 之前是 {@code textures/gui/app_icon_<path>.png}，和手机外壳、
+     * 商店按钮、浏览器面板全平铺在同一个目录里。按功能分开之后，"这是个 App
+     * 图标"从路径本身就看得出来，资源包作者也不用在一堆文件里找。
+     *
+     * 老路径仍然认——那些路径在 README 里作为换肤契约公开过两个版本，说改就改
+     * 等于把别人做好的资源包单方面作废。新路径优先，没有才回退。
+     *
+     * 只能用 path 不能用 id：ResourceLocation 的路径段不允许出现冒号，
      * 拼 id 会直接抛异常。
      */
     @Override
     public ResourceLocation getIconTexture() {
-        return ResourceLocation.fromNamespaceAndPath(
-                MCphone.MODID, "textures/gui/app_icon_" + path + ".png");
+        return PhoneSkin.resolveWithLegacy(
+                ResourceLocation.fromNamespaceAndPath(
+                        MCphone.MODID, "textures/app/" + path + ".png"),
+                ResourceLocation.fromNamespaceAndPath(
+                        MCphone.MODID, "textures/gui/app_icon_" + path + ".png"));
     }
 
     // isSystemApp() 不在此覆盖，沿用 IPhoneApp 的默认值 false：

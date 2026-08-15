@@ -76,7 +76,7 @@ import java.util.List;
  *       @Override
  *       public ResourceLocation getIconTexture() {
  *           return ResourceLocation.fromNamespaceAndPath(
- *                   "mymod", "textures/gui/app_icon_calculator.png");
+ *                   "mymod", "textures/app/calculator.png");
  *       }
  *
  *       @Override
@@ -107,7 +107,7 @@ import java.util.List;
  *         { "mymod.app.calculator": "Calculator" }
  *         中文另开一份 zh_cn.json，两边键要对齐
  *
- *   贴图: assets/mymod/textures/gui/app_icon_calculator.png
+ *   贴图: assets/mymod/textures/app/calculator.png
  *         20×20、PNG-32。路径要和 getIconTexture() 返回的一致。
  *         不放贴图也能跑：renderIcon 的默认实现在贴图缺失时由原版画成
  *         紫黑格，不会崩，但玩家会看见紫黑格，所以还是放一张。

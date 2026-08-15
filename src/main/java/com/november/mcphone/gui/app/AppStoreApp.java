@@ -9,7 +9,7 @@ import net.minecraft.client.Minecraft;
  * 目前只列出本机已发现但未安装的 App（未预装的、或被玩家卸载过的）。
  * 来源可拓展，见 com.november.mcphone.api.client.store.IAppSource。
  *
- * 贴图: assets/mcphone/textures/gui/app_icon_app_store.png (20×20)
+ * 贴图: assets/mcphone/textures/app/app_store.png (20×20)
  */
 public final class AppStoreApp extends PhoneApp {
 

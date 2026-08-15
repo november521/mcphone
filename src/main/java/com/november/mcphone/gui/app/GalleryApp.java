@@ -12,7 +12,7 @@ import net.minecraft.client.Minecraft;
  * 界面见 {@link com.november.mcphone.gui.Gallery}，
  * 扫描与缩略图缓存见 {@link com.november.mcphone.gui.PhotoLibrary}。
  *
- * 贴图: assets/mcphone/textures/gui/app_icon_gallery.png (20×20)
+ * 贴图: assets/mcphone/textures/app/gallery.png (20×20)
  */
 public final class GalleryApp extends PhoneApp {
 

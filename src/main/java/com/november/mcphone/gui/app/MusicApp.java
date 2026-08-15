@@ -11,7 +11,7 @@ import com.november.mcphone.gui.PhoneScreen;
  * - 播放自定义 WAV 文件（放入 config/mcphone/music/）
  * - OGG 格式建议通过资源包加载
  *
- * 贴图: assets/mcphone/textures/gui/app_icon_music.png (20×20)
+ * 贴图: assets/mcphone/textures/app/music.png (20×20)
  */
 public final class MusicApp extends PhoneApp {
 

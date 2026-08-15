@@ -13,7 +13,7 @@ import net.minecraft.client.Minecraft;
  * 按键可在原版「选项 → 按键设置 → MCphone」中修改，
  * 见 {@link com.november.mcphone.client.MCphoneKeyBindings}。
  *
- * 贴图: assets/mcphone/textures/gui/app_icon_camera.png (20×20)
+ * 贴图: assets/mcphone/textures/app/camera.png (20×20)
  */
 public final class CameraApp extends PhoneApp {
 

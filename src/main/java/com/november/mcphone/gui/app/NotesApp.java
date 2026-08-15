@@ -11,7 +11,7 @@ import net.minecraft.client.Minecraft;
  *
  * 与音乐、相册一致：记事本是手机内的一个模式，不另开 Screen。
  *
- * 贴图: assets/mcphone/textures/gui/app_icon_notes.png (20×20)
+ * 贴图: assets/mcphone/textures/app/notes.png (20×20)
  */
 public final class NotesApp extends PhoneApp {
 

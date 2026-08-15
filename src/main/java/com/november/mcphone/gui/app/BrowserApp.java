@@ -16,7 +16,7 @@ import java.util.List;
  * 网页的渲染交给 MCEF，我们只画面板、地址栏与导航按钮，并把鼠标键盘转发过去。
  * 中间隔着一层我们自己的抽象，见 {@link com.november.mcphone.client.browser.IBrowser}。
  *
- * 贴图: assets/mcphone/textures/gui/app_icon_browser.png (20×20)
+ * 贴图: assets/mcphone/textures/app/browser.png (20×20)
  */
 public final class BrowserApp extends PhoneApp {
 

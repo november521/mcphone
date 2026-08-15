@@ -11,7 +11,7 @@ import net.neoforged.neoforge.network.PacketDistributor;
  * 点击只发包、不自己开界面：容器菜单必须由服务端建立才有权威性，
  * 界面会在服务端 openMenu 后由原版流程自动弹出。
  *
- * 贴图: assets/mcphone/textures/gui/app_icon_ender_chest.png (20×20)
+ * 贴图: assets/mcphone/textures/app/ender_chest.png (20×20)
  */
 public final class EnderChestApp extends PhoneApp {
 

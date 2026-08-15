@@ -6,7 +6,7 @@ import com.november.mcphone.gui.PhoneScreen;
 /**
  * 设置 App —— 打开手机设置列表。
  *
- * 贴图: assets/mcphone/textures/gui/app_icon_settings.png (20×20)
+ * 贴图: assets/mcphone/textures/app/settings.png (20×20)
  */
 public final class SettingsApp extends PhoneApp {
 
