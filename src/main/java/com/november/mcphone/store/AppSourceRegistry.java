@@ -3,6 +3,7 @@ package com.november.mcphone.store;
 import com.november.mcphone.MCphone;
 import com.november.mcphone.api.client.store.AppInfo;
 import com.november.mcphone.api.client.store.IAppSource;
+import com.november.mcphone.util.SpiLoader;
 import net.minecraft.resources.ResourceLocation;
 
 import java.util.*;
@@ -81,9 +82,16 @@ public final class AppSourceRegistry {
         if (loaded) return;
         loaded = true;
 
+        // 走 SpiLoader：一个附属的来源类构造失败不该让整张来源表加载不上，
+        // 那会连本地来源一起丢掉，商店直接变空。理由详见 SpiLoader 的注释
         int count = 0;
-        for (IAppSource s : ServiceLoader.load(IAppSource.class)) {
-            if (register(s)) count++;
+        for (IAppSource s : SpiLoader.loadSafely(IAppSource.class, "应用来源")) {
+            try {
+                if (register(s)) count++;
+            } catch (Throwable t) {
+                MCphone.LOGGER.error("[MCphone] 应用来源 {} 登记时抛异常，已跳过",
+                        s.getClass().getName(), t);
+            }
         }
         MCphone.LOGGER.info("[MCphone] 应用来源扫描完成，共 {} 个", count);
     }

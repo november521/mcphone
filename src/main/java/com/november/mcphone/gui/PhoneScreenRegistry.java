@@ -7,6 +7,7 @@ import com.november.mcphone.api.client.IPhoneApp;
 import com.november.mcphone.api.client.RequiredMod;
 import com.november.mcphone.cost.AppPriceRegistry;
 import com.november.mcphone.network.store.StoreClientCache;
+import com.november.mcphone.util.SpiLoader;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ServerData;
 import net.minecraft.resources.ResourceLocation;
@@ -346,9 +347,20 @@ public final class PhoneScreenRegistry {
         // 所有 App 均通过 SPI 发现，包括内建 App
         // ServiceLoader 会扫描所有已加载 jar 包中的
         // META-INF/services/com.november.mcphone.api.client.IPhoneApp
+        //
+        // 走 SpiLoader 而不是直接 for-each ServiceLoader：一个附属的 App 构造失败
+        // 会让整个扫描中断，内建 App 一个都登记不上，玩家的手机变成空的。理由
+        // 详见那个类的注释
         int count = 0;
-        for (IPhoneApp app : ServiceLoader.load(IPhoneApp.class)) {
-            if (register(app)) count++;
+        for (IPhoneApp app : SpiLoader.loadSafely(IPhoneApp.class, "App")) {
+            // register 会调 getId()、isAvailable()——都是第三方代码，同样要兜。
+            // 一个 App 的 isAvailable() 抛异常，不该让它后面那些登记不上
+            try {
+                if (register(app)) count++;
+            } catch (Throwable t) {
+                MCphone.LOGGER.error("[MCphone] App {} 登记时抛异常，已跳过",
+                        app.getClass().getName(), t);
+            }
         }
         MCphone.LOGGER.info("[MCphone] SPI 扫描完成，目录中共 {} 个 App", count);
     }

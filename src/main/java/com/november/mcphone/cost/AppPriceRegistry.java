@@ -3,6 +3,7 @@ package com.november.mcphone.cost;
 import com.november.mcphone.MCphone;
 import com.november.mcphone.api.cost.IAppPriceProvider;
 import com.november.mcphone.api.cost.ICost;
+import com.november.mcphone.util.SpiLoader;
 import net.minecraft.resources.ResourceLocation;
 
 import java.util.LinkedHashMap;
@@ -92,7 +93,9 @@ public final class AppPriceRegistry {
 
         int providers = 0;
         int registered = 0;
-        for (IAppPriceProvider provider : ServiceLoader.load(IAppPriceProvider.class)) {
+        // 走 SpiLoader：下面那个 try 兜的是 prices() 抛异常，兜不住"这个类根本造不出来"——
+        // 后者是从迭代器抛的，会中断整个扫描，所有报价一起丢，付费 App 全变免费
+        for (IAppPriceProvider provider : SpiLoader.loadSafely(IAppPriceProvider.class, "App 报价")) {
             providers++;
             try {
                 Map<ResourceLocation, ICost> prices = provider.prices();
