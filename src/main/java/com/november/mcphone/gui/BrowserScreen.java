@@ -179,13 +179,37 @@ public final class BrowserScreen extends Screen {
 
     @Override
     public void onClose() {
-        // 必须关。浏览器背后是一个真的 Chromium 渲染进程，不关的话玩家退出界面
-        // 之后，一个看不见的网页还在后台放视频、发网络请求
+        // 这里只管回到手机。浏览器的释放在 removed() 里——setScreen 会先调它
+        minecraft.setScreen(parent);
+    }
+
+    /**
+     * 界面被换掉时释放浏览器。
+     *
+     * ============================================================
+     * 为什么写在 removed() 而不是 onClose()
+     * ============================================================
+     *
+     * onClose 只在玩家【主动关闭】（按 ESC）时走。而 Minecraft.setScreen 换界面
+     * 时调的是另一个：
+     *
+     *     if (old != null && guiScreen != old) { ...; old.removed(); }
+     *
+     * 断线、退回主菜单、世界卸载、死亡界面弹出、别的模组切界面——这些路径一条
+     * 都不经过 onClose。释放写在那儿的话，浏览器就不会被关，而它背后是一个真的
+     * Chromium 渲染进程：玩家已经离开界面了，一个看不见的网页还在放视频、发网络
+     * 请求，直到退出游戏。
+     *
+     * removed() 覆盖全部退出路径，包括 ESC——onClose 里那句 setScreen 自己就会
+     * 触发它。窗口大小变化走的是 init()，不经过这里，不会误伤。
+     */
+    @Override
+    public void removed() {
+        super.removed();
         if (browser != null) {
             browser.close();
             browser = null;
         }
-        minecraft.setScreen(parent);
     }
 
     /** 浏览器自己在跑，界面不需要暂停游戏 */
