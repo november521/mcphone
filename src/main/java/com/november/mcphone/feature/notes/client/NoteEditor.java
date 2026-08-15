@@ -1,14 +1,11 @@
 package com.november.mcphone.feature.notes.client;
 
 import com.november.mcphone.feature.notes.Note;
-import com.november.mcphone.feature.notes.NotePrinter;
 import com.november.mcphone.feature.notes.NoteService;
 import com.november.mcphone.feature.notes.net.DeleteNotePacket;
 import com.november.mcphone.feature.notes.net.NotesClientCache;
-import com.november.mcphone.feature.notes.net.PrintNotePacket;
 import com.november.mcphone.feature.notes.net.RequestNotePacket;
 import com.november.mcphone.feature.notes.net.SaveNotePacket;
-import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.MultiLineEditBox;
@@ -86,16 +83,12 @@ public final class NoteEditor {
     private static final int SCROLL_BAR_W = 8;
 
     private static final int COLOR_SAVE = 0xFF66FF88;
-    private static final int COLOR_PRINT = 0xFF88CCFF;
     private static final int COLOR_DELETE = 0xFFFF8888;
     private static final int COLOR_HOVER = 0xFFFFFFFF;
     private static final int COLOR_HINT = 0xFF888888;
 
     /** 删除已上膛时的颜色 —— 与相册的确认态一致 */
     private static final int COLOR_ARMED = 0xFFFFDD44;
-
-    /** 临时提示的颜色 */
-    private static final int COLOR_TOAST = 0xFFFFDD44;
 
     private MultiLineEditBox box;
 
@@ -106,7 +99,6 @@ public final class NoteEditor {
     private boolean filled;
 
     private boolean saveHovered;
-    private boolean printHovered;
     private boolean deleteHovered;
 
     /**
@@ -123,19 +115,6 @@ public final class NoteEditor {
     /** 保存或删除后置位，PhoneScreen 取走后退回列表 */
     private boolean backRequested;
 
-    /**
-     * 手机屏幕里的一行临时提示。
-     *
-     * 打印的结果本来是服务端用动作栏说的，但动作栏在游戏 HUD 上、手机
-     * 机身之外——玩家正盯着手机屏幕，得先关掉手机才看得见那句话，等于
-     * 白说。所以结果也在这块小屏幕里说一遍。
-     */
-    private String toast = "";
-    private long toastUntilMs;
-
-    /** 提示停留时长。够读完一行短句，又不至于赖着不走 */
-    private static final long TOAST_MS = 2500L;
-
     // ============================================================
     //  生命周期
     // ============================================================
@@ -145,7 +124,6 @@ public final class NoteEditor {
         this.noteId = id;
         this.filled = false;
         this.deleteArmed = false;
-        this.toast = "";
         resetBox();
 
         NotesClientCache.openNote(id);
@@ -157,7 +135,6 @@ public final class NoteEditor {
         this.noteId = NoteService.NEW_NOTE_ID;
         this.filled = true;   // 白纸本身就是"填好了"，别再等回包
         this.deleteArmed = false;
-        this.toast = "";
         resetBox();
 
         NotesClientCache.openNewNote();
@@ -165,7 +142,6 @@ public final class NoteEditor {
 
     public void close() {
         saveHovered = false;
-        printHovered = false;
         deleteHovered = false;
         deleteArmed = false;
         backRequested = false;
@@ -223,9 +199,6 @@ public final class NoteEditor {
         box.render(g, mouseX, mouseY, partialTick);
 
         renderButtons(g, font, x, buttonY, w, mouseX, mouseY);
-
-        // 画在字数那一行的位置：那儿本来就是空的，且紧挨按钮，视线不用挪
-        renderToast(g, font, x, buttonY - font.lineHeight - 1, w);
     }
 
     /**
@@ -244,31 +217,32 @@ public final class NoteEditor {
         filled = true;
     }
 
+    /**
+     * 底部只有两个按钮：保存在左，删除在右。
+     *
+     * 打印【不】在这儿。它曾经摆在中间，而删除上膛之后文案从"删除"变成
+     * "再点一次删除"，右对齐往左长出一大截，正好压住打印那两个字——112 像素宽
+     * 的屏幕上，两者重叠 7 像素。
+     *
+     * 挤是表象，根子是打印本来就不属于这一页：它对笔记做的事跟"编辑"无关，
+     * 放在列表页每条笔记的尾部更顺手，还顺带消掉了"新建未保存不能打印"那个
+     * 置灰态——列表里的每一条本来就都保存过。
+     */
     private void renderButtons(GuiGraphics g, Font font, int x, int y, int w,
                                int mouseX, int mouseY) {
         String save = Component.translatable("mcphone.settings.save").getString();
         String delete = Component.translatable(
                 deleteArmed ? "mcphone.notes.delete_confirm" : "mcphone.notes.delete").getString();
 
-        String print = Component.translatable("mcphone.notes.print").getString();
-
         int saveW = font.width(save);
-        int printW = font.width(print);
         int deleteW = font.width(delete);
         int deleteX = x + w - deleteW;
-        int printX = x + (w - printW) / 2;   // 摆中间，与左右两个按钮都拉开距离
 
         boolean inRow = mouseY >= y - 2 && mouseY < y + font.lineHeight + 2;
         saveHovered = inRow && mouseX >= x - 2 && mouseX < x + saveW + 2;
-        printHovered = inRow && mouseX >= printX - 2 && mouseX < printX + printW + 2;
         deleteHovered = inRow && mouseX >= deleteX - 2 && mouseX < deleteX + deleteW + 2;
 
         g.drawString(font, save, x, y, saveHovered ? COLOR_HOVER : COLOR_SAVE, false);
-
-        // 没保存过的新笔记印不出东西来，与删除一样置灰
-        boolean printable = noteId != NoteService.NEW_NOTE_ID;
-        g.drawString(font, print, printX, y,
-                !printable ? COLOR_HINT : (printHovered ? COLOR_HOVER : COLOR_PRINT), false);
 
         // 新建还没保存过的笔记没什么可删，删除键置灰
         boolean deletable = noteId != NoteService.NEW_NOTE_ID;
@@ -286,7 +260,6 @@ public final class NoteEditor {
     public boolean mouseClicked(double mx, double my, int button) {
         if (button == 0) {
             if (saveHovered) { save(); return true; }
-            if (printHovered && noteId != NoteService.NEW_NOTE_ID) { print(); return true; }
             if (deleteHovered && noteId != NoteService.NEW_NOTE_ID) { delete(); return true; }
         }
         // 点到别处就卸膛：玩家已经去干别的事了，那一下删除多半是误触
@@ -329,42 +302,6 @@ public final class NoteEditor {
         deleteArmed = false;
         PacketDistributor.sendToServer(new SaveNotePacket(noteId, box.getValue()));
         backRequested = true;
-    }
-
-    /**
-     * 印成一本书。
-     *
-     * 只发 id，正文以服务端存的那份为准。留在编辑界面不退回列表：打印
-     * 不改变笔记本身，把人踢回列表反而像是出了什么事。
-     *
-     * 成没成由服务端用动作栏回话——它才知道玩家有没有那本空白的书。
-     */
-    private void print() {
-        deleteArmed = false;
-
-        // 背包在客户端是齐全的，够不够这里就能算准——不必先发一趟包，
-        // 等服务端拒绝了再回话。缺书是最常见的失败，就地说清楚
-        Minecraft mc = Minecraft.getInstance();
-        if (mc.player != null && !NotePrinter.COST.canAfford(mc.player)) {
-            showToast("mcphone.notes.print_failed");
-            return;
-        }
-
-        PacketDistributor.sendToServer(new PrintNotePacket(noteId));
-        showToast("mcphone.notes.print_done");
-    }
-
-    private void showToast(String translationKey) {
-        toast = Component.translatable(translationKey).getString();
-        toastUntilMs = System.currentTimeMillis() + TOAST_MS;
-    }
-
-    /** 提示画在按钮行正上方，到点自动消失 */
-    private void renderToast(GuiGraphics g, Font font, int x, int y, int w) {
-        if (toast.isEmpty() || System.currentTimeMillis() > toastUntilMs) return;
-
-        int tw = font.width(toast);
-        g.drawString(font, toast, x + (w - tw) / 2, y, COLOR_TOAST, false);
     }
 
     /** 第一次点上膛，第二次才真删 —— 理由见 deleteArmed 的注释 */
