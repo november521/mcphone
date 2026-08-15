@@ -16,6 +16,9 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import org.joml.Matrix4f;
 
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+
 /**
  * 浏览器界面 —— 一块比手机大得多的面板，装整个网页。
  *
@@ -49,6 +52,14 @@ public final class BrowserScreen extends Screen {
      * 而"改主页"这个需求还没出现过，先留常量，真有人要再说。
      */
     private static final String HOME_URL = "https://www.bing.com";
+
+    /**
+     * 地址栏里打的不像地址时，拿它去搜。
+     *
+     * 与 HOME_URL 是同一家，换搜索引擎时两处一起换。没有并成一个常量：首页是个
+     * 光地址，这个后面要拼查询串，形状不一样，拼接的写法藏在一个常量里更容易出错。
+     */
+    private static final String SEARCH_URL = "https://www.bing.com/search?q=";
 
     /** 面板四周留出的边距占屏幕的比例。九成面积，一成留白 */
     private static final float MARGIN_RATIO = 0.05f;
@@ -568,22 +579,47 @@ public final class BrowserScreen extends Screen {
         return super.charTyped(codePoint, modifiers);
     }
 
-    /**
-     * 把地址栏里的东西当地址打开。
-     *
-     * 没写协议的补 https://。不补的话 Chromium 会把 "bilibili.com" 当成一个
-     * 相对路径，得到一个打不开的地址，而玩家只会觉得"输网址没反应"。
-     */
+    /** 把地址栏里的东西打开：像地址就当地址，不像就拿去搜 */
     private void navigateToTypedUrl() {
         if (browser == null) return;
         String input = urlBox.getValue().trim();
         if (input.isEmpty()) return;
 
-        String url = input.contains("://") ? input : "https://" + input;
-        browser.loadUrl(url);
+        browser.loadUrl(toUrl(input));
         urlBox.setFocused(false);
         urlEdited = false;
         browser.setFocus(true);
+    }
+
+    /**
+     * 玩家敲进去的这一串，是地址还是搜索词。
+     *
+     * ============================================================
+     * 为什么要判，不能一律补 https://
+     * ============================================================
+     *
+     * 地址栏兼搜索框是现在所有浏览器的默认行为，玩家一定会直接在里面打关键词。
+     * 一律补协议头的话，"红石中继器怎么做"会变成 https://红石中继器怎么做——一个
+     * 必然打不开的地址，而玩家只会觉得这浏览器搜不了东西。
+     *
+     * ============================================================
+     * 规则只有三条，刻意简单
+     * ============================================================
+     *
+     * 一、带 :// 就是地址，原样打开。file:// 之类也走这条。
+     * 二、带空格的一定不是地址——域名里不允许有空格。
+     * 三、剩下的看有没有点：有点当域名补 https://，没点当搜索词。
+     *
+     * 中文关键词天然既没有点也没有空格，正好落进第三条的搜索那一半。
+     *
+     * 已知会被判成搜索词的：localhost、不带点的内网主机名。接受这个代价——真要
+     * 开本地服务的人打得出 http://localhost，而反过来把每个不带点的词都先当域名
+     * 去解析，代价是玩家每搜一个词都要先等一次 DNS 失败。
+     */
+    private static String toUrl(String input) {
+        if (input.contains("://")) return input;
+        if (!input.contains(" ") && input.contains(".")) return "https://" + input;
+        return SEARCH_URL + URLEncoder.encode(input, StandardCharsets.UTF_8);
     }
 
     @Override
