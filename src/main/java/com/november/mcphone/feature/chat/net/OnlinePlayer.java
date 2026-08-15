@@ -1,4 +1,4 @@
-package com.november.mcphone.network.chat;
+package com.november.mcphone.feature.chat.net;
 
 import io.netty.buffer.ByteBuf;
 import net.minecraft.core.UUIDUtil;

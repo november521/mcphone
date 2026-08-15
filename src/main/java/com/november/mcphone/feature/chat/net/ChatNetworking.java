@@ -1,7 +1,7 @@
-package com.november.mcphone.network.chat;
+package com.november.mcphone.feature.chat.net;
 
-import com.november.mcphone.chat.ChatMessage;
-import com.november.mcphone.chat.ChatService;
+import com.november.mcphone.feature.chat.ChatMessage;
+import com.november.mcphone.feature.chat.ChatService;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.neoforge.network.PacketDistributor;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
@@ -9,6 +9,7 @@ import net.neoforged.neoforge.network.registration.PayloadRegistrar;
 
 import java.util.List;
 import com.november.mcphone.core.net.NetworkHandler;
+import com.november.mcphone.feature.chat.net.ChatClientCache;
 
 /**
  * 聊天相关网络包的注册与处理。

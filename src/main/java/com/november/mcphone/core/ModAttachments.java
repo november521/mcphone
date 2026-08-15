@@ -1,6 +1,6 @@
 package com.november.mcphone.core;
 
-import com.november.mcphone.chat.ChatReadState;
+import com.november.mcphone.feature.chat.ChatReadState;
 import com.november.mcphone.cost.PurchasedApps;
 import com.november.mcphone.network.WallpaperData;
 import com.november.mcphone.notes.NoteList;
@@ -10,6 +10,7 @@ import net.neoforged.neoforge.registries.NeoForgeRegistries;
 
 import java.util.function.Supplier;
 import com.november.mcphone.MCphone;
+import com.november.mcphone.feature.chat.FriendData;
 
 /**
  * 玩家附着数据（Attachment）注册。
@@ -17,7 +18,7 @@ import com.november.mcphone.MCphone;
  * 附件存"跟着玩家走"的东西：壁纸偏好、联系人列表这类。
  * 与之相对，{@link ModDataComponents} 存"跟着物品走"的东西（如设备名），
  * 而两个玩家之间的数据（聊天记录）既不属于人也不属于物，
- * 存在世界存档里，见 {@link com.november.mcphone.chat.ChatData}。
+ * 存在世界存档里，见 {@link com.november.mcphone.feature.chat.ChatData}。
  *
  * 注册入口在 MCphone 构造函数中挂到模组总线。
  */

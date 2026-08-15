@@ -7,6 +7,7 @@ import net.minecraft.server.level.ServerPlayer;
 
 import java.util.List;
 import java.util.Optional;
+import com.november.mcphone.feature.chat.ChatService;
 
 /**
  * 记事本的业务逻辑 —— 服务端侧。

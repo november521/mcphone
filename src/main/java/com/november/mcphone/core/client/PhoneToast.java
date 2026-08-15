@@ -1,6 +1,6 @@
 package com.november.mcphone.core.client;
 
-import com.november.mcphone.chat.ChatMessage;
+import com.november.mcphone.feature.chat.ChatMessage;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.toasts.Toast;

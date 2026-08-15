@@ -1,12 +1,12 @@
-package com.november.mcphone.gui;
+package com.november.mcphone.feature.chat.client;
 
-import com.november.mcphone.network.chat.ChatClientCache;
-import com.november.mcphone.network.chat.FriendRequestPacket;
-import com.november.mcphone.network.chat.OnlinePlayer;
-import com.november.mcphone.network.chat.Relation;
-import com.november.mcphone.network.chat.RemoveFriendPacket;
-import com.november.mcphone.network.chat.RequestOnlinePlayersPacket;
-import com.november.mcphone.network.chat.RespondFriendRequestPacket;
+import com.november.mcphone.feature.chat.net.ChatClientCache;
+import com.november.mcphone.feature.chat.net.FriendRequestPacket;
+import com.november.mcphone.feature.chat.net.OnlinePlayer;
+import com.november.mcphone.feature.chat.net.Relation;
+import com.november.mcphone.feature.chat.net.RemoveFriendPacket;
+import com.november.mcphone.feature.chat.net.RequestOnlinePlayersPacket;
+import com.november.mcphone.feature.chat.net.RespondFriendRequestPacket;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;

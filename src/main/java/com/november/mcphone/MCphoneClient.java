@@ -1,7 +1,7 @@
 package com.november.mcphone;
 
 import com.november.mcphone.client.CameraHandler;
-import com.november.mcphone.client.ChatNotifier;
+import com.november.mcphone.feature.chat.client.ChatNotifier;
 import com.november.mcphone.core.client.MCphoneKeyBindings;
 import com.november.mcphone.core.client.PhoneKeyHandler;
 import com.november.mcphone.core.client.PhoneContainerScreen;
@@ -9,7 +9,7 @@ import com.november.mcphone.core.client.PhoneScreenRegistry;
 import com.november.mcphone.core.client.PhoneSkin;
 import com.november.mcphone.gui.WallpaperStore;
 import com.november.mcphone.core.menu.ModMenus;
-import com.november.mcphone.network.chat.ChatClientCache;
+import com.november.mcphone.feature.chat.net.ChatClientCache;
 import com.november.mcphone.network.notes.NotesClientCache;
 import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 import net.neoforged.neoforge.client.event.RegisterClientReloadListenersEvent;

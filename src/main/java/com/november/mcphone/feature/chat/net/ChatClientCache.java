@@ -1,11 +1,14 @@
-package com.november.mcphone.network.chat;
+package com.november.mcphone.feature.chat.net;
 
-import com.november.mcphone.chat.ChatMessage;
+import com.november.mcphone.feature.chat.ChatMessage;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.function.BiConsumer;
+import com.november.mcphone.feature.chat.net.ChatNetworking;
+import com.november.mcphone.feature.chat.net.ConversationSummary;
+import com.november.mcphone.feature.chat.net.OnlinePlayer;
 
 /**
  * 客户端本地的聊天数据缓存 —— 界面每帧从这里读，不发包。
@@ -19,6 +22,17 @@ import java.util.function.BiConsumer;
  *
  * 只缓存【当前打开的那一个】会话的消息，而不是所有会话：玩家一次只看
  * 一个会话，把全部历史都留在内存里没有意义。切换会话时整份替换。
+ */
+/*
+ * 【为什么在 net 包而不是 client 包】
+ *
+ * 它装的确实是客户端侧的状态，但它【一个客户端类型都不许出现】——同包的
+ * ChatNetworking 是两端代码，服务端注册网络包时会加载它，而它的方法体里
+ * 引用了本类。本类哪天多一句 import net.minecraft.client.*，专用服务器
+ * 就会启动即崩，崩溃信息还不会提到聊天。
+ *
+ * 放进 client 包会让这条约束隐形：那个包的规矩恰恰是"可以引用客户端类型"。
+ * 放在这里，扫描产物字节码时它和网络包受同一条规则约束，是机器可校验的。
  */
 public final class ChatClientCache {
 

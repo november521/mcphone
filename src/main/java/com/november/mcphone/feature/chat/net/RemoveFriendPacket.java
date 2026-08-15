@@ -1,4 +1,4 @@
-package com.november.mcphone.network.chat;
+package com.november.mcphone.feature.chat.net;
 
 import com.november.mcphone.MCphone;
 import io.netty.buffer.ByteBuf;

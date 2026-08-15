@@ -4,6 +4,7 @@ import com.november.mcphone.notes.Note;
 import com.november.mcphone.notes.NoteSummary;
 
 import java.util.List;
+import com.november.mcphone.feature.chat.net.ChatClientCache;
 
 /**
  * 客户端本地的笔记缓存 —— 界面每帧从这里读，不发包。

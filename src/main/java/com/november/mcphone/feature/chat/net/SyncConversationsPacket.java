@@ -1,7 +1,7 @@
-package com.november.mcphone.network.chat;
+package com.november.mcphone.feature.chat.net;
 
 import com.november.mcphone.MCphone;
-import com.november.mcphone.chat.FriendData;
+import com.november.mcphone.feature.chat.FriendData;
 import io.netty.buffer.ByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;

@@ -1,10 +1,10 @@
-package com.november.mcphone.chat;
+package com.november.mcphone.feature.chat;
 
 import com.november.mcphone.core.ModAttachments;
 import com.november.mcphone.core.PhoneItem;
-import com.november.mcphone.network.chat.ConversationSummary;
-import com.november.mcphone.network.chat.OnlinePlayer;
-import com.november.mcphone.network.chat.Relation;
+import com.november.mcphone.feature.chat.net.ConversationSummary;
+import com.november.mcphone.feature.chat.net.OnlinePlayer;
+import com.november.mcphone.feature.chat.net.Relation;
 import com.november.mcphone.util.TextSanitizer;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;

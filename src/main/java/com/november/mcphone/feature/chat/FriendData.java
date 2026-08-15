@@ -1,4 +1,4 @@
-package com.november.mcphone.chat;
+package com.november.mcphone.feature.chat;
 
 import com.mojang.serialization.Codec;
 import com.november.mcphone.MCphone;

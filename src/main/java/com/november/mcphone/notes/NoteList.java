@@ -10,6 +10,8 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
+import com.november.mcphone.feature.chat.ChatData;
+import com.november.mcphone.feature.chat.FriendData;
 
 /**
  * 记事本里的一整组笔记。

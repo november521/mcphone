@@ -1,8 +1,8 @@
-package com.november.mcphone.gui;
+package com.november.mcphone.feature.chat.client;
 
-import com.november.mcphone.network.chat.ChatClientCache;
-import com.november.mcphone.network.chat.ConversationSummary;
-import com.november.mcphone.network.chat.RequestConversationsPacket;
+import com.november.mcphone.feature.chat.net.ChatClientCache;
+import com.november.mcphone.feature.chat.net.ConversationSummary;
+import com.november.mcphone.feature.chat.net.RequestConversationsPacket;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;

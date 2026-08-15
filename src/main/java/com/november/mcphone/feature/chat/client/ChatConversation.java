@@ -1,12 +1,12 @@
-package com.november.mcphone.gui;
+package com.november.mcphone.feature.chat.client;
 
-import com.november.mcphone.chat.ChatMessage;
-import com.november.mcphone.network.chat.ChatClientCache;
-import com.november.mcphone.network.chat.ConversationSummary;
-import com.november.mcphone.network.chat.MarkReadPacket;
-import com.november.mcphone.network.chat.RequestConversationsPacket;
-import com.november.mcphone.network.chat.RequestMessagesPacket;
-import com.november.mcphone.network.chat.SendChatMessagePacket;
+import com.november.mcphone.feature.chat.ChatMessage;
+import com.november.mcphone.feature.chat.net.ChatClientCache;
+import com.november.mcphone.feature.chat.net.ConversationSummary;
+import com.november.mcphone.feature.chat.net.MarkReadPacket;
+import com.november.mcphone.feature.chat.net.RequestConversationsPacket;
+import com.november.mcphone.feature.chat.net.RequestMessagesPacket;
+import com.november.mcphone.feature.chat.net.SendChatMessagePacket;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
@@ -26,6 +26,7 @@ import com.november.mcphone.core.client.PhoneScreen;
 import com.november.mcphone.core.client.PhoneSkin;
 import com.november.mcphone.core.client.PhoneTheme;
 import com.november.mcphone.core.client.PlayerAvatar;
+import com.november.mcphone.feature.chat.net.ChatNetworking;
 
 /**
  * 单个会话界面 —— 和某一位好友的聊天记录。
