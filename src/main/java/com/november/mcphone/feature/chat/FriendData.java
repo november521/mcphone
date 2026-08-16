@@ -11,7 +11,6 @@ import net.minecraft.world.level.saveddata.SavedData;
 
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -53,8 +52,14 @@ public class FriendData extends SavedData {
     /** 每人待处理申请数上限，防止被人刷屏 */
     public static final int MAX_PENDING_PER_PLAYER = 50;
 
-    /** 已成为好友的双方，键为归一化后的 UUID 对 */
-    private final Set<String> friendships;
+    /**
+     * 好友关系图。
+     *
+     * 1.3.22 之前这里是 Set&lt;String&gt;，元素是归一化后的 "a|b"，于是问
+     * "某人有哪些好友"要遍历全服每一条关系。理由与代价见 {@link FriendGraph}
+     * 的类注释；存档格式没有变，转换由它负责。
+     */
+    private final FriendGraph friends;
 
     /** 待处理申请：收件人 → (申请人 → 申请时刻) */
     private final Map<UUID, Map<UUID, Long>> pendingRequests;
@@ -64,8 +69,13 @@ public class FriendData extends SavedData {
 
     // ---- 序列化 ----
 
-    private static final Codec<Set<String>> FRIENDSHIPS_CODEC =
-            Codec.STRING.listOf().xmap(HashSet::new, ArrayList::new);
+    /**
+     * 存档里仍然是一串归一化后的 "a|b"，与 1.3.22 及更早完全一致。
+     *
+     * 老存档照读，新存档拿回老版本也照读——不这么做的话，玩家想退版本
+     * 就得在"退版本"和"丢好友"之间选一个。
+     */
+    private static final Codec<List<String>> FRIENDSHIPS_CODEC = Codec.STRING.listOf();
 
     private static final Codec<Map<UUID, Map<UUID, Long>>> REQUESTS_CODEC =
             Codec.unboundedMap(UUIDUtil.STRING_CODEC,
@@ -75,15 +85,15 @@ public class FriendData extends SavedData {
             Codec.unboundedMap(UUIDUtil.STRING_CODEC, Codec.STRING);
 
     public FriendData() {
-        this.friendships = new HashSet<>();
+        this.friends = new FriendGraph();
         this.pendingRequests = new HashMap<>();
         this.knownNames = new HashMap<>();
     }
 
-    private FriendData(Set<String> friendships,
+    private FriendData(FriendGraph friends,
                        Map<UUID, Map<UUID, Long>> pendingRequests,
                        Map<UUID, String> knownNames) {
-        this.friendships = friendships;
+        this.friends = friends;
         this.pendingRequests = pendingRequests;
         this.knownNames = knownNames;
     }
@@ -104,18 +114,13 @@ public class FriendData extends SavedData {
     //  好友关系
     // ============================================================
 
-    /** 与 ChatData 用同一套归一化规则，A|B 与 B|A 落到同一个键 */
-    private static String pairKey(UUID a, UUID b) {
-        return ChatData.conversationKey(a, b);
-    }
-
     public boolean areFriends(UUID a, UUID b) {
-        return friendships.contains(pairKey(a, b));
+        return friends.areFriends(a, b);
     }
 
     /** 成为好友。已经是好友则返回 false */
     public boolean addFriendship(UUID a, UUID b) {
-        if (!friendships.add(pairKey(a, b))) return false;
+        if (!friends.add(a, b)) return false;
         setDirty();
         return true;
     }
@@ -128,38 +133,24 @@ public class FriendData extends SavedData {
      * 替对方做决定。
      */
     public boolean removeFriendship(UUID a, UUID b) {
-        if (!friendships.remove(pairKey(a, b))) return false;
+        if (!friends.remove(a, b)) return false;
         setDirty();
         return true;
     }
 
-    /** 某人的全部好友 */
+    /** 某人的全部好友。一次哈希查找，不再扫全服 */
     public List<UUID> getFriends(UUID player) {
-        String self = player.toString();
-        List<UUID> out = new ArrayList<>();
-
-        for (String key : friendships) {
-            int sep = key.indexOf('|');
-            if (sep < 0) continue;                  // 脏数据，跳过而不是抛异常
-
-            String left = key.substring(0, sep);
-            String right = key.substring(sep + 1);
-            String other;
-            if (left.equals(self)) other = right;
-            else if (right.equals(self)) other = left;
-            else continue;
-
-            try {
-                out.add(UUID.fromString(other));
-            } catch (IllegalArgumentException ignored) {
-                // 存档被手改过，忽略这一条而不是让服务端起不来
-            }
-        }
-        return out;
+        return new ArrayList<>(friends.friendsOf(player));
     }
 
+    /**
+     * 某人有几个好友。
+     *
+     * 不再走 getFriends().size()：那样为了一个数字要先把好友列出来。
+     * 这个方法在每次发好友申请时被调两次（查双方的上限）。
+     */
     public int countFriends(UUID player) {
-        return getFriends(player).size();
+        return friends.countFriends(player);
     }
 
     // ============================================================
@@ -247,7 +238,7 @@ public class FriendData extends SavedData {
 
     @Override
     public CompoundTag save(CompoundTag tag, HolderLookup.Provider registries) {
-        encode(FRIENDSHIPS_CODEC, friendships, tag, "friendships");
+        encode(FRIENDSHIPS_CODEC, friends.toPairKeys(), tag, "friendships");
         encode(REQUESTS_CODEC, pendingRequests, tag, "requests");
         encode(NAMES_CODEC, knownNames, tag, "names");
         return tag;
@@ -260,7 +251,8 @@ public class FriendData extends SavedData {
     }
 
     private static FriendData load(CompoundTag tag, HolderLookup.Provider registries) {
-        Set<String> friendships = new HashSet<>(decode(FRIENDSHIPS_CODEC, tag, "friendships", Set.of()));
+        FriendGraph friends = FriendGraph.fromPairKeys(
+                decode(FRIENDSHIPS_CODEC, tag, "friendships", List.of()));
 
         // Codec 解出来的是不可变集合，而运行时要往里增删。不复制的话，
         // 读过档的世界里第一次加好友就会抛 UnsupportedOperationException——
@@ -271,7 +263,7 @@ public class FriendData extends SavedData {
 
         Map<UUID, String> names = new HashMap<>(decode(NAMES_CODEC, tag, "names", Map.of()));
 
-        return new FriendData(friendships, requests, names);
+        return new FriendData(friends, requests, names);
     }
 
     private static <T> T decode(Codec<T> codec, CompoundTag tag, String key, T fallback) {

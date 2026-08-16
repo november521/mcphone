@@ -87,9 +87,7 @@ public class ChatData extends SavedData {
      * 双方各自只看得到自己发的那一半。
      */
     public static String conversationKey(UUID a, UUID b) {
-        String sa = a.toString();
-        String sb = b.toString();
-        return sa.compareTo(sb) <= 0 ? sa + "|" + sb : sb + "|" + sa;
+        return FriendGraph.pairKey(a, b);
     }
 
     // ============================================================
@@ -118,35 +116,6 @@ public class ChatData extends SavedData {
             list.remove(0);
         }
         setDirty();
-    }
-
-    /**
-     * 某玩家有消息往来的所有对端 UUID。
-     *
-     * 用于列出会话列表——联系人加了但没聊过的不在此列，
-     * 会话列表由调用方与联系人表合并后决定显示什么。
-     */
-    public List<UUID> getPeers(UUID player) {
-        String self = player.toString();
-        List<UUID> peers = new ArrayList<>();
-        for (String key : conversations.keySet()) {
-            int sep = key.indexOf('|');
-            if (sep < 0) continue;          // 脏数据，跳过而不是抛异常
-            String left = key.substring(0, sep);
-            String right = key.substring(sep + 1);
-
-            String other;
-            if (left.equals(self)) other = right;
-            else if (right.equals(self)) other = left;
-            else continue;
-
-            try {
-                peers.add(UUID.fromString(other));
-            } catch (IllegalArgumentException ignored) {
-                // 存档被手改过，忽略这一条而不是让整个服务端起不来
-            }
-        }
-        return peers;
     }
 
     /** 最后一条消息，用于会话列表的摘要行。没有则返回 null */
