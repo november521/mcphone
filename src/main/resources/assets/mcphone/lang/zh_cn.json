@@ -128,5 +128,10 @@
   "mcphone.clock.until_sunset": "天黑还有",
   "mcphone.clock.until_sunrise": "天亮还有",
   "mcphone.clock.frozen": "时间已停止",
-  "mcphone.clock.no_world": "还没进入世界"
+  "mcphone.clock.no_world": "还没进入世界",
+  "mcphone.clock.session": "本次",
+  "mcphone.clock.total": "存档",
+  "mcphone.clock.unknown": "—",
+  "mcphone.clock.duration_hm": "%s 小时 %s 分",
+  "mcphone.clock.duration_m": "%s 分"
 }

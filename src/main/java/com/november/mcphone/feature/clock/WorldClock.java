@@ -192,4 +192,44 @@ public final class WorldClock {
     public static int toRealSeconds(int ticks) {
         return ticks / TICKS_PER_REAL_SECOND;
     }
+
+    // ============================================================
+    //  游玩时长
+    // ============================================================
+    //
+    // 【这里的 tick 与上面那些不是一回事】
+    //
+    // 上面全是昼夜循环的 tick：一"天" 24000 个，一个 MC 日等于现实 20 分钟。
+    // 这里是【现实时间】的 tick：一秒 20 个，一小时 72000 个。原版
+    // Stats.PLAY_TIME 记的是后者。
+    //
+    // 两者都叫 tick，都是 long，混用编译得过——而混用的结果是把 106 小时
+    // 显示成 3 小时半，看着像个正常数字。所以这一组方法一律带 play 前缀，
+    // 参数名一律写 realTicks，不叫 ticks。
+
+    /** 一小时有多少个现实 tick */
+    private static final long TICKS_PER_REAL_HOUR = TICKS_PER_REAL_SECOND * 3600L;
+
+    /** 一分钟有多少个现实 tick */
+    private static final long TICKS_PER_REAL_MINUTE = TICKS_PER_REAL_SECOND * 60L;
+
+    /** 玩了几小时（整数部分）。负数当 0 —— 统计值不该是负的，但不必为此崩 */
+    public static long playHours(long realTicks) {
+        return Math.max(0, realTicks) / TICKS_PER_REAL_HOUR;
+    }
+
+    /** 玩了几小时【零几分】，0–59。是余数，不是总分钟数 */
+    public static int playMinutes(long realTicks) {
+        return (int) (Math.max(0, realTicks) / TICKS_PER_REAL_MINUTE % 60);
+    }
+
+    /** 同上，但输入是毫秒 —— 本次游玩时长按墙上时钟算，见 PlayTime 的注释 */
+    public static long playHoursOfMillis(long millis) {
+        return Math.max(0, millis) / 3_600_000L;
+    }
+
+    /** 同上，0–59 */
+    public static int playMinutesOfMillis(long millis) {
+        return (int) (Math.max(0, millis) / 60_000L % 60);
+    }
 }

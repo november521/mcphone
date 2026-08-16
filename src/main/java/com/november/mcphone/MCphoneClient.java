@@ -12,6 +12,7 @@ import com.november.mcphone.feature.chat.net.ChatClientCache;
 import com.november.mcphone.feature.notes.net.NotesClientCache;
 import com.november.mcphone.feature.settings.client.WallpaperStore;
 import com.november.mcphone.feature.store.net.StoreClientCache;
+import com.november.mcphone.feature.clock.client.PlayTime;
 import net.minecraft.client.Minecraft;
 import net.minecraft.server.packs.resources.ResourceManagerReloadListener;
 import net.neoforged.api.distmarker.Dist;
@@ -57,6 +58,10 @@ public class MCphoneClient {
                     // 下一个存档在自己的状态读进来之前会先显示上一个的主屏，
                     // 玩家若恰好这时点了什么，还会被写进新存档的文件里
                     PhoneScreenRegistry.unloadWorld();
+
+                    // 本次游玩计时归零。不清的话，回主菜单再进另一个存档，
+                    // "本次"会从上一个世界就开始算
+                    PlayTime.onWorldLeave();
                 });
 
         // 进世界时读这个存档自己的安装状态。不能在客户端启动时读——那会儿
@@ -67,6 +72,10 @@ public class MCphoneClient {
                     // 顺手要一份购买记录：没买过的付费 App 要从主屏摘掉，
                     // 而那要等这份记录到了才知道
                     StoreClientCache.request();
+
+                    // 本次游玩从这一刻起算，顺便向服务端要一份统计，
+                    // 好知道这个存档一共玩了多久
+                    PlayTime.onWorldJoin();
                 });
 
         // 购买记录一到就核对主屏。走监听器而不是让网络层直接调注册表：

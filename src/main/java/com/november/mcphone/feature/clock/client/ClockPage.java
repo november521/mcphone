@@ -135,6 +135,48 @@ public final class ClockPage {
 
         // ---- 天黑 / 天亮倒计时 ----
         y = drawCountdown(g, font, x, y, w, dayTime, frozen);
+
+        y += 5;
+        g.fill(x, y, x + w, y + 1, PhoneTheme.COLOR_DIVIDER);
+        y += 6;
+
+        // ---- 两个游玩时长 ----
+        // 每帧都调，节流在 PlayTime 里面。放在调用方的话，迟早有一个
+        // 新调用点忘了加
+        PlayTime.requestStats();
+
+        y = drawRow(g, font, x, y, w,
+                Component.translatable("mcphone.clock.session").getString(),
+                durationOfMillis(PlayTime.sessionMillis()),
+                PhoneTheme.FONT_COLOR_BODY);
+
+        long worldTicks = PlayTime.worldPlayTicks();
+        drawRow(g, font, x, y, w,
+                Component.translatable("mcphone.clock.total").getString(),
+                worldTicks < 0
+                        ? Component.translatable("mcphone.clock.unknown").getString()
+                        : durationOfTicks(worldTicks),
+                worldTicks < 0 ? PhoneTheme.FONT_COLOR_SUBTLE : PhoneTheme.FONT_COLOR_BODY);
+    }
+
+    /**
+     * 把时长排成"3 小时 12 分"，不到一小时就只说分钟。
+     *
+     * 不显示秒：这两个数是拿来看个大概的，一个每秒跳的数字只会把视线拽过去。
+     */
+    private static String durationOfTicks(long realTicks) {
+        return duration(WorldClock.playHours(realTicks), WorldClock.playMinutes(realTicks));
+    }
+
+    private static String durationOfMillis(long millis) {
+        return duration(WorldClock.playHoursOfMillis(millis),
+                        WorldClock.playMinutesOfMillis(millis));
+    }
+
+    private static String duration(long hours, int minutes) {
+        return hours > 0
+                ? Component.translatable("mcphone.clock.duration_hm", hours, minutes).getString()
+                : Component.translatable("mcphone.clock.duration_m", minutes).getString();
     }
 
     /**

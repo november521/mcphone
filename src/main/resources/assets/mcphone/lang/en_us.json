@@ -128,5 +128,10 @@
   "mcphone.clock.until_sunset": "Until dark",
   "mcphone.clock.until_sunrise": "Until dawn",
   "mcphone.clock.frozen": "Time is frozen",
-  "mcphone.clock.no_world": "Not in a world yet"
+  "mcphone.clock.no_world": "Not in a world yet",
+  "mcphone.clock.session": "Session",
+  "mcphone.clock.total": "This save",
+  "mcphone.clock.unknown": "—",
+  "mcphone.clock.duration_hm": "%sh %sm",
+  "mcphone.clock.duration_m": "%sm"
 }
