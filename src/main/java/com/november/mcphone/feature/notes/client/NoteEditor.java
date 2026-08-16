@@ -6,6 +6,7 @@ import com.november.mcphone.feature.notes.net.DeleteNotePacket;
 import com.november.mcphone.feature.notes.net.NotesClientCache;
 import com.november.mcphone.feature.notes.net.RequestNotePacket;
 import com.november.mcphone.feature.notes.net.SaveNotePacket;
+import com.november.mcphone.core.client.PhoneTheme;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.MultiLineEditBox;
@@ -82,13 +83,13 @@ public final class NoteEditor {
      */
     private static final int SCROLL_BAR_W = 8;
 
-    private static final int COLOR_SAVE = 0xFF66FF88;
-    private static final int COLOR_DELETE = 0xFFFF8888;
-    private static final int COLOR_HOVER = 0xFFFFFFFF;
-    private static final int COLOR_HINT = 0xFF888888;
+    private static final int COLOR_SAVE = PhoneTheme.FONT_COLOR_CONFIRM;
+    private static final int COLOR_DELETE = PhoneTheme.FONT_COLOR_DANGER;
+    private static final int COLOR_HOVER = PhoneTheme.FONT_COLOR_TITLE;
+    private static final int COLOR_HINT = PhoneTheme.FONT_COLOR_SUBTLE;
 
     /** 删除已上膛时的颜色 —— 与相册的确认态一致 */
-    private static final int COLOR_ARMED = 0xFFFFDD44;
+    private static final int COLOR_ARMED = PhoneTheme.FONT_COLOR_ARMED;
 
     private MultiLineEditBox box;
 

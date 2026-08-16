@@ -49,12 +49,12 @@ public final class ChatAddContact {
     /** 头像与名字之间的空隙 */
     private static final int AVATAR_GAP = 3;
 
-    private static final int COLOR_NAME = 0xFFFFFFFF;
-    private static final int COLOR_ADD = 0xFF66FF88;
-    private static final int COLOR_ACCEPT = 0xFFFFDD44;
-    private static final int COLOR_PENDING = 0xFF888888;
-    private static final int COLOR_REMOVE = 0xFFFF8888;
-    private static final int COLOR_ROW_HOVER = 0x33FFFFFF;
+    private static final int COLOR_NAME = PhoneTheme.FONT_COLOR_TITLE;
+    private static final int COLOR_ADD = PhoneTheme.FONT_COLOR_CONFIRM;
+    private static final int COLOR_ACCEPT = PhoneTheme.FONT_COLOR_ARMED;
+    private static final int COLOR_PENDING = PhoneTheme.FONT_COLOR_SUBTLE;
+    private static final int COLOR_REMOVE = PhoneTheme.FONT_COLOR_DANGER;
+    private static final int COLOR_ROW_HOVER = PhoneTheme.COLOR_ROW_HOVER;
 
     private long lastRequestMs;
     private int scrollOffset;
@@ -88,7 +88,7 @@ public final class ChatAddContact {
         g.drawString(font, Component.translatable("mcphone.chat.add_contact").getString(),
                 x, y, PhoneTheme.FONT_COLOR_TITLE, true);
         y += font.lineHeight + 4;
-        g.fill(x, y, x + w, y + 1, 0x44FFFFFF);
+        g.fill(x, y, x + w, y + 1, PhoneTheme.COLOR_DIVIDER);
         y += 4;
 
         List<OnlinePlayer> players = ChatClientCache.getOnlinePlayers();
@@ -97,7 +97,7 @@ public final class ChatAddContact {
         if (ChatClientCache.isOnlineListTruncated()) {
             for (var line : font.split(Component.translatable("mcphone.chat.truncated",
                     players.size(), ChatClientCache.getTotalOnline()), w)) {
-                g.drawString(font, line, x, y, 0xFFFFAA44, false);
+                g.drawString(font, line, x, y, PhoneTheme.FONT_COLOR_NOTICE, false);
                 y += font.lineHeight;
             }
             y += 2;
@@ -105,7 +105,7 @@ public final class ChatAddContact {
 
         if (players.isEmpty()) {
             for (var line : font.split(Component.translatable("mcphone.chat.online_empty"), w)) {
-                g.drawString(font, line, x, y, 0xFF888888, false);
+                g.drawString(font, line, x, y, PhoneTheme.FONT_COLOR_SUBTLE, false);
                 y += font.lineHeight;
             }
             hoveredIdx = -1;

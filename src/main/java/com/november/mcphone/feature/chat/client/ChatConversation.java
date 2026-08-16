@@ -110,18 +110,18 @@ public final class ChatConversation {
     private static final int AVATAR_GAP = 3;
 
     // ---- 颜色（贴图缺失时的兜底） ----
-    private static final int COLOR_BUBBLE_SELF = 0xFF2E6FDB;
-    private static final int COLOR_BUBBLE_PEER = 0xFF3A3A4E;
-    private static final int COLOR_TEXT_SELF = 0xFFFFFFFF;
-    private static final int COLOR_TEXT_PEER = 0xFFEEEEEE;
-    private static final int COLOR_STAMP = 0xFF777777;
-    private static final int COLOR_EMPTY = 0xFF888888;
-    private static final int COLOR_INPUT_BG = 0xFF26263A;
-    private static final int COLOR_SEND = 0xFF66FF88;
-    private static final int COLOR_SEND_HOVER = 0xFFFFFFFF;
+    private static final int COLOR_BUBBLE_SELF = PhoneTheme.COLOR_CHAT_BUBBLE_SELF;
+    private static final int COLOR_BUBBLE_PEER = PhoneTheme.COLOR_CHAT_BUBBLE_PEER;
+    private static final int COLOR_TEXT_SELF = PhoneTheme.FONT_COLOR_TITLE;
+    private static final int COLOR_TEXT_PEER = PhoneTheme.FONT_COLOR_CHAT_PEER;
+    private static final int COLOR_STAMP = PhoneTheme.FONT_COLOR_TIMESTAMP;
+    private static final int COLOR_EMPTY = PhoneTheme.FONT_COLOR_SUBTLE;
+    private static final int COLOR_INPUT_BG = PhoneTheme.COLOR_CHAT_INPUT_BG;
+    private static final int COLOR_SEND = PhoneTheme.FONT_COLOR_CONFIRM;
+    private static final int COLOR_SEND_HOVER = PhoneTheme.FONT_COLOR_TITLE;
 
     /** 输入框空着时发送键置灰：点了也不会发，颜色要说明这一点 */
-    private static final int COLOR_SEND_OFF = 0xFF555555;
+    private static final int COLOR_SEND_OFF = PhoneTheme.FONT_COLOR_MUTED;
 
     /** 当前会话的对端；null 表示不在会话界面 */
     private UUID peer;
@@ -266,7 +266,7 @@ public final class ChatConversation {
 
         // 标题行由头像撑高，比原先高 7 像素，消息区相应少一点
         y += AVATAR_SIZE + 4;
-        g.fill(x, y, x + w, y + 1, 0x44FFFFFF);
+        g.fill(x, y, x + w, y + 1, PhoneTheme.COLOR_DIVIDER);
         return y + 4;
     }
 
