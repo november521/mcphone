@@ -112,6 +112,12 @@ public final class PhoneTheme {
      */
     public static final int COLOR_APP_DROP_SLOT = 0x33FFFFFF;
 
+    /** 页码点：不是当前这一页的那些。兜底色，见 PhoneSkin.Element.HOME_PAGE_DOT */
+    public static final int COLOR_PAGE_DOT = 0x55FFFFFF;
+
+    /** 页码点：当前这一页。兜底色，见 PhoneSkin.Element.HOME_PAGE_DOT_ACTIVE */
+    public static final int COLOR_PAGE_DOT_ACTIVE = 0xFFFFFFFF;
+
     /** 底部导航栏背景色 */
     public static final int COLOR_NAV_BAR = 0xFF16213E;
 
@@ -179,8 +185,28 @@ public final class PhoneTheme {
     /** 每行 App 数量 */
     public static final int APP_COLUMNS = 4;
 
+    /**
+     * 每页最多几行 App。
+     *
+     * 这是【上限】不是定值：实际行数还要看扣掉状态栏、导航栏、页码点之后剩多少
+     * 高度，由 HomeLayout.rowsThatFit 算。写死成定值的话，谁把字体换大一号，
+     * 最后一行就会压到页码点上，而那种错位没人会往"行数"上想。
+     */
+    public static final int APP_ROWS = 5;
+
     /** App 名称字体缩放，1.0=原大小 */
     public static final float APP_NAME_SCALE = 0.6f;
+
+    // -- 主屏页码点 --
+
+    /** 页码点那一条的高度，夹在图标区与导航栏之间 */
+    public static final int PAGE_DOTS_HEIGHT = 8;
+
+    /** 一个页码点的边长 */
+    public static final int PAGE_DOT_SIZE = 3;
+
+    /** 页码点之间的间隔 */
+    public static final int PAGE_DOT_SPACING = 4;
 
     /**
      * 按住图标要移动多少像素才算"在拖动"，小于它松手仍然是一次点击。

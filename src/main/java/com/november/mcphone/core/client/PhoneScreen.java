@@ -117,7 +117,17 @@ public final class PhoneScreen extends Screen {
     private final PhoneLocation location;
 
     // ---- 主屏幕 hover ----
+    /** 鼠标停在第几个 App。是【全局】下标，不是当前页里的第几格 */
     private int hoveredAppIndex = -1;
+
+    /**
+     * 主屏当前停在第几页。
+     *
+     * 装的 App 变少（卸载、换存档）时它可能指到不存在的页，所以每次画之前都
+     * 重新夹一次，而不是在每个改动安装状态的地方各夹一遍——那种写法迟早漏一处，
+     * 表现是主屏一片空白、玩家以为 App 全没了。
+     */
+    private int homePage = 0;
 
     // ---- 主屏拖动排序 ----
     //
@@ -528,26 +538,33 @@ public final class PhoneScreen extends Screen {
         final int cols = PhoneTheme.APP_COLUMNS;
         final int cellW = is + PhoneTheme.APP_GRID_SPACING_X;
         final int cellH = appCellHeight();
+        final int pageSize = pageSize();
 
         // 拖动时按"抽出来、再插进去"的结果画，而不是画原顺序再叠个提示：
-        // 玩家看到的直接就是松手后的样子，不必先松手再确认自己摆对没有
+        // 玩家看到的直接就是松手后的样子，不必先松手再确认自己摆对没有。
+        // 用的是与 moveApp 同一个 HomeLayout.reorder，预览与落定不可能对不上
         List<IPhoneApp> ordered = new ArrayList<>(PhoneScreenRegistry.getApps());
         IPhoneApp floatingApp = null;
-        int floatingSlot = -1;
+        int floatingIndex = -1;
         if (draggingApp && pressedAppIndex >= 0 && pressedAppIndex < ordered.size()) {
-            floatingApp = ordered.remove(pressedAppIndex);
-            floatingSlot = Math.max(0, Math.min(dragTargetIndex, ordered.size()));
-            ordered.add(floatingSlot, floatingApp);
+            floatingApp = ordered.get(pressedAppIndex);
+            floatingIndex = Math.max(0, Math.min(dragTargetIndex, ordered.size() - 1));
+            HomeLayout.reorder(ordered, pressedAppIndex, floatingIndex);
         }
 
-        for (int i = 0; i < ordered.size(); i++) {
-            int ix = gridStartX + (i % cols) * cellW;
-            int iy = gridStartY + (i / cols) * cellH;
+        // 每帧夹一次页码：卸载 App、换存档都可能让它指到不存在的页
+        homePage = HomeLayout.clampPage(homePage, ordered.size(), pageSize);
+        final int start = homePage * pageSize;
 
-            if (iy + is > phoneTop + PhoneTheme.PHONE_HEIGHT - PhoneTheme.NAV_BAR_HEIGHT) break;
+        for (int slot = 0; slot < pageSize; slot++) {
+            int i = start + slot;
+            if (i >= ordered.size()) break;
+
+            int ix = gridStartX + (slot % cols) * cellW;
+            int iy = gridStartY + (slot / cols) * cellH;
 
             // 被拖的那一格只留个空槽——它本人跟着鼠标走，最后单独画
-            if (i == floatingSlot) {
+            if (i == floatingIndex) {
                 PhoneSkin.drawOrFill(g, PhoneSkin.Element.HOME_DROP_SLOT,
                         ix, iy, is, is, PhoneTheme.COLOR_APP_DROP_SLOT);
                 continue;
@@ -565,6 +582,8 @@ public final class PhoneScreen extends Screen {
             drawAppName(g, app.getDisplayName().getString(), ix, iy, is);
         }
 
+        renderPageDots(g, HomeLayout.pageCount(ordered.size(), pageSize));
+
         // 浮起的那张放最后画，才会盖在别的图标上面而不是被它们盖住。
         // 以鼠标为中心，手指按住哪儿它就在哪儿，不会跟手偏出去半格
         if (floatingApp != null) {
@@ -573,6 +592,53 @@ public final class PhoneScreen extends Screen {
             floatingApp.renderIcon(g, fx, fy, is, 0);
             drawAppName(g, floatingApp.getDisplayName().getString(), fx, fy, is);
         }
+    }
+
+    /**
+     * 底部那排页码点。
+     *
+     * 只有一页时【不画】：一个孤零零的点会让人以为还能往旁边划，划了没反应比
+     * 什么都不画更让人困惑。
+     */
+    private void renderPageDots(GuiGraphics g, int pages) {
+        if (pages <= 1) return;
+
+        final int size = PhoneTheme.PAGE_DOT_SIZE;
+        final int gap = PhoneTheme.PAGE_DOT_SPACING;
+
+        int x = phoneLeft + (PhoneTheme.PHONE_WIDTH - (pages * size + (pages - 1) * gap)) / 2;
+        int y = dotsTop() + (PhoneTheme.PAGE_DOTS_HEIGHT - size) / 2;
+
+        for (int p = 0; p < pages; p++) {
+            boolean active = p == homePage;
+            PhoneSkin.drawOrFill(g,
+                    active ? PhoneSkin.Element.HOME_PAGE_DOT_ACTIVE
+                           : PhoneSkin.Element.HOME_PAGE_DOT,
+                    x, y, size, size,
+                    active ? PhoneTheme.COLOR_PAGE_DOT_ACTIVE : PhoneTheme.COLOR_PAGE_DOT);
+            x += size + gap;
+        }
+    }
+
+    /**
+     * 点在了第几个页码点上，没点中返回 -1。
+     *
+     * 判定区比那 3×3 的点大一圈——按点本身的大小算的话，得对着三个像素点才能
+     * 跳页，那不叫"能点"，叫"能瞄准"。
+     */
+    private int hitTestPageDot(double lx, double ly, int pages) {
+        if (pages <= 1) return -1;
+
+        int top = dotsTop();
+        if (ly < top || ly >= top + PhoneTheme.PAGE_DOTS_HEIGHT) return -1;
+
+        final int size = PhoneTheme.PAGE_DOT_SIZE;
+        final int gap = PhoneTheme.PAGE_DOT_SPACING;
+        final int step = size + gap;
+
+        int x = phoneLeft + (PhoneTheme.PHONE_WIDTH - (pages * size + (pages - 1) * gap)) / 2;
+        int idx = (int) Math.floor((lx - (x - gap / 2.0)) / step);
+        return (idx >= 0 && idx < pages) ? idx : -1;
     }
 
     /**
@@ -586,24 +652,56 @@ public final class PhoneScreen extends Screen {
                 + (int)(font.lineHeight * PhoneTheme.APP_NAME_SCALE) + 4;
     }
 
+    /** 页码点那一条的顶边。图标区到此为止，再往下是导航栏 */
+    private int dotsTop() {
+        return phoneTop + PhoneTheme.PHONE_HEIGHT
+                - PhoneTheme.NAV_BAR_HEIGHT - PhoneTheme.PAGE_DOTS_HEIGHT;
+    }
+
+    /** 这块屏幕一页放得下几行图标 */
+    private int rowsPerPage() {
+        return HomeLayout.rowsThatFit(dotsTop() - gridStartY, appCellHeight(), PhoneTheme.APP_ROWS);
+    }
+
+    /** 一页几个 App */
+    private int pageSize() {
+        return PhoneTheme.APP_COLUMNS * rowsPerPage();
+    }
+
+    /** 主屏一共几页 */
+    private int pageCount() {
+        return HomeLayout.pageCount(PhoneScreenRegistry.getAppCount(), pageSize());
+    }
+
     /**
-     * 鼠标落在主屏的第几格，用于拖动时决定松手插到哪儿。
+     * 翻到第几页。
      *
-     * 越界一律夹到最近的合法格子，而不是返回"没有"：拖到图标区外面松手时，
-     * 最符合直觉的结果是落在最近的那一格，而不是弹回原位当无事发生。
+     * @return 真的换页了才 true；已经在头一页还要往前翻，返回 false
      */
-    private int gridSlotAt(double lx, double ly, int count) {
+    private boolean goToPage(int page) {
+        int target = HomeLayout.clampPage(page, PhoneScreenRegistry.getAppCount(), pageSize());
+        if (target == homePage) return false;
+
+        homePage = target;
+        // 换页之后鼠标底下换成了另一个 App，旧的 hover 下标指的已经不是它了
+        hoveredAppIndex = -1;
+        return true;
+    }
+
+    /**
+     * 鼠标位置对应的落点（全局下标），用于拖动时决定松手插到哪儿。
+     *
+     * 落点是"当前这一页的第几格"再加上页偏移——所以在第二页拖动时，松手插的是
+     * 第二页的位置，而不是从头数的那一格。
+     */
+    private int dropIndexAt(double lx, double ly, int count) {
         if (count <= 0) return -1;
 
-        final int cellW = PhoneTheme.APP_ICON_SIZE + PhoneTheme.APP_GRID_SPACING_X;
-        final int cellH = appCellHeight();
+        int slot = HomeLayout.slotAt(lx, ly, gridStartX, gridStartY,
+                PhoneTheme.APP_ICON_SIZE + PhoneTheme.APP_GRID_SPACING_X, appCellHeight(),
+                PhoneTheme.APP_COLUMNS, rowsPerPage());
 
-        int col = (int) Math.floor((lx - gridStartX) / (double) cellW);
-        int row = (int) Math.floor((ly - gridStartY) / (double) cellH);
-        col = Math.max(0, Math.min(col, PhoneTheme.APP_COLUMNS - 1));
-        row = Math.max(0, row);
-
-        return Math.max(0, Math.min(row * PhoneTheme.APP_COLUMNS + col, count - 1));
+        return HomeLayout.dropIndex(homePage, slot, pageSize(), count);
     }
 
     /**
@@ -934,18 +1032,24 @@ public final class PhoneScreen extends Screen {
         int lx = (int)((mx - cx) / s + cx);
         int ly = (int)((my - cy) / s + cy);
 
-        final var apps = PhoneScreenRegistry.getApps();
+        final int count = PhoneScreenRegistry.getAppCount();
         final int is = PhoneTheme.APP_ICON_SIZE;
         final int cols = PhoneTheme.APP_COLUMNS;
         final int cellW = is + PhoneTheme.APP_GRID_SPACING_X;
         final int cellH = appCellHeight();
+        final int pageSize = pageSize();
+        final int start = homePage * pageSize;
 
+        // 只看当前这一页：别的页的图标压根没画出来，"停在"它们上面没有意义
         hoveredAppIndex = -1;
-        for (int i = 0; i < apps.size(); i++) {
-            int ix = gridStartX + (i % cols) * cellW;
-            int iy = gridStartY + (i / cols) * cellH;
+        for (int slot = 0; slot < pageSize; slot++) {
+            int i = start + slot;
+            if (i >= count) break;
+
+            int ix = gridStartX + (slot % cols) * cellW;
+            int iy = gridStartY + (slot / cols) * cellH;
             if (lx >= ix && lx <= ix + is && ly >= iy && ly <= iy + is + 6) {
-                hoveredAppIndex = i;
+                hoveredAppIndex = i;   // 全局下标，不是 slot
                 return;
             }
         }
@@ -996,6 +1100,14 @@ public final class PhoneScreen extends Screen {
 
         return switch (mode) {
             case MAIN -> {
+                // 页码点抢在图标之前：它在图标区【下方】，两者不重叠，
+                // 但先判它一次就不必担心将来图标区长高了压过来
+                int dot = hitTestPageDot(toLocalX(mx), toLocalY(my), pageCount());
+                if (dot >= 0) {
+                    homePage = dot;
+                    hoveredAppIndex = -1;
+                    yield true;
+                }
                 if (hoveredAppIndex >= 0) {
                     // 先记着是哪一格，别急着开——这一下可能是要把它拖走。
                     // 到底算点开还是算挪位置，由 mouseReleased 定
@@ -1150,7 +1262,7 @@ public final class PhoneScreen extends Screen {
 
             dragLocalX = lx;
             dragLocalY = ly;
-            dragTargetIndex = gridSlotAt(lx, ly, PhoneScreenRegistry.getAppCount());
+            dragTargetIndex = dropIndexAt(lx, ly, PhoneScreenRegistry.getAppCount());
             return true;
         }
 
@@ -1194,6 +1306,13 @@ public final class PhoneScreen extends Screen {
 
     @Override
     public boolean mouseScrolled(double mx, double my, double scrollX, double scrollY) {
+        // 主屏滚轮翻页。真手机是横划，鼠标上最接近的等价物就是滚轮——
+        // 往下滚＝往后翻，与所有列表一致
+        if (mode == Mode.MAIN && scrollY != 0) {
+            if (goToPage(homePage + (scrollY > 0 ? -1 : 1))) return true;
+            // 只有一页、或已经到头：仍然把滚轮吃掉，别让它穿到下面去
+            return true;
+        }
         if (mode == Mode.GALLERY && gallery.mouseScrolled(scrollY)) return true;
         if (mode == Mode.CHAT && chatList.mouseScrolled(scrollY)) return true;
         if (mode == Mode.CHAT_ADD_CONTACT && chatAddContact.mouseScrolled(scrollY)) return true;

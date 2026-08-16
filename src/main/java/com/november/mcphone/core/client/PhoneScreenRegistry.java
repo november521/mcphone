@@ -279,12 +279,9 @@ public final class PhoneScreenRegistry {
         ensureLoaded();
 
         List<ResourceLocation> order = new ArrayList<>(INSTALLED);
-        if (from < 0 || from >= order.size()) return false;
-
-        int target = Math.max(0, Math.min(to, order.size() - 1));
-        if (from == target) return false;
-
-        order.add(target, order.remove(from));
+        // 重排的算术走 HomeLayout：界面上的实时预览用的是同一个方法，
+        // 两边共用才不会出现"看着会插到这儿、松手却去了那儿"
+        if (!HomeLayout.reorder(order, from, to)) return false;
 
         // 清空再灌回去：LinkedHashSet 没有"就地重排"这回事，它的顺序只由插入
         // 顺序决定。这里的元素总数是个位数，重建的开销可以忽略

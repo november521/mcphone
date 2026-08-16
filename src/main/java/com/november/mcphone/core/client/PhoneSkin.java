@@ -81,6 +81,22 @@ public final class PhoneSkin {
         HOME_DROP_SLOT("phone/drop_slot", "home_drop_slot"),
 
         /**
+         * 主屏底部的页码点 —— 不是当前这一页的那些。建议 3×3。
+         *
+         * 没有贴图时用 {@link PhoneTheme#COLOR_PAGE_DOT} 填。
+         */
+        HOME_PAGE_DOT("phone/page_dot", "home_page_dot"),
+
+        /**
+         * 页码点 —— 当前这一页。建议 3×3。
+         *
+         * 单独一张而不是把上面那张调亮，理由与 {@link #STORE_BUTTON_DISABLED} 一样：
+         * 调亮是我们替美术做的决定，"你在这一页"该长什么样应该由画贴图的人说了算。
+         * 没有贴图时用 {@link PhoneTheme#COLOR_PAGE_DOT_ACTIVE} 填。
+         */
+        HOME_PAGE_DOT_ACTIVE("phone/page_dot_active", "home_page_dot_active"),
+
+        /**
          * 自己发出的聊天气泡底。
          *
          * 气泡大小随文字长短变化，贴图会被整张拉伸过去，所以纯色或纵向
