@@ -4,6 +4,7 @@ import com.november.mcphone.core.PhoneItem;
 import com.november.mcphone.feature.notes.Note;
 import com.november.mcphone.feature.notes.NotePrinter;
 import com.november.mcphone.feature.notes.NoteService;
+import com.november.mcphone.core.net.RequestThrottle;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
@@ -81,6 +82,8 @@ public final class NotesNetworking {
     private static void handleRequestNoteList(RequestNoteListPacket packet, IPayloadContext ctx) {
         ctx.enqueueWork(() -> {
             if (!(ctx.player() instanceof ServerPlayer player)) return;
+            if (!RequestThrottle.allow(player, RequestThrottle.Kind.NOTE_LIST)) return;
+
             ctx.reply(new SyncNoteListPacket(NoteService.buildSummaries(player)));
         });
     }
@@ -94,6 +97,7 @@ public final class NotesNetworking {
     private static void handleRequestNote(RequestNotePacket packet, IPayloadContext ctx) {
         ctx.enqueueWork(() -> {
             if (!(ctx.player() instanceof ServerPlayer player)) return;
+            if (!RequestThrottle.allow(player, RequestThrottle.Kind.NOTE)) return;
 
             Note note = NoteService.getNote(player, packet.id())
                     .orElseGet(() -> new Note(packet.id(), "", 0L));

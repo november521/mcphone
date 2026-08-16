@@ -4,6 +4,7 @@ import com.november.mcphone.feature.chat.ChatMessage;
 import com.november.mcphone.feature.chat.ChatService;
 import com.november.mcphone.feature.chat.FriendData;
 import com.november.mcphone.feature.chat.FriendOutcome;
+import com.november.mcphone.core.net.RequestThrottle;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.neoforge.network.PacketDistributor;
@@ -128,6 +129,7 @@ public final class ChatNetworking {
                                                    IPayloadContext ctx) {
         ctx.enqueueWork(() -> {
             if (!(ctx.player() instanceof ServerPlayer player)) return;
+            if (!RequestThrottle.allow(player, RequestThrottle.Kind.CONVERSATIONS)) return;
 
             List<ConversationSummary> conversations = ChatService.buildConversations(player);
             ctx.reply(new SyncConversationsPacket(conversations));
@@ -144,6 +146,7 @@ public final class ChatNetworking {
     private static void handleRequestMessages(RequestMessagesPacket packet, IPayloadContext ctx) {
         ctx.enqueueWork(() -> {
             if (!(ctx.player() instanceof ServerPlayer player)) return;
+            if (!RequestThrottle.allow(player, RequestThrottle.Kind.MESSAGES)) return;
 
             List<ChatMessage> messages = ChatService.getMessages(player, packet.peer());
             ChatService.markRead(player, packet.peer());
@@ -164,6 +167,7 @@ public final class ChatNetworking {
     private static void handleMarkRead(MarkReadPacket packet, IPayloadContext ctx) {
         ctx.enqueueWork(() -> {
             if (!(ctx.player() instanceof ServerPlayer player)) return;
+            if (!RequestThrottle.allow(player, RequestThrottle.Kind.MARK_READ)) return;
             ChatService.markRead(player, packet.peer());
         });
     }
@@ -204,6 +208,8 @@ public final class ChatNetworking {
                                                    IPayloadContext ctx) {
         ctx.enqueueWork(() -> {
             if (!(ctx.player() instanceof ServerPlayer player)) return;
+            if (!RequestThrottle.allow(player, RequestThrottle.Kind.ONLINE_PLAYERS)) return;
+
             ctx.reply(buildOnlinePlayersPacket(player));
         });
     }

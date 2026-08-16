@@ -6,6 +6,7 @@ import com.november.mcphone.core.ModAttachments;
 import com.november.mcphone.core.PhoneItem;
 import com.november.mcphone.feature.store.AppPriceRegistry;
 import com.november.mcphone.feature.store.PurchasedApps;
+import com.november.mcphone.core.net.RequestThrottle;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
@@ -72,6 +73,7 @@ public final class StoreNetworking {
     private static void handleRequest(RequestPurchasedAppsPacket packet, IPayloadContext ctx) {
         ctx.enqueueWork(() -> {
             if (!(ctx.player() instanceof ServerPlayer player)) return;
+            if (!RequestThrottle.allow(player, RequestThrottle.Kind.PURCHASED)) return;
             sync(player, ctx);
         });
     }

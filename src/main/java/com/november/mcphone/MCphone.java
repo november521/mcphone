@@ -53,6 +53,12 @@ public class MCphone {
         ModAttachments.ATTACHMENT_TYPES.register(modEventBus);
         modEventBus.addListener(com.november.mcphone.core.net.NetworkHandler::register);
 
+        // 玩家下线时丢掉他的请求限流计时。挂在【游戏总线】上，显式添加而不
+        // 依赖注解自动路由——漏了这一条不会有任何症状，限流照常工作，只是
+        // 那张表再也不缩小了，半年后才看得出来
+        net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener(
+                com.november.mcphone.core.net.RequestThrottle::onPlayerLoggedOut);
+
         // 与外部模组的兼容处理。放在自家注册之后：兼容模块可能要看我们已经
         // 注册了什么，反过来则不成立。
         com.november.mcphone.compat.CompatModules.init(modEventBus);
