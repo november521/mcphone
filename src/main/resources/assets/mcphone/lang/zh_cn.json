@@ -115,8 +115,5 @@
   "mcphone.browser.need_mcef": "首次使用需要下载约 200 MB 的运行库，稍后再试",
   "mcphone.store.companion": "联动App",
   "mcphone.store.companion.empty": "没有联动 App",
-  "mcphone.store.companion.requires": "需要 %s",
-  "mcphone.app.debug_placeholder": "占位 %s",
-  "mcphone.app.debug_placeholder.desc": "调试用的空壳 App，什么都不做。",
-  "mcphone.command.debug_apps": "主屏上现在有 %s 个占位 App"
+  "mcphone.store.companion.requires": "需要 %s"
 }
