@@ -104,6 +104,14 @@ public final class PhoneTheme {
     /** App 图标按下时的覆盖色 */
     public static final int COLOR_APP_PRESSED = 0x44FFFFFF;
 
+    /**
+     * 拖动排序时，"松手就落这儿"的那个空槽提示色。
+     *
+     * 【兜底】色：放了 phone/drop_slot.png 就用贴图，见 PhoneSkin.Element.HOME_DROP_SLOT。
+     * 比按下色更淡，因为它表达的是"这里空着等你放"，而不是"你正按着这个"。
+     */
+    public static final int COLOR_APP_DROP_SLOT = 0x33FFFFFF;
+
     /** 底部导航栏背景色 */
     public static final int COLOR_NAV_BAR = 0xFF16213E;
 
@@ -173,6 +181,15 @@ public final class PhoneTheme {
 
     /** App 名称字体缩放，1.0=原大小 */
     public static final float APP_NAME_SCALE = 0.6f;
+
+    /**
+     * 按住图标要移动多少像素才算"在拖动"，小于它松手仍然是一次点击。
+     *
+     * 没有这个阈值的话，按下时手稍微抖一下就变成了排序——玩家想开个 App，
+     * 结果 App 换了位置还没打开。3 像素在 GUI 比例 2 下约等于 6 个物理像素，
+     * 抖不到，有意拖的人也不会觉得"推不动"。
+     */
+    public static final int APP_DRAG_THRESHOLD = 3;
 
     // 贴图路径不在这里声明：可换肤元素统一由 PhoneSkin.Element 管理，
     // 一处定义文件名、尺寸建议与兜底行为，不会出现"声明了却没人用"的空头承诺。

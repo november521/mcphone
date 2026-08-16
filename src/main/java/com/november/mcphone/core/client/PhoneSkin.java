@@ -70,6 +70,17 @@ public final class PhoneSkin {
         NAV_TASKS("phone/nav_tasks", "nav_tasks"),
 
         /**
+         * 主屏拖动排序时，"松手就落这儿"的空槽提示。建议 20×20，与 App 图标同尺寸。
+         *
+         * 没有贴图时用 {@link PhoneTheme#COLOR_APP_DROP_SLOT} 填。
+         *
+         * 这一项是 1.3.9 才有的，1.2.7 那套老路径下从来不存在
+         * home_drop_slot.png——那个参数只是构造器的形式要求，查一次查不到就
+         * 落回兜底色，不影响任何老资源包。
+         */
+        HOME_DROP_SLOT("phone/drop_slot", "home_drop_slot"),
+
+        /**
          * 自己发出的聊天气泡底。
          *
          * 气泡大小随文字长短变化，贴图会被整张拉伸过去，所以纯色或纵向

@@ -119,6 +119,27 @@ public final class PhoneScreen extends Screen {
     // ---- 主屏幕 hover ----
     private int hoveredAppIndex = -1;
 
+    // ---- 主屏拖动排序 ----
+    //
+    // 按下【不】立即开 App：这一下可能是要把图标拖去别的格子。按下只记下是哪一格，
+    // 真正开 App 推迟到 mouseReleased，位移没超过阈值才算一次点击。
+    // 这是"能拖"必然要付的代价——按下的那一刻还看不出玩家想干什么。
+
+    /** 按下时命中的图标下标，-1 表示这次按下没落在图标上 */
+    private int pressedAppIndex = -1;
+
+    /** 按下点的手机局部坐标，用来量挪了多远、够不够算拖动 */
+    private double pressLocalX, pressLocalY;
+
+    /** 位移超过 {@link PhoneTheme#APP_DRAG_THRESHOLD} 之后才为 true */
+    private boolean draggingApp;
+
+    /** 拖动中鼠标所在的局部坐标，浮起的那张图标画在这儿 */
+    private double dragLocalX, dragLocalY;
+
+    /** 拖动中松手会落到第几格 */
+    private int dragTargetIndex = -1;
+
     // ---- 布局缓存 ----
     private int phoneLeft, phoneTop;
     private int gridStartX, gridStartY;
@@ -503,28 +524,86 @@ public final class PhoneScreen extends Screen {
     // ============================================================
 
     private void renderAppGrid(GuiGraphics g) {
-        final var apps = PhoneScreenRegistry.getApps();
         final int is = PhoneTheme.APP_ICON_SIZE;
-        final int sx = PhoneTheme.APP_GRID_SPACING_X;
         final int cols = PhoneTheme.APP_COLUMNS;
-        final int cellW = is + sx;
-        final int cellH = is + (int)(font.lineHeight * PhoneTheme.APP_NAME_SCALE) + 4;
+        final int cellW = is + PhoneTheme.APP_GRID_SPACING_X;
+        final int cellH = appCellHeight();
 
-        for (int i = 0; i < apps.size(); i++) {
+        // 拖动时按"抽出来、再插进去"的结果画，而不是画原顺序再叠个提示：
+        // 玩家看到的直接就是松手后的样子，不必先松手再确认自己摆对没有
+        List<IPhoneApp> ordered = new ArrayList<>(PhoneScreenRegistry.getApps());
+        IPhoneApp floatingApp = null;
+        int floatingSlot = -1;
+        if (draggingApp && pressedAppIndex >= 0 && pressedAppIndex < ordered.size()) {
+            floatingApp = ordered.remove(pressedAppIndex);
+            floatingSlot = Math.max(0, Math.min(dragTargetIndex, ordered.size()));
+            ordered.add(floatingSlot, floatingApp);
+        }
+
+        for (int i = 0; i < ordered.size(); i++) {
             int ix = gridStartX + (i % cols) * cellW;
             int iy = gridStartY + (i / cols) * cellH;
 
             if (iy + is > phoneTop + PhoneTheme.PHONE_HEIGHT - PhoneTheme.NAV_BAR_HEIGHT) break;
 
-            if (i == hoveredAppIndex) {
+            // 被拖的那一格只留个空槽——它本人跟着鼠标走，最后单独画
+            if (i == floatingSlot) {
+                PhoneSkin.drawOrFill(g, PhoneSkin.Element.HOME_DROP_SLOT,
+                        ix, iy, is, is, PhoneTheme.COLOR_APP_DROP_SLOT);
+                continue;
+            }
+
+            // 拖动中不画 hover 高亮：那会儿鼠标底下的格子表达的是"要插到这儿"，
+            // 再高亮一次容易被理解成"松手是跟它对调"
+            if (i == hoveredAppIndex && !draggingApp) {
                 g.fill(ix - 2, iy - 2, ix + is + 2, iy + is + 2, PhoneTheme.COLOR_APP_PRESSED);
             }
 
-            IPhoneApp app = apps.get(i);
+            IPhoneApp app = ordered.get(i);
             app.renderIcon(g, ix, iy, is, 0);
 
             drawAppName(g, app.getDisplayName().getString(), ix, iy, is);
         }
+
+        // 浮起的那张放最后画，才会盖在别的图标上面而不是被它们盖住。
+        // 以鼠标为中心，手指按住哪儿它就在哪儿，不会跟手偏出去半格
+        if (floatingApp != null) {
+            int fx = (int) dragLocalX - is / 2;
+            int fy = (int) dragLocalY - is / 2;
+            floatingApp.renderIcon(g, fx, fy, is, 0);
+            drawAppName(g, floatingApp.getDisplayName().getString(), fx, fy, is);
+        }
+    }
+
+    /**
+     * 主屏一格的高度：图标加底下那行名字。
+     *
+     * 画、hover 判定、拖动落点判定三处都得用同一个值，抽出来是免得改一处漏两处——
+     * 那种漏改的表现是"看着点在图标上，却没反应"，很难往格子高度上想。
+     */
+    private int appCellHeight() {
+        return PhoneTheme.APP_ICON_SIZE
+                + (int)(font.lineHeight * PhoneTheme.APP_NAME_SCALE) + 4;
+    }
+
+    /**
+     * 鼠标落在主屏的第几格，用于拖动时决定松手插到哪儿。
+     *
+     * 越界一律夹到最近的合法格子，而不是返回"没有"：拖到图标区外面松手时，
+     * 最符合直觉的结果是落在最近的那一格，而不是弹回原位当无事发生。
+     */
+    private int gridSlotAt(double lx, double ly, int count) {
+        if (count <= 0) return -1;
+
+        final int cellW = PhoneTheme.APP_ICON_SIZE + PhoneTheme.APP_GRID_SPACING_X;
+        final int cellH = appCellHeight();
+
+        int col = (int) Math.floor((lx - gridStartX) / (double) cellW);
+        int row = (int) Math.floor((ly - gridStartY) / (double) cellH);
+        col = Math.max(0, Math.min(col, PhoneTheme.APP_COLUMNS - 1));
+        row = Math.max(0, row);
+
+        return Math.max(0, Math.min(row * PhoneTheme.APP_COLUMNS + col, count - 1));
     }
 
     /**
@@ -859,7 +938,7 @@ public final class PhoneScreen extends Screen {
         final int is = PhoneTheme.APP_ICON_SIZE;
         final int cols = PhoneTheme.APP_COLUMNS;
         final int cellW = is + PhoneTheme.APP_GRID_SPACING_X;
-        final int cellH = is + (int)(font.lineHeight * PhoneTheme.APP_NAME_SCALE) + 4;
+        final int cellH = appCellHeight();
 
         hoveredAppIndex = -1;
         for (int i = 0; i < apps.size(); i++) {
@@ -918,8 +997,14 @@ public final class PhoneScreen extends Screen {
         return switch (mode) {
             case MAIN -> {
                 if (hoveredAppIndex >= 0) {
-                    IPhoneApp app = PhoneScreenRegistry.getApp(hoveredAppIndex);
-                    if (app != null) { launchApp(app); yield true; }
+                    // 先记着是哪一格，别急着开——这一下可能是要把它拖走。
+                    // 到底算点开还是算挪位置，由 mouseReleased 定
+                    pressedAppIndex = hoveredAppIndex;
+                    pressLocalX = toLocalX(mx);
+                    pressLocalY = toLocalY(my);
+                    dragTargetIndex = pressedAppIndex;
+                    draggingApp = false;
+                    yield true;
                 }
                 // 只有点在手机机身外才关闭；机身内的空白处不响应
                 if (!isInsidePhone(mx, my)) onClose();
@@ -1045,14 +1130,66 @@ public final class PhoneScreen extends Screen {
     }
 
     // ============================================================
-    //  滚轮
+    //  拖动 / 松手 / 滚轮
     // ============================================================
 
     @Override
     public boolean mouseDragged(double mx, double my, int button, double dx, double dy) {
+        // 主屏拖动排序。没过阈值之前什么都不做，好让这一下还有机会被当成点击
+        if (mode == Mode.MAIN && button == 0 && pressedAppIndex >= 0) {
+            double lx = toLocalX(mx);
+            double ly = toLocalY(my);
+
+            if (!draggingApp) {
+                if (Math.abs(lx - pressLocalX) < PhoneTheme.APP_DRAG_THRESHOLD
+                        && Math.abs(ly - pressLocalY) < PhoneTheme.APP_DRAG_THRESHOLD) {
+                    return true;
+                }
+                draggingApp = true;
+            }
+
+            dragLocalX = lx;
+            dragLocalY = ly;
+            dragTargetIndex = gridSlotAt(lx, ly, PhoneScreenRegistry.getAppCount());
+            return true;
+        }
+
         // 多行输入框靠拖动选中文本，不转发的话选不了
         if (mode == Mode.NOTE_EDIT && noteEditor.mouseDragged(mx, my, button, dx, dy)) return true;
         return super.mouseDragged(mx, my, button, dx, dy);
+    }
+
+    /**
+     * 松手 —— 主屏上这一下才定性：刚才那次按下算"点开"还是"挪位置"。
+     *
+     * 开 App 放在这里而不是 mouseClicked，就是为了留出这个判断的余地。代价是
+     * 点击的响应晚了一个"松手"，收益是图标能拖；真手机也是松手才启动 App。
+     */
+    @Override
+    public boolean mouseReleased(double mx, double my, int button) {
+        if (mode == Mode.MAIN && button == 0 && pressedAppIndex >= 0) {
+            int from = pressedAppIndex;
+            int to = dragTargetIndex;
+            boolean dragged = draggingApp;
+
+            // 先把状态清干净再动作：launchApp 可能当场跳去别的界面，
+            // 之后再改这几个字段就是在给一个已经不在的界面收尾
+            pressedAppIndex = -1;
+            dragTargetIndex = -1;
+            draggingApp = false;
+
+            if (dragged) {
+                PhoneScreenRegistry.moveApp(from, to);
+                // 顺序变了，原来那个 hover 下标指的已经不是同一个 App，
+                // 留着会让高亮框停在错的格子上直到鼠标下次移动
+                hoveredAppIndex = -1;
+            } else {
+                IPhoneApp app = PhoneScreenRegistry.getApp(from);
+                if (app != null) launchApp(app);
+            }
+            return true;
+        }
+        return super.mouseReleased(mx, my, button);
     }
 
     @Override
