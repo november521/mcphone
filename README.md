@@ -124,7 +124,9 @@ NeoForge 的注册阶段只要收到任何一个模组抛的异常，就会把�
 - `phone/toast.png` 的 160×32 是原版通知的槽位尺寸，照这个画才不会和其他模组的通知挤在一起错位。
 - 玩家头像**不在换肤范围内** —— 那是玩家自己的皮肤，取自 Tab 玩家列表，资源包不该覆盖。
 - 改完按 **F3+T** 重载资源包即可看到效果，不用重启游戏。
-- **App 图标**单独放在 `app/` 下，文件名就是 App 的短名：内建的十个是 `app/camera.png`、`app/chat.png`、`app/browser.png` 这样，20×20。附属模组的 App 图标路径由它自己决定，见「给附属模组作者」。
+- **App 图标**单独放在 `app/` 下，文件名就是 App 的短名：内建的十二个是 `app/settings.png`、`app/app_store.png`、`app/chat.png`、`app/camera.png`、`app/gallery.png`、`app/music.png`、`app/ender_chest.png`、`app/notes.png`、`app/waystone.png`、`app/browser.png`、`app/clock.png`、`app/weather.png`，都是 20×20。附属模组的 App 图标路径由它自己决定，见「给附属模组作者」。
+- **天气页那张大图标**在 `weather/` 下，六张 32×32：`clear.png`、`rain.png`、`snow.png`、`thunder.png`、`dry.png`、`none.png`，按当前是什么天各显其一。这六张和上面那张表不是一回事——它们**没有兜底色**，因为模组自带全套，资源包只是覆盖。要换就六张一起换，只换一两张会出现画风打架。
+- 完整的贴图位清单（含每个位现有的图长什么样、缺图时退回哪个颜色）可以自己生成：`python3 docs/make_texture_manifest.py`，出一张 HTML。不在文档里存一份静态清单，是因为那种清单必然过期——`PhoneTheme` 头部那张就是这么烂掉的。
 - 放进去的文件不是合法 PNG 时会退回纯色，并在日志里记一条警告，不会崩。
 - **老路径仍然认。** 1.2.7 之前所有贴图平铺在 `textures/gui/` 下（`phone_frame.png`、`app_icon_chat.png` 这种）。按那套做的资源包不用改也能继续用——新路径找不到时会自动回退，并在日志里提一句。新做的资源包请按上表。
 
