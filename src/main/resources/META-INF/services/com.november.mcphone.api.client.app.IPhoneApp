@@ -8,3 +8,4 @@ com.november.mcphone.feature.enderchest.client.EnderChestApp
 com.november.mcphone.feature.notes.client.NotesApp
 com.november.mcphone.feature.waystone.client.WaystoneApp
 com.november.mcphone.feature.browser.client.BrowserApp
+com.november.mcphone.feature.clock.client.ClockApp

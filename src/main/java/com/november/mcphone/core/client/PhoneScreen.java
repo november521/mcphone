@@ -19,6 +19,7 @@ import com.november.mcphone.feature.settings.client.WallpaperPicker;
 import com.november.mcphone.feature.store.client.AppDetail;
 import com.november.mcphone.feature.store.client.AppStore;
 import com.november.mcphone.feature.store.client.CompanionApps;
+import com.november.mcphone.feature.clock.client.ClockPage;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
@@ -40,7 +41,7 @@ import java.util.UUID;
 public final class PhoneScreen extends Screen {
 
     /** 手机导航模式 */
-    public enum Mode { MAIN, SETTINGS, WALLPAPER_PICKER, APP_MANAGER, MUSIC_PLAYER, APP_STORE, APP_DETAIL, COMPANION_APPS, ADDON_PAGE, ABOUT, GALLERY, DEVICE_NAME, CHAT, CHAT_ADD_CONTACT, CHAT_CONVERSATION, NOTES, NOTE_EDIT }
+    public enum Mode { MAIN, SETTINGS, WALLPAPER_PICKER, APP_MANAGER, MUSIC_PLAYER, APP_STORE, APP_DETAIL, COMPANION_APPS, ADDON_PAGE, ABOUT, GALLERY, DEVICE_NAME, CHAT, CHAT_ADD_CONTACT, CHAT_CONVERSATION, NOTES, NOTE_EDIT, CLOCK }
 
 
     // ---- 打开动画 ----
@@ -227,6 +228,10 @@ public final class PhoneScreen extends Screen {
         if (target == Mode.NOTES) notesList.open();
 
         if (this.mode == Mode.NOTE_EDIT) noteEditor.close();
+
+        // 时钟靠"连续多少帧没动"判断时间停没停，离开时清掉，
+        // 免得下次进来带着上次的判断先闪一下"时间已停止"
+        if (this.mode == Mode.CLOCK) ClockPage.reset();
 
         this.mode = target;
         this.hoveredSettingIdx = -1;
@@ -520,6 +525,9 @@ public final class PhoneScreen extends Screen {
             case NOTES             -> notesList.render(g, phoneLeft, phoneTop,
                     PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
                     PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT, mouseX, mouseY, font);
+            case CLOCK             -> ClockPage.render(g, phoneLeft, phoneTop,
+                    PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
+                    PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT, font);
             case NOTE_EDIT         -> noteEditor.render(g, phoneLeft, phoneTop,
                     PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
                     PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT,
@@ -1344,8 +1352,8 @@ public final class PhoneScreen extends Screen {
                 callPage(p -> p.mouseClicked(mx, my, button));
                 yield true;
             }
-            case ABOUT -> {
-                // 这一页只有信息，没有可点的东西。仍然 yield true 把点击吃掉，
+            case ABOUT, CLOCK -> {
+                // 这两页只有信息，没有可点的东西。仍然 yield true 把点击吃掉，
                 // 否则会落到下面的默认分支去，行为不好预料
                 yield true;
             }
