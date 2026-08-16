@@ -1,5 +1,6 @@
 package com.november.mcphone.feature.music.client;
 
+import com.november.mcphone.core.client.FontPalette;
 import com.november.mcphone.core.client.PhoneTheme;
 import com.november.mcphone.core.client.GuiUtil;
 import net.minecraft.client.Minecraft;
@@ -112,16 +113,16 @@ public final class MusicPlayer {
         int bottom = phoneTop + screenH - navH;
 
         // 标题
-        g.drawString(font, "音乐播放器", x, y, PhoneTheme.FONT_COLOR_TITLE, true);
+        g.drawString(font, "音乐播放器", x, y, FontPalette.title(), true);
         y += font.lineHeight + 4;
 
         g.fill(x, y, x + w, y + 1, PhoneTheme.COLOR_DIVIDER);
         y += 4;
 
         if (tracks.isEmpty()) {
-            g.drawString(font, "暂无曲目", x, y, PhoneTheme.FONT_COLOR_SUBTLE, false);
+            g.drawString(font, "暂无曲目", x, y, FontPalette.subtle(), false);
             y += font.lineHeight + 2;
-            g.drawString(font, "放入WAV到 config/mcphone/music/", x, y, PhoneTheme.FONT_COLOR_DIM, false);
+            g.drawString(font, "放入WAV到 config/mcphone/music/", x, y, FontPalette.dim(), false);
             hoveredIdx = -1;
             return;
         }
@@ -152,7 +153,7 @@ public final class MusicPlayer {
             if (font.width(full) > w - 4) {
                 full = font.plainSubstrByWidth(full, w - 8) + "…";
             }
-            g.drawString(font, full, x + 2, y + 1, PhoneTheme.FONT_COLOR_BODY, false);
+            g.drawString(font, full, x + 2, y + 1, FontPalette.body(), false);
 
             y += font.lineHeight + 4;
         }

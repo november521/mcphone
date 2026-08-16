@@ -1,5 +1,6 @@
 package com.november.mcphone.feature.gallery.client;
 
+import com.november.mcphone.core.client.FontPalette;
 import com.november.mcphone.core.client.PhoneTheme;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
@@ -48,10 +49,10 @@ public final class Gallery {
 
     private static final int COLOR_CELL_BG      = PhoneTheme.COLOR_SCRIM;
     private static final int COLOR_CELL_HOVER   = PhoneTheme.COLOR_HOVER_STRONG;
-    private static final int COLOR_CELL_BORDER  = PhoneTheme.FONT_COLOR_LINK;
-    private static final int COLOR_PAGER        = PhoneTheme.FONT_COLOR_BODY;
-    private static final int COLOR_PAGER_OFF    = PhoneTheme.FONT_COLOR_MUTED;
-    private static final int COLOR_HINT         = PhoneTheme.FONT_COLOR_SUBTLE;
+    private static int colorCellBorder() { return FontPalette.link(); }
+    private static int colorPager() { return FontPalette.body(); }
+    private static int colorPagerOff() { return FontPalette.muted(); }
+    private static int colorHint() { return FontPalette.subtle(); }
 
     private static final String ARROW_PREV = "◁";
     private static final String ARROW_NEXT = "▷";
@@ -134,10 +135,10 @@ public final class Gallery {
 
         // ---- 标题：带照片总数 ----
         String title = Component.translatable("mcphone.app.gallery").getString();
-        g.drawString(font, title, x, y, PhoneTheme.FONT_COLOR_TITLE, true);
+        g.drawString(font, title, x, y, FontPalette.title(), true);
         if (!photos.isEmpty()) {
             String count = String.valueOf(photos.size());
-            g.drawString(font, count, x + w - font.width(count), y, COLOR_HINT, false);
+            g.drawString(font, count, x + w - font.width(count), y, colorHint(), false);
         }
         y += font.lineHeight + 4;
 
@@ -147,9 +148,9 @@ public final class Gallery {
         // ---- 空相册 ----
         if (photos.isEmpty()) {
             g.drawString(font, Component.translatable("mcphone.gallery.empty").getString(),
-                    x, y, COLOR_HINT, false);
+                    x, y, colorHint(), false);
             g.drawString(font, Component.translatable("mcphone.gallery.empty_hint").getString(),
-                    x, y + font.lineHeight + 2, COLOR_HINT, false);
+                    x, y + font.lineHeight + 2, colorHint(), false);
             hoveredIdx = -1;
             hoveredPager = 0;
             return;
@@ -210,7 +211,7 @@ public final class Gallery {
             g.drawString(font, dots,
                     cx + (CELL_W - font.width(dots)) / 2,
                     cy + (CELL_H - font.lineHeight) / 2,
-                    COLOR_HINT, false);
+                    colorHint(), false);
         } else {
             // 等比缩放塞进格子，留 1px 内边距免得贴着边框
             int boxW = CELL_W - 2;
@@ -228,7 +229,7 @@ public final class Gallery {
 
         if (hovered) {
             g.fill(cx, cy, cx + CELL_W, cy + CELL_H, COLOR_CELL_HOVER);
-            drawBorder(g, cx, cy, CELL_W, CELL_H, COLOR_CELL_BORDER);
+            drawBorder(g, cx, cy, CELL_W, CELL_H, colorCellBorder());
         }
     }
 
@@ -256,13 +257,13 @@ public final class Gallery {
         int ty = y + (h - font.lineHeight) / 2;
 
         g.drawString(font, ARROW_PREV, x + 2, ty,
-                canPrev ? (onPrev ? COLOR_CELL_BORDER : COLOR_PAGER) : COLOR_PAGER_OFF, false);
+                canPrev ? (onPrev ? colorCellBorder() : colorPager()) : colorPagerOff(), false);
 
         String label = (cur + 1) + "/" + pageCount;
-        g.drawString(font, label, x + (w - font.width(label)) / 2, ty, COLOR_PAGER, false);
+        g.drawString(font, label, x + (w - font.width(label)) / 2, ty, colorPager(), false);
 
         g.drawString(font, ARROW_NEXT, x + w - font.width(ARROW_NEXT) - 2, ty,
-                canNext ? (onNext ? COLOR_CELL_BORDER : COLOR_PAGER) : COLOR_PAGER_OFF, false);
+                canNext ? (onNext ? colorCellBorder() : colorPager()) : colorPagerOff(), false);
     }
 
     // ============================================================
@@ -291,10 +292,10 @@ public final class Gallery {
         String back = ARROW_PREV + " " + Component.translatable("mcphone.gallery.back").getString();
         boolean onBack = mouseX >= x && mouseX < x + font.width(back) + 4
                       && mouseY >= headerY && mouseY < headerY + rowH;
-        g.drawString(font, back, x, headerY, onBack ? COLOR_CELL_BORDER : COLOR_PAGER, false);
+        g.drawString(font, back, x, headerY, onBack ? colorCellBorder() : colorPager(), false);
 
         String idx = (viewing + 1) + "/" + photos.size();
-        g.drawString(font, idx, x + w - font.width(idx), headerY, COLOR_HINT, false);
+        g.drawString(font, idx, x + w - font.width(idx), headerY, colorHint(), false);
 
         // ---- 底部两行：文件名 / ◁ 删除 ▷ ----
         int btnRowY = phoneTop + screenH - navH - rowH - 2;
@@ -329,15 +330,15 @@ public final class Gallery {
         // 文件名过长就截断，手机屏幕放不下完整的时间戳文件名
         String name = photo.fileName();
         if (font.width(name) > w) name = font.plainSubstrByWidth(name, w - 6) + "…";
-        g.drawString(font, name, x + (w - font.width(name)) / 2, nameRowY, COLOR_HINT, false);
+        g.drawString(font, name, x + (w - font.width(name)) / 2, nameRowY, colorHint(), false);
 
         g.drawString(font, ARROW_PREV, x + 2, btnRowY,
-                canPrev ? (onPrev ? COLOR_CELL_BORDER : COLOR_PAGER) : COLOR_PAGER_OFF, false);
+                canPrev ? (onPrev ? colorCellBorder() : colorPager()) : colorPagerOff(), false);
         g.drawString(font, ARROW_NEXT, x + w - font.width(ARROW_NEXT) - 2, btnRowY,
-                canNext ? (onNext ? COLOR_CELL_BORDER : COLOR_PAGER) : COLOR_PAGER_OFF, false);
+                canNext ? (onNext ? colorCellBorder() : colorPager()) : colorPagerOff(), false);
         g.drawString(font, del, delX, btnRowY,
-                deleteArmed ? PhoneTheme.FONT_COLOR_DANGER_ARMED
-                        : (onDelete ? PhoneTheme.FONT_COLOR_DANGER : COLOR_PAGER), false);
+                deleteArmed ? FontPalette.dangerArmed()
+                        : (onDelete ? FontPalette.danger() : colorPager()), false);
     }
 
     /** 大图区域：黑底 + 等比居中的照片 */
@@ -354,7 +355,7 @@ public final class Gallery {
             String loading = Component.translatable("mcphone.gallery.loading").getString();
             g.drawString(font, loading,
                     areaX + (areaW - font.width(loading)) / 2,
-                    areaY + (areaH - font.lineHeight) / 2, COLOR_HINT, false);
+                    areaY + (areaH - font.lineHeight) / 2, colorHint(), false);
             return;
         }
 

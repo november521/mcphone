@@ -23,13 +23,13 @@ public final class ThemeStyle implements PhoneStyle {
 
     private ThemeStyle() {}
 
-    @Override public int titleColor() { return PhoneTheme.FONT_COLOR_TITLE; }
+    @Override public int titleColor() { return FontPalette.title(); }
 
-    @Override public int bodyColor() { return PhoneTheme.FONT_COLOR_BODY; }
+    @Override public int bodyColor() { return FontPalette.body(); }
 
-    @Override public int subtleColor() { return PhoneTheme.FONT_COLOR_SUBTLE; }
+    @Override public int subtleColor() { return FontPalette.subtle(); }
 
-    @Override public int accentColor() { return PhoneTheme.FONT_COLOR_PRICE; }
+    @Override public int accentColor() { return FontPalette.price(); }
 
     @Override public int screenBackground() { return PhoneTheme.COLOR_SCREEN_BG; }
 

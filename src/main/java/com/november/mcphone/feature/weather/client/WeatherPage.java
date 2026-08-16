@@ -1,6 +1,7 @@
 package com.november.mcphone.feature.weather.client;
 
 import com.november.mcphone.MCphone;
+import com.november.mcphone.core.client.FontPalette;
 import com.november.mcphone.core.client.PhoneTheme;
 import com.november.mcphone.feature.clock.WorldClock;
 import com.november.mcphone.feature.weather.Weather;
@@ -64,7 +65,7 @@ public final class WeatherPage {
 
         // ---- 标题 ----
         g.drawString(font, Component.translatable("mcphone.app.weather").getString(),
-                x, y, PhoneTheme.FONT_COLOR_TITLE, true);
+                x, y, FontPalette.title(), true);
         y += font.lineHeight + 4;
         g.fill(x, y, x + w, y + 1, PhoneTheme.COLOR_DIVIDER);
         y += 10;
@@ -73,7 +74,7 @@ public final class WeatherPage {
             // 理论上进不来：没有世界就没有手机界面。写着是为了不在断线的
             // 那一帧抛空指针
             g.drawString(font, Component.translatable("mcphone.clock.no_world").getString(),
-                    x, y, PhoneTheme.FONT_COLOR_SUBTLE, false);
+                    x, y, FontPalette.subtle(), false);
             return;
         }
 
@@ -97,7 +98,7 @@ public final class WeatherPage {
 
         // ---- 适合做什么 ----
         g.drawString(font, Component.translatable("mcphone.weather.advice_title").getString(),
-                x, y, PhoneTheme.FONT_COLOR_SUBTLE, false);
+                x, y, FontPalette.subtle(), false);
         y += font.lineHeight + 3;
 
         // 走 font.split 而不是自己按字数断行：中文一字一格、英文按词断，
@@ -108,7 +109,7 @@ public final class WeatherPage {
         int bottom = phoneTop + screenH - navH - 2;
         for (FormattedCharSequence line : lines) {
             if (y + font.lineHeight > bottom) break;   // 排不下就截住，不画到导航栏上
-            g.drawString(font, line, x, y, PhoneTheme.FONT_COLOR_BODY, false);
+            g.drawString(font, line, x, y, FontPalette.body(), false);
             y += font.lineHeight + 1;
         }
     }
@@ -160,7 +161,7 @@ public final class WeatherPage {
         g.pose().pushPose();
         g.pose().translate(phoneLeft + (screenW - bigW) / 2f, y, 0);
         g.pose().scale(BIG_SCALE, BIG_SCALE, 1f);
-        g.drawString(font, text, 0, 0, PhoneTheme.FONT_COLOR_TITLE, false);
+        g.drawString(font, text, 0, 0, FontPalette.title(), false);
         g.pose().popPose();
     }
 }

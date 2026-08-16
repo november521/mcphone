@@ -1,5 +1,6 @@
 package com.november.mcphone.feature.notes.client;
 
+import com.november.mcphone.core.client.FontPalette;
 import com.november.mcphone.core.client.PhoneTheme;
 import com.november.mcphone.feature.notes.NotePrinter;
 import com.november.mcphone.feature.notes.NoteSummary;
@@ -32,9 +33,9 @@ public final class NotesList {
 
     private static final int PAD = 4;
 
-    private static final int COLOR_TITLE = PhoneTheme.FONT_COLOR_TITLE;
-    private static final int COLOR_PREVIEW = PhoneTheme.FONT_COLOR_PREVIEW;
-    private static final int COLOR_TIME = PhoneTheme.FONT_COLOR_TIMESTAMP;
+    private static int colorTitle() { return FontPalette.title(); }
+    private static int colorPreview() { return FontPalette.preview(); }
+    private static int colorTime() { return FontPalette.timestamp(); }
     private static final int COLOR_ROW_HOVER = PhoneTheme.COLOR_ROW_HOVER;
 
     private int scrollOffset;
@@ -63,7 +64,7 @@ public final class NotesList {
     private static final long TOAST_MS = 2500L;
 
     /** 临时提示的颜色 */
-    private static final int COLOR_TOAST = PhoneTheme.FONT_COLOR_ARMED;
+    private static int colorToast() { return FontPalette.armed(); }
 
     /**
      * 打印键的颜色。
@@ -72,7 +73,7 @@ public final class NotesList {
      * 用同一种颜色，玩家扫一眼就知道哪些字是能点的。预览文字是灰的，绿色跳出来
      * 正好把可点的那部分标出来。
      */
-    private static final int COLOR_PRINT = PhoneTheme.FONT_COLOR_CONFIRM;
+    private static int colorPrint() { return FontPalette.confirm(); }
 
     /** 待消费的"打开某条"请求，null 表示没有 */
     private Integer pendingOpen;
@@ -147,14 +148,14 @@ public final class NotesList {
     private int renderHeader(GuiGraphics g, Font font, int x, int y, int w,
                              int mouseX, int mouseY) {
         g.drawString(font, Component.translatable("mcphone.app.notes").getString(),
-                x, y, PhoneTheme.FONT_COLOR_TITLE, true);
+                x, y, FontPalette.title(), true);
 
         String plus = "+";
         int plusW = font.width(plus);
         int plusX = x + w - plusW - 2;
         addHovered = mouseX >= plusX - 3 && mouseX <= plusX + plusW + 3
                   && mouseY >= y - 2 && mouseY <= y + font.lineHeight + 2;
-        g.drawString(font, plus, plusX, y, addHovered ? PhoneTheme.FONT_COLOR_TITLE : PhoneTheme.FONT_COLOR_LINK, true);
+        g.drawString(font, plus, plusX, y, addHovered ? FontPalette.title() : FontPalette.link(), true);
 
         y += font.lineHeight + 4;
         g.fill(x, y, x + w, y + 1, PhoneTheme.COLOR_DIVIDER);
@@ -163,10 +164,10 @@ public final class NotesList {
 
     private void renderEmpty(GuiGraphics g, Font font, int x, int y, int w) {
         g.drawString(font, Component.translatable("mcphone.notes.empty").getString(),
-                x, y, PhoneTheme.FONT_COLOR_SUBTLE, false);
+                x, y, FontPalette.subtle(), false);
         y += font.lineHeight + 2;
         for (var line : font.split(Component.translatable("mcphone.notes.empty_hint"), w)) {
-            g.drawString(font, line, x, y, PhoneTheme.FONT_COLOR_DIM, false);
+            g.drawString(font, line, x, y, FontPalette.dim(), false);
             y += font.lineHeight;
         }
     }
@@ -191,13 +192,13 @@ public final class NotesList {
             // 右侧时间先算宽度，标题才知道能占多少
             String time = GuiUtil.formatTime(note.modified());
             int timeW = font.width(time);
-            g.drawString(font, time, x + w - timeW, y, COLOR_TIME, false);
+            g.drawString(font, time, x + w - timeW, y, colorTime(), false);
 
             // 正文第一行为空的笔记显示"无标题"，否则列表里会出现一行空白
             String title = note.title().isEmpty()
                     ? Component.translatable("mcphone.notes.untitled").getString()
                     : note.title();
-            g.drawString(font, GuiUtil.truncate(font, title, w - timeW - 4), x, y, COLOR_TITLE, false);
+            g.drawString(font, GuiUtil.truncate(font, title, w - timeW - 4), x, y, colorTitle(), false);
 
             // 预览行右端是「打印」。放这一行而不是标题行：标题行右边已经被
             // 时间占了，而预览天生是可以截断的那一个
@@ -208,12 +209,12 @@ public final class NotesList {
             if (printHover) printHoveredIdx = i;
 
             g.drawString(font, GuiUtil.truncate(font, note.preview(), w - printW - 4),
-                    x, y + font.lineHeight + 1, COLOR_PREVIEW, false);
+                    x, y + font.lineHeight + 1, colorPreview(), false);
 
             // 每一行都画，不是只在悬停那行画：只给悬停行画的话，鼠标一进来
             // 预览就突然被截短，整行文字跳一下，比多几个字更闹
             g.drawString(font, print, printX, y + font.lineHeight + 1,
-                    printHover ? COLOR_TITLE : COLOR_PRINT, false);
+                    printHover ? colorTitle() : colorPrint(), false);
 
             y += rowH;
         }
@@ -275,7 +276,7 @@ public final class NotesList {
     private void renderToast(GuiGraphics g, Font font, int x, int y, int w) {
         if (toast.isEmpty() || System.currentTimeMillis() > toastUntilMs) return;
         int tw = font.width(toast);
-        g.drawString(font, toast, x + (w - tw) / 2, y, COLOR_TOAST, false);
+        g.drawString(font, toast, x + (w - tw) / 2, y, colorToast(), false);
     }
 
     public boolean mouseScrolled(double scrollY) {

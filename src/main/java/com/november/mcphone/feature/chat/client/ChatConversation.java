@@ -1,5 +1,6 @@
 package com.november.mcphone.feature.chat.client;
 
+import com.november.mcphone.core.client.FontPalette;
 import com.november.mcphone.core.client.PhoneSkin;
 import com.november.mcphone.core.client.PhoneTheme;
 import com.november.mcphone.core.client.PlayerAvatar;
@@ -114,8 +115,8 @@ public final class ChatConversation {
     private static final int COLOR_BUBBLE_PEER = PhoneTheme.COLOR_CHAT_BUBBLE_PEER;
     private static final int COLOR_TEXT_SELF = PhoneTheme.FONT_COLOR_CHAT_SELF;
     private static final int COLOR_TEXT_PEER = PhoneTheme.FONT_COLOR_CHAT_PEER;
-    private static final int COLOR_STAMP = PhoneTheme.FONT_COLOR_TIMESTAMP;
-    private static final int COLOR_EMPTY = PhoneTheme.FONT_COLOR_SUBTLE;
+    private static int colorStamp() { return FontPalette.timestamp(); }
+    private static int colorEmpty() { return FontPalette.subtle(); }
     private static final int COLOR_INPUT_BG = PhoneTheme.COLOR_CHAT_INPUT_BG;
     private static final int COLOR_SEND = PhoneTheme.FONT_COLOR_CHAT_SEND;
     private static final int COLOR_SEND_HOVER = PhoneTheme.FONT_COLOR_CHAT_SEND_HOVER;
@@ -262,7 +263,7 @@ public final class ChatConversation {
         int nameX = x + AVATAR_SIZE + AVATAR_GAP;
         g.drawString(font, GuiUtil.truncate(font, peerName(s), w - (nameX - x)),
                 nameX, y + (AVATAR_SIZE - font.lineHeight) / 2,
-                PhoneTheme.FONT_COLOR_TITLE, true);
+                FontPalette.title(), true);
 
         // 标题行由头像撑高，比原先高 7 像素，消息区相应少一点
         y += AVATAR_SIZE + 4;
@@ -274,7 +275,7 @@ public final class ChatConversation {
         if (blocks.isEmpty()) {
             int y = top;
             for (var line : font.split(Component.translatable("mcphone.chat.conversation_empty"), w)) {
-                g.drawString(font, line, x, y, COLOR_EMPTY, false);
+                g.drawString(font, line, x, y, colorEmpty(), false);
                 y += font.lineHeight;
             }
             maxScroll = 0;
@@ -304,7 +305,7 @@ public final class ChatConversation {
     private void renderBlock(GuiGraphics g, Font font, Block b, int x, int y, int w) {
         if (b.stamp()) {
             g.drawString(font, b.lines().get(0), x + (w - b.w()) / 2, y + STAMP_PAD_Y,
-                    COLOR_STAMP, false);
+                    colorStamp(), false);
             return;
         }
 

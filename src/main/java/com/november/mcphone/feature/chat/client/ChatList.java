@@ -1,5 +1,6 @@
 package com.november.mcphone.feature.chat.client;
 
+import com.november.mcphone.core.client.FontPalette;
 import com.november.mcphone.core.client.PhoneSkin;
 import com.november.mcphone.core.client.PhoneTheme;
 import com.november.mcphone.core.client.PlayerAvatar;
@@ -47,9 +48,9 @@ public final class ChatList {
     private static final int AVATAR_GAP = 3;
 
     // ---- 颜色 ----
-    private static final int COLOR_NAME = PhoneTheme.FONT_COLOR_TITLE;
-    private static final int COLOR_PREVIEW = PhoneTheme.FONT_COLOR_PREVIEW;
-    private static final int COLOR_TIME = PhoneTheme.FONT_COLOR_TIMESTAMP;
+    private static int colorName() { return FontPalette.title(); }
+    private static int colorPreview() { return FontPalette.preview(); }
+    private static int colorTime() { return FontPalette.timestamp(); }
     private static final int COLOR_UNREAD_BG = PhoneTheme.COLOR_UNREAD_BADGE;
     private static final int COLOR_ROW_HOVER = PhoneTheme.COLOR_ROW_HOVER;
 
@@ -129,7 +130,7 @@ public final class ChatList {
     private int renderHeader(GuiGraphics g, Font font, int x, int y, int w,
                              int mouseX, int mouseY) {
         g.drawString(font, Component.translatable("mcphone.app.chat").getString(),
-                x, y, PhoneTheme.FONT_COLOR_TITLE, true);
+                x, y, FontPalette.title(), true);
 
         String plus = "+";
         int plusW = font.width(plus);
@@ -137,7 +138,7 @@ public final class ChatList {
         addContactHovered = mouseX >= plusX - 3 && mouseX <= plusX + plusW + 3
                          && mouseY >= y - 2 && mouseY <= y + font.lineHeight + 2;
         g.drawString(font, plus, plusX, y,
-                addContactHovered ? PhoneTheme.FONT_COLOR_TITLE : PhoneTheme.FONT_COLOR_LINK, true);
+                addContactHovered ? FontPalette.title() : FontPalette.link(), true);
 
         y += font.lineHeight + 4;
         g.fill(x, y, x + w, y + 1, PhoneTheme.COLOR_DIVIDER);
@@ -146,12 +147,12 @@ public final class ChatList {
 
     private void renderEmpty(GuiGraphics g, Font font, int x, int y, int w) {
         g.drawString(font, Component.translatable("mcphone.chat.empty").getString(),
-                x, y, PhoneTheme.FONT_COLOR_SUBTLE, false);
+                x, y, FontPalette.subtle(), false);
         y += font.lineHeight + 2;
 
         // 提示文字比屏幕宽时按词换行，硬截断会把话说一半
         for (var line : font.split(Component.translatable("mcphone.chat.empty_hint"), w)) {
-            g.drawString(font, line, x, y, PhoneTheme.FONT_COLOR_DIM, false);
+            g.drawString(font, line, x, y, FontPalette.dim(), false);
             y += font.lineHeight;
         }
     }
@@ -190,7 +191,7 @@ public final class ChatList {
         int nameX = x + AVATAR_SIZE + AVATAR_GAP;
         int nameMaxW = w - (nameX - x) - rightW - 4;
         String name = GuiUtil.truncate(font, c.name(), nameMaxW);
-        g.drawString(font, name, nameX, y, COLOR_NAME, false);
+        g.drawString(font, name, nameX, y, colorName(), false);
 
         if (!right.isEmpty()) {
             int rx = x + w - rightW;
@@ -201,7 +202,7 @@ public final class ChatList {
                         rx - 1, y - 1, x + w - (rx - 1), font.lineHeight + 1, COLOR_UNREAD_BG);
                 g.drawString(font, right, rx + 1, y, PhoneTheme.FONT_COLOR_BADGE, false);
             } else {
-                g.drawString(font, right, rx, y, COLOR_TIME, false);
+                g.drawString(font, right, rx, y, colorTime(), false);
             }
         }
 
@@ -210,7 +211,7 @@ public final class ChatList {
                 ? Component.translatable("mcphone.chat.no_message").getString()
                 : c.lastText();
         g.drawString(font, GuiUtil.truncate(font, preview, w - (nameX - x)),
-                nameX, y + font.lineHeight + 1, COLOR_PREVIEW, false);
+                nameX, y + font.lineHeight + 1, colorPreview(), false);
     }
 
     // ============================================================

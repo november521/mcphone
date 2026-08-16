@@ -1,5 +1,6 @@
 package com.november.mcphone.feature.settings.client;
 
+import com.november.mcphone.core.client.FontPalette;
 import com.november.mcphone.core.client.PhoneTheme;
 import com.november.mcphone.feature.settings.net.SetWallpaperPacket;
 import com.november.mcphone.core.client.GuiUtil;
@@ -45,7 +46,7 @@ public final class WallpaperPicker {
         int contentW = screenW - PAD_X * 2;
 
         // ---- 标题 ----
-        g.drawString(font, "更换壁纸", contentX, contentY, PhoneTheme.FONT_COLOR_TITLE, true);
+        g.drawString(font, "更换壁纸", contentX, contentY, FontPalette.title(), true);
         contentY += font.lineHeight + 4;
 
         int hovered = -1;
@@ -56,7 +57,7 @@ public final class WallpaperPicker {
             hovered = -2;
             g.fill(contentX, btnY, contentX + contentW, btnY + font.lineHeight + 4, PhoneTheme.COLOR_HOVER_STRONG);
         }
-        g.drawString(font, "恢复默认背景", contentX + 2, btnY + 2, PhoneTheme.FONT_COLOR_BODY, false);
+        g.drawString(font, "恢复默认背景", contentX + 2, btnY + 2, FontPalette.body(), false);
         contentY = btnY + font.lineHeight + 6;
 
         // ---- 分割线 ----
@@ -65,10 +66,10 @@ public final class WallpaperPicker {
 
         // ---- 无壁纸提示 ----
         if (wallpapers.isEmpty()) {
-            g.drawString(font, "暂无壁纸", contentX, contentY, PhoneTheme.FONT_COLOR_SUBTLE, false);
-            g.drawString(font, "放入PNG到", contentX, contentY + font.lineHeight + 2, PhoneTheme.FONT_COLOR_SUBTLE, false);
-            g.drawString(font, "config/mcphone/", contentX, contentY + (font.lineHeight + 2) * 2, PhoneTheme.FONT_COLOR_SUBTLE, false);
-            g.drawString(font, "wallpapers/", contentX, contentY + (font.lineHeight + 2) * 3, PhoneTheme.FONT_COLOR_SUBTLE, false);
+            g.drawString(font, "暂无壁纸", contentX, contentY, FontPalette.subtle(), false);
+            g.drawString(font, "放入PNG到", contentX, contentY + font.lineHeight + 2, FontPalette.subtle(), false);
+            g.drawString(font, "config/mcphone/", contentX, contentY + (font.lineHeight + 2) * 2, FontPalette.subtle(), false);
+            g.drawString(font, "wallpapers/", contentX, contentY + (font.lineHeight + 2) * 3, FontPalette.subtle(), false);
             this.hoveredIdx = -1;
             return;
         }
@@ -98,7 +99,7 @@ public final class WallpaperPicker {
                 label = font.plainSubstrByWidth(label, THUMB_W - 2) + "…";
             }
             g.drawCenteredString(font, label,
-                    x + THUMB_W / 2, y + THUMB_H + 1, PhoneTheme.FONT_COLOR_APP_NAME);
+                    x + THUMB_W / 2, y + THUMB_H + 1, FontPalette.appName());
 
             col++;
             if (col >= COLS) {

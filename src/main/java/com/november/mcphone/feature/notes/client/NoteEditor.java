@@ -6,6 +6,7 @@ import com.november.mcphone.feature.notes.net.DeleteNotePacket;
 import com.november.mcphone.feature.notes.net.NotesClientCache;
 import com.november.mcphone.feature.notes.net.RequestNotePacket;
 import com.november.mcphone.feature.notes.net.SaveNotePacket;
+import com.november.mcphone.core.client.FontPalette;
 import com.november.mcphone.core.client.PhoneTheme;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
@@ -83,13 +84,13 @@ public final class NoteEditor {
      */
     private static final int SCROLL_BAR_W = 8;
 
-    private static final int COLOR_SAVE = PhoneTheme.FONT_COLOR_CONFIRM;
-    private static final int COLOR_DELETE = PhoneTheme.FONT_COLOR_DANGER;
-    private static final int COLOR_HOVER = PhoneTheme.FONT_COLOR_TITLE;
-    private static final int COLOR_HINT = PhoneTheme.FONT_COLOR_SUBTLE;
+    private static int colorSave() { return FontPalette.confirm(); }
+    private static int colorDelete() { return FontPalette.danger(); }
+    private static int colorHover() { return FontPalette.title(); }
+    private static int colorHint() { return FontPalette.subtle(); }
 
     /** 删除已上膛时的颜色 —— 与相册的确认态一致 */
-    private static final int COLOR_ARMED = PhoneTheme.FONT_COLOR_ARMED;
+    private static int colorArmed() { return FontPalette.armed(); }
 
     private MultiLineEditBox box;
 
@@ -243,14 +244,14 @@ public final class NoteEditor {
         saveHovered = inRow && mouseX >= x - 2 && mouseX < x + saveW + 2;
         deleteHovered = inRow && mouseX >= deleteX - 2 && mouseX < deleteX + deleteW + 2;
 
-        g.drawString(font, save, x, y, saveHovered ? COLOR_HOVER : COLOR_SAVE, false);
+        g.drawString(font, save, x, y, saveHovered ? colorHover() : colorSave(), false);
 
         // 新建还没保存过的笔记没什么可删，删除键置灰
         boolean deletable = noteId != NoteService.NEW_NOTE_ID;
         // 上膛后用醒目的黄色：这一下点下去就真没了，颜色得先说一声
-        int deleteColor = !deletable ? COLOR_HINT
-                : deleteArmed ? COLOR_ARMED
-                : deleteHovered ? COLOR_HOVER : COLOR_DELETE;
+        int deleteColor = !deletable ? colorHint()
+                : deleteArmed ? colorArmed()
+                : deleteHovered ? colorHover() : colorDelete();
         g.drawString(font, delete, deleteX, y, deleteColor, false);
     }
 

@@ -2,6 +2,7 @@ package com.november.mcphone.feature.settings.client;
 
 import com.november.mcphone.core.ModDataComponents;
 import com.november.mcphone.core.PhoneLocation;
+import com.november.mcphone.core.client.FontPalette;
 import com.november.mcphone.core.client.PhoneTheme;
 import com.november.mcphone.feature.settings.net.SetDeviceNamePacket;
 import net.minecraft.client.Minecraft;
@@ -65,9 +66,9 @@ public final class DeviceNameEditor {
     private static final int PAD = 8;
     private static final int BOX_HEIGHT = 14;
 
-    private static final int COLOR_HINT   = PhoneTheme.FONT_COLOR_SUBTLE;
-    private static final int COLOR_BTN    = PhoneTheme.FONT_COLOR_BODY;
-    private static final int COLOR_BTN_ON = PhoneTheme.FONT_COLOR_LINK;
+    private static int colorHint() { return FontPalette.subtle(); }
+    private static int colorBtn() { return FontPalette.body(); }
+    private static int colorBtnOn() { return FontPalette.link(); }
 
     /** 正在改名的是身上哪一部手机 */
     private PhoneLocation location = new PhoneLocation.InHand(InteractionHand.MAIN_HAND);
@@ -122,7 +123,7 @@ public final class DeviceNameEditor {
 
         // ---- 标题 ----
         g.drawString(font, Component.translatable("mcphone.settings.device_name").getString(),
-                x, y, PhoneTheme.FONT_COLOR_TITLE, true);
+                x, y, FontPalette.title(), true);
         y += font.lineHeight + 4;
         g.fill(x, y, x + w, y + 1, PhoneTheme.COLOR_DIVIDER);
         y += 6;
@@ -147,13 +148,13 @@ public final class DeviceNameEditor {
 
         // ---- 剩余字数 ----
         String counter = box.getValue().length() + "/" + SetDeviceNamePacket.MAX_NAME_LENGTH;
-        g.drawString(font, counter, x + w - font.width(counter), y, COLOR_HINT, false);
+        g.drawString(font, counter, x + w - font.width(counter), y, colorHint(), false);
         y += font.lineHeight + 4;
 
         // ---- 说明 ----
         // 手机屏幕窄，说明文字用 split 自动折行
         for (var line : font.split(Component.translatable("mcphone.settings.device_name_hint"), w)) {
-            g.drawString(font, line, x, y, COLOR_HINT, false);
+            g.drawString(font, line, x, y, colorHint(), false);
             y += font.lineHeight + 1;
         }
 
@@ -173,8 +174,8 @@ public final class DeviceNameEditor {
                         && mouseY >= btnY - 2 && mouseY < btnY + font.lineHeight + 2;
         hovered = onSave ? Btn.SAVE : onCancel ? Btn.CANCEL : Btn.NONE;
 
-        g.drawString(font, save, saveX, btnY, onSave ? COLOR_BTN_ON : PhoneTheme.FONT_COLOR_CONFIRM, false);
-        g.drawString(font, cancel, cancelX, btnY, onCancel ? COLOR_BTN_ON : COLOR_BTN, false);
+        g.drawString(font, save, saveX, btnY, onSave ? colorBtnOn() : FontPalette.confirm(), false);
+        g.drawString(font, cancel, cancelX, btnY, onCancel ? colorBtnOn() : colorBtn(), false);
     }
 
     // ============================================================

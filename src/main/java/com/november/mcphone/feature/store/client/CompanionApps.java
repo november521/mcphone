@@ -3,6 +3,7 @@ package com.november.mcphone.feature.store.client;
 import com.november.mcphone.MCphone;
 import com.november.mcphone.api.client.app.IPhoneApp;
 import com.november.mcphone.api.client.app.RequiredMod;
+import com.november.mcphone.core.client.FontPalette;
 import com.november.mcphone.core.client.PhoneScreenRegistry;
 import com.november.mcphone.core.client.PhoneTheme;
 import com.november.mcphone.core.client.GuiUtil;
@@ -164,7 +165,7 @@ public final class CompanionApps {
         int bottom = phoneTop + screenH - navH;
 
         g.drawString(font, Component.translatable("mcphone.store.companion").getString(),
-                x, y, PhoneTheme.FONT_COLOR_TITLE, true);
+                x, y, FontPalette.title(), true);
         y += font.lineHeight + 4;
 
         g.fill(x, y, x + w, y + 1, PhoneTheme.COLOR_DIVIDER);
@@ -172,7 +173,7 @@ public final class CompanionApps {
 
         if (rows.isEmpty()) {
             g.drawString(font, Component.translatable("mcphone.store.companion.empty").getString(),
-                    x, y, PhoneTheme.FONT_COLOR_SUBTLE, false);
+                    x, y, FontPalette.subtle(), false);
             return;
         }
 
@@ -220,15 +221,15 @@ public final class CompanionApps {
         // 名字要给状态让出位置。不减这一块的话，长名字会直接压在"未装"上面，
         // 而这一页最要紧的信息恰恰就是那两个字
         g.drawString(font, clip(font, row.name(), textW - stateW - GAP), textX, y,
-                row.satisfied() ? PhoneTheme.FONT_COLOR_BODY
+                row.satisfied() ? FontPalette.body()
                         : PhoneTheme.FONT_COLOR_BUTTON_DISABLED, false);
 
         // 第二行没有状态文字挡着，可以用满整行宽度
         g.drawString(font, clip(font, row.requires(), textW), textX, y + font.lineHeight + 1,
-                PhoneTheme.FONT_COLOR_SUBTLE, false);
+                FontPalette.subtle(), false);
 
         g.drawString(font, state, x + w - stateW, y,
-                row.satisfied() ? PhoneTheme.COLOR_BUTTON_HOVER : PhoneTheme.FONT_COLOR_SUBTLE,
+                row.satisfied() ? PhoneTheme.COLOR_BUTTON_HOVER : FontPalette.subtle(),
                 false);
     }
 
@@ -270,12 +271,12 @@ public final class CompanionApps {
         hoverNext = canNext && GuiUtil.hit(mouseX, mouseY, nextX, pagerY, font.width(next), font.lineHeight);
 
         g.drawString(font, prev, prevX, pagerY,
-                canPrev ? (hoverPrev ? PhoneTheme.FONT_COLOR_TITLE : PhoneTheme.FONT_COLOR_BODY)
+                canPrev ? (hoverPrev ? FontPalette.title() : FontPalette.body())
                         : PhoneTheme.COLOR_BUTTON_DISABLED, false);
         g.drawString(font, next, nextX, pagerY,
-                canNext ? (hoverNext ? PhoneTheme.FONT_COLOR_TITLE : PhoneTheme.FONT_COLOR_BODY)
+                canNext ? (hoverNext ? FontPalette.title() : FontPalette.body())
                         : PhoneTheme.COLOR_BUTTON_DISABLED, false);
-        g.drawString(font, label, labelX, pagerY, PhoneTheme.FONT_COLOR_SUBTLE, false);
+        g.drawString(font, label, labelX, pagerY, FontPalette.subtle(), false);
     }
 
     /**

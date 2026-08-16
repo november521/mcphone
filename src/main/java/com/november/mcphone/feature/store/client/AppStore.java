@@ -2,6 +2,7 @@ package com.november.mcphone.feature.store.client;
 
 import com.november.mcphone.api.client.store.AppInfo;
 import com.november.mcphone.api.client.store.IAppSource;
+import com.november.mcphone.core.client.FontPalette;
 import com.november.mcphone.core.client.PhoneScreenRegistry;
 import com.november.mcphone.core.client.PhoneSkin;
 import com.november.mcphone.core.client.PhoneTheme;
@@ -210,7 +211,7 @@ public final class AppStore {
         int bottom = phoneTop + screenH - navH;
 
         g.drawString(font, Component.translatable("mcphone.app.app_store").getString(),
-                x, y, PhoneTheme.FONT_COLOR_TITLE, true);
+                x, y, FontPalette.title(), true);
         y += font.lineHeight + 4;
 
         g.fill(x, y, x + w, y + 1, PhoneTheme.COLOR_DIVIDER);
@@ -219,13 +220,13 @@ public final class AppStore {
         if (message != null) {
             String msg = message.getString();
             if (font.width(msg) > w - 4) msg = font.plainSubstrByWidth(msg, w - 8) + "…";
-            g.drawString(font, msg, x, y, PhoneTheme.FONT_COLOR_NOTICE, false);
+            g.drawString(font, msg, x, y, FontPalette.notice(), false);
             y += font.lineHeight + 2;
         }
 
         if (cellCount() == 0) {
             g.drawString(font, Component.translatable("mcphone.store.empty").getString(),
-                    x, y, PhoneTheme.FONT_COLOR_SUBTLE, false);
+                    x, y, FontPalette.subtle(), false);
             hoveredIdx = -1;
             return;
         }
@@ -310,7 +311,7 @@ public final class AppStore {
             int by = y + (size - s) / 2;
             for (int i = 0; i < 3; i++) {
                 int sx = bx + i * (s + gap);
-                g.fill(sx, by, sx + s, by + s, PhoneTheme.FONT_COLOR_SUBTLE);
+                g.fill(sx, by, sx + s, by + s, FontPalette.subtle());
             }
         }
         drawName(g, font, Component.translatable("mcphone.store.companion").getString(),
@@ -331,7 +332,7 @@ public final class AppStore {
         g.pose().pushPose();
         g.pose().translate(ix + (is - nw) / 2f, iy + is + 2, 0);
         g.pose().scale(ns, ns, 1f);
-        g.drawString(font, name, 0, 0, PhoneTheme.FONT_COLOR_APP_NAME, false);
+        g.drawString(font, name, 0, 0, FontPalette.appName(), false);
         g.pose().popPose();
     }
 
@@ -358,12 +359,12 @@ public final class AppStore {
         hoverNext = canNext && GuiUtil.hit(mouseX, mouseY, nextX, pagerY, font.width(next), font.lineHeight);
 
         g.drawString(font, prev, prevX, pagerY,
-                canPrev ? (hoverPrev ? PhoneTheme.FONT_COLOR_TITLE : PhoneTheme.FONT_COLOR_BODY)
+                canPrev ? (hoverPrev ? FontPalette.title() : FontPalette.body())
                         : PhoneTheme.COLOR_BUTTON_DISABLED, false);
         g.drawString(font, next, nextX, pagerY,
-                canNext ? (hoverNext ? PhoneTheme.FONT_COLOR_TITLE : PhoneTheme.FONT_COLOR_BODY)
+                canNext ? (hoverNext ? FontPalette.title() : FontPalette.body())
                         : PhoneTheme.COLOR_BUTTON_DISABLED, false);
-        g.drawString(font, label, labelX, pagerY, PhoneTheme.FONT_COLOR_SUBTLE, false);
+        g.drawString(font, label, labelX, pagerY, FontPalette.subtle(), false);
     }
 
     // ============================================================

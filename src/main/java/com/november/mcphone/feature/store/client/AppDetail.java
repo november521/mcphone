@@ -3,6 +3,7 @@ package com.november.mcphone.feature.store.client;
 import com.november.mcphone.api.client.store.AppInfo;
 import com.november.mcphone.api.client.store.IAppSource;
 import com.november.mcphone.api.cost.ICost;
+import com.november.mcphone.core.client.FontPalette;
 import com.november.mcphone.core.client.PhoneScreenRegistry;
 import com.november.mcphone.core.client.PhoneSkin;
 import com.november.mcphone.core.client.PhoneTheme;
@@ -146,7 +147,7 @@ public final class AppDetail {
 
         if (info == null) {
             g.drawString(font, Component.translatable("mcphone.store.empty").getString(),
-                    x, y, PhoneTheme.FONT_COLOR_SUBTLE, false);
+                    x, y, FontPalette.subtle(), false);
             return;
         }
 
@@ -169,14 +170,14 @@ public final class AppDetail {
         int textX = x + BIG_ICON + 5;
         int textW = w - BIG_ICON - 5;
         g.drawString(font, GuiUtil.truncate(font, info.displayName().getString(), textW),
-                textX, y + 2, PhoneTheme.FONT_COLOR_TITLE, false);
+                textX, y + 2, FontPalette.title(), false);
 
         // 作者与版本挤在一行：屏幕只有 120 宽，各占一行不值得
         String meta = info.author() == null || info.author().isBlank()
                 ? "v" + info.version()
                 : info.author() + " · v" + info.version();
         g.drawString(font, GuiUtil.truncate(font, meta, textW),
-                textX, y + 2 + font.lineHeight + 2, PhoneTheme.FONT_COLOR_SUBTLE, false);
+                textX, y + 2 + font.lineHeight + 2, FontPalette.subtle(), false);
 
         y += BIG_ICON + 6;
 
@@ -191,14 +192,14 @@ public final class AppDetail {
         }
         for (var line : font.split(Component.literal(desc), w)) {
             if (y + font.lineHeight > bodyBottom) break;
-            g.drawString(font, line, x, y, PhoneTheme.FONT_COLOR_BODY, false);
+            g.drawString(font, line, x, y, FontPalette.body(), false);
             y += font.lineHeight + 1;
         }
 
         // ---- 提示（购买失败之类） ----
         if (message != null) {
             g.drawString(font, GuiUtil.truncate(font, message.getString(), w),
-                    x, bodyBottom, PhoneTheme.FONT_COLOR_NOTICE, false);
+                    x, bodyBottom, FontPalette.notice(), false);
         }
 
         // ---- 价格 ----
@@ -208,7 +209,7 @@ public final class AppDetail {
                 : price.describe().getString();
         int priceY = bottom - BUTTON_H - font.lineHeight - 3;
         g.drawString(font, GuiUtil.truncate(font, priceText, w), x, priceY,
-                price == ICost.FREE ? PhoneTheme.FONT_COLOR_SUBTLE : PhoneTheme.FONT_COLOR_PRICE,
+                price == ICost.FREE ? FontPalette.subtle() : FontPalette.price(),
                 false);
 
         // ---- 按钮 ----

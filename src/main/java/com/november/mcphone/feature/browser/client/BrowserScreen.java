@@ -6,6 +6,7 @@ import com.mojang.blaze3d.vertex.BufferUploader;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.Tesselator;
 import com.mojang.blaze3d.vertex.VertexFormat;
+import com.november.mcphone.core.client.FontPalette;
 import com.november.mcphone.core.client.PhoneSkin;
 import com.november.mcphone.core.client.PhoneTheme;
 import com.november.mcphone.feature.browser.client.BrowserBackends;
@@ -305,10 +306,10 @@ public final class BrowserScreen extends Screen {
         } else {
             String msg = (failure != null ? failure : Component.empty()).getString();
             g.drawCenteredString(font, msg, viewX + viewW / 2,
-                    viewY + viewH / 2 - font.lineHeight, PhoneTheme.FONT_COLOR_BODY);
+                    viewY + viewH / 2 - font.lineHeight, FontPalette.body());
             g.drawCenteredString(font,
                     Component.translatable("mcphone.browser.need_mcef").getString(),
-                    viewX + viewW / 2, viewY + viewH / 2 + 2, PhoneTheme.FONT_COLOR_SUBTLE);
+                    viewX + viewW / 2, viewY + viewH / 2 + 2, FontPalette.subtle());
         }
 
         // 地址栏自己画。见上面那段注释：这里【不能】调 super.render()
@@ -392,8 +393,8 @@ public final class BrowserScreen extends Screen {
         if (hovered) g.fill(x, y, x + NAV_BTN_W, y + h, PhoneTheme.COLOR_APP_PRESSED);
 
         int color = !enabled ? PhoneTheme.COLOR_BUTTON_DISABLED
-                : hovered ? PhoneTheme.FONT_COLOR_TITLE
-                : PhoneTheme.FONT_COLOR_BODY;
+                : hovered ? FontPalette.title()
+                : FontPalette.body();
 
         float sc = NAV_GLYPH_SCALE;
         float gw = font.width(glyph) * sc;
@@ -418,7 +419,7 @@ public final class BrowserScreen extends Screen {
         int size = 5;
         int x = panelX + panelW - size - 3;
         int y = barY + (BAR_H - size) / 2;
-        g.fill(x, y, x + size, y + size, PhoneTheme.FONT_COLOR_PRICE);
+        g.fill(x, y, x + size, y + size, FontPalette.price());
     }
 
     private boolean inViewport(double mx, double my) {

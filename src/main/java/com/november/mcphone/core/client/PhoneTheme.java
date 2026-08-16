@@ -148,14 +148,6 @@ public final class PhoneTheme {
     /** 输入框空着，「发送」点了也不发 */
     public static final int FONT_COLOR_CHAT_SEND_OFF = 0xFF555555;
 
-    // -- 文字颜色 --
-
-    /** App 名称文字颜色 */
-    public static final int FONT_COLOR_APP_NAME = 0xFFAAAAAA;
-
-    /** 主标题文字颜色 */
-    public static final int FONT_COLOR_TITLE = 0xFFFFFFFF;
-
     // -- 应用商店与详情页 --
     // 这几项都是【兜底】色：放了对应贴图时由 PhoneSkin 覆盖，见
     // PhoneSkin.Element 里的 STORE_BUTTON / STORE_BUTTON_DISABLED。
@@ -174,15 +166,6 @@ public final class PhoneTheme {
 
     /** 点不动的按钮上的文字 */
     public static final int FONT_COLOR_BUTTON_DISABLED = 0xFF888888;
-
-    /** 正文（App 简介之类） */
-    public static final int FONT_COLOR_BODY = 0xFFCCCCCC;
-
-    /** 次要信息（作者、版本、分页页码） */
-    public static final int FONT_COLOR_SUBTLE = 0xFF888888;
-
-    /** 价格 */
-    public static final int FONT_COLOR_PRICE = 0xFFFFD54F;
 
     // ==================== 各界面共用的角色色 ====================
     //
@@ -236,51 +219,20 @@ public final class PhoneTheme {
     public static final int COLOR_SLOT_BG = 0x88000000;
 
     // -- 文字 --
+    //
+    // 画在【壁纸】上的那些字色不在这里，在 FontPalette —— 它们随玩家在
+    // 「设置 → 字体颜色」里选的预设变，而 static final int 是编译期常量、
+    // 运行时改不动。搬走的是这十七个角色：
+    //
+    //   标题 正文 App名 预览 次要 时间戳 更暗一档 点不动
+    //   链接 确认 就绪 危险 危险就绪 卸载 提示 价格 问候
+    //
+    // 通知正文与对方气泡里的字看着也像"文字"，却留在本文件里：它们画在
+    // 通知底与气泡底上，那两块底不会变。判据始终是「底是什么」，不是
+    // 「这是不是一段字」。
 
-    /** 比 SUBTLE 再暗一档：系统 App 的名字、提示的第二行 */
-    public static final int FONT_COLOR_DIM = 0xFF666666;
-
-    /** 点不动的动作文字（翻到头的翻页箭头、空输入时的发送） */
-    public static final int FONT_COLOR_MUTED = 0xFF555555;
-
-    /** 列表第二行的内容预览 */
-    public static final int FONT_COLOR_PREVIEW = 0xFF999999;
-
-    /** 列表右侧那一列时间 */
-    public static final int FONT_COLOR_TIMESTAMP = 0xFF777777;
-
-    /** 通知里的正文 */
+    /** 通知里的正文。底是 COLOR_TOAST_BG */
     public static final int FONT_COLOR_TOAST = 0xFFBBBBBB;
-
-    /** 可点的强调文字：右上角的「+」、当前生效的选项 */
-    public static final int FONT_COLOR_LINK = 0xFF88CCFF;
-
-    /** 确认类动作：发送、保存、添加、打印 */
-    public static final int FONT_COLOR_CONFIRM = 0xFF66FF88;
-
-    /** 等着再点一次确认的状态，以及"同意"这类需要看一眼再决定的动作 */
-    public static final int FONT_COLOR_ARMED = 0xFFFFDD44;
-
-    /** 会删东西的动作：删除、解除好友 */
-    public static final int FONT_COLOR_DANGER = 0xFFFF8888;
-
-    /** 危险动作已经就绪，下一次点击就真删了 */
-    public static final int FONT_COLOR_DANGER_ARMED = 0xFFFF5555;
-
-    /** App 管理器里那个「✕ 卸载」 */
-    public static final int FONT_COLOR_UNINSTALL = 0xFFFF6666;
-
-    /** 出错了、缺东西：商店的失败提示、缺前置模组的说明 */
-    public static final int FONT_COLOR_NOTICE = 0xFFFFAA44;
-
-    /**
-     * 说给屏幕前那个人听的那一行（时钟里的问候与关怀语）。
-     *
-     * 暖金色，比正文亮、比标题柔。它不是信息也不是警告，是这一页上唯一
-     * 一句不为了让你知道什么而存在的话——用现成的哪个色都不对：
-     * NOTICE 是警告，LINK 看着能点，SUBTLE 又太像脚注。
-     */
-    public static final int FONT_COLOR_GREETING = 0xFFFFD54F;
 
     // -- 在线状态 --
 

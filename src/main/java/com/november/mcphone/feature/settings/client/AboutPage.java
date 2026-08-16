@@ -4,6 +4,7 @@ import com.november.mcphone.MCphone;
 import com.november.mcphone.api.client.app.IPhoneApp;
 import com.november.mcphone.api.client.app.RequiredMod;
 import com.november.mcphone.compat.CuriosCompat;
+import com.november.mcphone.core.client.FontPalette;
 import com.november.mcphone.core.client.PhoneScreenRegistry;
 import com.november.mcphone.core.client.PhoneTheme;
 import net.minecraft.SharedConstants;
@@ -59,18 +60,18 @@ public final class AboutPage {
         int w = screenW - PAD * 2;
 
         g.drawString(font, Component.translatable("mcphone.gui.about").getString(),
-                x, y, PhoneTheme.FONT_COLOR_TITLE, true);
+                x, y, FontPalette.title(), true);
         y += font.lineHeight + 4;
 
         g.fill(x, y, x + w, y + 1, PhoneTheme.COLOR_DIVIDER);
         y += 5;
 
         // ---- 名字与版本 ----
-        g.drawString(font, "MCphone", x, y, PhoneTheme.FONT_COLOR_TITLE, false);
+        g.drawString(font, "MCphone", x, y, FontPalette.title(), false);
         y += font.lineHeight + 1;
 
         // 版本运行时取，不写死——这一页存在的理由就是原来那句写死了
-        g.drawString(font, "v" + MCphone.getVersion(), x, y, PhoneTheme.FONT_COLOR_PRICE, false);
+        g.drawString(font, "v" + MCphone.getVersion(), x, y, FontPalette.price(), false);
         y += font.lineHeight + 4;
 
         y = row(g, font, x, y, w, "mcphone.about.author", "november521");
@@ -85,7 +86,7 @@ public final class AboutPage {
 
         // ---- 联动模组 ----
         g.drawString(font, Component.translatable("mcphone.about.compat").getString(),
-                x, y, PhoneTheme.FONT_COLOR_SUBTLE, false);
+                x, y, FontPalette.subtle(), false);
         y += font.lineHeight + 2;
 
         // Curios 是"能力型"联动：装了手机能挂腰上，它不对应任何一个 App，
@@ -98,7 +99,7 @@ public final class AboutPage {
         int bottom = phoneTop + screenH - navH - 2;
         for (RequiredMod mod : companionMods()) {
             if (y + font.lineHeight > bottom) {
-                g.drawString(font, "…", x, y, PhoneTheme.FONT_COLOR_SUBTLE, false);
+                g.drawString(font, "…", x, y, FontPalette.subtle(), false);
                 break;
             }
             y = compatRow(g, font, x, y, w, mod.displayName(),
@@ -127,9 +128,9 @@ public final class AboutPage {
     private static int row(GuiGraphics g, Font font, int x, int y, int w,
                            String labelKey, String value) {
         String label = Component.translatable(labelKey).getString();
-        g.drawString(font, label, x, y, PhoneTheme.FONT_COLOR_SUBTLE, false);
+        g.drawString(font, label, x, y, FontPalette.subtle(), false);
         g.drawString(font, value, x + w - font.width(value), y,
-                PhoneTheme.FONT_COLOR_BODY, false);
+                FontPalette.body(), false);
         return y + font.lineHeight + 1;
     }
 
@@ -143,9 +144,9 @@ public final class AboutPage {
                                  String modName, boolean loaded) {
         String value = Component.translatable(
                 loaded ? "mcphone.about.installed" : "mcphone.about.missing").getString();
-        g.drawString(font, modName, x, y, PhoneTheme.FONT_COLOR_SUBTLE, false);
+        g.drawString(font, modName, x, y, FontPalette.subtle(), false);
         g.drawString(font, value, x + w - font.width(value), y,
-                loaded ? PhoneTheme.COLOR_BUTTON_HOVER : PhoneTheme.FONT_COLOR_SUBTLE, false);
+                loaded ? PhoneTheme.COLOR_BUTTON_HOVER : FontPalette.subtle(), false);
         return y + font.lineHeight + 1;
     }
 }

@@ -1,5 +1,6 @@
 package com.november.mcphone.feature.chat.client;
 
+import com.november.mcphone.core.client.FontPalette;
 import com.november.mcphone.core.client.PhoneTheme;
 import com.november.mcphone.core.client.PlayerAvatar;
 import com.november.mcphone.feature.chat.net.ChatClientCache;
@@ -49,11 +50,11 @@ public final class ChatAddContact {
     /** 头像与名字之间的空隙 */
     private static final int AVATAR_GAP = 3;
 
-    private static final int COLOR_NAME = PhoneTheme.FONT_COLOR_TITLE;
-    private static final int COLOR_ADD = PhoneTheme.FONT_COLOR_CONFIRM;
-    private static final int COLOR_ACCEPT = PhoneTheme.FONT_COLOR_ARMED;
-    private static final int COLOR_PENDING = PhoneTheme.FONT_COLOR_SUBTLE;
-    private static final int COLOR_REMOVE = PhoneTheme.FONT_COLOR_DANGER;
+    private static int colorName() { return FontPalette.title(); }
+    private static int colorAdd() { return FontPalette.confirm(); }
+    private static int colorAccept() { return FontPalette.armed(); }
+    private static int colorPending() { return FontPalette.subtle(); }
+    private static int colorRemove() { return FontPalette.danger(); }
     private static final int COLOR_ROW_HOVER = PhoneTheme.COLOR_ROW_HOVER;
 
     private long lastRequestMs;
@@ -86,7 +87,7 @@ public final class ChatAddContact {
         int y = phoneTop + statusH + 4;
 
         g.drawString(font, Component.translatable("mcphone.chat.add_contact").getString(),
-                x, y, PhoneTheme.FONT_COLOR_TITLE, true);
+                x, y, FontPalette.title(), true);
         y += font.lineHeight + 4;
         g.fill(x, y, x + w, y + 1, PhoneTheme.COLOR_DIVIDER);
         y += 4;
@@ -97,7 +98,7 @@ public final class ChatAddContact {
         if (ChatClientCache.isOnlineListTruncated()) {
             for (var line : font.split(Component.translatable("mcphone.chat.truncated",
                     players.size(), ChatClientCache.getTotalOnline()), w)) {
-                g.drawString(font, line, x, y, PhoneTheme.FONT_COLOR_NOTICE, false);
+                g.drawString(font, line, x, y, FontPalette.notice(), false);
                 y += font.lineHeight;
             }
             y += 2;
@@ -105,7 +106,7 @@ public final class ChatAddContact {
 
         if (players.isEmpty()) {
             for (var line : font.split(Component.translatable("mcphone.chat.online_empty"), w)) {
-                g.drawString(font, line, x, y, PhoneTheme.FONT_COLOR_SUBTLE, false);
+                g.drawString(font, line, x, y, FontPalette.subtle(), false);
                 y += font.lineHeight;
             }
             hoveredIdx = -1;
@@ -143,7 +144,7 @@ public final class ChatAddContact {
 
             // 名字按剩余宽度截断，否则长名字会盖住右侧的动作文字
             String name = GuiUtil.truncate(font, p.name(), w - (nameX - x) - actionW - 6);
-            g.drawString(font, name, nameX, textY, COLOR_NAME, false);
+            g.drawString(font, name, nameX, textY, colorName(), false);
             g.drawString(font, action, x + w - actionW - 2, textY,
                     actionColor(p.relation()), false);
 
@@ -188,10 +189,10 @@ public final class ChatAddContact {
     /** 待处理的申请用灰色：它不可点，颜色要说明这一点 */
     private static int actionColor(Relation relation) {
         return switch (relation) {
-            case NONE -> COLOR_ADD;
-            case REQUEST_SENT -> COLOR_PENDING;
-            case REQUEST_RECEIVED -> COLOR_ACCEPT;
-            case FRIEND -> COLOR_REMOVE;
+            case NONE -> colorAdd();
+            case REQUEST_SENT -> colorPending();
+            case REQUEST_RECEIVED -> colorAccept();
+            case FRIEND -> colorRemove();
         };
     }
 

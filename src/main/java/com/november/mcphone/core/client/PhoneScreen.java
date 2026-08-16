@@ -882,7 +882,7 @@ public final class PhoneScreen extends Screen {
         g.pose().pushPose();
         g.pose().translate(ix + (is - nw) / 2f, iy + is + 2, 0);
         g.pose().scale(ns, ns, 1f);
-        g.drawString(font, name, 0, 0, PhoneTheme.FONT_COLOR_APP_NAME, false);
+        g.drawString(font, name, 0, 0, FontPalette.appName(), false);
         g.pose().popPose();
     }
 
@@ -917,7 +917,7 @@ public final class PhoneScreen extends Screen {
 
         // 标题
         String title = Component.translatable("mcphone.gui.settings").getString();
-        g.drawString(font, title, x, y, PhoneTheme.FONT_COLOR_TITLE, true);
+        g.drawString(font, title, x, y, FontPalette.title(), true);
         y += font.lineHeight + 4;
 
         // 分割线
@@ -934,7 +934,7 @@ public final class PhoneScreen extends Screen {
                 g.fill(x, y, x + w, y + rowH, PhoneTheme.COLOR_ROW_HOVER);
             }
 
-            g.drawString(font, item.label(), x + 2, y + 2, PhoneTheme.FONT_COLOR_BODY, false);
+            g.drawString(font, item.label(), x + 2, y + 2, FontPalette.body(), false);
 
             // 有当前值就显示值，否则画右箭头
             String right = item.value() != null ? item.value().get() : ">";
@@ -944,7 +944,7 @@ public final class PhoneScreen extends Screen {
                 right = font.plainSubstrByWidth(right, Math.max(6, maxRightW - 4)) + "…";
             }
             int ax = x + w - font.width(right) - 4;
-            g.drawString(font, right, ax, y + 2, PhoneTheme.FONT_COLOR_SUBTLE, false);
+            g.drawString(font, right, ax, y + 2, FontPalette.subtle(), false);
 
             y += rowH + 2;
         }
@@ -952,7 +952,7 @@ public final class PhoneScreen extends Screen {
         // 空列表提示
         if (settingItems.isEmpty()) {
             String noItems = Component.translatable("mcphone.gui.no_settings").getString();
-            g.drawString(font, noItems, x, y, PhoneTheme.FONT_COLOR_SUBTLE, false);
+            g.drawString(font, noItems, x, y, FontPalette.subtle(), false);
         }
     }
 
@@ -978,7 +978,7 @@ public final class PhoneScreen extends Screen {
         int bottom = phoneTop + PhoneTheme.PHONE_HEIGHT - PhoneTheme.NAV_BAR_HEIGHT;
 
         String title = Component.translatable("mcphone.app.app_manager").getString();
-        g.drawString(font, title, x, y, PhoneTheme.FONT_COLOR_TITLE, true);
+        g.drawString(font, title, x, y, FontPalette.title(), true);
         y += font.lineHeight + 4;
 
         g.fill(x, y, x + w, y + 1, PhoneTheme.COLOR_DIVIDER);
@@ -986,7 +986,7 @@ public final class PhoneScreen extends Screen {
 
         if (appManagerApps.isEmpty()) {
             g.drawString(font, Component.translatable("mcphone.gui.app_manager_empty").getString(),
-                    x, y, PhoneTheme.FONT_COLOR_SUBTLE, false);
+                    x, y, FontPalette.subtle(), false);
             return;
         }
 
@@ -1005,11 +1005,11 @@ public final class PhoneScreen extends Screen {
             }
 
             g.drawString(font, app.getDisplayName().getString(), x + 2, y + 2,
-                    system ? PhoneTheme.FONT_COLOR_DIM : PhoneTheme.FONT_COLOR_BODY, false);
+                    system ? FontPalette.dim() : FontPalette.body(), false);
 
             String tag = system ? systemTag : uninstall;
             int tx = x + w - font.width(tag) - 4;
-            g.drawString(font, tag, tx, y + 2, system ? PhoneTheme.FONT_COLOR_DIM : PhoneTheme.FONT_COLOR_UNINSTALL, false);
+            g.drawString(font, tag, tx, y + 2, system ? FontPalette.dim() : FontPalette.uninstall(), false);
 
             y += rowH + 2;
         }

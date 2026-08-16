@@ -1,5 +1,6 @@
 package com.november.mcphone.feature.clock.client;
 
+import com.november.mcphone.core.client.FontPalette;
 import com.november.mcphone.core.client.PhoneTheme;
 import com.november.mcphone.feature.clock.WorldClock;
 import com.november.mcphone.feature.clock.Greeting;
@@ -97,7 +98,7 @@ public final class ClockPage {
             // 理论上进不来：没有世界就没有手机界面。写着是为了不在
             // 某个我们没想到的时机（断线的那一帧）抛空指针
             g.drawString(font, Component.translatable("mcphone.clock.no_world").getString(),
-                    x, y, PhoneTheme.FONT_COLOR_SUBTLE, false);
+                    x, y, FontPalette.subtle(), false);
             return;
         }
 
@@ -106,7 +107,7 @@ public final class ClockPage {
 
         // ---- 标题 ----
         g.drawString(font, Component.translatable("mcphone.app.clock").getString(),
-                x, y, PhoneTheme.FONT_COLOR_TITLE, true);
+                x, y, FontPalette.title(), true);
         y += font.lineHeight + 4;
         g.fill(x, y, x + w, y + 1, PhoneTheme.COLOR_DIVIDER);
         y += 8;
@@ -122,7 +123,7 @@ public final class ClockPage {
         // 玩家说的"第一天"是刚出生那天，没人管它叫第 0 天
         String day = Component.translatable(
                 "mcphone.clock.day", WorldClock.dayNumber(dayTime) + 1).getString();
-        drawCentered(g, font, day, phoneLeft, screenW, y, PhoneTheme.FONT_COLOR_SUBTLE);
+        drawCentered(g, font, day, phoneLeft, screenW, y, FontPalette.subtle());
         y += font.lineHeight + 8;
 
         g.fill(x, y, x + w, y + 1, PhoneTheme.COLOR_DIVIDER);
@@ -132,7 +133,7 @@ public final class ClockPage {
         y = drawRow(g, font, x, y, w,
                 Component.translatable("mcphone.clock.real").getString(),
                 LocalTime.now().format(REAL_TIME),
-                PhoneTheme.FONT_COLOR_BODY);
+                FontPalette.body());
 
         // ---- 天黑 / 天亮倒计时 ----
         y = drawCountdown(g, font, x, y, w, dayTime, frozen);
@@ -149,7 +150,7 @@ public final class ClockPage {
         y = drawRow(g, font, x, y, w,
                 Component.translatable("mcphone.clock.session").getString(),
                 durationOfMillis(PlayTime.sessionMillis()),
-                PhoneTheme.FONT_COLOR_BODY);
+                FontPalette.body());
 
         long worldTicks = PlayTime.worldPlayTicks();
         y = drawRow(g, font, x, y, w,
@@ -157,7 +158,7 @@ public final class ClockPage {
                 worldTicks < 0
                         ? Component.translatable("mcphone.clock.unknown").getString()
                         : durationOfTicks(worldTicks),
-                worldTicks < 0 ? PhoneTheme.FONT_COLOR_SUBTLE : PhoneTheme.FONT_COLOR_BODY);
+                worldTicks < 0 ? FontPalette.subtle() : FontPalette.body());
 
         // ---- 说给屏幕前那个人听的一句 ----
         // 贴着导航栏放，与上面的数据拉开距离：它不是这一页的第五条信息，
@@ -188,7 +189,7 @@ public final class ClockPage {
                 ? Component.translatable(choice.kind().key(), choice.arg()).getString()
                 : Component.translatable(choice.kind().key()).getString();
 
-        drawCentered(g, font, text, phoneLeft, screenW, y, PhoneTheme.FONT_COLOR_GREETING);
+        drawCentered(g, font, text, phoneLeft, screenW, y, FontPalette.greeting());
     }
 
     /**
@@ -223,7 +224,7 @@ public final class ClockPage {
             return drawRow(g, font, x, y, w,
                     Component.translatable("mcphone.clock.until").getString(),
                     Component.translatable("mcphone.clock.frozen").getString(),
-                    PhoneTheme.FONT_COLOR_SUBTLE);
+                    FontPalette.subtle());
         }
 
         boolean night = WorldClock.isNight(dayTime);
@@ -237,7 +238,7 @@ public final class ClockPage {
 
         // 天快黑了标成警示色。5 分钟是"现在往回走还来得及"的分界
         int color = (!night && seconds <= 300)
-                ? PhoneTheme.FONT_COLOR_NOTICE : PhoneTheme.FONT_COLOR_BODY;
+                ? FontPalette.notice() : FontPalette.body();
 
         return drawRow(g, font, x, y, w, label, value, color);
     }
@@ -249,7 +250,7 @@ public final class ClockPage {
     /** 一行"标签 …… 值"，值靠右。与关于页同一套排法 */
     private static int drawRow(GuiGraphics g, Font font, int x, int y, int w,
                                String label, String value, int valueColor) {
-        g.drawString(font, label, x, y, PhoneTheme.FONT_COLOR_SUBTLE, false);
+        g.drawString(font, label, x, y, FontPalette.subtle(), false);
         g.drawString(font, value, x + w - font.width(value), y, valueColor, false);
         return y + font.lineHeight + 3;
     }
@@ -273,7 +274,7 @@ public final class ClockPage {
         g.pose().pushPose();
         g.pose().translate(phoneLeft + (screenW - bigW) / 2f, y, 0);
         g.pose().scale(BIG_SCALE, BIG_SCALE, 1f);
-        g.drawString(font, text, 0, 0, PhoneTheme.FONT_COLOR_TITLE, false);
+        g.drawString(font, text, 0, 0, FontPalette.title(), false);
         g.pose().popPose();
     }
 
