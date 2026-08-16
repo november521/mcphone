@@ -1,5 +1,6 @@
 package com.november.mcphone.feature.weather.client;
 
+import com.november.mcphone.MCphone;
 import com.november.mcphone.core.client.PhoneTheme;
 import com.november.mcphone.feature.clock.WorldClock;
 import com.november.mcphone.feature.weather.Weather;
@@ -10,6 +11,7 @@ import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.world.level.biome.Biome;
 
@@ -41,6 +43,14 @@ public final class WeatherPage {
     /** 天气名放大到这个倍数 */
     private static final float BIG_SCALE = 2.0f;
 
+    /**
+     * 天气图标画多大。贴图本身是 32×32，这里按原尺寸画。
+     *
+     * 手机内宽 120，32 占四分之一强，是这一页当之无愧的主角，
+     * 又不至于把下面那段建议挤没。
+     */
+    private static final int ICON_SIZE = 32;
+
     public static void render(GuiGraphics g, int phoneLeft, int phoneTop,
                               int screenW, int screenH, int statusH, int navH, Font font) {
 
@@ -70,10 +80,17 @@ public final class WeatherPage {
         Weather.Kind kind = currentKind(level, player);
         boolean night = WorldClock.isNight(level.getDayTime());
 
+        // ---- 天气图标，居中 ----
+        int iconX = phoneLeft + (screenW - ICON_SIZE) / 2;
+        g.blit(ResourceLocation.fromNamespaceAndPath(
+                        MCphone.MODID, "textures/" + kind.iconPath() + ".png"),
+                iconX, y, 0, 0, ICON_SIZE, ICON_SIZE, ICON_SIZE, ICON_SIZE);
+        y += ICON_SIZE + 4;
+
         // ---- 天气名，大字居中 ----
         drawBigCentered(g, font, Component.translatable(kind.nameKey()).getString(),
                 phoneLeft, screenW, y);
-        y += (int) (font.lineHeight * BIG_SCALE) + 10;
+        y += (int) (font.lineHeight * BIG_SCALE) + 8;
 
         g.fill(x, y, x + w, y + 1, PhoneTheme.COLOR_DIVIDER);
         y += 6;

@@ -90,6 +90,17 @@ public final class Weather {
         }
 
         /**
+         * 这种天的图标，相对 assets/mcphone/textures/ 的路径（不含 .png）。
+         *
+         * 返回的是【字符串】不是 ResourceLocation：那个类型带着整个 Minecraft
+         * 一起进来，这个类就编不成单独的了，断言也就跑不了。拼成完整路径
+         * 是界面层一句话的事。
+         */
+        public String iconPath() {
+            return "weather/" + suffix;
+        }
+
+        /**
          * "适合干什么"的语言键。
          *
          * 键由枚举拼出来，不散在调用点：拼错一个不会报错，只会把
