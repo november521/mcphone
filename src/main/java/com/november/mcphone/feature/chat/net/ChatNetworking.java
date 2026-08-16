@@ -2,7 +2,9 @@ package com.november.mcphone.feature.chat.net;
 
 import com.november.mcphone.feature.chat.ChatMessage;
 import com.november.mcphone.feature.chat.ChatService;
-import com.november.mcphone.feature.chat.net.ChatClientCache;
+import com.november.mcphone.feature.chat.FriendData;
+import com.november.mcphone.feature.chat.FriendOutcome;
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.neoforge.network.PacketDistributor;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
@@ -217,7 +219,7 @@ public final class ChatNetworking {
         ctx.enqueueWork(() -> {
             if (!(ctx.player() instanceof ServerPlayer player)) return;
 
-            ChatService.sendFriendRequest(player, packet.target());
+            tell(player, ChatService.sendFriendRequest(player, packet.target()));
             replyState(ctx, player);
         });
     }
@@ -228,9 +230,37 @@ public final class ChatNetworking {
         ctx.enqueueWork(() -> {
             if (!(ctx.player() instanceof ServerPlayer player)) return;
 
-            ChatService.respondFriendRequest(player, packet.requester(), packet.accept());
+            tell(player, ChatService.respondFriendRequest(
+                    player, packet.requester(), packet.accept()));
             replyState(ctx, player);
         });
+    }
+
+    /**
+     * 把"为什么没成"用动作栏告诉玩家。
+     *
+     * 界面上这几种失败全都长得一模一样：按钮闪一下，还是原样。玩家分不出
+     * 是自己满了、对方满了、还是这个人服务端没见过，只会反复点，然后来报
+     * "加好友是坏的"。一句话就能把他引向真正的原因。
+     *
+     * 走动作栏而不是聊天框：这是一次操作的即时反馈，不该在公屏历史里留一行。
+     * 与印笔记的成功/失败提示是同一套做法。
+     *
+     * OK 与 NOTHING 都不说话。前者界面上自己看得见变化；后者要么是正常
+     * 客户端走不到的路径（身上没手机、申请不存在），要么本来就是那个状态。
+     */
+    private static void tell(ServerPlayer player, FriendOutcome outcome) {
+        String key = switch (outcome) {
+            case SELF_FULL       -> "mcphone.chat.friend_self_full";
+            case PEER_FULL       -> "mcphone.chat.friend_peer_full";
+            case PEER_INBOX_FULL -> "mcphone.chat.friend_peer_inbox_full";
+            case UNKNOWN_PLAYER  -> "mcphone.chat.friend_unknown_player";
+            case OK, NOTHING     -> null;
+        };
+        if (key == null) return;
+
+        player.displayClientMessage(
+                Component.translatable(key, FriendData.MAX_FRIENDS), true);
     }
 
     /** 解除好友。同样回发两份列表让界面归位 */

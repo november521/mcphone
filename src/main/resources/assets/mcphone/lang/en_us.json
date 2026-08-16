@@ -115,5 +115,9 @@
   "mcphone.browser.need_mcef": "First use downloads about 200 MB of runtime; try again shortly",
   "mcphone.store.companion": "Integrations",
   "mcphone.store.companion.empty": "No integration apps",
-  "mcphone.store.companion.requires": "Requires %s"
+  "mcphone.store.companion.requires": "Requires %s",
+  "mcphone.chat.friend_self_full": "Your friend list is full (max %s), remove someone first",
+  "mcphone.chat.friend_peer_full": "Their friend list is full",
+  "mcphone.chat.friend_peer_inbox_full": "They have too many pending requests, try later",
+  "mcphone.chat.friend_unknown_player": "The server has never seen that player"
 }

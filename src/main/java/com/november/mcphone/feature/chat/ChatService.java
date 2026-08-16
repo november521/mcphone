@@ -148,36 +148,40 @@ public final class ChatService {
      * 而不是再挂一条反向申请。两个人同时点了"添加"却谁也加不上，
      * 是很蠢的体验。
      *
-     * @return 是否产生了变化（发出申请，或直接成为好友）
+     * @return 结果。加不上时说明是哪一种加不上，由网络层转达给玩家
      */
-    public static boolean sendFriendRequest(ServerPlayer self, UUID targetId) {
-        if (!PhoneItem.isCarriedBy(self)) return false;
+    public static FriendOutcome sendFriendRequest(ServerPlayer self, UUID targetId) {
+        if (!PhoneItem.isCarriedBy(self)) return FriendOutcome.NOTHING;
 
         UUID selfId = self.getUUID();
-        if (selfId.equals(targetId)) return false;
+        if (selfId.equals(targetId)) return FriendOutcome.NOTHING;
 
         MinecraftServer server = self.server;
         FriendData friends = FriendData.get(server);
 
-        if (friends.areFriends(selfId, targetId)) return false;
-        if (friends.countFriends(selfId) >= FriendData.MAX_FRIENDS) return false;
-        if (friends.countFriends(targetId) >= FriendData.MAX_FRIENDS) return false;
+        if (friends.areFriends(selfId, targetId)) return FriendOutcome.NOTHING;
+        if (friends.countFriends(selfId) >= FriendData.MAX_FRIENDS) return FriendOutcome.SELF_FULL;
+        if (friends.countFriends(targetId) >= FriendData.MAX_FRIENDS) return FriendOutcome.PEER_FULL;
 
         // 对方先申请过我 → 直接成为好友，省掉一次来回
         if (friends.hasRequest(targetId, selfId)) {
             friends.removeRequest(targetId, selfId);
             friends.addFriendship(selfId, targetId);
             rememberBoth(server, friends, selfId, targetId);
-            return true;
+            return FriendOutcome.OK;
         }
 
         // 只能申请"存在的人"：在线，或服务端见过（有名字缓存）。
         // 否则可以对着编造的 UUID 无限发申请，把存档撑大
-        if (!isKnownPlayer(server, friends, targetId)) return false;
+        if (!isKnownPlayer(server, friends, targetId)) return FriendOutcome.UNKNOWN_PLAYER;
 
-        if (!friends.addRequest(selfId, targetId, System.currentTimeMillis())) return false;
+        // 走到这里只剩一种失败：对方的申请列表满了。重复申请返回 false 的那条
+        // 路在上面 areFriends/hasRequest 之后已经走不到——真重复了也没坏处
+        if (!friends.addRequest(selfId, targetId, System.currentTimeMillis())) {
+            return FriendOutcome.PEER_INBOX_FULL;
+        }
         rememberBoth(server, friends, selfId, targetId);
-        return true;
+        return FriendOutcome.OK;
     }
 
     /**
@@ -186,30 +190,51 @@ public final class ChatService {
      * 同意与拒绝共用一套校验：申请必须真的存在、且确实是发给我的。
      * 分成两个方法等于把校验抄两遍，改一处漏一处。
      *
+     * ============================================================
+     * 上限检查必须在删申请【之前】
+     * ============================================================
+     *
+     * 原先的顺序是先 removeRequest 再查上限，超了就直接返回。结果是这条
+     * 申请被吃掉了：申请没了，好友也没加上，而两边谁都没收到任何提示。
+     * 玩家点「✔ 同意」，那一行凭空消失，他只能理解成"点坏了"，而对方
+     * 那边的「已申请」也悄悄变回「+ 添加」——发起人根本不知道自己被
+     * 同意过一次又被退了回去。
+     *
+     * 现在满员时原样保留申请：玩家删掉一个好友之后再点同意，它还在。
+     *
+     * 拒绝不受上限影响，所以那条路先走完就返回，不必趟这一遍检查。
+     *
      * @param accept true 同意并建立好友关系，false 仅拒绝
-     * @return 这条申请是否真的存在并被处理
+     * @return 结果。满员时申请仍然在，由网络层告诉玩家为什么没成
      */
-    public static boolean respondFriendRequest(ServerPlayer self, UUID requesterId, boolean accept) {
-        if (!PhoneItem.isCarriedBy(self)) return false;
+    public static FriendOutcome respondFriendRequest(ServerPlayer self, UUID requesterId,
+                                                     boolean accept) {
+        if (!PhoneItem.isCarriedBy(self)) return FriendOutcome.NOTHING;
 
         UUID selfId = self.getUUID();
         FriendData friends = FriendData.get(self.server);
 
         // 申请不存在就直接退出：拦住的是伪造客户端凭空"同意"一条不存在的申请，
         // 那等于单方面把任何人拉成自己的好友
-        if (!friends.hasRequest(requesterId, selfId)) return false;
+        if (!friends.hasRequest(requesterId, selfId)) return FriendOutcome.NOTHING;
+
+        if (!accept) {
+            friends.removeRequest(requesterId, selfId);
+            return FriendOutcome.OK;
+        }
+
+        // 同意的瞬间双方都可能已经加满。查在删之前，否则这条申请就白没了
+        if (friends.countFriends(selfId) >= FriendData.MAX_FRIENDS) {
+            return FriendOutcome.SELF_FULL;
+        }
+        if (friends.countFriends(requesterId) >= FriendData.MAX_FRIENDS) {
+            return FriendOutcome.PEER_FULL;
+        }
 
         friends.removeRequest(requesterId, selfId);
-
-        if (accept) {
-            // 同意的瞬间双方都可能已经加满，再查一次
-            if (friends.countFriends(selfId) >= FriendData.MAX_FRIENDS) return true;
-            if (friends.countFriends(requesterId) >= FriendData.MAX_FRIENDS) return true;
-
-            friends.addFriendship(selfId, requesterId);
-            rememberBoth(self.server, friends, selfId, requesterId);
-        }
-        return true;
+        friends.addFriendship(selfId, requesterId);
+        rememberBoth(self.server, friends, selfId, requesterId);
+        return FriendOutcome.OK;
     }
 
     /**

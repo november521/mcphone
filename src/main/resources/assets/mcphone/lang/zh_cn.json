@@ -115,5 +115,9 @@
   "mcphone.browser.need_mcef": "首次使用需要下载约 200 MB 的运行库，稍后再试",
   "mcphone.store.companion": "联动App",
   "mcphone.store.companion.empty": "没有联动 App",
-  "mcphone.store.companion.requires": "需要 %s"
+  "mcphone.store.companion.requires": "需要 %s",
+  "mcphone.chat.friend_self_full": "你的好友已满（上限 %s 人），先解除一个再加",
+  "mcphone.chat.friend_peer_full": "对方的好友已满，加不上",
+  "mcphone.chat.friend_peer_inbox_full": "对方待处理的申请太多了，晚点再试",
+  "mcphone.chat.friend_unknown_player": "服务端没见过这个玩家"
 }
