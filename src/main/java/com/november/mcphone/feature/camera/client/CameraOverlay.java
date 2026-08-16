@@ -1,6 +1,7 @@
 package com.november.mcphone.feature.camera.client;
 
 import com.november.mcphone.core.client.MCphoneKeyBindings;
+import com.november.mcphone.core.client.PhoneTheme;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
@@ -23,11 +24,11 @@ public final class CameraOverlay {
     private static final int BRACKET_THICKNESS = 2;
     /** 卡尺距屏幕边缘的留白（占屏幕短边的比例） */
     private static final float BRACKET_MARGIN_RATIO = 0.04f;
-    private static final int COLOR_BRACKET = 0xCCFFFFFF;
+    private static final int COLOR_BRACKET = PhoneTheme.COLOR_VIEWFINDER;
 
     /** 中心准星臂长，像素 */
     private static final int RETICLE_ARM = 5;
-    private static final int COLOR_RETICLE = 0x99FFFFFF;
+    private static final int COLOR_RETICLE = PhoneTheme.COLOR_RETICLE;
 
     // ---- 提示 ----
     /** 提示完整显示时长，毫秒 */

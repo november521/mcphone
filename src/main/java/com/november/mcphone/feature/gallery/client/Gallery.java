@@ -46,12 +46,12 @@ public final class Gallery {
 
     // ==================== 颜色 ====================
 
-    private static final int COLOR_CELL_BG      = 0x66000000;
-    private static final int COLOR_CELL_HOVER   = 0x44FFFFFF;
-    private static final int COLOR_CELL_BORDER  = 0xFF88CCFF;
-    private static final int COLOR_PAGER        = 0xFFCCCCCC;
-    private static final int COLOR_PAGER_OFF    = 0xFF555555;
-    private static final int COLOR_HINT         = 0xFF888888;
+    private static final int COLOR_CELL_BG      = PhoneTheme.COLOR_SCRIM;
+    private static final int COLOR_CELL_HOVER   = PhoneTheme.COLOR_HOVER_STRONG;
+    private static final int COLOR_CELL_BORDER  = PhoneTheme.FONT_COLOR_LINK;
+    private static final int COLOR_PAGER        = PhoneTheme.FONT_COLOR_BODY;
+    private static final int COLOR_PAGER_OFF    = PhoneTheme.FONT_COLOR_MUTED;
+    private static final int COLOR_HINT         = PhoneTheme.FONT_COLOR_SUBTLE;
 
     private static final String ARROW_PREV = "◁";
     private static final String ARROW_NEXT = "▷";
@@ -141,7 +141,7 @@ public final class Gallery {
         }
         y += font.lineHeight + 4;
 
-        g.fill(x, y, x + w, y + 1, 0x44FFFFFF);
+        g.fill(x, y, x + w, y + 1, PhoneTheme.COLOR_DIVIDER);
         y += 4;
 
         // ---- 空相册 ----
@@ -336,7 +336,8 @@ public final class Gallery {
         g.drawString(font, ARROW_NEXT, x + w - font.width(ARROW_NEXT) - 2, btnRowY,
                 canNext ? (onNext ? COLOR_CELL_BORDER : COLOR_PAGER) : COLOR_PAGER_OFF, false);
         g.drawString(font, del, delX, btnRowY,
-                deleteArmed ? 0xFFFF5555 : (onDelete ? 0xFFFF8888 : COLOR_PAGER), false);
+                deleteArmed ? PhoneTheme.FONT_COLOR_DANGER_ARMED
+                        : (onDelete ? PhoneTheme.FONT_COLOR_DANGER : COLOR_PAGER), false);
     }
 
     /** 大图区域：黑底 + 等比居中的照片 */
@@ -344,7 +345,7 @@ public final class Gallery {
                              int areaX, int areaY, int areaW, int areaH) {
 
         // 黑底：照片可能是任意比例，留白处不该透出壁纸
-        g.fill(areaX, areaY, areaX + areaW, areaY + areaH, 0xCC000000);
+        g.fill(areaX, areaY, areaX + areaW, areaY + areaH, PhoneTheme.COLOR_OVERLAY);
 
         PhotoLibrary.Thumb img = PhotoLibrary.preview(photo);
         if (img == null) img = PhotoLibrary.thumbnail(photo);   // 大图未就绪，先用缩略图顶着

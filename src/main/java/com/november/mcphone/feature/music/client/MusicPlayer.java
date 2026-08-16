@@ -115,13 +115,13 @@ public final class MusicPlayer {
         g.drawString(font, "音乐播放器", x, y, PhoneTheme.FONT_COLOR_TITLE, true);
         y += font.lineHeight + 4;
 
-        g.fill(x, y, x + w, y + 1, 0x44FFFFFF);
+        g.fill(x, y, x + w, y + 1, PhoneTheme.COLOR_DIVIDER);
         y += 4;
 
         if (tracks.isEmpty()) {
-            g.drawString(font, "暂无曲目", x, y, 0xFF888888, false);
+            g.drawString(font, "暂无曲目", x, y, PhoneTheme.FONT_COLOR_SUBTLE, false);
             y += font.lineHeight + 2;
-            g.drawString(font, "放入WAV到 config/mcphone/music/", x, y, 0xFF666666, false);
+            g.drawString(font, "放入WAV到 config/mcphone/music/", x, y, PhoneTheme.FONT_COLOR_DIM, false);
             hoveredIdx = -1;
             return;
         }
@@ -140,10 +140,10 @@ public final class MusicPlayer {
 
             if (hovered) {
                 hoveredIdx = i;
-                g.fill(x, y, x + w, y + rowH, 0x33FFFFFF);
+                g.fill(x, y, x + w, y + rowH, PhoneTheme.COLOR_ROW_HOVER);
             }
             if (i == playingIdx && isPlaying) {
-                g.fill(x, y, x + w, y + rowH, 0x2222AA44);
+                g.fill(x, y, x + w, y + rowH, PhoneTheme.COLOR_ROW_ACTIVE);
             }
 
             String label = t.isCustom() ? "♪ " : "♫ ";
@@ -152,7 +152,7 @@ public final class MusicPlayer {
             if (font.width(full) > w - 4) {
                 full = font.plainSubstrByWidth(full, w - 8) + "…";
             }
-            g.drawString(font, full, x + 2, y + 1, 0xFFCCCCCC, false);
+            g.drawString(font, full, x + 2, y + 1, PhoneTheme.FONT_COLOR_BODY, false);
 
             y += font.lineHeight + 4;
         }
