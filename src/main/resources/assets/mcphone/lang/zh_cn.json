@@ -123,7 +123,7 @@
   "mcphone.app.clock": "时钟",
   "mcphone.app.clock.desc": "游戏里几点了，现实里几点了，还有多久天黑。在下界也照常走——原版时钟在那儿只会乱转。",
   "mcphone.clock.day": "第 %s 天",
-  "mcphone.clock.real": "现实",
+  "mcphone.clock.real": "现实时间",
   "mcphone.clock.until": "天色",
   "mcphone.clock.until_sunset": "天黑还有",
   "mcphone.clock.until_sunrise": "天亮还有",

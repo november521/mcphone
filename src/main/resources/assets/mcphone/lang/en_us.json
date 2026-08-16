@@ -123,7 +123,7 @@
   "mcphone.app.clock": "Clock",
   "mcphone.app.clock.desc": "The time in game, the time out here, and how long until dark. Works in the Nether too — the vanilla clock just spins there.",
   "mcphone.clock.day": "Day %s",
-  "mcphone.clock.real": "Real",
+  "mcphone.clock.real": "Real time",
   "mcphone.clock.until": "Daylight",
   "mcphone.clock.until_sunset": "Until dark",
   "mcphone.clock.until_sunrise": "Until dawn",
