@@ -213,13 +213,13 @@ public final class AppStore {
                 x, y, PhoneTheme.FONT_COLOR_TITLE, true);
         y += font.lineHeight + 4;
 
-        g.fill(x, y, x + w, y + 1, 0x44FFFFFF);
+        g.fill(x, y, x + w, y + 1, PhoneTheme.COLOR_DIVIDER);
         y += 4;
 
         if (message != null) {
             String msg = message.getString();
             if (font.width(msg) > w - 4) msg = font.plainSubstrByWidth(msg, w - 8) + "…";
-            g.drawString(font, msg, x, y, 0xFFFFAA44, false);
+            g.drawString(font, msg, x, y, PhoneTheme.FONT_COLOR_NOTICE, false);
             y += font.lineHeight + 2;
         }
 

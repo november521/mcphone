@@ -51,11 +51,11 @@ public final class PhoneToast implements Toast {
     private static final int PREVIEW_MAX_CHARS = 64;
 
     // ---- 颜色（贴图缺失时的兜底） ----
-    private static final int COLOR_BG = 0xFF1A1A2E;
-    private static final int COLOR_BORDER = 0xFF0F3460;
-    private static final int COLOR_NAME = 0xFFFFFFFF;
-    private static final int COLOR_TEXT = 0xFFBBBBBB;
-    private static final int COLOR_BADGE_BG = 0xFFDD3333;
+    private static final int COLOR_BG = PhoneTheme.COLOR_TOAST_BG;
+    private static final int COLOR_BORDER = PhoneTheme.COLOR_TOAST_BORDER;
+    private static final int COLOR_NAME = PhoneTheme.FONT_COLOR_TITLE;
+    private static final int COLOR_TEXT = PhoneTheme.FONT_COLOR_TOAST;
+    private static final int COLOR_BADGE_BG = PhoneTheme.COLOR_UNREAD_BADGE;
 
     private final UUID sender;
     private final String senderName;

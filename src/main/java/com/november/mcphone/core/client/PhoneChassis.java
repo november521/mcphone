@@ -93,7 +93,7 @@ public final class PhoneChassis {
     }
 
     /** 状态栏没有贴图时的兜底底色（半透明黑，压在壁纸上仍看得清） */
-    private static final int COLOR_STATUS_BAR_FALLBACK = 0x66000000;
+    private static final int COLOR_STATUS_BAR_FALLBACK = PhoneTheme.COLOR_SCRIM;
 
     /** 画顶部状态栏：左侧信号、右侧时钟。背景可换肤 */
     public static void drawStatusBar(GuiGraphics g, Font font, int phoneLeft, int phoneTop) {
@@ -105,7 +105,7 @@ public final class PhoneChassis {
         String time = LocalTime.now().format(TIME_FORMATTER);
         int tx = phoneLeft + PhoneTheme.PHONE_WIDTH - 6 - font.width(time);
         g.drawString(font, time, tx, phoneTop + 1, PhoneTheme.FONT_COLOR_STATUS, true);
-        g.drawString(font, "●●●●", phoneLeft + 4, phoneTop + 1, 0xFFFFFFFF, true);
+        g.drawString(font, "●●●●", phoneLeft + 4, phoneTop + 1, PhoneTheme.FONT_COLOR_STATUS, true);
     }
 
     // ============================================================
@@ -177,7 +177,7 @@ public final class PhoneChassis {
             if (isHovered) {
                 g.fill(phoneLeft + tw * i, ny,
                         phoneLeft + tw * (i + 1), phoneTop + PhoneTheme.PHONE_HEIGHT,
-                        0x33FFFFFF);
+                        PhoneTheme.COLOR_ROW_HOVER);
             }
             // 按键图标可换肤；没有贴图就画原来的字符符号
             if (!PhoneSkin.draw(g, NAV_ICONS[i],
@@ -185,7 +185,7 @@ public final class PhoneChassis {
                 int bw = font.width(NAV_GLYPHS[i]);
                 int bx = phoneLeft + tw * i + (tw - bw) / 2;
                 g.drawString(font, NAV_GLYPHS[i], bx, cy,
-                        isHovered ? 0xFFFFFFFF : 0xFF888888, false);
+                        isHovered ? PhoneTheme.FONT_COLOR_TITLE : PhoneTheme.FONT_COLOR_SUBTLE, false);
             }
         }
     }

@@ -45,10 +45,10 @@ public final class PlayerAvatar {
     private static final int DOT_SIZE = 4;
 
     /** 状态点周围那圈描边的颜色，与手机屏幕底色一致 */
-    private static final int COLOR_DOT_OUTLINE = 0xFF1A1A2E;
+    private static final int COLOR_DOT_OUTLINE = PhoneTheme.COLOR_SCREEN_BG;
 
-    public static final int COLOR_ONLINE = 0xFF55DD55;
-    public static final int COLOR_OFFLINE = 0xFF777777;
+    public static final int COLOR_ONLINE = PhoneTheme.COLOR_ONLINE;
+    public static final int COLOR_OFFLINE = PhoneTheme.COLOR_OFFLINE;
 
     /** 画头像 */
     public static void draw(GuiGraphics g, UUID player, int x, int y, int size) {

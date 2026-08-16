@@ -54,21 +54,21 @@ public final class WallpaperPicker {
         int btnY = contentY;
         if (GuiUtil.hit(mouseX, mouseY, contentX, btnY, contentW, font.lineHeight + 4)) {
             hovered = -2;
-            g.fill(contentX, btnY, contentX + contentW, btnY + font.lineHeight + 4, 0x44FFFFFF);
+            g.fill(contentX, btnY, contentX + contentW, btnY + font.lineHeight + 4, PhoneTheme.COLOR_HOVER_STRONG);
         }
-        g.drawString(font, "恢复默认背景", contentX + 2, btnY + 2, 0xFFCCCCCC, false);
+        g.drawString(font, "恢复默认背景", contentX + 2, btnY + 2, PhoneTheme.FONT_COLOR_BODY, false);
         contentY = btnY + font.lineHeight + 6;
 
         // ---- 分割线 ----
-        g.fill(contentX, contentY, contentX + contentW, contentY + 1, 0x44FFFFFF);
+        g.fill(contentX, contentY, contentX + contentW, contentY + 1, PhoneTheme.COLOR_DIVIDER);
         contentY += 4;
 
         // ---- 无壁纸提示 ----
         if (wallpapers.isEmpty()) {
-            g.drawString(font, "暂无壁纸", contentX, contentY, 0xFF888888, false);
-            g.drawString(font, "放入PNG到", contentX, contentY + font.lineHeight + 2, 0xFF888888, false);
-            g.drawString(font, "config/mcphone/", contentX, contentY + (font.lineHeight + 2) * 2, 0xFF888888, false);
-            g.drawString(font, "wallpapers/", contentX, contentY + (font.lineHeight + 2) * 3, 0xFF888888, false);
+            g.drawString(font, "暂无壁纸", contentX, contentY, PhoneTheme.FONT_COLOR_SUBTLE, false);
+            g.drawString(font, "放入PNG到", contentX, contentY + font.lineHeight + 2, PhoneTheme.FONT_COLOR_SUBTLE, false);
+            g.drawString(font, "config/mcphone/", contentX, contentY + (font.lineHeight + 2) * 2, PhoneTheme.FONT_COLOR_SUBTLE, false);
+            g.drawString(font, "wallpapers/", contentX, contentY + (font.lineHeight + 2) * 3, PhoneTheme.FONT_COLOR_SUBTLE, false);
             this.hoveredIdx = -1;
             return;
         }
@@ -86,7 +86,7 @@ public final class WallpaperPicker {
             // hover 高亮
             if (GuiUtil.hit(mouseX, mouseY, x, y, THUMB_W, THUMB_H + font.lineHeight + 2)) {
                 hovered = i;
-                g.fill(x - 1, y - 1, x + THUMB_W + 1, y + THUMB_H + font.lineHeight + 3, 0x4488CCFF);
+                g.fill(x - 1, y - 1, x + THUMB_W + 1, y + THUMB_H + font.lineHeight + 3, PhoneTheme.COLOR_SELECTION);
             }
 
             // 按比例缩放绘制壁纸纹理
@@ -98,7 +98,7 @@ public final class WallpaperPicker {
                 label = font.plainSubstrByWidth(label, THUMB_W - 2) + "…";
             }
             g.drawCenteredString(font, label,
-                    x + THUMB_W / 2, y + THUMB_H + 1, 0xFFAAAAAA);
+                    x + THUMB_W / 2, y + THUMB_H + 1, PhoneTheme.FONT_COLOR_APP_NAME);
 
             col++;
             if (col >= COLS) {

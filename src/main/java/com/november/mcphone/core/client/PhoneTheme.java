@@ -168,8 +168,13 @@ public final class PhoneTheme {
     /** 列表行悬停时垫在下面的那层 */
     public static final int COLOR_ROW_HOVER = 0x33FFFFFF;
 
-    /** 网格格子悬停时垫的那层。比列表行重一档，因为格子本身有底色 */
-    public static final int COLOR_CELL_HOVER = 0x44FFFFFF;
+    /**
+     * 悬停反馈里【重】的那一档：网格格子、独立按钮。
+     *
+     * 整行的列表项用淡一档的 {@link #COLOR_ROW_HOVER}——列表一行铺满整个
+     * 宽度，同样的透明度盖上去比一个小格子显眼得多。
+     */
+    public static final int COLOR_HOVER_STRONG = 0x44FFFFFF;
 
     /** 悬停在"会删掉东西"的那一行上（App 管理器的卸载行） */
     public static final int COLOR_ROW_HOVER_DANGER = 0x44FF4444;

@@ -22,10 +22,10 @@ import net.minecraft.world.inventory.Slot;
 public class PhoneContainerScreen extends AbstractContainerScreen<PhoneContainerMenu> {
 
     /** 格子底板颜色（半透明黑，压在壁纸上仍看得清物品） */
-    private static final int COLOR_SLOT_BG = 0x88000000;
+    private static final int COLOR_SLOT_BG = PhoneTheme.COLOR_SLOT_BG;
 
     /** 压在壁纸上的暗色蒙版，保证白色标题与物品轮廓可读 */
-    private static final int COLOR_SCRIM = 0x66000000;
+    private static final int COLOR_SCRIM = PhoneTheme.COLOR_SCRIM;
 
     public PhoneContainerScreen(PhoneContainerMenu menu, Inventory playerInventory, Component title) {
         super(menu, playerInventory, title);

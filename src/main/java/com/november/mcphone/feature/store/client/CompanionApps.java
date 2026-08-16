@@ -167,7 +167,7 @@ public final class CompanionApps {
                 x, y, PhoneTheme.FONT_COLOR_TITLE, true);
         y += font.lineHeight + 4;
 
-        g.fill(x, y, x + w, y + 1, 0x44FFFFFF);
+        g.fill(x, y, x + w, y + 1, PhoneTheme.COLOR_DIVIDER);
         y += 4;
 
         if (rows.isEmpty()) {

@@ -905,7 +905,7 @@ public final class PhoneScreen extends Screen {
         y += font.lineHeight + 4;
 
         // 分割线
-        g.fill(x, y, x + w, y + 1, 0x44FFFFFF);
+        g.fill(x, y, x + w, y + 1, PhoneTheme.COLOR_DIVIDER);
         y += 4;
 
         for (int i = 0; i < settingItems.size(); i++) {
@@ -915,10 +915,10 @@ public final class PhoneScreen extends Screen {
             int rowH = font.lineHeight + 4;
 
             if (i == hoveredSettingIdx) {
-                g.fill(x, y, x + w, y + rowH, 0x33FFFFFF);
+                g.fill(x, y, x + w, y + rowH, PhoneTheme.COLOR_ROW_HOVER);
             }
 
-            g.drawString(font, item.label(), x + 2, y + 2, 0xFFCCCCCC, false);
+            g.drawString(font, item.label(), x + 2, y + 2, PhoneTheme.FONT_COLOR_BODY, false);
 
             // 有当前值就显示值，否则画右箭头
             String right = item.value() != null ? item.value().get() : ">";
@@ -928,7 +928,7 @@ public final class PhoneScreen extends Screen {
                 right = font.plainSubstrByWidth(right, Math.max(6, maxRightW - 4)) + "…";
             }
             int ax = x + w - font.width(right) - 4;
-            g.drawString(font, right, ax, y + 2, 0xFF888888, false);
+            g.drawString(font, right, ax, y + 2, PhoneTheme.FONT_COLOR_SUBTLE, false);
 
             y += rowH + 2;
         }
@@ -936,7 +936,7 @@ public final class PhoneScreen extends Screen {
         // 空列表提示
         if (settingItems.isEmpty()) {
             String noItems = Component.translatable("mcphone.gui.no_settings").getString();
-            g.drawString(font, noItems, x, y, 0xFF888888, false);
+            g.drawString(font, noItems, x, y, PhoneTheme.FONT_COLOR_SUBTLE, false);
         }
     }
 
@@ -965,12 +965,12 @@ public final class PhoneScreen extends Screen {
         g.drawString(font, title, x, y, PhoneTheme.FONT_COLOR_TITLE, true);
         y += font.lineHeight + 4;
 
-        g.fill(x, y, x + w, y + 1, 0x44FFFFFF);
+        g.fill(x, y, x + w, y + 1, PhoneTheme.COLOR_DIVIDER);
         y += 4;
 
         if (appManagerApps.isEmpty()) {
             g.drawString(font, Component.translatable("mcphone.gui.app_manager_empty").getString(),
-                    x, y, 0xFF888888, false);
+                    x, y, PhoneTheme.FONT_COLOR_SUBTLE, false);
             return;
         }
 
@@ -985,15 +985,15 @@ public final class PhoneScreen extends Screen {
 
             // 系统 App 不可卸载，不画 hover 高亮
             if (i == appManagerHover && !system) {
-                g.fill(x, y, x + w, y + rowH, 0x44FF4444);
+                g.fill(x, y, x + w, y + rowH, PhoneTheme.COLOR_ROW_HOVER_DANGER);
             }
 
             g.drawString(font, app.getDisplayName().getString(), x + 2, y + 2,
-                    system ? 0xFF666666 : 0xFFCCCCCC, false);
+                    system ? PhoneTheme.FONT_COLOR_DIM : PhoneTheme.FONT_COLOR_BODY, false);
 
             String tag = system ? systemTag : uninstall;
             int tx = x + w - font.width(tag) - 4;
-            g.drawString(font, tag, tx, y + 2, system ? 0xFF666666 : 0xFFFF6666, false);
+            g.drawString(font, tag, tx, y + 2, system ? PhoneTheme.FONT_COLOR_DIM : PhoneTheme.FONT_COLOR_UNINSTALL, false);
 
             y += rowH + 2;
         }

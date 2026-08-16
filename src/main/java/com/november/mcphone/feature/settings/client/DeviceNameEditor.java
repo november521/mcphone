@@ -65,9 +65,9 @@ public final class DeviceNameEditor {
     private static final int PAD = 8;
     private static final int BOX_HEIGHT = 14;
 
-    private static final int COLOR_HINT   = 0xFF888888;
-    private static final int COLOR_BTN    = 0xFFCCCCCC;
-    private static final int COLOR_BTN_ON = 0xFF88CCFF;
+    private static final int COLOR_HINT   = PhoneTheme.FONT_COLOR_SUBTLE;
+    private static final int COLOR_BTN    = PhoneTheme.FONT_COLOR_BODY;
+    private static final int COLOR_BTN_ON = PhoneTheme.FONT_COLOR_LINK;
 
     /** 正在改名的是身上哪一部手机 */
     private PhoneLocation location = new PhoneLocation.InHand(InteractionHand.MAIN_HAND);
@@ -124,7 +124,7 @@ public final class DeviceNameEditor {
         g.drawString(font, Component.translatable("mcphone.settings.device_name").getString(),
                 x, y, PhoneTheme.FONT_COLOR_TITLE, true);
         y += font.lineHeight + 4;
-        g.fill(x, y, x + w, y + 1, 0x44FFFFFF);
+        g.fill(x, y, x + w, y + 1, PhoneTheme.COLOR_DIVIDER);
         y += 6;
 
         // ---- 输入框 ----
@@ -173,7 +173,7 @@ public final class DeviceNameEditor {
                         && mouseY >= btnY - 2 && mouseY < btnY + font.lineHeight + 2;
         hovered = onSave ? Btn.SAVE : onCancel ? Btn.CANCEL : Btn.NONE;
 
-        g.drawString(font, save, saveX, btnY, onSave ? COLOR_BTN_ON : 0xFF66FF88, false);
+        g.drawString(font, save, saveX, btnY, onSave ? COLOR_BTN_ON : PhoneTheme.FONT_COLOR_CONFIRM, false);
         g.drawString(font, cancel, cancelX, btnY, onCancel ? COLOR_BTN_ON : COLOR_BTN, false);
     }
 

@@ -180,7 +180,7 @@ public final class AppDetail {
 
         y += BIG_ICON + 6;
 
-        g.fill(x, y, x + w, y + 1, 0x44FFFFFF);
+        g.fill(x, y, x + w, y + 1, PhoneTheme.COLOR_DIVIDER);
         y += 4;
 
         // ---- 简介。按钮要占底部，正文只能用中间这段 ----
@@ -198,7 +198,7 @@ public final class AppDetail {
         // ---- 提示（购买失败之类） ----
         if (message != null) {
             g.drawString(font, GuiUtil.truncate(font, message.getString(), w),
-                    x, bodyBottom, 0xFFFFAA44, false);
+                    x, bodyBottom, PhoneTheme.FONT_COLOR_NOTICE, false);
         }
 
         // ---- 价格 ----
