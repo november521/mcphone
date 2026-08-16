@@ -115,5 +115,8 @@
   "mcphone.browser.need_mcef": "First use downloads about 200 MB of runtime; try again shortly",
   "mcphone.store.companion": "Integrations",
   "mcphone.store.companion.empty": "No integration apps",
-  "mcphone.store.companion.requires": "Requires %s"
+  "mcphone.store.companion.requires": "Requires %s",
+  "mcphone.app.debug_placeholder": "Slot %s",
+  "mcphone.app.debug_placeholder.desc": "Debug placeholder app. Does nothing.",
+  "mcphone.command.debug_apps": "The home screen now has %s placeholder apps"
 }

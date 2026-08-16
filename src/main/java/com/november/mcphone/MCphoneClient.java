@@ -1,5 +1,6 @@
 package com.november.mcphone;
 
+import com.november.mcphone.core.client.DebugApps;
 import com.november.mcphone.core.client.MCphoneKeyBindings;
 import com.november.mcphone.core.client.PhoneContainerScreen;
 import com.november.mcphone.core.client.PhoneKeyHandler;
@@ -76,6 +77,9 @@ public class MCphoneClient {
         // 收到消息时弹通知。装在这里而不是让网络层直接调 ChatNotifier：
         // 网络层在专用服务器上也会加载，碰不得客户端的类
         ChatClientCache.setMessageListener(ChatNotifier::onMessage);
+
+        // 调试用的 /mcphone debugapps <个数>，客户端命令，同样在游戏总线上
+        NeoForge.EVENT_BUS.addListener(DebugApps::onRegisterClientCommands);
     }
 
     /**
