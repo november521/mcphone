@@ -1,5 +1,6 @@
 package com.november.mcphone;
 
+import com.november.mcphone.core.client.ClientConfig;
 import com.november.mcphone.core.client.MCphoneKeyBindings;
 import com.november.mcphone.core.client.PhoneContainerScreen;
 import com.november.mcphone.core.client.PhoneKeyHandler;
@@ -21,6 +22,7 @@ import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.fml.common.Mod;
+import net.neoforged.fml.config.ModConfig;
 import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
 import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 import net.neoforged.neoforge.client.event.RegisterClientReloadListenersEvent;
@@ -35,6 +37,12 @@ public class MCphoneClient {
 
     public MCphoneClient(ModContainer container, IEventBus modEventBus) {
         container.registerExtensionPoint(IConfigScreenFactory.class, ConfigurationScreen::new);
+
+        // 客户端配置。先挂监听再注册：两件事都在构造期完成、加载在其后，
+        // 顺序其实不影响，但反过来读着像"注册完才想起要听"
+        modEventBus.addListener(ClientConfig::onLoad);
+        modEventBus.addListener(ClientConfig::onReload);
+        container.registerConfig(ModConfig.Type.CLIENT, ClientConfig.SPEC);
 
         // 按键注册是【模组总线】事件，显式挂载而不依赖注解自动路由
         modEventBus.addListener(MCphoneKeyBindings::register);

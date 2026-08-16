@@ -158,5 +158,6 @@
   "mcphone.weather.advice.snow": "Bring a shovel. Enough snow blocks makes a snow golem, and snowballs still knock things around.",
   "mcphone.weather.advice.thunder": "Dark as night, so mobs spawn on the surface. But lightning turns a creeper charged — now is the time.",
   "mcphone.weather.advice.dry": "It's raining elsewhere; not a drop here. The sky still dims, so watch your step.",
-  "mcphone.weather.advice.none": "No weather in this dimension. Head back to the Overworld to see rain."
+  "mcphone.weather.advice.none": "No weather in this dimension. Head back to the Overworld to see rain.",
+  "mcphone.config.font_color": "Font Color"
 }
