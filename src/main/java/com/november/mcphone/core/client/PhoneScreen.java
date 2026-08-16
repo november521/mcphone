@@ -1151,10 +1151,12 @@ public final class PhoneScreen extends Screen {
      * 必须做同样的逆变换，否则那 150 毫秒里点击位置会偏。
      *
      * 【结果仍然是屏幕坐标】，原点没有挪到手机左上角——所以它算出来的值可以
-     * 直接和 phoneLeft、gridStartY、dotsTop() 这些比。此前这两个方法叫
-     * toLocalX/toLocalY，存下来的字段也叫 pressX/dragX，"Local"
-     * 让人以为是相对手机的局部坐标，读代码时会觉得
-     * "dragX < phoneLeft + ..." 这种比较是个 bug——其实是名字在骗人。
+     * 直接和 phoneLeft、gridStartY、dotsTop() 这些比。
+     *
+     * 1.3.24 之前这两个方法叫 toLocalX/toLocalY，存下来的字段叫
+     * pressLocalX/dragLocalX。那个 "Local" 让人以为是相对手机的局部坐标，
+     * 于是读到 "dragLocalX &lt; phoneLeft + ..." 会觉得是个 bug——局部坐标
+     * 跟屏幕坐标比当然不对，但它其实是对的，是名字在骗人。
      */
     private double unscaledX(double mx) {
         int cx = phoneLeft + PhoneTheme.PHONE_WIDTH / 2;
