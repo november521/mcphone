@@ -2,6 +2,7 @@ package com.november.mcphone.feature.clock.client;
 
 import com.november.mcphone.core.client.PhoneTheme;
 import com.november.mcphone.feature.clock.WorldClock;
+import com.november.mcphone.feature.clock.Greeting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
@@ -151,12 +152,43 @@ public final class ClockPage {
                 PhoneTheme.FONT_COLOR_BODY);
 
         long worldTicks = PlayTime.worldPlayTicks();
-        drawRow(g, font, x, y, w,
+        y = drawRow(g, font, x, y, w,
                 Component.translatable("mcphone.clock.total").getString(),
                 worldTicks < 0
                         ? Component.translatable("mcphone.clock.unknown").getString()
                         : durationOfTicks(worldTicks),
                 worldTicks < 0 ? PhoneTheme.FONT_COLOR_SUBTLE : PhoneTheme.FONT_COLOR_BODY);
+
+        // ---- 说给屏幕前那个人听的一句 ----
+        // 贴着导航栏放，与上面的数据拉开距离：它不是这一页的第五条信息，
+        // 是看完之后抬眼看到的那一行
+        drawGreeting(g, font, phoneLeft, screenW,
+                phoneTop + screenH - navH - font.lineHeight - 5,
+                dayTime, frozen);
+    }
+
+    /**
+     * 挑一句话说，居中。
+     *
+     * 挑哪一句全在 Greeting 里，那个类不碰 Minecraft，能把 24 个钟点乘各种
+     * 状态全部跑一遍断言——分支写错了不会崩，只会在凌晨三点跟人说"下午好"，
+     * 而那种错要恰好有人在那个时刻看着才发现得了。
+     */
+    private static void drawGreeting(GuiGraphics g, Font font, int phoneLeft, int screenW,
+                                     int y, long dayTime, boolean frozen) {
+        Greeting.Choice choice = Greeting.choose(
+                LocalTime.now().getHour(),
+                PlayTime.sessionMillis(),
+                PlayTime.worldPlayTicks(),
+                WorldClock.isNight(dayTime),
+                WorldClock.ticksUntilSunset(dayTime),
+                frozen);
+
+        String text = choice.hasArg()
+                ? Component.translatable(choice.kind().key(), choice.arg()).getString()
+                : Component.translatable(choice.kind().key()).getString();
+
+        drawCentered(g, font, text, phoneLeft, screenW, y, PhoneTheme.FONT_COLOR_GREETING);
     }
 
     /**

@@ -232,6 +232,15 @@ public final class PhoneTheme {
     /** 出错了、缺东西：商店的失败提示、缺前置模组的说明 */
     public static final int FONT_COLOR_NOTICE = 0xFFFFAA44;
 
+    /**
+     * 说给屏幕前那个人听的那一行（时钟里的问候与关怀语）。
+     *
+     * 暖金色，比正文亮、比标题柔。它不是信息也不是警告，是这一页上唯一
+     * 一句不为了让你知道什么而存在的话——用现成的哪个色都不对：
+     * NOTICE 是警告，LINK 看着能点，SUBTLE 又太像脚注。
+     */
+    public static final int FONT_COLOR_GREETING = 0xFFFFD54F;
+
     // -- 在线状态 --
 
     /** 在线的小圆点 */

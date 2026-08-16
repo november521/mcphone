@@ -133,5 +133,14 @@
   "mcphone.clock.total": "This save",
   "mcphone.clock.unknown": "—",
   "mcphone.clock.duration_hm": "%sh %sm",
-  "mcphone.clock.duration_m": "%sm"
+  "mcphone.clock.duration_m": "%sm",
+  "mcphone.clock.greet.welcome_back": "Welcome back",
+  "mcphone.clock.greet.late_night": "It's late — get some rest",
+  "mcphone.clock.greet.long_session": "You've been at this %s hours",
+  "mcphone.clock.greet.milestone": "%s hours in this save",
+  "mcphone.clock.greet.dark_soon": "Night is coming",
+  "mcphone.clock.greet.morning": "Good morning",
+  "mcphone.clock.greet.noon": "Good afternoon",
+  "mcphone.clock.greet.afternoon": "Good afternoon",
+  "mcphone.clock.greet.evening": "Good evening"
 }

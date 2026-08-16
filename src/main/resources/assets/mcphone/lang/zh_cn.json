@@ -133,5 +133,14 @@
   "mcphone.clock.total": "存档",
   "mcphone.clock.unknown": "—",
   "mcphone.clock.duration_hm": "%s 小时 %s 分",
-  "mcphone.clock.duration_m": "%s 分"
+  "mcphone.clock.duration_m": "%s 分",
+  "mcphone.clock.greet.welcome_back": "欢迎回来",
+  "mcphone.clock.greet.late_night": "夜深了，早点休息",
+  "mcphone.clock.greet.long_session": "已经玩了 %s 个多小时了",
+  "mcphone.clock.greet.milestone": "这个存档陪了你 %s 小时",
+  "mcphone.clock.greet.dark_soon": "天要黑了",
+  "mcphone.clock.greet.morning": "早上好",
+  "mcphone.clock.greet.noon": "中午好",
+  "mcphone.clock.greet.afternoon": "下午好",
+  "mcphone.clock.greet.evening": "晚上好"
 }
