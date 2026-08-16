@@ -105,9 +105,50 @@ public final class PhoneTheme {
     /** 底部导航栏背景色 */
     public static final int COLOR_NAV_BAR = 0xFF16213E;
 
-    // -- 文字颜色 --
-    /** 状态栏时间/文字颜色 */
+    // ==================== 画在【构件】上的字 ====================
+    //
+    // 手机上的字分两类，分界线是「底是什么」：
+    //
+    //   一类画在【壁纸】上——每一页都由 PhoneChassis.drawFrameAndWallpaper
+    //   铺底，不只主屏。底是玩家自己选的，可深可浅。
+    //
+    //   另一类画在【手机自带的构件】上——导航栏、通知、未读角标、聊天气泡、
+    //   输入栏、商店按钮。这些底是我们画的实心色，玩家换不了。
+    //
+    // 分开的理由：底不会变的地方，字也不能变。两者一起往同一个方向走，
+    // 字就会陷进底里——导航栏那三个按钮直接消失，而且不报错，只是"点不着了"。
+    //
+    // 所以本节这些常量是【钉死】的，不随任何配色设置改变。会随设置改变的
+    // 那一类不在这里，在 FontPalette。
+
+    /** 状态栏时间/信号。底是 COLOR_SCRIM 压暗层 */
     public static final int FONT_COLOR_STATUS = 0xFFFFFFFF;
+
+    /** 导航栏 ◀ ● ■ 三个符号。底是 COLOR_NAV_BAR */
+    public static final int FONT_COLOR_NAV = 0xFF888888;
+
+    /** 导航栏符号被鼠标悬着时 */
+    public static final int FONT_COLOR_NAV_HOVER = 0xFFFFFFFF;
+
+    /** 通知里的发信人名字与右上角条数。底是 COLOR_TOAST_BG */
+    public static final int FONT_COLOR_TOAST_TITLE = 0xFFFFFFFF;
+
+    /** 会话列表未读角标里的数字。底是 COLOR_UNREAD_BADGE 那块红 */
+    public static final int FONT_COLOR_BADGE = 0xFFFFFFFF;
+
+    /** 自己发的气泡里的字。底是 COLOR_CHAT_BUBBLE_SELF */
+    public static final int FONT_COLOR_CHAT_SELF = 0xFFFFFFFF;
+
+    /** 会话底部那个「发送」。底是 COLOR_CHAT_INPUT_BG */
+    public static final int FONT_COLOR_CHAT_SEND = 0xFF66FF88;
+
+    /** 「发送」被鼠标悬着时 */
+    public static final int FONT_COLOR_CHAT_SEND_HOVER = 0xFFFFFFFF;
+
+    /** 输入框空着，「发送」点了也不发 */
+    public static final int FONT_COLOR_CHAT_SEND_OFF = 0xFF555555;
+
+    // -- 文字颜色 --
 
     /** App 名称文字颜色 */
     public static final int FONT_COLOR_APP_NAME = 0xFFAAAAAA;

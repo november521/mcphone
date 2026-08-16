@@ -199,7 +199,7 @@ public final class ChatList {
                 // 底走换肤，与消息通知里的角标共用同一张贴图
                 PhoneSkin.drawOrFill(g, PhoneSkin.Element.UNREAD_BADGE,
                         rx - 1, y - 1, x + w - (rx - 1), font.lineHeight + 1, COLOR_UNREAD_BG);
-                g.drawString(font, right, rx + 1, y, PhoneTheme.FONT_COLOR_TITLE, false);
+                g.drawString(font, right, rx + 1, y, PhoneTheme.FONT_COLOR_BADGE, false);
             } else {
                 g.drawString(font, right, rx, y, COLOR_TIME, false);
             }

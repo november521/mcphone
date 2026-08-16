@@ -185,7 +185,7 @@ public final class PhoneChassis {
                 int bw = font.width(NAV_GLYPHS[i]);
                 int bx = phoneLeft + tw * i + (tw - bw) / 2;
                 g.drawString(font, NAV_GLYPHS[i], bx, cy,
-                        isHovered ? PhoneTheme.FONT_COLOR_TITLE : PhoneTheme.FONT_COLOR_SUBTLE, false);
+                        isHovered ? PhoneTheme.FONT_COLOR_NAV_HOVER : PhoneTheme.FONT_COLOR_NAV, false);
             }
         }
     }
