@@ -14,6 +14,12 @@
 
 没装对应模组时，依赖它的 App 不会出现在主屏和应用商店里——商店里躺着一个点了会报错的东西，比它不存在更糟。
 
+**还有一个不给你加东西的联动**：装了 [Integrated Dynamics](https://modrinth.com/mod/integrated-dynamics) 时，MCphone 会在方块注册的末尾把 ID 全部方块的掉落表提前解析一次。这不改变任何掉落行为，也不给你多出任何功能——它是为了让**别人**的崩溃能被正确指认。
+
+NeoForge 的注册阶段只要收到任何一个模组抛的异常，就会把整个注册表回滚成原版状态；而回滚过程本身会在 ID 的墙上火把那里踩到一个空指针，于是真正的错误被顶掉，崩溃报告上只剩一句 `Trying to access unbound value: integrateddynamics:menril_torch_stone`——看起来像是 ID 的锅，其实 ID 只是最后一个倒下的。提前解析一次就绕开了那个空指针，回滚能正常跑完，把真凶抛出来。
+
+服主要知道的是：**这不会救回服务器**，起不来还是起不来，它只让崩溃报告指认对人。细节写在 `compat/IntegratedDynamicsCompat.java` 的类注释里。没装 ID 时这段代码一行都不会执行。
+
 ---
 
 ## 怎么拿到手机
