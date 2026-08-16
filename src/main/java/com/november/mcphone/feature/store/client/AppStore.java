@@ -7,6 +7,7 @@ import com.november.mcphone.core.client.PhoneSkin;
 import com.november.mcphone.core.client.PhoneTheme;
 import com.november.mcphone.feature.store.client.AppSourceRegistry;
 import com.november.mcphone.feature.store.net.StoreClientCache;
+import com.november.mcphone.core.client.GuiUtil;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
@@ -353,8 +354,8 @@ public final class AppStore {
         boolean canPrev = page > 0;
         boolean canNext = page < pages - 1;
 
-        hoverPrev = canPrev && hit(mouseX, mouseY, prevX, pagerY, font.width(prev), font.lineHeight);
-        hoverNext = canNext && hit(mouseX, mouseY, nextX, pagerY, font.width(next), font.lineHeight);
+        hoverPrev = canPrev && GuiUtil.hit(mouseX, mouseY, prevX, pagerY, font.width(prev), font.lineHeight);
+        hoverNext = canNext && GuiUtil.hit(mouseX, mouseY, nextX, pagerY, font.width(next), font.lineHeight);
 
         g.drawString(font, prev, prevX, pagerY,
                 canPrev ? (hoverPrev ? PhoneTheme.FONT_COLOR_TITLE : PhoneTheme.FONT_COLOR_BODY)
@@ -363,10 +364,6 @@ public final class AppStore {
                 canNext ? (hoverNext ? PhoneTheme.FONT_COLOR_TITLE : PhoneTheme.FONT_COLOR_BODY)
                         : PhoneTheme.COLOR_BUTTON_DISABLED, false);
         g.drawString(font, label, labelX, pagerY, PhoneTheme.FONT_COLOR_SUBTLE, false);
-    }
-
-    private static boolean hit(int mx, int my, int x, int y, int w, int h) {
-        return mx >= x && mx <= x + w && my >= y && my <= y + h;
     }
 
     // ============================================================

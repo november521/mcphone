@@ -1,6 +1,7 @@
 package com.november.mcphone.feature.music.client;
 
 import com.november.mcphone.core.client.PhoneTheme;
+import com.november.mcphone.core.client.GuiUtil;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
@@ -135,7 +136,7 @@ public final class MusicPlayer {
 
             MusicTrack t = tracks.get(i);
             int rowH = font.lineHeight + 2;
-            boolean hovered = mxInRect(mouseX, mouseY, x, y, w, rowH);
+            boolean hovered = GuiUtil.hit(mouseX, mouseY, x, y, w, rowH);
 
             if (hovered) {
                 hoveredIdx = i;
@@ -230,7 +231,4 @@ public final class MusicPlayer {
         playingIdx = -1; isPlaying = false;
     }
 
-    private static boolean mxInRect(int mx, int my, int x, int y, int w, int h) {
-        return mx >= x && mx <= x + w && my >= y && my <= y + h;
-    }
 }

@@ -9,6 +9,7 @@ import com.november.mcphone.core.client.PhoneTheme;
 import com.november.mcphone.feature.store.AppPriceRegistry;
 import com.november.mcphone.feature.store.client.AppSourceRegistry;
 import com.november.mcphone.feature.store.net.StoreClientCache;
+import com.november.mcphone.core.client.GuiUtil;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
@@ -167,14 +168,14 @@ public final class AppDetail {
 
         int textX = x + BIG_ICON + 5;
         int textW = w - BIG_ICON - 5;
-        g.drawString(font, trim(font, info.displayName().getString(), textW),
+        g.drawString(font, GuiUtil.truncate(font, info.displayName().getString(), textW),
                 textX, y + 2, PhoneTheme.FONT_COLOR_TITLE, false);
 
         // 作者与版本挤在一行：屏幕只有 120 宽，各占一行不值得
         String meta = info.author() == null || info.author().isBlank()
                 ? "v" + info.version()
                 : info.author() + " · v" + info.version();
-        g.drawString(font, trim(font, meta, textW),
+        g.drawString(font, GuiUtil.truncate(font, meta, textW),
                 textX, y + 2 + font.lineHeight + 2, PhoneTheme.FONT_COLOR_SUBTLE, false);
 
         y += BIG_ICON + 6;
@@ -196,7 +197,7 @@ public final class AppDetail {
 
         // ---- 提示（购买失败之类） ----
         if (message != null) {
-            g.drawString(font, trim(font, message.getString(), w),
+            g.drawString(font, GuiUtil.truncate(font, message.getString(), w),
                     x, bodyBottom, 0xFFFFAA44, false);
         }
 
@@ -206,7 +207,7 @@ public final class AppDetail {
                 ? Component.translatable("mcphone.store.free").getString()
                 : price.describe().getString();
         int priceY = bottom - BUTTON_H - font.lineHeight - 3;
-        g.drawString(font, trim(font, priceText, w), x, priceY,
+        g.drawString(font, GuiUtil.truncate(font, priceText, w), x, priceY,
                 price == ICost.FREE ? PhoneTheme.FONT_COLOR_SUBTLE : PhoneTheme.FONT_COLOR_PRICE,
                 false);
 
@@ -232,11 +233,6 @@ public final class AppDetail {
                 btnY + (BUTTON_H - font.lineHeight) / 2 + 1,
                 btnEnabled ? PhoneTheme.FONT_COLOR_BUTTON : PhoneTheme.FONT_COLOR_BUTTON_DISABLED,
                 false);
-    }
-
-    private static String trim(Font font, String text, int maxW) {
-        if (font.width(text) <= maxW) return text;
-        return font.plainSubstrByWidth(text, maxW - 6) + "…";
     }
 
     // ============================================================

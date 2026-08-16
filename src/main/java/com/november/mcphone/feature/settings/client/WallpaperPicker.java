@@ -2,6 +2,7 @@ package com.november.mcphone.feature.settings.client;
 
 import com.november.mcphone.core.client.PhoneTheme;
 import com.november.mcphone.feature.settings.net.SetWallpaperPacket;
+import com.november.mcphone.core.client.GuiUtil;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.resources.ResourceLocation;
 import net.neoforged.neoforge.network.PacketDistributor;
@@ -51,7 +52,7 @@ public final class WallpaperPicker {
 
         // ---- "恢复默认" 按钮 ----
         int btnY = contentY;
-        if (isHover(mouseX, mouseY, contentX, btnY, contentW, font.lineHeight + 4)) {
+        if (GuiUtil.hit(mouseX, mouseY, contentX, btnY, contentW, font.lineHeight + 4)) {
             hovered = -2;
             g.fill(contentX, btnY, contentX + contentW, btnY + font.lineHeight + 4, 0x44FFFFFF);
         }
@@ -83,7 +84,7 @@ public final class WallpaperPicker {
             if (y + THUMB_H + font.lineHeight + 2 > contentBottom) break;
 
             // hover 高亮
-            if (isHover(mouseX, mouseY, x, y, THUMB_W, THUMB_H + font.lineHeight + 2)) {
+            if (GuiUtil.hit(mouseX, mouseY, x, y, THUMB_W, THUMB_H + font.lineHeight + 2)) {
                 hovered = i;
                 g.fill(x - 1, y - 1, x + THUMB_W + 1, y + THUMB_H + font.lineHeight + 3, 0x4488CCFF);
             }
@@ -171,7 +172,4 @@ public final class WallpaperPicker {
         return false;
     }
 
-    private static boolean isHover(int mx, int my, int x, int y, int w, int h) {
-        return mx >= x && mx <= x + w && my >= y && my <= y + h;
-    }
 }

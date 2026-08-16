@@ -6,16 +6,13 @@ import com.november.mcphone.core.client.PlayerAvatar;
 import com.november.mcphone.feature.chat.net.ChatClientCache;
 import com.november.mcphone.feature.chat.net.ConversationSummary;
 import com.november.mcphone.feature.chat.net.RequestConversationsPacket;
+import com.november.mcphone.core.client.GuiUtil;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 import net.neoforged.neoforge.network.PacketDistributor;
 
-import java.time.Instant;
-import java.time.LocalDate;
 import java.time.LocalTime;
-import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.UUID;
 
@@ -42,9 +39,6 @@ public final class ChatList {
 
     /** 刷新间隔。够短，上线下线看得出来；够长，不至于每帧发包 */
     private static final long REFRESH_INTERVAL_MS = 3000L;
-
-    private static final DateTimeFormatter TIME_FORMAT = DateTimeFormatter.ofPattern("HH:mm");
-    private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("MM-dd");
 
     /** 头像边长。16 ＝ 皮肤头部 8×8 的整数倍放大，边缘才锐利 */
     private static final int AVATAR_SIZE = 16;
@@ -190,12 +184,12 @@ public final class ChatList {
         PlayerAvatar.drawWithStatus(g, c.id(), x, avatarY, AVATAR_SIZE, c.online());
 
         // 右侧先算宽度，名字才知道能占多少
-        String right = c.unread() > 0 ? unreadLabel(c.unread()) : formatTime(c.lastTime());
+        String right = c.unread() > 0 ? unreadLabel(c.unread()) : GuiUtil.formatTime(c.lastTime());
         int rightW = right.isEmpty() ? 0 : font.width(right) + (c.unread() > 0 ? 4 : 0);
 
         int nameX = x + AVATAR_SIZE + AVATAR_GAP;
         int nameMaxW = w - (nameX - x) - rightW - 4;
-        String name = truncate(font, c.name(), nameMaxW);
+        String name = GuiUtil.truncate(font, c.name(), nameMaxW);
         g.drawString(font, name, nameX, y, COLOR_NAME, false);
 
         if (!right.isEmpty()) {
@@ -215,7 +209,7 @@ public final class ChatList {
         String preview = c.lastText().isEmpty()
                 ? Component.translatable("mcphone.chat.no_message").getString()
                 : c.lastText();
-        g.drawString(font, truncate(font, preview, w - (nameX - x)),
+        g.drawString(font, GuiUtil.truncate(font, preview, w - (nameX - x)),
                 nameX, y + font.lineHeight + 1, COLOR_PREVIEW, false);
     }
 
@@ -287,20 +281,4 @@ public final class ChatList {
         return unread > 99 ? "99+" : String.valueOf(unread);
     }
 
-    /** 今天的消息显示时刻，更早的显示日期——手机上就这么干的 */
-    private static String formatTime(long time) {
-        if (time <= 0) return "";
-
-        var zone = ZoneId.systemDefault();
-        var dateTime = Instant.ofEpochMilli(time).atZone(zone);
-        return dateTime.toLocalDate().equals(LocalDate.now(zone))
-                ? dateTime.format(TIME_FORMAT)
-                : dateTime.format(DATE_FORMAT);
-    }
-
-    private static String truncate(Font font, String text, int maxWidth) {
-        if (maxWidth <= 0) return "";
-        if (font.width(text) <= maxWidth) return text;
-        return font.plainSubstrByWidth(text, Math.max(0, maxWidth - font.width("…"))) + "…";
-    }
 }

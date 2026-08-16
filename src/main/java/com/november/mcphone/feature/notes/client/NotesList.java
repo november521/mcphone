@@ -6,16 +6,13 @@ import com.november.mcphone.feature.notes.NoteSummary;
 import com.november.mcphone.feature.notes.net.NotesClientCache;
 import com.november.mcphone.feature.notes.net.PrintNotePacket;
 import com.november.mcphone.feature.notes.net.RequestNoteListPacket;
+import com.november.mcphone.core.client.GuiUtil;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 import net.neoforged.neoforge.network.PacketDistributor;
 
-import java.time.Instant;
-import java.time.LocalDate;
-import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 /**
@@ -34,9 +31,6 @@ import java.util.List;
 public final class NotesList {
 
     private static final int PAD = 4;
-
-    private static final DateTimeFormatter TIME_FORMAT = DateTimeFormatter.ofPattern("HH:mm");
-    private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("MM-dd");
 
     private static final int COLOR_TITLE = 0xFFFFFFFF;
     private static final int COLOR_PREVIEW = 0xFF999999;
@@ -195,7 +189,7 @@ public final class NotesList {
             }
 
             // 右侧时间先算宽度，标题才知道能占多少
-            String time = formatTime(note.modified());
+            String time = GuiUtil.formatTime(note.modified());
             int timeW = font.width(time);
             g.drawString(font, time, x + w - timeW, y, COLOR_TIME, false);
 
@@ -203,7 +197,7 @@ public final class NotesList {
             String title = note.title().isEmpty()
                     ? Component.translatable("mcphone.notes.untitled").getString()
                     : note.title();
-            g.drawString(font, truncate(font, title, w - timeW - 4), x, y, COLOR_TITLE, false);
+            g.drawString(font, GuiUtil.truncate(font, title, w - timeW - 4), x, y, COLOR_TITLE, false);
 
             // 预览行右端是「打印」。放这一行而不是标题行：标题行右边已经被
             // 时间占了，而预览天生是可以截断的那一个
@@ -213,7 +207,7 @@ public final class NotesList {
                     && mouseY >= y + font.lineHeight && mouseY < y + rowH;
             if (printHover) printHoveredIdx = i;
 
-            g.drawString(font, truncate(font, note.preview(), w - printW - 4),
+            g.drawString(font, GuiUtil.truncate(font, note.preview(), w - printW - 4),
                     x, y + font.lineHeight + 1, COLOR_PREVIEW, false);
 
             // 每一行都画，不是只在悬停那行画：只给悬停行画的话，鼠标一进来
@@ -313,19 +307,4 @@ public final class NotesList {
         if (scrollOffset < 0) scrollOffset = 0;
     }
 
-    /** 今天的显示时刻，更早的显示日期——与会话列表同一个取舍 */
-    private static String formatTime(long time) {
-        if (time <= 0) return "";
-        var zone = ZoneId.systemDefault();
-        var dateTime = Instant.ofEpochMilli(time).atZone(zone);
-        return dateTime.toLocalDate().equals(LocalDate.now(zone))
-                ? dateTime.format(TIME_FORMAT)
-                : dateTime.format(DATE_FORMAT);
-    }
-
-    private static String truncate(Font font, String text, int maxWidth) {
-        if (maxWidth <= 0) return "";
-        if (font.width(text) <= maxWidth) return text;
-        return font.plainSubstrByWidth(text, Math.max(0, maxWidth - font.width("…"))) + "…";
-    }
 }

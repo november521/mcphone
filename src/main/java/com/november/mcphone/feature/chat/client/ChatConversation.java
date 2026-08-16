@@ -10,6 +10,7 @@ import com.november.mcphone.feature.chat.net.MarkReadPacket;
 import com.november.mcphone.feature.chat.net.RequestConversationsPacket;
 import com.november.mcphone.feature.chat.net.RequestMessagesPacket;
 import com.november.mcphone.feature.chat.net.SendChatMessagePacket;
+import com.november.mcphone.core.client.GuiUtil;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
@@ -259,7 +260,7 @@ public final class ChatConversation {
         }
 
         int nameX = x + AVATAR_SIZE + AVATAR_GAP;
-        g.drawString(font, truncate(font, peerName(s), w - (nameX - x)),
+        g.drawString(font, GuiUtil.truncate(font, peerName(s), w - (nameX - x)),
                 nameX, y + (AVATAR_SIZE - font.lineHeight) / 2,
                 PhoneTheme.FONT_COLOR_TITLE, true);
 
@@ -551,9 +552,4 @@ public final class ChatConversation {
                 : dateTime.format(DATE_TIME_FORMAT);
     }
 
-    private static String truncate(Font font, String text, int maxWidth) {
-        if (maxWidth <= 0) return "";
-        if (font.width(text) <= maxWidth) return text;
-        return font.plainSubstrByWidth(text, Math.max(0, maxWidth - font.width("…"))) + "…";
-    }
 }

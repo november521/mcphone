@@ -11,6 +11,7 @@ import com.november.mcphone.core.client.PhoneTheme;
 import com.november.mcphone.feature.browser.client.BrowserBackends;
 import com.november.mcphone.feature.browser.client.IBrowser;
 import com.november.mcphone.feature.browser.client.IBrowserBackend;
+import com.november.mcphone.core.client.GuiUtil;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.EditBox;
@@ -385,7 +386,7 @@ public final class BrowserScreen extends Screen {
         int x = panelX + 2 + index * NAV_BTN_W;
         int y = barY + 2;
         int h = BAR_H - 4;
-        boolean hovered = enabled && hit(mouseX, mouseY, x, y, NAV_BTN_W, h);
+        boolean hovered = enabled && GuiUtil.hit(mouseX, mouseY, x, y, NAV_BTN_W, h);
 
         // 悬停时给个底，让人看得出这是个键而不是一个字
         if (hovered) g.fill(x, y, x + NAV_BTN_W, y + h, PhoneTheme.COLOR_APP_PRESSED);
@@ -420,12 +421,8 @@ public final class BrowserScreen extends Screen {
         g.fill(x, y, x + size, y + size, PhoneTheme.FONT_COLOR_PRICE);
     }
 
-    private static boolean hit(double mx, double my, int x, int y, int w, int h) {
-        return mx >= x && mx <= x + w && my >= y && my <= y + h;
-    }
-
     private boolean inViewport(double mx, double my) {
-        return hit(mx, my, viewX, viewY, viewW, viewH);
+        return GuiUtil.hit(mx, my, viewX, viewY, viewW, viewH);
     }
 
     /**
@@ -452,7 +449,7 @@ public final class BrowserScreen extends Screen {
         // 导航按钮
         for (int i = 0; i < 3; i++) {
             int x = panelX + 2 + i * NAV_BTN_W;
-            if (hit(mouseX, mouseY, x, barY + 2, NAV_BTN_W, BAR_H - 4)) {
+            if (GuiUtil.hit(mouseX, mouseY, x, barY + 2, NAV_BTN_W, BAR_H - 4)) {
                 onNavButton(i);
                 return true;
             }

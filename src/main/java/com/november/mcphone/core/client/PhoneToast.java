@@ -127,9 +127,9 @@ public final class PhoneToast implements Toast {
 
         // 有多条时右上角留出角标的位置，名字不能压到它
         int badgeW = count > 1 ? font.width(countLabel()) + 4 : 0;
-        g.drawString(font, truncate(font, senderName, textW - badgeW - 2),
+        g.drawString(font, GuiUtil.truncate(font, senderName, textW - badgeW - 2),
                 textX, 7, COLOR_NAME, false);
-        g.drawString(font, truncate(font, text, textW), textX, 18, COLOR_TEXT, false);
+        g.drawString(font, GuiUtil.truncate(font, text, textW), textX, 18, COLOR_TEXT, false);
 
         if (count > 1) {
             int badgeX = WIDTH - PAD - badgeW;
@@ -147,12 +147,6 @@ public final class PhoneToast implements Toast {
     /** 超过 99 就显示 99+，否则一个三位数会把角标撑变形 */
     private String countLabel() {
         return count > 99 ? "99+" : String.valueOf(count);
-    }
-
-    private static String truncate(Font font, String text, int maxWidth) {
-        if (maxWidth <= 0) return "";
-        if (font.width(text) <= maxWidth) return text;
-        return font.plainSubstrByWidth(text, Math.max(0, maxWidth - font.width("…"))) + "…";
     }
 
     /**

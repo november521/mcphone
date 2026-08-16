@@ -9,6 +9,7 @@ import com.november.mcphone.feature.chat.net.Relation;
 import com.november.mcphone.feature.chat.net.RemoveFriendPacket;
 import com.november.mcphone.feature.chat.net.RequestOnlinePlayersPacket;
 import com.november.mcphone.feature.chat.net.RespondFriendRequestPacket;
+import com.november.mcphone.core.client.GuiUtil;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
@@ -141,7 +142,7 @@ public final class ChatAddContact {
             int textY = y + (rowH - font.lineHeight) / 2;
 
             // 名字按剩余宽度截断，否则长名字会盖住右侧的动作文字
-            String name = truncate(font, p.name(), w - (nameX - x) - actionW - 6);
+            String name = GuiUtil.truncate(font, p.name(), w - (nameX - x) - actionW - 6);
             g.drawString(font, name, nameX, textY, COLOR_NAME, false);
             g.drawString(font, action, x + w - actionW - 2, textY,
                     actionColor(p.relation()), false);
@@ -236,9 +237,4 @@ public final class ChatAddContact {
         if (scrollOffset < 0) scrollOffset = 0;
     }
 
-    private static String truncate(Font font, String text, int maxWidth) {
-        if (maxWidth <= 0) return "";
-        if (font.width(text) <= maxWidth) return text;
-        return font.plainSubstrByWidth(text, Math.max(0, maxWidth - font.width("…"))) + "…";
-    }
 }
