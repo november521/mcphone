@@ -143,6 +143,134 @@ public final class PhoneTheme {
     /** 价格 */
     public static final int FONT_COLOR_PRICE = 0xFFFFD54F;
 
+    // ==================== 各界面共用的角色色 ====================
+    //
+    // 下面这些此前是各界面自己写的字面量：分割线 0x44FFFFFF 在【十个】文件里
+    // 各写一遍，行悬停底 0x33FFFFFF 五遍，"确认"绿 0xFF66FF88 分散在发送、
+    // 保存、添加、打印四处。改一次配色要翻遍全项目，而且必漏。
+    //
+    // 【几个名字共用一个值是有意的】
+    //
+    // COLOR_DIVIDER、COLOR_CELL_HOVER 与上面的 COLOR_APP_PRESSED 眼下都是
+    // 0x44FFFFFF，但它们是三件不同的东西。合并成一个名字的话，日后想把
+    // 分割线调淡，主屏图标的按下反馈会跟着一起淡掉——而那不是任何人的本意。
+    //
+    // 名字按【角色】起，不按颜色起：值可以重合，角色不能混。
+
+    // -- 覆盖层与填充 --
+
+    /** 一像素分割线。标题与内容之间、列表分组之间 */
+    public static final int COLOR_DIVIDER = 0x44FFFFFF;
+
+    /** 更淡的分割线，用于同一块内容里的次级分组（关于页） */
+    public static final int COLOR_DIVIDER_FAINT = 0x22FFFFFF;
+
+    /** 列表行悬停时垫在下面的那层 */
+    public static final int COLOR_ROW_HOVER = 0x33FFFFFF;
+
+    /** 网格格子悬停时垫的那层。比列表行重一档，因为格子本身有底色 */
+    public static final int COLOR_CELL_HOVER = 0x44FFFFFF;
+
+    /** 悬停在"会删掉东西"的那一行上（App 管理器的卸载行） */
+    public static final int COLOR_ROW_HOVER_DANGER = 0x44FF4444;
+
+    /** 当前正生效的那一行（音乐播放器里正在放的曲子） */
+    public static final int COLOR_ROW_ACTIVE = 0x2222AA44;
+
+    /** 选中项的外圈（壁纸选择器里当前那张） */
+    public static final int COLOR_SELECTION = 0x4488CCFF;
+
+    /** 压暗一层：状态栏兜底、容器界面背景、相册格子底 */
+    public static final int COLOR_SCRIM = 0x66000000;
+
+    /** 压得更重的一层，用于要把注意力全收到前景的时候（相册看大图） */
+    public static final int COLOR_OVERLAY = 0xCC000000;
+
+    /** 容器界面里空槽位的底 */
+    public static final int COLOR_SLOT_BG = 0x88000000;
+
+    // -- 文字 --
+
+    /** 比 SUBTLE 再暗一档：系统 App 的名字、提示的第二行 */
+    public static final int FONT_COLOR_DIM = 0xFF666666;
+
+    /** 点不动的动作文字（翻到头的翻页箭头、空输入时的发送） */
+    public static final int FONT_COLOR_MUTED = 0xFF555555;
+
+    /** 列表第二行的内容预览 */
+    public static final int FONT_COLOR_PREVIEW = 0xFF999999;
+
+    /** 列表右侧那一列时间 */
+    public static final int FONT_COLOR_TIMESTAMP = 0xFF777777;
+
+    /** 通知里的正文 */
+    public static final int FONT_COLOR_TOAST = 0xFFBBBBBB;
+
+    /** 可点的强调文字：右上角的「+」、当前生效的选项 */
+    public static final int FONT_COLOR_LINK = 0xFF88CCFF;
+
+    /** 确认类动作：发送、保存、添加、打印 */
+    public static final int FONT_COLOR_CONFIRM = 0xFF66FF88;
+
+    /** 等着再点一次确认的状态，以及"同意"这类需要看一眼再决定的动作 */
+    public static final int FONT_COLOR_ARMED = 0xFFFFDD44;
+
+    /** 会删东西的动作：删除、解除好友 */
+    public static final int FONT_COLOR_DANGER = 0xFFFF8888;
+
+    /** 危险动作已经就绪，下一次点击就真删了 */
+    public static final int FONT_COLOR_DANGER_ARMED = 0xFFFF5555;
+
+    /** App 管理器里那个「✕ 卸载」 */
+    public static final int FONT_COLOR_UNINSTALL = 0xFFFF6666;
+
+    /** 出错了、缺东西：商店的失败提示、缺前置模组的说明 */
+    public static final int FONT_COLOR_NOTICE = 0xFFFFAA44;
+
+    // -- 在线状态 --
+
+    /** 在线的小圆点 */
+    public static final int COLOR_ONLINE = 0xFF55DD55;
+
+    /** 离线的小圆点 */
+    public static final int COLOR_OFFLINE = 0xFF777777;
+
+    // -- 聊天 --
+    // 气泡底与输入栏底是【兜底】色，见 PhoneSkin.Element 的
+    // CHAT_BUBBLE_SELF / CHAT_BUBBLE_PEER / CHAT_INPUT_BAR
+
+    /** 自己发的气泡底 */
+    public static final int COLOR_CHAT_BUBBLE_SELF = 0xFF2E6FDB;
+
+    /** 对方发的气泡底 */
+    public static final int COLOR_CHAT_BUBBLE_PEER = 0xFF3A3A4E;
+
+    /** 对方气泡里的字。比纯白暗一点点，深色气泡上不刺眼 */
+    public static final int FONT_COLOR_CHAT_PEER = 0xFFEEEEEE;
+
+    /** 会话底部输入栏的底 */
+    public static final int COLOR_CHAT_INPUT_BG = 0xFF26263A;
+
+    /** 未读条数角标的底。兜底色，见 PhoneSkin.Element.UNREAD_BADGE */
+    public static final int COLOR_UNREAD_BADGE = 0xFFDD3333;
+
+    // -- 通知 --
+    // 兜底色，见 PhoneSkin.Element.TOAST_BG
+
+    /** 通知底 */
+    public static final int COLOR_TOAST_BG = 0xFF1A1A2E;
+
+    /** 通知边框 */
+    public static final int COLOR_TOAST_BORDER = 0xFF0F3460;
+
+    // -- 相机取景 --
+
+    /** 取景框四角那四个折角 */
+    public static final int COLOR_VIEWFINDER = 0xCCFFFFFF;
+
+    /** 正中的准星 */
+    public static final int COLOR_RETICLE = 0x99FFFFFF;
+
     // ==================== 布局参数 ====================
 
     /** 状态栏高度 */
