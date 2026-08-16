@@ -159,5 +159,12 @@
   "mcphone.weather.advice.thunder": "天光暗得像夜里，地表照样刷怪。但闪电劈中苦力怕会把它变成高压的——想抓就是现在。",
   "mcphone.weather.advice.dry": "别处在下雨，这里一滴不落。天光还是会暗下来，出门当心。",
   "mcphone.weather.advice.none": "这个维度没有天气。想看下雨，得回主世界。",
-  "mcphone.config.font_color": "字体颜色"
+  "mcphone.config.font_color": "字体颜色",
+  "mcphone.settings.font_color": "字体颜色",
+  "mcphone.font_preset.white": "白色",
+  "mcphone.font_preset.black": "黑色",
+  "mcphone.font_preset.amber": "琥珀",
+  "mcphone.font_preset.cyan": "天青",
+  "mcphone.font_preset.mint": "薄荷",
+  "mcphone.font_preset.pink": "樱粉"
 }

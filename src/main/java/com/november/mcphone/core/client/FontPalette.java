@@ -151,7 +151,16 @@ public final class FontPalette {
      * @param prominence 0（最不显眼）～ 10（最显眼）
      */
     private static int neutral(int prominence) {
-        FontPreset p = current;
+        return sample(current, prominence);
+    }
+
+    /**
+     * 按明显度取【指定】预设的色，不管当前选的是哪个。
+     *
+     * 设置页里那几个色块要这个：每一格显示的是那个预设长什么样，而不是
+     * 当前预设长什么样——否则六格全一个色，选了等于没选。
+     */
+    public static int sample(FontPreset p, int prominence) {
         int strong = p.strong();
         int weak = p.weak();
 

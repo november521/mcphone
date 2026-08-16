@@ -159,5 +159,12 @@
   "mcphone.weather.advice.thunder": "Dark as night, so mobs spawn on the surface. But lightning turns a creeper charged — now is the time.",
   "mcphone.weather.advice.dry": "It's raining elsewhere; not a drop here. The sky still dims, so watch your step.",
   "mcphone.weather.advice.none": "No weather in this dimension. Head back to the Overworld to see rain.",
-  "mcphone.config.font_color": "Font Color"
+  "mcphone.config.font_color": "Font Color",
+  "mcphone.settings.font_color": "Font Color",
+  "mcphone.font_preset.white": "White",
+  "mcphone.font_preset.black": "Black",
+  "mcphone.font_preset.amber": "Amber",
+  "mcphone.font_preset.cyan": "Cyan",
+  "mcphone.font_preset.mint": "Mint",
+  "mcphone.font_preset.pink": "Pink"
 }
