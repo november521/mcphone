@@ -97,6 +97,14 @@ public final class PhoneSkin {
         HOME_PAGE_DOT_ACTIVE("phone/page_dot_active", "home_page_dot_active"),
 
         /**
+         * 拖着图标停在屏幕边上时，那条"再等一下就翻页"的提示条。建议 10×176（竖条）。
+         *
+         * 会随停留时长由浅到深淡入——贴图整张按透明度调制，所以画成实心竖条即可，
+         * 不必自己做渐变。没有贴图时用 {@link PhoneTheme#COLOR_PAGE_EDGE} 填。
+         */
+        HOME_PAGE_EDGE("phone/page_edge", "home_page_edge"),
+
+        /**
          * 自己发出的聊天气泡底。
          *
          * 气泡大小随文字长短变化，贴图会被整张拉伸过去，所以纯色或纵向

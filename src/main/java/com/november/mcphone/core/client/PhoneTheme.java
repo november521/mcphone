@@ -118,6 +118,14 @@ public final class PhoneTheme {
     /** 页码点：当前这一页。兜底色，见 PhoneSkin.Element.HOME_PAGE_DOT_ACTIVE */
     public static final int COLOR_PAGE_DOT_ACTIVE = 0xFFFFFFFF;
 
+    /**
+     * 拖着图标停在屏幕边上时，那条"再等一下就翻页"的提示条。
+     *
+     * 兜底色，见 PhoneSkin.Element.HOME_PAGE_EDGE。透明度由停留时长决定，
+     * 这里写的是停满时的样子。
+     */
+    public static final int COLOR_PAGE_EDGE = 0x77FFFFFF;
+
     /** 底部导航栏背景色 */
     public static final int COLOR_NAV_BAR = 0xFF16213E;
 
@@ -218,6 +226,17 @@ public final class PhoneTheme {
 
     /** 翻页滑动动画时长（毫秒），0 表示直接切 */
     public static final int PAGE_SLIDE_MS = 160;
+
+    /** 拖着图标停在左右这么宽的边条里，就会自动翻页 */
+    public static final int PAGE_EDGE_WIDTH = 10;
+
+    /**
+     * 拖着图标在边条里停多久才翻页（毫秒）。
+     *
+     * 不能是"碰到就翻"：拖去最右那一列的路上必然会扫过右边条，一碰就翻的话
+     * 玩家永远放不到最后一格。停顿是他表达"我真要去下一页"的方式。
+     */
+    public static final int PAGE_EDGE_DWELL_MS = 400;
 
     /**
      * 按住图标要移动多少像素才算"在拖动"，小于它松手仍然是一次点击。

@@ -159,6 +159,12 @@ public final class PhoneScreen extends Screen {
     /** 拖动中松手会落到第几格 */
     private int dragTargetIndex = -1;
 
+    /** 拖着图标正停在哪条边上：-1 左、1 右、0 不在边上 */
+    private int edgeDwellSide;
+
+    /** 停进边条的时刻，用来算停够了没有 */
+    private long edgeDwellStartMs;
+
     // ---- 布局缓存 ----
     private int phoneLeft, phoneTop;
     private int gridStartX, gridStartY;
@@ -544,10 +550,10 @@ public final class PhoneScreen extends Screen {
 
     private void renderAppGrid(GuiGraphics g) {
         final int is = PhoneTheme.APP_ICON_SIZE;
-        final int cols = PhoneTheme.APP_COLUMNS;
-        final int cellW = is + PhoneTheme.APP_GRID_SPACING_X;
-        final int cellH = appCellHeight();
         final int pageSize = pageSize();
+
+        // 先结算边缘停留：这一帧可能就翻页了，翻完再算下面的预览才是对的
+        updateEdgePageFlip();
 
         // 拖动时按"抽出来、再插进去"的结果画，而不是画原顺序再叠个提示：
         // 玩家看到的直接就是松手后的样子，不必先松手再确认自己摆对没有。
@@ -581,6 +587,7 @@ public final class PhoneScreen extends Screen {
         }
 
         renderPageDots(g, HomeLayout.pageCount(ordered.size(), pageSize));
+        renderEdgeHint(g);
 
         // 浮起的那张放最后画，才会盖在别的图标上面而不是被它们盖住。
         // 以鼠标为中心，手指按住哪儿它就在哪儿，不会跟手偏出去半格
@@ -589,6 +596,80 @@ public final class PhoneScreen extends Screen {
             int fy = (int) dragLocalY - is / 2;
             floatingApp.renderIcon(g, fx, fy, is, 0);
             drawAppName(g, floatingApp.getDisplayName().getString(), fx, fy, is);
+        }
+    }
+
+    /**
+     * 拖着图标停在屏幕左右边上时，自动翻到相邻那一页。
+     *
+     * 没有这条路的话，App 根本挪不到别的页去：拖动只能落在【当前这一页】的格子里，
+     * 而翻页要么得松手（松手就落定了）、要么得腾出另一只手滚滚轮。
+     *
+     * 每帧算一次而不是挂在 mouseDragged 上：玩家把图标停在边上不动时，鼠标不产生
+     * 任何事件，挂在拖动事件上的计时器永远走不完。
+     */
+    private void updateEdgePageFlip() {
+        if (!draggingApp) {
+            edgeDwellSide = 0;
+            edgeDwellStartMs = 0;
+            return;
+        }
+
+        final int count = PhoneScreenRegistry.getAppCount();
+        final int pageSize = pageSize();
+
+        int side = 0;
+        if (dragLocalX < phoneLeft + PhoneTheme.PAGE_EDGE_WIDTH) {
+            side = -1;
+        } else if (dragLocalX > phoneLeft + PhoneTheme.PHONE_WIDTH - PhoneTheme.PAGE_EDGE_WIDTH) {
+            side = 1;
+        }
+
+        // 那个方向已经没有页了就当没停在边上——让提示条亮着、等半天却什么都不发生，
+        // 比压根不亮更让人困惑
+        if (side != 0
+                && HomeLayout.clampPage(homePage + side, count, pageSize) == homePage) {
+            side = 0;
+        }
+
+        if (side != edgeDwellSide) {
+            edgeDwellSide = side;
+            edgeDwellStartMs = nowMs;
+        }
+        if (side == 0) return;
+
+        if (nowMs - edgeDwellStartMs >= PhoneTheme.PAGE_EDGE_DWELL_MS) {
+            goToPage(homePage + side);
+            edgeDwellStartMs = nowMs;   // 按住不放就接着往下翻
+
+            // 页变了，同一个鼠标位置对应的落点也变了——不重算的话，预览还停在
+            // 上一页的那一格上
+            dragTargetIndex = dropIndexAt(dragLocalX, dragLocalY, count);
+        }
+    }
+
+    /** 边缘提示条，随停留时长由浅到深。停满就翻页，所以它也是个进度条 */
+    private void renderEdgeHint(GuiGraphics g) {
+        if (edgeDwellSide == 0 || !draggingApp) return;
+
+        float progress = Math.min(1f,
+                (float) (nowMs - edgeDwellStartMs) / Math.max(1, PhoneTheme.PAGE_EDGE_DWELL_MS));
+
+        final int w = PhoneTheme.PAGE_EDGE_WIDTH;
+        int x = edgeDwellSide < 0 ? phoneLeft : phoneLeft + PhoneTheme.PHONE_WIDTH - w;
+        int top = phoneTop + PhoneTheme.STATUS_BAR_HEIGHT;
+        int h = dotsTop() - top;
+
+        // 贴图靠 setColor 调制透明度整张淡入；画完必须还原，否则后面的东西
+        // 会跟着一起变淡——这类"全屏莫名其妙变暗"的 bug 极难定位
+        g.setColor(1f, 1f, 1f, progress);
+        boolean drawn = PhoneSkin.draw(g, PhoneSkin.Element.HOME_PAGE_EDGE, x, top, w, h);
+        g.setColor(1f, 1f, 1f, 1f);
+
+        if (!drawn) {
+            int alpha = (int) (progress * ((PhoneTheme.COLOR_PAGE_EDGE >>> 24) & 0xFF));
+            g.fill(x, top, x + w, top + h,
+                    (alpha << 24) | (PhoneTheme.COLOR_PAGE_EDGE & 0x00FFFFFF));
         }
     }
 
