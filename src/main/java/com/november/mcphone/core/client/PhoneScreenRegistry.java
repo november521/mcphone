@@ -36,6 +36,7 @@ import java.util.*;
  *
  *   INSTALLED（已装） 玩家手机主屏上"装了"哪些 App，只存 id。
  *                    安装/卸载只改这个集合，并持久化到磁盘。
+ *                    它【有序】，那个顺序就是图标在主屏上的排列。
  *
  * 卸载不会销毁目录条目，因此卸载是可逆的——应用商店正是靠
  * "目录 - 已装"列出可下载的 App。若像早期版本那样在卸载时直接
@@ -56,9 +57,12 @@ import java.util.*;
  * 状态文件: config/mcphone/installed/<存档标识>.json —— 每个存档/服务器一份
  *
  *   {
- *     "installed": ["mcphone:settings", "mcphone:music"],   已装 id
+ *     "installed": ["mcphone:settings", "mcphone:music"],   已装 id，【顺序＝主屏排列】
  *     "known":     ["mcphone:settings", "mcphone:music", "mcphone:camera"]
  *   }
+ *
+ * installed 那一串是有序的：1.3.8 起玩家能在主屏上拖动图标，摆出来的顺序就存在
+ * 这里。手改这个文件也能改主屏顺序。known 则只是个集合，顺序没有意义。
  *
  * 1.0.47 起 id 带命名空间。老文件里是裸串（"settings"），读取时一律按
  * mcphone 补全——详见 parseStoredId，那里说明了为什么不能用
@@ -236,14 +240,59 @@ public final class PhoneScreenRegistry {
     //  查询
     // ================================================================
 
-    /** 已安装 App（只读列表，保持目录顺序）—— 主屏显示的就是这些 */
+    /**
+     * 已安装 App（只读列表）—— 主屏显示的就是这些，**顺序就是主屏上的排列顺序**。
+     *
+     * 1.3.8 之前这里遍历的是 CATALOG、拿 INSTALLED 当过滤器，于是主屏顺序等于
+     * SPI 扫描顺序：玩家摆不动它。现在遍历 INSTALLED 本身——它是 LinkedHashSet，
+     * 插入序就是玩家看到的顺序，{@link #moveApp} 改的也是它。
+     *
+     * 一个集合同时表达"装了哪些"和"怎么排"，而不是另开一个 order 字段：两份数据
+     * 就有两份数据不一致的可能，而卸载一个 App 时忘了同步另一份，表现出来是主屏
+     * 上留一个点不动的空格。
+     *
+     * 目录里查不到的 id 会被跳过。这是兜底——install() 与 loadState() 都只往
+     * INSTALLED 里放目录中已有的 id，所以正常情况下不会发生。这条不变式也是
+     * {@link #moveApp} 能直接用下标的前提。
+     */
     public static List<IPhoneApp> getApps() {
         ensureLoaded();
         List<IPhoneApp> out = new ArrayList<>();
-        for (Map.Entry<ResourceLocation, IPhoneApp> e : CATALOG.entrySet()) {
-            if (INSTALLED.contains(e.getKey())) out.add(e.getValue());
+        for (ResourceLocation id : INSTALLED) {
+            IPhoneApp app = CATALOG.get(id);
+            if (app != null) out.add(app);
         }
         return List.copyOf(out);
+    }
+
+    /**
+     * 把主屏第 from 格的 App 挪到第 to 格。
+     *
+     * 【插入】而不是交换：把第 1 个拖到第 3 格，中间那些依次前移，就像真手机那样。
+     * 交换的话玩家拖一个图标会让另一个莫名其妙地跳到他手指原来的位置上。
+     *
+     * 下标按 {@link #getApps()} 的下标算——两者一一对应，理由见那个方法的注释。
+     *
+     * @return 真的改变了顺序才返回 true；下标越界或原地不动返回 false
+     */
+    public static boolean moveApp(int from, int to) {
+        ensureLoaded();
+
+        List<ResourceLocation> order = new ArrayList<>(INSTALLED);
+        if (from < 0 || from >= order.size()) return false;
+
+        int target = Math.max(0, Math.min(to, order.size() - 1));
+        if (from == target) return false;
+
+        order.add(target, order.remove(from));
+
+        // 清空再灌回去：LinkedHashSet 没有"就地重排"这回事，它的顺序只由插入
+        // 顺序决定。这里的元素总数是个位数，重建的开销可以忽略
+        INSTALLED.clear();
+        INSTALLED.addAll(order);
+
+        saveState();
+        return true;
     }
 
     /** 目录中的全部 App，含未安装的 */
@@ -399,8 +448,13 @@ public final class PhoneScreenRegistry {
         return id;
     }
 
-    /** 把状态文件里的一串 id 解析进目标集合，跳过解析不了的 */
-    private static void parseStoredIds(List<String> raw, Set<ResourceLocation> out) {
+    /**
+     * 把状态文件里的一串 id 解析进目标集合，跳过解析不了的。
+     *
+     * 收 Collection 而不是 Set：installed 那一串的【顺序】就是主屏排列，得用
+     * LinkedHashSet 接着；known 只关心有没有，用 HashSet 就够。
+     */
+    private static void parseStoredIds(List<String> raw, Collection<ResourceLocation> out) {
         if (raw == null) return;
         for (String s : raw) {
             ResourceLocation id = parseStoredId(s);
@@ -538,7 +592,8 @@ public final class PhoneScreenRegistry {
 
     private static void loadState() {
         Set<ResourceLocation> known = new HashSet<>();
-        Set<ResourceLocation> installed = new HashSet<>();
+        // 有序：这一串的顺序就是玩家上次摆好的主屏顺序
+        Set<ResourceLocation> installed = new LinkedHashSet<>();
 
         if (stateFile != null && Files.isRegularFile(stateFile)) {
             try (Reader r = Files.newBufferedReader(stateFile, StandardCharsets.UTF_8)) {
@@ -554,13 +609,21 @@ public final class PhoneScreenRegistry {
         }
 
         INSTALLED.clear();
+
+        // 第一段：文件里记着装了的，按【文件里的先后】装回来。
+        // 这一段决定主屏的排列——1.3.8 之前这里是遍历 CATALOG 的，于是玩家怎么
+        // 摆都会在下次进世界时被摆回目录顺序
+        for (ResourceLocation id : installed) {
+            if (CATALOG.containsKey(id)) INSTALLED.add(id);
+        }
+
+        // 第二段：目录里有、而玩家从没见过的（known 里没有），按该不该预装决定，
+        // 一律【追加到末尾】。新装个附属模组不该把已经摆好的位置挤乱，
+        // 真手机装了新 App 也是落在最后一格
         for (Map.Entry<ResourceLocation, IPhoneApp> e : CATALOG.entrySet()) {
             ResourceLocation id = e.getKey();
-            // 目录中出现过 → 沿用玩家的选择；首次出现 → 看该不该预装
-            boolean on = known.contains(id)
-                    ? installed.contains(id)
-                    : shouldPreinstall(id, e.getValue());
-            if (on) INSTALLED.add(id);
+            if (known.contains(id) || INSTALLED.contains(id)) continue;
+            if (shouldPreinstall(id, e.getValue())) INSTALLED.add(id);
         }
 
         MCphone.LOGGER.info("[MCphone] 已安装 {} / 目录 {} 个 App",
