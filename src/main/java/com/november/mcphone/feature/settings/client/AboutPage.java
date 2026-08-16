@@ -146,7 +146,7 @@ public final class AboutPage {
                 loaded ? "mcphone.about.installed" : "mcphone.about.missing").getString();
         g.drawString(font, modName, x, y, FontPalette.subtle(), false);
         g.drawString(font, value, x + w - font.width(value), y,
-                loaded ? PhoneTheme.COLOR_BUTTON_HOVER : FontPalette.subtle(), false);
+                loaded ? FontPalette.confirm() : FontPalette.subtle(), false);
         return y + font.lineHeight + 1;
     }
 }

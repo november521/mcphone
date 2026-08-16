@@ -222,14 +222,14 @@ public final class CompanionApps {
         // 而这一页最要紧的信息恰恰就是那两个字
         g.drawString(font, clip(font, row.name(), textW - stateW - GAP), textX, y,
                 row.satisfied() ? FontPalette.body()
-                        : PhoneTheme.FONT_COLOR_BUTTON_DISABLED, false);
+                        : FontPalette.muted(), false);
 
         // 第二行没有状态文字挡着，可以用满整行宽度
         g.drawString(font, clip(font, row.requires(), textW), textX, y + font.lineHeight + 1,
                 FontPalette.subtle(), false);
 
         g.drawString(font, state, x + w - stateW, y,
-                row.satisfied() ? PhoneTheme.COLOR_BUTTON_HOVER : FontPalette.subtle(),
+                row.satisfied() ? FontPalette.confirm() : FontPalette.subtle(),
                 false);
     }
 
@@ -272,10 +272,10 @@ public final class CompanionApps {
 
         g.drawString(font, prev, prevX, pagerY,
                 canPrev ? (hoverPrev ? FontPalette.title() : FontPalette.body())
-                        : PhoneTheme.COLOR_BUTTON_DISABLED, false);
+                        : FontPalette.muted(), false);
         g.drawString(font, next, nextX, pagerY,
                 canNext ? (hoverNext ? FontPalette.title() : FontPalette.body())
-                        : PhoneTheme.COLOR_BUTTON_DISABLED, false);
+                        : FontPalette.muted(), false);
         g.drawString(font, label, labelX, pagerY, FontPalette.subtle(), false);
     }
 

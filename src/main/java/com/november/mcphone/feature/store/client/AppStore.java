@@ -360,10 +360,10 @@ public final class AppStore {
 
         g.drawString(font, prev, prevX, pagerY,
                 canPrev ? (hoverPrev ? FontPalette.title() : FontPalette.body())
-                        : PhoneTheme.COLOR_BUTTON_DISABLED, false);
+                        : FontPalette.muted(), false);
         g.drawString(font, next, nextX, pagerY,
                 canNext ? (hoverNext ? FontPalette.title() : FontPalette.body())
-                        : PhoneTheme.COLOR_BUTTON_DISABLED, false);
+                        : FontPalette.muted(), false);
         g.drawString(font, label, labelX, pagerY, FontPalette.subtle(), false);
     }
 
