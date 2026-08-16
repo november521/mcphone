@@ -257,12 +257,16 @@ public final class PhoneScreenRegistry {
      */
     public static List<IPhoneApp> getApps() {
         ensureLoaded();
-        List<IPhoneApp> out = new ArrayList<>();
+        List<IPhoneApp> out = new ArrayList<>(INSTALLED.size());
         for (ResourceLocation id : INSTALLED) {
             IPhoneApp app = CATALOG.get(id);
             if (app != null) out.add(app);
         }
-        return List.copyOf(out);
+        // unmodifiableList 而不是 List.copyOf：后者会把刚建好的表再拷一遍数组。
+        // out 是本方法里新建的局部变量，出了这里没有第二个人握着它的引用，
+        // 包一层只读视图与真拷一份在外部看来完全等价，少一次数组分配。
+        // 这是主屏每帧都要走的一条路，见 getAppCount 的注释
+        return Collections.unmodifiableList(out);
     }
 
     /**
@@ -361,14 +365,46 @@ public final class PhoneScreenRegistry {
         return CATALOG.get(id);
     }
 
-    /** 按主屏索引查找已安装 App */
+    /**
+     * 按主屏索引查找已安装 App。
+     *
+     * 直接遍历 INSTALLED 数到第 index 个，不再先建整张表再取一个——
+     * 理由同 {@link #getAppCount()}。
+     */
     public static IPhoneApp getApp(int index) {
-        List<IPhoneApp> apps = getApps();
-        return (index >= 0 && index < apps.size()) ? apps.get(index) : null;
+        ensureLoaded();
+        if (index < 0) return null;
+
+        int i = 0;
+        for (ResourceLocation id : INSTALLED) {
+            IPhoneApp app = CATALOG.get(id);
+            if (app == null) continue;      // 与 getApps 同一条跳过规则，下标才对得上
+            if (i++ == index) return app;
+        }
+        return null;
     }
 
-    /** 已安装 App 数量 */
-    public static int getAppCount() { return getApps().size(); }
+    /**
+     * 已安装 App 数量。
+     *
+     * 原先是 getApps().size() —— 为了拿一个整数，先建一个 ArrayList，再让
+     * List.copyOf 把它拷成第二个数组，然后只读 size。
+     *
+     * 这不是理论上的浪费：主屏一帧里它至少被调四次（renderAppGrid 的边缘
+     * 翻页结算、pageCount、goToPage 的夹取、updateAppHover），拖动时还要
+     * 再加一次。每帧十次数组分配，只为几个个位数的计数。
+     *
+     * 现在只数不建表。跳过规则与 getApps 保持一致（目录里没有的 id 不算），
+     * 否则"主屏画了几个"与"一共几个"会对不上，表现是最后一页多出一格空白。
+     */
+    public static int getAppCount() {
+        ensureLoaded();
+        int n = 0;
+        for (ResourceLocation id : INSTALLED) {
+            if (CATALOG.containsKey(id)) n++;
+        }
+        return n;
+    }
 
     public static boolean isInstalled(ResourceLocation id) {
         ensureLoaded();
