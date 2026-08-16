@@ -209,6 +209,17 @@ public final class PhoneTheme {
     public static final int PAGE_DOT_SPACING = 4;
 
     /**
+     * 在空白处横着拖多远算一次翻页。
+     *
+     * 手机宽 120，取五分之一：再小的话，想拖个图标却按空了、手一抖就翻页；
+     * 再大就得从屏幕这头划到那头，一页一页翻很累。
+     */
+    public static final int PAGE_SWIPE_THRESHOLD = 24;
+
+    /** 翻页滑动动画时长（毫秒），0 表示直接切 */
+    public static final int PAGE_SLIDE_MS = 160;
+
+    /**
      * 按住图标要移动多少像素才算"在拖动"，小于它松手仍然是一次点击。
      *
      * 没有这个阈值的话，按下时手稍微抖一下就变成了排序——玩家想开个 App，
