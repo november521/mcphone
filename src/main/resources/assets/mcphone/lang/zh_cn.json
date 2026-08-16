@@ -142,5 +142,21 @@
   "mcphone.clock.greet.morning": "早上好",
   "mcphone.clock.greet.noon": "中午好",
   "mcphone.clock.greet.afternoon": "下午好",
-  "mcphone.clock.greet.evening": "晚上好"
+  "mcphone.clock.greet.evening": "晚上好",
+  "mcphone.app.weather": "天气",
+  "mcphone.app.weather.desc": "现在是什么天，以及这种天适合去做什么。判得出沙漠的干打雷和雪山的下雪，不只是「在下雨」。",
+  "mcphone.weather.advice_title": "适合做的事",
+  "mcphone.weather.kind.clear": "晴",
+  "mcphone.weather.kind.rain": "雨",
+  "mcphone.weather.kind.snow": "雪",
+  "mcphone.weather.kind.thunder": "雷雨",
+  "mcphone.weather.kind.dry": "阴",
+  "mcphone.weather.kind.none": "无天气",
+  "mcphone.weather.advice.clear": "出门的好时候。僵尸和骷髅在阳光下会烧起来，路上比夜里安全得多。",
+  "mcphone.weather.advice.clear.night": "地表开始刷怪了。点几个火把，或者干脆睡一觉跳过去。",
+  "mcphone.weather.advice.rain": "钓鱼的好时候——下雨时鱼上钩明显更快。雨还会浇灭地上的火。",
+  "mcphone.weather.advice.snow": "拿把铲子去收雪。攒够雪块能堆雪傀儡，雪球也能砸人。",
+  "mcphone.weather.advice.thunder": "天光暗得像夜里，地表照样刷怪。但闪电劈中苦力怕会把它变成高压的——想抓就是现在。",
+  "mcphone.weather.advice.dry": "别处在下雨，这里一滴不落。天光还是会暗下来，出门当心。",
+  "mcphone.weather.advice.none": "这个维度没有天气。想看下雨，得回主世界。"
 }
