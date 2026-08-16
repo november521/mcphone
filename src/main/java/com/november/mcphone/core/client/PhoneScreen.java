@@ -147,14 +147,14 @@ public final class PhoneScreen extends Screen {
     /** 按下时命中的图标下标，-1 表示这次按下没落在图标上 */
     private int pressedAppIndex = -1;
 
-    /** 按下点的手机局部坐标，用来量挪了多远、够不够算拖动 */
-    private double pressLocalX, pressLocalY;
+    /** 按下点的坐标（已撤掉开场动画的缩放，见 unscaledX），用来量挪了多远 */
+    private double pressX, pressY;
 
     /** 位移超过 {@link PhoneTheme#APP_DRAG_THRESHOLD} 之后才为 true */
     private boolean draggingApp;
 
-    /** 拖动中鼠标所在的局部坐标，浮起的那张图标画在这儿 */
-    private double dragLocalX, dragLocalY;
+    /** 拖动中鼠标所在的坐标（同上，已撤掉缩放），浮起的那张图标画在这儿 */
+    private double dragX, dragY;
 
     /** 拖动中松手会落到第几格 */
     private int dragTargetIndex = -1;
@@ -245,17 +245,6 @@ public final class PhoneScreen extends Screen {
     public boolean isViewingConversation(UUID peer) {
         return mode == Mode.CHAT_CONVERSATION && chatConversation.isViewing(peer);
     }
-
-    /**
-     * 返回上一层。
-     *
-     * ESC 与导航栏的 ◁ 共用这一套规则——分别实现的话，两条路的层级
-     * 关系迟早会不一致：改了一处忘了另一处，玩家按 ESC 和点 ◁ 会去到
-     * 不同的地方。
-     *
-     * @return 真的退了一层才返回 true；已在主屏返回 false，
-     *         由调用方决定要不要关机（ESC 关，导航栏的 ◁ 不关）
-     */
 
     // ============================================================
     //  附属 App 的页面
@@ -393,6 +382,16 @@ public final class PhoneScreen extends Screen {
         }
     }
 
+    /**
+     * 返回上一层。
+     *
+     * ESC 与导航栏的 ◁ 共用这一套规则——分别实现的话，两条路的层级
+     * 关系迟早会不一致：改了一处忘了另一处，玩家按 ESC 和点 ◁ 会去到
+     * 不同的地方。
+     *
+     * @return 真的退了一层才返回 true；已在主屏返回 false，
+     *         由调用方决定要不要关机（ESC 关，导航栏的 ◁ 不关）
+     */
     private boolean goBackOneLevel() {
         // 相册的单张查看是相册内的一层，先退回缩略图网格
         if (mode == Mode.GALLERY && gallery.backToGrid()) return true;
@@ -475,6 +474,13 @@ public final class PhoneScreen extends Screen {
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
         this.nowMs = System.currentTimeMillis();
         computeLayout();
+
+        // 翻页动画走完就把起点清零。放在这里而不是藏在 slideProgress 里：
+        // 那个方法在渲染和 hover 判定两处被当查询用，让它顺手改状态的话，
+        // "谁先调到它"就成了行为的一部分——这类耦合出问题时极难看出来
+        if (pageSlideStartMs > 0 && nowMs - pageSlideStartMs >= PhoneTheme.PAGE_SLIDE_MS) {
+            pageSlideStartMs = 0;
+        }
 
         renderBackground(g, mouseX, mouseY, partialTick);
 
@@ -592,8 +598,8 @@ public final class PhoneScreen extends Screen {
         // 浮起的那张放最后画，才会盖在别的图标上面而不是被它们盖住。
         // 以鼠标为中心，手指按住哪儿它就在哪儿，不会跟手偏出去半格
         if (floatingApp != null) {
-            int fx = (int) dragLocalX - is / 2;
-            int fy = (int) dragLocalY - is / 2;
+            int fx = (int) dragX - is / 2;
+            int fy = (int) dragY - is / 2;
             floatingApp.renderIcon(g, fx, fy, is, 0);
             drawAppName(g, floatingApp.getDisplayName().getString(), fx, fy, is);
         }
@@ -619,9 +625,9 @@ public final class PhoneScreen extends Screen {
         final int pageSize = pageSize();
 
         int side = 0;
-        if (dragLocalX < phoneLeft + PhoneTheme.PAGE_EDGE_WIDTH) {
+        if (dragX < phoneLeft + PhoneTheme.PAGE_EDGE_WIDTH) {
             side = -1;
-        } else if (dragLocalX > phoneLeft + PhoneTheme.PHONE_WIDTH - PhoneTheme.PAGE_EDGE_WIDTH) {
+        } else if (dragX > phoneLeft + PhoneTheme.PHONE_WIDTH - PhoneTheme.PAGE_EDGE_WIDTH) {
             side = 1;
         }
 
@@ -644,7 +650,7 @@ public final class PhoneScreen extends Screen {
 
             // 页变了，同一个鼠标位置对应的落点也变了——不重算的话，预览还停在
             // 上一页的那一格上
-            dragTargetIndex = dropIndexAt(dragLocalX, dragLocalY, count);
+            dragTargetIndex = dropIndexAt(dragX, dragY, count);
         }
     }
 
@@ -724,13 +730,11 @@ public final class PhoneScreen extends Screen {
      * 看着像幻灯片切换。
      */
     private float slideProgress() {
-        if (pageSlideStartMs <= 0) return 1f;
+        if (pageSlideStartMs <= 0 || PhoneTheme.PAGE_SLIDE_MS <= 0) return 1f;
 
         long elapsed = nowMs - pageSlideStartMs;
-        if (elapsed >= PhoneTheme.PAGE_SLIDE_MS || PhoneTheme.PAGE_SLIDE_MS <= 0) {
-            pageSlideStartMs = 0;
-            return 1f;
-        }
+        if (elapsed >= PhoneTheme.PAGE_SLIDE_MS) return 1f;
+
         float t = (float) elapsed / PhoneTheme.PAGE_SLIDE_MS;
         return 1f - (1f - t) * (1f - t);
     }
@@ -1141,16 +1145,23 @@ public final class PhoneScreen extends Screen {
     // ============================================================
 
     /**
-     * 把屏幕坐标逆变换回未缩放的手机局部坐标。
-     * render() 在开场动画期间以手机中心为原点做了缩放，
-     * 因此命中判定必须应用同样的逆变换，否则动画期间点击位置会偏。
+     * 撤掉开场动画的缩放，回到界面元素真正被摆在哪儿的那套坐标。
+     *
+     * render() 在开场动画期间以手机中心为原点缩放了整个画面，因此命中判定
+     * 必须做同样的逆变换，否则那 150 毫秒里点击位置会偏。
+     *
+     * 【结果仍然是屏幕坐标】，原点没有挪到手机左上角——所以它算出来的值可以
+     * 直接和 phoneLeft、gridStartY、dotsTop() 这些比。此前这两个方法叫
+     * toLocalX/toLocalY，存下来的字段也叫 pressX/dragX，"Local"
+     * 让人以为是相对手机的局部坐标，读代码时会觉得
+     * "dragX < phoneLeft + ..." 这种比较是个 bug——其实是名字在骗人。
      */
-    private double toLocalX(double mx) {
+    private double unscaledX(double mx) {
         int cx = phoneLeft + PhoneTheme.PHONE_WIDTH / 2;
         return (mx - cx) / getAnimationScale() + cx;
     }
 
-    private double toLocalY(double my) {
+    private double unscaledY(double my) {
         int cy = phoneTop + PhoneTheme.PHONE_HEIGHT / 2;
         return (my - cy) / getAnimationScale() + cy;
     }
@@ -1160,8 +1171,8 @@ public final class PhoneScreen extends Screen {
      * 矩形与 renderPhoneFrame() 绘制边框所用坐标一致，保证判定与视觉对齐。
      */
     private boolean isInsidePhone(double mx, double my) {
-        double lx = toLocalX(mx);
-        double ly = toLocalY(my);
+        double lx = unscaledX(mx);
+        double ly = unscaledY(my);
         int fl = phoneLeft - PhoneTheme.PHONE_BORDER;
         int ft = phoneTop - PhoneTheme.PHONE_BORDER;
         return lx >= fl && lx < fl + PhoneTheme.PHONE_TOTAL_WIDTH
@@ -1173,11 +1184,11 @@ public final class PhoneScreen extends Screen {
     // ============================================================
 
     private void updateAppHover(int mx, int my) {
-        float s = getAnimationScale();
-        int cx = phoneLeft + PhoneTheme.PHONE_WIDTH / 2;
-        int cy = phoneTop + PhoneTheme.PHONE_HEIGHT / 2;
-        int lx = (int)((mx - cx) / s + cx);
-        int ly = (int)((my - cy) / s + cy);
+        // 走 unscaledX/Y 而不是把那两行算式再抄一遍：抄的那份此前已经和
+        // 正主分开住了，改动画曲线时只会有一个人被想起来，而结果是
+        // "开机那一瞬间点图标点不准"——短到没人抓得住
+        int lx = (int) unscaledX(mx);
+        int ly = (int) unscaledY(my);
 
         final int count = PhoneScreenRegistry.getAppCount();
         final int is = PhoneTheme.APP_ICON_SIZE;
@@ -1253,7 +1264,7 @@ public final class PhoneScreen extends Screen {
             case MAIN -> {
                 // 页码点抢在图标之前：它在图标区【下方】，两者不重叠，
                 // 但先判它一次就不必担心将来图标区长高了压过来
-                int dot = hitTestPageDot(toLocalX(mx), toLocalY(my), pageCount());
+                int dot = hitTestPageDot(unscaledX(mx), unscaledY(my), pageCount());
                 if (dot >= 0) {
                     homePage = dot;
                     hoveredAppIndex = -1;
@@ -1263,8 +1274,8 @@ public final class PhoneScreen extends Screen {
                     // 先记着是哪一格，别急着开——这一下可能是要把它拖走。
                     // 到底算点开还是算挪位置，由 mouseReleased 定
                     pressedAppIndex = hoveredAppIndex;
-                    pressLocalX = toLocalX(mx);
-                    pressLocalY = toLocalY(my);
+                    pressX = unscaledX(mx);
+                    pressY = unscaledY(my);
                     dragTargetIndex = pressedAppIndex;
                     draggingApp = false;
                     yield true;
@@ -1272,8 +1283,8 @@ public final class PhoneScreen extends Screen {
                 // 机身内的空白：记下来，横着拖它就是翻页
                 if (isInsidePhone(mx, my)) {
                     pressedBlank = true;
-                    pressLocalX = toLocalX(mx);
-                    pressLocalY = toLocalY(my);
+                    pressX = unscaledX(mx);
+                    pressY = unscaledY(my);
                     yield true;
                 }
                 // 只有点在手机机身外才关闭
@@ -1407,33 +1418,33 @@ public final class PhoneScreen extends Screen {
     public boolean mouseDragged(double mx, double my, int button, double dx, double dy) {
         // 主屏拖动排序。没过阈值之前什么都不做，好让这一下还有机会被当成点击
         if (mode == Mode.MAIN && button == 0 && pressedAppIndex >= 0) {
-            double lx = toLocalX(mx);
-            double ly = toLocalY(my);
+            double lx = unscaledX(mx);
+            double ly = unscaledY(my);
 
             if (!draggingApp) {
-                if (Math.abs(lx - pressLocalX) < PhoneTheme.APP_DRAG_THRESHOLD
-                        && Math.abs(ly - pressLocalY) < PhoneTheme.APP_DRAG_THRESHOLD) {
+                if (Math.abs(lx - pressX) < PhoneTheme.APP_DRAG_THRESHOLD
+                        && Math.abs(ly - pressY) < PhoneTheme.APP_DRAG_THRESHOLD) {
                     return true;
                 }
                 draggingApp = true;
             }
 
-            dragLocalX = lx;
-            dragLocalY = ly;
+            dragX = lx;
+            dragY = ly;
             dragTargetIndex = dropIndexAt(lx, ly, PhoneScreenRegistry.getAppCount());
             return true;
         }
 
         // 空白处横着拖 = 翻页。真手机的划屏，鼠标上的等价物
         if (mode == Mode.MAIN && button == 0 && pressedBlank) {
-            double lx = toLocalX(mx);
-            double moved = lx - pressLocalX;
+            double lx = unscaledX(mx);
+            double moved = lx - pressX;
             if (Math.abs(moved) >= PhoneTheme.PAGE_SWIPE_THRESHOLD) {
                 // 往左划＝内容跟着往左走＝看后面那一页
                 goToPage(homePage + (moved < 0 ? 1 : -1));
                 // 不管翻没翻成都重设起点：翻成了才能接着往下划连翻两页，
                 // 没翻成（到头了）也得重设，否则按住不动会每帧重复触发
-                pressLocalX = lx;
+                pressX = lx;
             }
             return true;
         }

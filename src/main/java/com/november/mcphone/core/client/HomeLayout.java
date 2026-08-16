@@ -71,7 +71,8 @@ public final class HomeLayout {
      * 越界一律夹到最近的合法格子，而不是返回"没有"：拖到图标区外面松手时，最符合
      * 直觉的结果是落在最近的那一格，而不是弹回原位当无事发生。
      *
-     * @param lx 手机局部坐标（已做过开场动画的逆变换）
+     * @param lx 屏幕坐标，已撤掉开场动画的缩放（见 PhoneScreen.unscaledX）。
+     *           与 gridX/gridY 同一套坐标，直接相减即可
      */
     public static int slotAt(double lx, double ly, int gridX, int gridY,
                              int cellW, int cellH, int cols, int rows) {

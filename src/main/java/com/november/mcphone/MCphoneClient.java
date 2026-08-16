@@ -11,6 +11,7 @@ import com.november.mcphone.feature.chat.client.ChatNotifier;
 import com.november.mcphone.feature.chat.net.ChatClientCache;
 import com.november.mcphone.feature.notes.net.NotesClientCache;
 import com.november.mcphone.feature.settings.client.WallpaperStore;
+import com.november.mcphone.feature.store.net.StoreClientCache;
 import net.minecraft.client.Minecraft;
 import net.minecraft.server.packs.resources.ResourceManagerReloadListener;
 import net.neoforged.api.distmarker.Dist;
@@ -51,7 +52,7 @@ public class MCphoneClient {
                 (ClientPlayerNetworkEvent.LoggingOut event) -> {
                     ChatClientCache.clear();
                     NotesClientCache.clear();
-                    com.november.mcphone.feature.store.net.StoreClientCache.clear();
+                    StoreClientCache.clear();
                     // 安装状态是按存档存的，退出时必须一并卸下。留着的话，
                     // 下一个存档在自己的状态读进来之前会先显示上一个的主屏，
                     // 玩家若恰好这时点了什么，还会被写进新存档的文件里
@@ -65,12 +66,12 @@ public class MCphoneClient {
                     PhoneScreenRegistry.loadForCurrentWorld();
                     // 顺手要一份购买记录：没买过的付费 App 要从主屏摘掉，
                     // 而那要等这份记录到了才知道
-                    com.november.mcphone.feature.store.net.StoreClientCache.request();
+                    StoreClientCache.request();
                 });
 
         // 购买记录一到就核对主屏。走监听器而不是让网络层直接调注册表：
         // 那个类现在含客户端类型，网络层两端都会加载，碰不得
-        com.november.mcphone.feature.store.net.StoreClientCache.setSyncListener(
+        StoreClientCache.setSyncListener(
                 PhoneScreenRegistry::enforcePurchases);
 
         // 收到消息时弹通知。装在这里而不是让网络层直接调 ChatNotifier：
