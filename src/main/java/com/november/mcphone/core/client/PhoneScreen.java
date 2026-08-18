@@ -201,7 +201,9 @@ public final class PhoneScreen extends Screen {
         // 联动页进出都要动作：进入时重扫一遍（模组装没装只在这时问一次就够），
         // 离开时清掉页码，下次进来从第一页开始
         // 离开附属页面就把它关掉：它可能占着资源，而玩家已经走了。
-        // onClose() 一定会被调到——返回键、ESC、关手机、断线，全从 navigateTo 过
+        // 这里只管页面之间的切换（◁、点别的 App）。ESC 关机、被别的界面顶掉、
+        // 断线这几条根本不经过 navigateTo，它们由 removed() 兜住——两处合起来
+        // 才凑齐 IPhonePage.onClose() 那句"一定会被调用"
         if (this.mode == Mode.ADDON_PAGE && target != Mode.ADDON_PAGE) closeAddonPage();
 
         if (this.mode == Mode.COMPANION_APPS) companionApps.reset();

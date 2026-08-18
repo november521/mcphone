@@ -199,7 +199,7 @@ public final class DeviceNameEditor {
      * @return true 表示按键已被消费；needsBack() 另行判断是否要退出
      */
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        // 回车＝保存。ESC 不在这里处理，交给 PhoneScreen 当作取消返回
+        // 回车＝保存。ESC 不在这里处理，交给 PhoneScreen 当作"取消并关机"
         if (keyCode == 257 || keyCode == 335) {   // Enter / 小键盘 Enter
             save();
             backRequested = true;
