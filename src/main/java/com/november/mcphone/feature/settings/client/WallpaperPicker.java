@@ -5,6 +5,7 @@ import com.november.mcphone.core.client.PhoneTheme;
 import com.november.mcphone.feature.settings.net.SetWallpaperPacket;
 import com.november.mcphone.core.client.GuiUtil;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.neoforged.neoforge.network.PacketDistributor;
 
@@ -46,7 +47,8 @@ public final class WallpaperPicker {
         int contentW = screenW - PAD_X * 2;
 
         // ---- 标题 ----
-        g.drawString(font, "更换壁纸", contentX, contentY, FontPalette.title(), true);
+        g.drawString(font, Component.translatable("mcphone.gui.wallpaper_title").getString(),
+                contentX, contentY, FontPalette.title(), true);
         contentY += font.lineHeight + 4;
 
         int hovered = -1;
@@ -57,7 +59,8 @@ public final class WallpaperPicker {
             hovered = -2;
             g.fill(contentX, btnY, contentX + contentW, btnY + font.lineHeight + 4, PhoneTheme.COLOR_HOVER_STRONG);
         }
-        g.drawString(font, "恢复默认背景", contentX + 2, btnY + 2, FontPalette.body(), false);
+        g.drawString(font, Component.translatable("mcphone.gui.wallpaper_default").getString(),
+                contentX + 2, btnY + 2, FontPalette.body(), false);
         contentY = btnY + font.lineHeight + 6;
 
         // ---- 分割线 ----
@@ -66,10 +69,14 @@ public final class WallpaperPicker {
 
         // ---- 无壁纸提示 ----
         if (wallpapers.isEmpty()) {
-            g.drawString(font, "暂无壁纸", contentX, contentY, FontPalette.subtle(), false);
-            g.drawString(font, "放入PNG到", contentX, contentY + font.lineHeight + 2, FontPalette.subtle(), false);
-            g.drawString(font, "config/mcphone/", contentX, contentY + (font.lineHeight + 2) * 2, FontPalette.subtle(), false);
-            g.drawString(font, "wallpapers/", contentX, contentY + (font.lineHeight + 2) * 3, FontPalette.subtle(), false);
+            g.drawString(font, Component.translatable("mcphone.gui.wallpaper_empty").getString(),
+                    contentX, contentY, FontPalette.subtle(), false);
+            g.drawString(font, Component.translatable("mcphone.gui.wallpaper_hint1").getString(),
+                    contentX, contentY + font.lineHeight + 2, FontPalette.subtle(), false);
+            g.drawString(font, Component.translatable("mcphone.gui.wallpaper_hint2").getString(),
+                    contentX, contentY + (font.lineHeight + 2) * 2, FontPalette.subtle(), false);
+            g.drawString(font, Component.translatable("mcphone.gui.wallpaper_hint3").getString(),
+                    contentX, contentY + (font.lineHeight + 2) * 3, FontPalette.subtle(), false);
             this.hoveredIdx = -1;
             return;
         }
