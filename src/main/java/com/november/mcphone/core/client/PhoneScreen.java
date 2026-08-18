@@ -395,12 +395,11 @@ public final class PhoneScreen extends Screen {
     /**
      * 返回上一层。
      *
-     * ESC 与导航栏的 ◁ 共用这一套规则——分别实现的话，两条路的层级
-     * 关系迟早会不一致：改了一处忘了另一处，玩家按 ESC 和点 ◁ 会去到
-     * 不同的地方。
+     * 只有导航栏的 ◁ 走这里。ESC 从 1.4.2 起不再退层，它一下直接关机，
+     * 见 {@link #keyPressed}。
      *
-     * @return 真的退了一层才返回 true；已在主屏返回 false，
-     *         由调用方决定要不要关机（ESC 关，导航栏的 ◁ 不关）
+     * @return 真的退了一层才返回 true；已在主屏返回 false。
+     *         ◁ 不看这个返回值——主屏上按它什么都不做
      */
     private boolean goBackOneLevel() {
         // 相册的单张查看是相册内的一层，先退回缩略图网格
@@ -1276,7 +1275,7 @@ public final class PhoneScreen extends Screen {
         // 就得处处重复。各界面的内容都画在导航栏上方，不会争抢同一块区域
         switch (PhoneChassis.hitTestNavBar(mx, my, phoneLeft, phoneTop)) {
             case BACK -> {
-                // 主屏上按返回不关机——真实手机就是这样，关机走 ESC 或点机身外
+                // 主屏上按返回不关机——真实手机就是这样。关机走 ESC 或点机身外
                 goBackOneLevel();
                 return true;
             }
@@ -1555,8 +1554,10 @@ public final class PhoneScreen extends Screen {
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
         if (keyCode == 256) { // ESC
-            // 已在主屏时 goBackOneLevel 返回 false，此时 ESC 关机
-            if (!goBackOneLevel()) onClose();
+            // 不管开到第几层，ESC 一下就关机——它在原版里的意思始终是
+            // "把这个界面收掉"，玩家不会指望按它是往回走一格。
+            // 退一层交给导航栏的 ◁，两者分工，不再共用 goBackOneLevel
+            onClose();
             return true;
         }
         // 带输入框的界面必须抢在背包键判定之前，且无论输入框是否消费都要
