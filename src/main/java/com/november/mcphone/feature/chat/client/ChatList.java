@@ -38,7 +38,7 @@ import java.util.UUID;
  * 一行里有两个点击区
  * ============================================================
  *
- * 点这一行的任何地方＝进会话；点名字后面那个小图标＝传送到对方身边
+ * 点这一行的任何地方＝进会话；点右下角那个小图标＝传送到对方身边
  * （仅限在线的人）。后者的点击区整个落在前者里面，所以判定顺序反不得：
  * 先问图标，再问行。反过来的话，点图标会连带把会话也打开。
  *
@@ -53,9 +53,11 @@ import java.util.UUID;
  * 1.4.9 试过改成点头像，版面成本是零，但误点的代价太大——头像那一块同时
  * 是"这是谁"和"点我传送"两个意思，而点错的后果是人真的被传走，撤不回来。
  *
- * 现在是 8×8 的图标：约 10px，比文字省掉三分之二，名字基本不受影响；
- * 它又是一块专门的、只有一个意思的区域，误点不了。让路规则跟着删了，
- * 那点宽度差已经不值得为它写一条规则。
+ * 现在是 7×7 的图标，而且放在行的【右下角】——名字那一行一个像素都不用让：
+ * 右上角归未读数与时间，右下角在这个两行版式里本来就是空的。掏的是第二行
+ * 消息预览的宽度，那是三样东西里最不要紧的一样。
+ *
+ * 它又是一块专门的、只有一个意思的区域，误点不了。让路规则跟着删了。
  */
 public final class ChatList {
 
@@ -74,12 +76,14 @@ public final class ChatList {
     /**
      * 传送图标的边长。
      *
-     * 8＝行内文字高度（9px）能容下的最大整数尺寸。改这个数就要连贴图一起
-     * 改：这里不做平滑缩放，尺寸对不上会隔行抽像素。
+     * 7＝与旁边的字目测等高：原版字体行高 9、字形格 8，而大写字母的实际
+     * 笔画高度就是 7。取 8 或 9 的话图标会比同一行的字明显高出一截。
+     *
+     * 改这个数就要连贴图一起改：这里不做平滑缩放，尺寸对不上会隔行抽像素。
      */
-    private static final int TP_ICON_SIZE = 8;
+    private static final int TP_ICON_SIZE = 7;
 
-    /** 传送图标与右侧未读数／时间之间的空隙 */
+    /** 传送图标与它左边那行消息预览之间的空隙 */
     private static final int TP_GAP = 3;
 
     /**
@@ -257,24 +261,32 @@ public final class ChatList {
         String right = c.unread() > 0 ? unreadLabel(c.unread()) : GuiUtil.formatTime(c.lastTime());
         int rightW = right.isEmpty() ? 0 : font.width(right) + (c.unread() > 0 ? 4 : 0);
 
-        // 传送图标只给在线的人：离线传不过去，画一个点了没反应的按钮
-        // 比不画更让人困惑
-        int tpW = c.online() ? TP_ICON_SIZE + TP_GAP : 0;
-
+        // 名字占满这一行的剩余宽度：传送图标在第二行的右下角，不与它争
         int nameX = x + AVATAR_SIZE + AVATAR_GAP;
-        int nameMaxW = w - (nameX - x) - rightW - tpW - 4;
+        int nameMaxW = w - (nameX - x) - rightW - 4;
         String name = GuiUtil.truncate(font, c.name(), nameMaxW);
         g.drawString(font, name, nameX, y, colorName(), false);
 
+        // ---- 传送图标：行的右下角，只给在线的人 ----
+        // 离线传不过去，画一个点了没反应的按钮比不画更让人困惑。
+        //
+        // 位置先算出来、图最后再画：第二行的预览文字要按它让出的宽度截断，
+        // 而悬停与否又决定那行写的是预览还是提示，顺序绕不开
+        int secondLineY = y + font.lineHeight + 1;
+        int tpW = 0;
+        int tpX = 0;
+        int tpY = 0;
         boolean tpHovered = false;
         if (c.online()) {
-            int tpX = x + w - rightW - tpW;
-            // 图标在这一行文字里居中：字高 9、图标 8，差的那一像素给上面
-            int tpY = y + (font.lineHeight - TP_ICON_SIZE) / 2;
+            // 往里缩 TP_HIT_PAD，不贴着行的右边缘：悬停高亮铺的是【点击区】，
+            // 贴边的话那块高亮会比整行的高亮宽出 3px，凸在外面很显眼
+            tpW = TP_ICON_SIZE + TP_HIT_PAD + TP_GAP;
+            tpX = x + w - TP_ICON_SIZE - TP_HIT_PAD;
+            // 与第二行的字目测对齐：两者都是 7 高，直接同一条基线
+            tpY = secondLineY + (font.lineHeight - TP_ICON_SIZE) / 2;
             tpHovered = GuiUtil.hit(mouseX, mouseY,
                     tpX - TP_HIT_PAD, tpY - TP_HIT_PAD,
                     TP_ICON_SIZE + TP_HIT_PAD * 2, TP_ICON_SIZE + TP_HIT_PAD * 2);
-            renderTeleportIcon(g, font, tpX, tpY, tpHovered);
         }
 
         if (!right.isEmpty()) {
@@ -291,7 +303,7 @@ public final class ChatList {
         }
 
         // ---- 第二行：最后一条消息预览，停在传送图标上时改说传送 ----
-        // 8 像素的图标画什么都得让人猜，得有个地方把话说明白。借这一行说，
+        // 7 像素的图标画什么都得让人猜，得有个地方把话说明白。借这一行说，
         // 是因为它本来就在，不必为提示另外挤出空间；预览晚一眼看也不打紧
         String preview;
         int previewColor;
@@ -304,8 +316,10 @@ public final class ChatList {
                     : c.lastText();
             previewColor = colorPreview();
         }
-        g.drawString(font, GuiUtil.truncate(font, preview, w - (nameX - x)),
-                nameX, y + font.lineHeight + 1, previewColor, false);
+        g.drawString(font, GuiUtil.truncate(font, preview, w - (nameX - x) - tpW),
+                nameX, secondLineY, previewColor, false);
+
+        if (c.online()) renderTeleportIcon(g, font, tpX, tpY, tpHovered);
 
         return tpHovered;
     }
