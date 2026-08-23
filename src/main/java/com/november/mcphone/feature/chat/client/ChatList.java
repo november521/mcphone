@@ -38,9 +38,17 @@ import java.util.UUID;
  * 一行里有两个点击区
  * ============================================================
  *
- * 点这一行的任何地方＝进会话；点名字后面那个「传送」＝传到对方身边。
- * 后者的点击区整个落在前者里面，所以判定顺序反不得：先问传送，再问行。
- * 反过来的话，点传送会连带把会话也打开。
+ * 点这一行的任何地方＝进会话；点【头像】＝传送到对方身边（仅限在线的人）。
+ * 后者的点击区整个落在前者里面，所以判定顺序反不得：先问头像，再问行。
+ * 反过来的话，点头像会连带把会话也打开。
+ *
+ * 1.4.5 到 1.4.8 之间传送是名字后面一个「→传送」文字按钮。120px 宽的屏幕
+ * 上它太贵了：中文两个字加箭头要走掉近三成行宽，逼得名字截到认不出人，
+ * 还得专门写一条"挤不下就砍掉时间戳"的让路规则。改点头像之后那些全没了
+ * ——头像本来就在那儿占着位置，一个像素都不用多给。
+ *
+ * 代价是"点头像能传送"猜不到，所以给了两个提示：停上去时头像外面亮一圈，
+ * 同时第二行的消息预览临时换成一句话。
  */
 public final class ChatList {
 
@@ -56,16 +64,8 @@ public final class ChatList {
     /** 头像与右侧文字之间的空隙 */
     private static final int AVATAR_GAP = 3;
 
-    /** 传送按钮与右侧未读数／时间之间的空隙 */
-    private static final int TP_GAP = 3;
-
-    /**
-     * 名字至少要占这么宽，不然这一行就没法分辨是谁了。
-     *
-     * 36px 大约是 6 个拉丁字符或 3 个汉字——短是短，好歹还能认人。
-     * 详见下面 renderRow 里为它让路的那段。
-     */
-    private static final int MIN_NAME_W = 36;
+    /** 头像悬停时，外面那一圈提示比头像每边宽出多少 */
+    private static final int RING_PAD = 2;
 
     // ---- 颜色 ----
     private static int colorName() { return FontPalette.title(); }
@@ -85,7 +85,7 @@ public final class ChatList {
     /** 待消费的"打开加联系人界面"请求 */
     private boolean pendingAddContact;
 
-    /** 鼠标停在哪一行的传送按钮上，-1 表示没有 */
+    /** 鼠标停在哪一行的头像上（即"点了就传送"），-1 表示没有 */
     private int teleportHoveredIdx = -1;
 
     /** 待消费的"把手机关掉"请求 */
@@ -229,51 +229,30 @@ public final class ChatList {
         // ---- 头像：竖跨两行文字，在行内居中 ----
         // 在线状态点挂在头像右下角，比单独占一列省地方，也更像真手机
         int avatarY = y + (rowHeight(font) - AVATAR_SIZE) / 2;
+
+        // 头像就是传送键，但只对在线的人算数：离线传不过去，那时候它
+        // 仍然只是一张头像，点了跟点这一行别处一样进会话
+        // 点击区连那一圈描边一起算：亮起来的是多大一块，点得中的就该是
+        // 多大一块，差 2px 会让人觉得"明明亮着却点不着"
+        boolean tpHovered = c.online() && GuiUtil.hit(mouseX, mouseY,
+                x - RING_PAD, avatarY - RING_PAD,
+                AVATAR_SIZE + RING_PAD * 2, AVATAR_SIZE + RING_PAD * 2);
+
+        // 描边画在头像【底下】，四边各露 2px。先画圈再画脸，顺序反了
+        // 兜底色那一圈会盖住头像边缘的像素
+        if (tpHovered) renderTeleportRing(g, x, avatarY);
+
         PlayerAvatar.drawWithStatus(g, c.id(), x, avatarY, AVATAR_SIZE, c.online());
 
         // 右侧先算宽度，名字才知道能占多少
         String right = c.unread() > 0 ? unreadLabel(c.unread()) : GuiUtil.formatTime(c.lastTime());
         int rightW = right.isEmpty() ? 0 : font.width(right) + (c.unread() > 0 ? 4 : 0);
 
-        // 传送按钮只画给在线的人：离线传不过去，画一个点了没反应的按钮
-        // 比不画更让人困惑。名字要先减掉它占的宽度，否则长名字会盖上去
-        String tp = c.online()
-                ? Component.translatable("mcphone.chat.teleport_action").getString()
-                : "";
-        int tpTextW = tp.isEmpty() ? 0 : font.width(tp);
-        int tpW = tp.isEmpty() ? 0 : tpTextW + TP_GAP;
-
+        // 名字拿回了整条剩余宽度：传送不再占版面，只减右侧的未读数／时间
         int nameX = x + AVATAR_SIZE + AVATAR_GAP;
-        int nameMaxW = w - (nameX - x) - rightW - tpW - 4;
-
-        // 挤不下时先牺牲时间戳，不牺牲名字。
-        //
-        // 屏幕宽度是死的 120px，而「传送」两个汉字比英文的 TP 宽出一截——
-        // 到底宽多少取决于原版字体的中日韩字形步进，那不是我们能定的数。
-        // 所以这里不去赌那个数字，只保证名字有个下限：真挤到底了，就把
-        // 时间戳去掉。三样东西里它最不重要——列表本来按时间排序，第二行
-        // 还有内容预览，而名字是唯一能分辨"这是谁"的东西。
-        //
-        // 未读数不让路：那是玩家打开这个 App 真正在找的东西。
-        if (nameMaxW < MIN_NAME_W && c.unread() == 0 && !right.isEmpty()) {
-            right = "";
-            rightW = 0;
-            nameMaxW = w - (nameX - x) - tpW - 4;
-        }
-
+        int nameMaxW = w - (nameX - x) - rightW - 4;
         String name = GuiUtil.truncate(font, c.name(), nameMaxW);
         g.drawString(font, name, nameX, y, colorName(), false);
-
-        boolean tpHovered = false;
-        if (!tp.isEmpty()) {
-            int tpX = x + w - rightW - tpW;
-            // 点击区四边各放宽 3px，与标题栏那个"+"同一套做法：屏幕只有
-            // 120px 宽，按字宽严丝合缝地判定的话很难点中
-            tpHovered = mouseX >= tpX - 3 && mouseX <= tpX + tpTextW + 3
-                     && mouseY >= y - 1 && mouseY <= y + font.lineHeight + 1;
-            g.drawString(font, tp, tpX, y,
-                    tpHovered ? FontPalette.title() : FontPalette.link(), false);
-        }
 
         if (!right.isEmpty()) {
             int rx = x + w - rightW;
@@ -288,12 +267,22 @@ public final class ChatList {
             }
         }
 
-        // ---- 第二行：最后一条消息预览 ----
-        String preview = c.lastText().isEmpty()
-                ? Component.translatable("mcphone.chat.no_message").getString()
-                : c.lastText();
+        // ---- 第二行：最后一条消息预览，停在头像上时改说传送 ----
+        // "点头像能传送"是猜不到的，得有个地方说出来。借这一行说，
+        // 是因为它本来就在，不必为提示另外挤出空间；预览晚一眼看也不打紧
+        String preview;
+        int previewColor;
+        if (tpHovered) {
+            preview = Component.translatable("mcphone.chat.teleport_hint").getString();
+            previewColor = FontPalette.link();
+        } else {
+            preview = c.lastText().isEmpty()
+                    ? Component.translatable("mcphone.chat.no_message").getString()
+                    : c.lastText();
+            previewColor = colorPreview();
+        }
         g.drawString(font, GuiUtil.truncate(font, preview, w - (nameX - x)),
-                nameX, y + font.lineHeight + 1, colorPreview(), false);
+                nameX, y + font.lineHeight + 1, previewColor, false);
 
         return tpHovered;
     }
@@ -312,8 +301,8 @@ public final class ChatList {
 
         List<ConversationSummary> list = ChatClientCache.getConversations();
 
-        // 传送必须抢在"点进会话"之前：它的点击区整个落在那一行里面，
-        // 后判的话点传送会连带把会话也打开
+        // 传送必须抢在"点进会话"之前：头像的点击区整个落在那一行里面，
+        // 后判的话点头像会连带把会话也打开
         if (teleportHoveredIdx >= 0 && teleportHoveredIdx < list.size()) {
             // 只发包，不改本地状态：能不能传全由服务端说了算，
             // 与加好友、解除好友同一条规矩
@@ -345,6 +334,26 @@ public final class ChatList {
     // ============================================================
     //  内部
     // ============================================================
+
+    /**
+     * 头像外面那一圈"点它就传过去"。
+     *
+     * 贴图优先：资源包可以整张换掉（见 PhoneSkin.Element.CHAT_TELEPORT_RING）。
+     * 没有贴图时画四条 1px 的边，不填中间——填了会把头像盖住。
+     */
+    private static void renderTeleportRing(GuiGraphics g, int x, int avatarY) {
+        int x0 = x - RING_PAD;
+        int y0 = avatarY - RING_PAD;
+        int size = AVATAR_SIZE + RING_PAD * 2;
+
+        if (PhoneSkin.draw(g, PhoneSkin.Element.CHAT_TELEPORT_RING, x0, y0, size, size)) return;
+
+        int color = PhoneTheme.COLOR_TELEPORT_RING;
+        g.fill(x0, y0, x0 + size, y0 + 1, color);                    // 上
+        g.fill(x0, y0 + size - 1, x0 + size, y0 + size, color);      // 下
+        g.fill(x0, y0, x0 + 1, y0 + size, color);                    // 左
+        g.fill(x0 + size - 1, y0, x0 + size, y0 + size, color);      // 右
+    }
 
     /** 到点就再拉一次会话摘要 */
     private void maybeRefresh() {

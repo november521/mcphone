@@ -261,6 +261,14 @@ public final class PhoneTheme {
     /** 未读条数角标的底。兜底色，见 PhoneSkin.Element.UNREAD_BADGE */
     public static final int COLOR_UNREAD_BADGE = 0xFFDD3333;
 
+    /**
+     * 鼠标停在在线好友头像上时，头像外那一圈提示——意思是"点它就传过去"。
+     *
+     * 兜底色，见 PhoneSkin.Element.CHAT_TELEPORT_RING。用蓝而不用绿：
+     * 绿色在这一格已经有主了（右下角那个在线点），两个绿挨着分不出谁是谁。
+     */
+    public static final int COLOR_TELEPORT_RING = 0xFF88CCFF;
+
     // -- 通知 --
     // 兜底色，见 PhoneSkin.Element.TOAST_BG
 

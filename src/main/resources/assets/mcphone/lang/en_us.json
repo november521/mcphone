@@ -58,7 +58,7 @@
   "mcphone.chat.online_empty": "No other players online",
   "mcphone.chat.add_action": "+ Add",
   "mcphone.chat.remove_action": "✕ Unfriend",
-  "mcphone.chat.teleport_action": "→TP",
+  "mcphone.chat.teleport_hint": "Click the head to teleport",
   "mcphone.chat.truncated": "Showing %s of %s players",
   "mcphone.chat.request_pending": "Pending",
   "mcphone.chat.accept_action": "✔ Accept",
