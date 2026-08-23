@@ -119,17 +119,19 @@ public final class PhoneSkin {
         CHAT_INPUT_BAR("chat/input_bar", "chat_input_bar"),
 
         /**
-         * 鼠标停在在线好友头像上时，头像外那一圈"点它就传送过去"的提示。
-         * 建议 20×20（头像 16 加外面一圈 2）。
+         * 会话列表里每个在线好友名字后面那个"传送到他身边"的小图标。建议 8×8。
          *
-         * 整张画在头像【底下】，四边各露出 2px，所以中间留空或半透明都行——
-         * 中间画满的话会把头像盖住。没有贴图时用
-         * {@link PhoneTheme#COLOR_TELEPORT_RING} 画一圈 1px 描边。
+         * 8 是行内文字的高度（9px）能容下的最大整数尺寸——再大就撑破那一行，
+         * 再小则认不出画的是什么。贴图请按【实际绘制尺寸】画：这里不做平滑
+         * 缩放，16×16 画进 8×8 的框会被隔行抽掉一半像素。
          *
-         * 这一项 1.4.9 才有，老路径下从来不存在 chat_teleport_ring.png——
-         * 那个参数只是构造器的形式要求，与 HOME_DROP_SLOT 同理。
+         * 没有贴图时画一个 → 字符，与导航栏三个键缺图时画 ◁ ○ □ 同一套做法：
+         * 兜底也要能看懂是什么，不能只剩一个色块。
+         *
+         * 这一项 1.4.10 才有，老路径下从来不存在 chat_teleport.png——那个参数
+         * 只是构造器的形式要求，与 HOME_DROP_SLOT 同理。
          */
-        CHAT_TELEPORT_RING("chat/teleport_ring", "chat_teleport_ring"),
+        CHAT_TELEPORT("chat/teleport", "chat_teleport"),
 
         /**
          * 收到消息时右上角弹出的通知底。建议 160×32。
