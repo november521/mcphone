@@ -1405,6 +1405,12 @@ public final class PhoneScreen extends Screen {
             }
             case CHAT -> {
                 chatList.mouseClicked(mx, my, button);
+                // 点了传送就关机：人已经在几百格外，还举着手机的话看不见
+                // 自己落在哪。包由列表自己发了，这里只管把界面收掉
+                if (chatList.consumeCloseRequest()) {
+                    onClose();
+                    yield true;
+                }
                 // 会话列表只提出请求，由这里决定去哪个界面——
                 // 组件不该知道 PhoneScreen 的导航结构
                 UUID open = chatList.consumeOpenRequest();

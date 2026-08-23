@@ -7,6 +7,7 @@ import com.november.mcphone.core.client.PlayerAvatar;
 import com.november.mcphone.feature.chat.net.ChatClientCache;
 import com.november.mcphone.feature.chat.net.ConversationSummary;
 import com.november.mcphone.feature.chat.net.RequestConversationsPacket;
+import com.november.mcphone.feature.chat.net.TeleportToFriendPacket;
 import com.november.mcphone.core.client.GuiUtil;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
@@ -32,6 +33,14 @@ import java.util.UUID;
  * 期间每隔几秒拉一次摘要。
  *
  * 只在列表可见时才拉——关掉 App 就停，不会在后台空转。
+ *
+ * ============================================================
+ * 一行里有两个点击区
+ * ============================================================
+ *
+ * 点这一行的任何地方＝进会话；点名字后面那个「传送」＝传到对方身边。
+ * 后者的点击区整个落在前者里面，所以判定顺序反不得：先问传送，再问行。
+ * 反过来的话，点传送会连带把会话也打开。
  */
 public final class ChatList {
 
@@ -46,6 +55,9 @@ public final class ChatList {
 
     /** 头像与右侧文字之间的空隙 */
     private static final int AVATAR_GAP = 3;
+
+    /** 传送按钮与右侧未读数／时间之间的空隙 */
+    private static final int TP_GAP = 3;
 
     // ---- 颜色 ----
     private static int colorName() { return FontPalette.title(); }
@@ -65,6 +77,12 @@ public final class ChatList {
     /** 待消费的"打开加联系人界面"请求 */
     private boolean pendingAddContact;
 
+    /** 鼠标停在哪一行的传送按钮上，-1 表示没有 */
+    private int teleportHoveredIdx = -1;
+
+    /** 待消费的"把手机关掉"请求 */
+    private boolean pendingClose;
+
     // ============================================================
     //  生命周期
     // ============================================================
@@ -76,12 +94,15 @@ public final class ChatList {
         lastRequestMs = 0L;      // 置零＝下一帧立即请求
         pendingOpen = null;
         pendingAddContact = false;
+        teleportHoveredIdx = -1;
+        pendingClose = false;
     }
 
     /** 离开会话列表：停止定时刷新 */
     public void close() {
         hoveredIdx = -1;
         addContactHovered = false;
+        teleportHoveredIdx = -1;
     }
 
     /** 取走"打开某个会话"的请求，没有则返回 null */
@@ -95,6 +116,19 @@ public final class ChatList {
     public boolean consumeAddContactRequest() {
         boolean out = pendingAddContact;
         pendingAddContact = false;
+        return out;
+    }
+
+    /**
+     * 取走"把手机关掉"的请求。
+     *
+     * 点了传送就该关机：人已经在几百格外了，还举着手机的话看不见自己落在
+     * 哪、周围有什么。关机只有 PhoneScreen 做得了，本类只提请求——
+     * 与"打开某个会话"同一个道理，组件不该知道外面的导航结构。
+     */
+    public boolean consumeCloseRequest() {
+        boolean out = pendingClose;
+        pendingClose = false;
         return out;
     }
 
@@ -119,6 +153,7 @@ public final class ChatList {
         if (list.isEmpty()) {
             renderEmpty(g, font, x, y, w);
             hoveredIdx = -1;
+            teleportHoveredIdx = -1;
             return;
         }
 
@@ -161,6 +196,7 @@ public final class ChatList {
                             int x, int y, int w, int bottom, int mouseX, int mouseY) {
         final int rowH = rowHeight(font);
         hoveredIdx = -1;
+        teleportHoveredIdx = -1;
 
         for (int i = scrollOffset; i < list.size(); i++) {
             if (y + rowH > bottom) break;
@@ -172,13 +208,16 @@ public final class ChatList {
                 g.fill(x, y, x + w, y + rowH, COLOR_ROW_HOVER);
             }
 
-            renderRow(g, font, c, x, y, w);
+            // 悬停判定与绘制在同一处完成：按钮画在哪儿，点击区就在哪儿，
+            // 两处各算一遍迟早会算出不一样的结果
+            if (renderRow(g, font, c, x, y, w, mouseX, mouseY)) teleportHoveredIdx = i;
             y += rowH;
         }
     }
 
-    private void renderRow(GuiGraphics g, Font font, ConversationSummary c,
-                           int x, int y, int w) {
+    /** @return 鼠标是否停在这一行的传送按钮上 */
+    private boolean renderRow(GuiGraphics g, Font font, ConversationSummary c,
+                              int x, int y, int w, int mouseX, int mouseY) {
         // ---- 头像：竖跨两行文字，在行内居中 ----
         // 在线状态点挂在头像右下角，比单独占一列省地方，也更像真手机
         int avatarY = y + (rowHeight(font) - AVATAR_SIZE) / 2;
@@ -188,10 +227,29 @@ public final class ChatList {
         String right = c.unread() > 0 ? unreadLabel(c.unread()) : GuiUtil.formatTime(c.lastTime());
         int rightW = right.isEmpty() ? 0 : font.width(right) + (c.unread() > 0 ? 4 : 0);
 
+        // 传送按钮只画给在线的人：离线传不过去，画一个点了没反应的按钮
+        // 比不画更让人困惑。名字要先减掉它占的宽度，否则长名字会盖上去
+        String tp = c.online()
+                ? Component.translatable("mcphone.chat.teleport_action").getString()
+                : "";
+        int tpTextW = tp.isEmpty() ? 0 : font.width(tp);
+        int tpW = tp.isEmpty() ? 0 : tpTextW + TP_GAP;
+
         int nameX = x + AVATAR_SIZE + AVATAR_GAP;
-        int nameMaxW = w - (nameX - x) - rightW - 4;
+        int nameMaxW = w - (nameX - x) - rightW - tpW - 4;
         String name = GuiUtil.truncate(font, c.name(), nameMaxW);
         g.drawString(font, name, nameX, y, colorName(), false);
+
+        boolean tpHovered = false;
+        if (!tp.isEmpty()) {
+            int tpX = x + w - rightW - tpW;
+            // 点击区四边各放宽 3px，与标题栏那个"+"同一套做法：屏幕只有
+            // 120px 宽，按字宽严丝合缝地判定的话很难点中
+            tpHovered = mouseX >= tpX - 3 && mouseX <= tpX + tpTextW + 3
+                     && mouseY >= y - 1 && mouseY <= y + font.lineHeight + 1;
+            g.drawString(font, tp, tpX, y,
+                    tpHovered ? FontPalette.title() : FontPalette.link(), false);
+        }
 
         if (!right.isEmpty()) {
             int rx = x + w - rightW;
@@ -212,6 +270,8 @@ public final class ChatList {
                 : c.lastText();
         g.drawString(font, GuiUtil.truncate(font, preview, w - (nameX - x)),
                 nameX, y + font.lineHeight + 1, colorPreview(), false);
+
+        return tpHovered;
     }
 
     // ============================================================
@@ -227,6 +287,18 @@ public final class ChatList {
         }
 
         List<ConversationSummary> list = ChatClientCache.getConversations();
+
+        // 传送必须抢在"点进会话"之前：它的点击区整个落在那一行里面，
+        // 后判的话点传送会连带把会话也打开
+        if (teleportHoveredIdx >= 0 && teleportHoveredIdx < list.size()) {
+            // 只发包，不改本地状态：能不能传全由服务端说了算，
+            // 与加好友、解除好友同一条规矩
+            PacketDistributor.sendToServer(
+                    new TeleportToFriendPacket(list.get(teleportHoveredIdx).id()));
+            pendingClose = true;
+            return true;
+        }
+
         if (hoveredIdx >= 0 && hoveredIdx < list.size()) {
             pendingOpen = list.get(hoveredIdx).id();
             return true;
