@@ -10,10 +10,13 @@ import com.november.mcphone.feature.music.Track;
 import com.november.mcphone.feature.music.client.playback.AudioDecoders;
 import com.november.mcphone.feature.music.client.playback.LocalPlayback;
 import com.november.mcphone.feature.music.client.source.MusicSources;
+import com.november.mcphone.feature.music.net.DiscActionPacket;
 import com.november.mcphone.feature.music.client.source.VanillaDiscSource;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
+import net.minecraft.world.item.ItemStack;
+import net.neoforged.neoforge.network.PacketDistributor;
 
 import java.util.List;
 
@@ -29,6 +32,11 @@ import java.util.List;
  *
  * 底部那一条把当前曲目、进度和四个键都收在 28 像素里，列表照样占满剩下
  * 的地方。这就是现在手机播放器的通行做法。
+ *
+ * 顶上还有一条 18 像素的唱片仓，那是"外放"那一半的入口，与下面的曲库
+ * 各管各的：唱片仓走服务端、周围人听得见、只有播和停；曲库走本地解码、
+ * 只有自己听得见、能暂停能看进度。两者可以同时响，就像真的一边戴耳机
+ * 一边开外放——没必要禁止，玩家自己会关掉一个。
  *
  * ============================================================
  * 界面不持有播放状态
@@ -58,6 +66,12 @@ public final class MusicPage {
     /** 底部播放条的高度：曲名一行 + 进度条 + 按钮一行 */
     private static final int BAR_H = 28;
 
+    /** 唱片仓那一条的高度。16 是物品图标的边长，上下各留 1 */
+    private static final int BAY_H = 18;
+
+    /** 物品图标边长。原版物品贴图就是 16×16，缩放会糊 */
+    private static final int ITEM_SIZE = 16;
+
     /** 播放条上那四个键的边长。9 ＝ 与行内文字目测等高 */
     private static final int BTN = 9;
 
@@ -85,6 +99,10 @@ public final class MusicPage {
     /** 播放条的上沿，滚轮判定要用 */
     private int barTop;
 
+    /** 唱片仓上三个点击区的横坐标与上沿，绘制时算出、点击时用 */
+    private int bayY, discToggleX, discEjectX;
+    private boolean bayEmpty;
+
     /**
      * 音量回显到什么时候为止。
      *
@@ -108,6 +126,10 @@ public final class MusicPage {
         scrollOffset = 0;
         hoveredTrack = null;
         MusicSources.refreshAll();
+
+        // 唱片仓的真值在服务端，进来先要一份。不要的话界面会先显示上一次
+        // 的快照——玩家可能中途把唱片取走过（死亡掉落、别的界面操作）
+        PacketDistributor.sendToServer(new DiscActionPacket(DiscActionPacket.Action.QUERY));
     }
 
     /**
@@ -134,6 +156,7 @@ public final class MusicPage {
         int y = phoneTop + statusH + 4;
 
         y = renderHeader(g, font, x, y, w, mouseX, mouseY);
+        y = renderDiscBay(g, font, x, y, w, mouseX, mouseY);
 
         // 有东西在放才留出底部那一条，否则列表白白少一截
         barVisible = MusicController.current() != null;
@@ -171,6 +194,82 @@ public final class MusicPage {
         y += font.lineHeight + 4;
         g.fill(x, y, x + w, y + 1, PhoneTheme.COLOR_DIVIDER);
         return y + 4;
+    }
+
+    /**
+     * 唱片仓 —— 外放那一半的入口。
+     *
+     * 空着时整条都是"放入"的点击区：那时候这一条只有一个意思，把点击区
+     * 缩小到某个小按钮上纯属为难人。
+     *
+     * 放着唱片时右边两个键：播放/停止，以及取出。没有暂停继续——原版音效
+     * 系统只有开始和停止，给一个按下去会从头开始的"继续"比不给更糟。
+     */
+    private int renderDiscBay(GuiGraphics g, Font font, int x, int y, int w,
+                              int mouseX, int mouseY) {
+        bayY = y;
+        bayEmpty = !DiscClientCache.hasDisc();
+
+        boolean hovered = GuiUtil.hit(mouseX, mouseY, x, y, w, BAY_H);
+        if (hovered && bayEmpty) {
+            g.fill(x, y, x + w, y + BAY_H, PhoneTheme.COLOR_ROW_HOVER);
+        }
+
+        if (bayEmpty) {
+            // 空仓：画一个虚位 + 一句话。用与主屏拖动空槽同一块兜底色，
+            // 玩家对"这里可以放东西"的观感是一致的
+            PhoneSkin.drawOrFill(g, PhoneSkin.Element.HOME_DROP_SLOT,
+                    x + 1, y + 1, ITEM_SIZE, ITEM_SIZE, PhoneTheme.COLOR_APP_DROP_SLOT);
+
+            int textX = x + ITEM_SIZE + 4;
+            g.drawString(font, GuiUtil.truncate(font,
+                            Component.translatable("mcphone.music.disc.insert_hint").getString(),
+                            w - (textX - x)),
+                    textX, y + (BAY_H - font.lineHeight) / 2, FontPalette.dim(), false);
+
+            g.fill(x, y + BAY_H, x + w, y + BAY_H + 1, PhoneTheme.COLOR_DIVIDER);
+            return y + BAY_H + 4;
+        }
+
+        // ---- 仓里有唱片 ----
+        ItemStack disc = DiscClientCache.getDisc();
+        g.renderItem(disc, x + 1, y + 1);
+
+        boolean playing = DiscClientCache.isPlaying();
+        discEjectX = x + w - BTN;
+        discToggleX = discEjectX - BTN - BTN_GAP;
+
+        int textX = x + ITEM_SIZE + 4;
+        int textW = discToggleX - textX - 2;
+        g.drawString(font, GuiUtil.truncate(font, discTitle(disc), textW),
+                textX, y + (BAY_H - font.lineHeight) / 2,
+                playing ? FontPalette.title() : FontPalette.body(), false);
+
+        int btnY2 = y + (BAY_H - BTN) / 2;
+        drawButton(g, font,
+                playing ? PhoneSkin.Element.MUSIC_PAUSE : PhoneSkin.Element.MUSIC_PLAY,
+                playing ? "■" : "▶", discToggleX, btnY2, mouseX, mouseY);
+        drawButton(g, font, PhoneSkin.Element.MUSIC_EJECT, "⏏",
+                discEjectX, btnY2, mouseX, mouseY);
+
+        g.fill(x, y + BAY_H, x + w, y + BAY_H + 1, PhoneTheme.COLOR_DIVIDER);
+        return y + BAY_H + 4;
+    }
+
+    /**
+     * 唱片显示什么名字。
+     *
+     * 优先曲子的名称（"C418 - cat"），那是玩家在唱片机上看到的那一句。
+     * 取不到才退回物品名（"音乐唱片"）——数据包可能定义了没有描述的唱片。
+     */
+    private static String discTitle(ItemStack disc) {
+        var mc = net.minecraft.client.Minecraft.getInstance();
+        if (mc.level != null) {
+            var song = net.minecraft.world.item.JukeboxSong
+                    .fromStack(mc.level.registryAccess(), disc);
+            if (song.isPresent()) return song.get().value().description().getString();
+        }
+        return disc.getHoverName().getString();
     }
 
     /** 空曲库：告诉玩家往哪儿放歌、放什么格式 */
@@ -324,6 +423,9 @@ public final class MusicPage {
             return true;
         }
 
+        // 唱片仓在列表上面，先判它
+        if (hitDiscBay(mx, my)) return true;
+
         // 播放条要抢在列表之前判：它盖在列表下沿，后判会连带点到某一行
         if (barVisible && hitButtons(mx, my)) return true;
 
@@ -334,6 +436,41 @@ public final class MusicPage {
             return true;
         }
         return false;
+    }
+
+    /**
+     * 唱片仓上的点击。
+     *
+     * 只发包、不改本地状态：能不能放、能不能取全由服务端说了算，它处理完
+     * 会回一份最新状态。本地抢先改的话，一旦服务端因为背包满了拒绝了，
+     * 界面就会显示唱片已经取出的假象——与加好友那边同一条规矩。
+     */
+    private boolean hitDiscBay(double mx, double my) {
+        if (my < bayY || my >= bayY + BAY_H) return false;
+
+        if (bayEmpty) {
+            send(DiscActionPacket.Action.INSERT);
+            return true;
+        }
+        if (hitAt(mx, my, discToggleX, bayY + (BAY_H - BTN) / 2)) {
+            send(DiscActionPacket.Action.TOGGLE);
+            return true;
+        }
+        if (hitAt(mx, my, discEjectX, bayY + (BAY_H - BTN) / 2)) {
+            send(DiscActionPacket.Action.EJECT);
+            return true;
+        }
+        // 点在这一条的别处：什么都不做。整条都当成"取出"太危险了
+        return true;
+    }
+
+    private static void send(DiscActionPacket.Action action) {
+        PacketDistributor.sendToServer(new DiscActionPacket(action));
+    }
+
+    private boolean hitAt(double mx, double my, int bx, int by) {
+        return GuiUtil.hit(mx, my, bx - HIT_PAD, by - HIT_PAD,
+                BTN + HIT_PAD * 2, BTN + HIT_PAD * 2);
     }
 
     private boolean hitButtons(double mx, double my) {

@@ -199,6 +199,13 @@ public final class PhoneSkin {
         MUSIC_NEXT("music/next", "music_next"),
 
         /**
+         * 唱片仓的「取出」。建议 9×9，缺图时画 ⏏ 字符。
+         *
+         * 与播放键并排画在唱片仓那一条上，所以尺寸得与它们一致。
+         */
+        MUSIC_EJECT("music/eject", "music_eject"),
+
+        /**
          * 循环模式键 —— 列表循环。建议 9×9，缺图时画 ↻ 字符。
          *
          * 三种模式各一张，而不是一张图配三个角标：它们在任何播放器里都是
