@@ -91,11 +91,11 @@ public final class TeleportService {
         self.level().playSound(null, self.getX(), self.getY(), self.getZ(),
                 SoundEvents.ENDERMAN_TELEPORT, SoundSource.PLAYERS, 1.0F, 1.0F);
 
-        // 骑着东西不能直接传：马会留在原地，而客户端那边人还在马背上，
-        // 表现是一匹被拉长到几百格外的马
-        if (self.isPassenger()) self.stopRiding();
-
-        // 这一个调用同时覆盖同维度与跨维度，不必自己判断在哪个世界
+        // 这一个调用同时覆盖同维度与跨维度，不必自己判断在哪个世界。
+        //
+        // 也不必自己先下马：它进门第二件事就是 stopRiding()（1.21.1 的
+        // ServerPlayer.teleportTo，字节码核过）。自己再判一次 isPassenger
+        // 是死代码，而且会让人以为不写就会留下一匹被拉长到几百格外的马
         self.teleportTo(level, spot.x, spot.y, spot.z, yaw, 0.0F);
 
         level.playSound(null, spot.x, spot.y, spot.z,
