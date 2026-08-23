@@ -53,7 +53,7 @@
   "mcphone.music.source.local": "Local Music",
   "mcphone.music.source.disc": "Music Discs",
   "mcphone.music.disc.not_a_disc": "That is not a music disc",
-  "mcphone.music.disc.insert_hint": "Hold a disc and click here",
+  "mcphone.music.disc.insert_hint": "Insert a disc — others hear it too",
   "mcphone.music.disc.occupied": "There is already a disc inside",
   "mcphone.music.disc.inventory_full": "Your inventory is full",
   "mcphone.music.mode.list_loop": "Repeat all",

@@ -53,7 +53,7 @@
   "mcphone.music.source.local": "本地音乐",
   "mcphone.music.source.disc": "唱片",
   "mcphone.music.disc.not_a_disc": "手上拿的不是唱片",
-  "mcphone.music.disc.insert_hint": "手持唱片点这里放入",
+  "mcphone.music.disc.insert_hint": "放入唱片，周围人也听得见",
   "mcphone.music.disc.occupied": "唱片仓里已经有一张了",
   "mcphone.music.disc.inventory_full": "背包满了，唱片拿不回去",
   "mcphone.music.mode.list_loop": "列表循环",
