@@ -1550,7 +1550,7 @@ public final class PhoneScreen extends Screen {
         if (mode == Mode.CHAT_ADD_CONTACT && chatAddContact.mouseScrolled(scrollY)) return true;
         if (mode == Mode.CHAT_CONVERSATION && chatConversation.mouseScrolled(scrollY)) return true;
         if (mode == Mode.NOTES && notesList.mouseScrolled(scrollY)) return true;
-        if (mode == Mode.MUSIC_PLAYER && musicPage.mouseScrolled(scrollY)) return true;
+        if (mode == Mode.MUSIC_PLAYER && musicPage.mouseScrolled(scrollY, my)) return true;
         if (mode == Mode.NOTE_EDIT && noteEditor.mouseScrolled(mx, my, scrollX, scrollY)) return true;
         if (mode == Mode.ADDON_PAGE
                 && callPage(p -> p.mouseScrolled(mx, my, scrollY))) return true;

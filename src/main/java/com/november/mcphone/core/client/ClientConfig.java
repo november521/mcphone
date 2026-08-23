@@ -1,6 +1,9 @@
 package com.november.mcphone.core.client;
 
 import com.november.mcphone.MCphone;
+import com.november.mcphone.feature.music.PlayMode;
+import com.november.mcphone.feature.music.client.MusicController;
+import com.november.mcphone.feature.music.client.playback.LocalPlayback;
 import net.neoforged.fml.event.config.ModConfigEvent;
 import net.neoforged.neoforge.common.ModConfigSpec;
 
@@ -40,6 +43,12 @@ public final class ClientConfig {
     /** 手机界面里画在壁纸上的字用哪套配色 */
     public static final ModConfigSpec.EnumValue<FontPreset> FONT_COLOR;
 
+    /** 音乐 App 的循环模式。记在配置里，重进游戏还是上次那个 */
+    public static final ModConfigSpec.EnumValue<PlayMode> MUSIC_MODE;
+
+    /** 音乐 App 自己的音量（0-100）。最终输出还要乘游戏的主音量与唱片音量 */
+    public static final ModConfigSpec.IntValue MUSIC_VOLUME;
+
     static {
         ModConfigSpec.Builder builder = new ModConfigSpec.Builder();
 
@@ -50,6 +59,19 @@ public final class ClientConfig {
                         "Font color of the phone UI. WHITE is the default; pick BLACK for light wallpapers.")
                 .translation("mcphone.config.font_color")
                 .defineEnum("fontColor", FontPreset.WHITE);
+
+        MUSIC_MODE = builder
+                .comment("音乐 App 的循环模式。",
+                        "Loop mode of the Music app.")
+                .translation("mcphone.config.music_mode")
+                .defineEnum("musicMode", PlayMode.LIST_LOOP);
+
+        MUSIC_VOLUME = builder
+                .comment("音乐 App 的音量，0-100。",
+                        "这是这台手机自己的音量，最终输出还会乘游戏的主音量与唱片音量。",
+                        "Music app volume (0-100), multiplied by the game's master and record sliders.")
+                .translation("mcphone.config.music_volume")
+                .defineInRange("musicVolume", 100, 0, 100);
 
         SPEC = builder.build();
     }
@@ -77,6 +99,11 @@ public final class ClientConfig {
         if (event.getConfig().getSpec() != SPEC) return;
 
         FontPalette.set(FONT_COLOR.get());
+
+        // 音乐的两项也在这里落地：配置读进来之后，播放器才知道上次
+        // 玩家把音量拧到了哪儿、用的是哪种循环
+        MusicController.setMode(MUSIC_MODE.get());
+        LocalPlayback.setVolume(MUSIC_VOLUME.get() / 100.0F);
     }
 
     // ============================================================
@@ -102,6 +129,30 @@ public final class ClientConfig {
         }
 
         FONT_COLOR.set(preset);
+        SPEC.save();
+    }
+
+    /**
+     * 玩家在音乐 App 里切了循环模式。
+     *
+     * 与字体颜色同一套路数：先让播放器立刻用上，再写值存盘。存盘会绕回
+     * apply 再设一次同样的值，重复但无害。
+     */
+    public static void saveMusicMode(PlayMode mode) {
+        if (!SPEC.isLoaded()) return;
+        MUSIC_MODE.set(mode);
+        SPEC.save();
+    }
+
+    /**
+     * 玩家在音乐 App 里调了音量。
+     *
+     * 存的是 0-100 的整数而不是浮点：配置文件里 "musicVolume = 80" 比
+     * "0.8000000119" 好读，玩家手改配置的时候尤其。
+     */
+    public static void saveMusicVolume(float volume) {
+        if (!SPEC.isLoaded()) return;
+        MUSIC_VOLUME.set(Math.round(Math.clamp(volume, 0.0F, 1.0F) * 100));
         SPEC.save();
     }
 }

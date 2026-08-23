@@ -1,6 +1,7 @@
 package com.november.mcphone.feature.music.client;
 
 import com.november.mcphone.MCphone;
+import com.november.mcphone.core.client.ClientConfig;
 import com.november.mcphone.feature.music.PlayMode;
 import com.november.mcphone.feature.music.Track;
 import com.november.mcphone.feature.music.client.playback.LocalPlayback;
@@ -151,9 +152,15 @@ public final class MusicController {
         if (m != null) mode = m;
     }
 
-    /** 循环模式按钮：点一下切下一种 */
+    /**
+     * 循环模式按钮：点一下切下一种，顺手记进配置。
+     *
+     * 记住是必须的：玩家把它调成单曲循环，重进游戏又变回列表循环，
+     * 那这个按钮等于每次开游戏都要重按一遍。
+     */
     public static PlayMode cycleMode() {
         mode = mode.next();
+        ClientConfig.saveMusicMode(mode);
         return mode;
     }
 

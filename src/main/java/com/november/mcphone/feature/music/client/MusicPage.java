@@ -1,5 +1,6 @@
 package com.november.mcphone.feature.music.client;
 
+import com.november.mcphone.core.client.ClientConfig;
 import com.november.mcphone.core.client.FontPalette;
 import com.november.mcphone.core.client.GuiUtil;
 import com.november.mcphone.core.client.PhoneSkin;
@@ -80,6 +81,23 @@ public final class MusicPage {
     /** 待消费的"刷新曲库"请求 */
     private boolean refreshHovered;
 
+    /** 播放条的上沿，滚轮判定要用 */
+    private int barTop;
+
+    /**
+     * 音量回显到什么时候为止。
+     *
+     * 滚轮调音量之后，曲名那一行临时换成"音量 80%"再变回去。不回显的话
+     * 玩家滚了半天不知道调到了哪儿——而这条上没地方常驻一个音量数字。
+     */
+    private long volumeShownUntil;
+
+    /** 音量回显停留多久 */
+    private static final long VOLUME_HINT_MS = 1500L;
+
+    /** 滚轮一格调多少音量 */
+    private static final float VOLUME_STEP = 0.05F;
+
     // ============================================================
     //  生命周期
     // ============================================================
@@ -129,8 +147,9 @@ public final class MusicPage {
             renderRows(g, font, tracks, x, y, w, listBottom, mouseX, mouseY);
         }
 
+        barTop = screenBottom - BAR_H;
         if (barVisible) {
-            renderBar(g, font, x, screenBottom - BAR_H, w, mouseX, mouseY);
+            renderBar(g, font, x, barTop, w, mouseX, mouseY);
         }
     }
 
@@ -205,9 +224,14 @@ public final class MusicPage {
         g.fill(x, y, x + w, y + 1, PhoneTheme.COLOR_DIVIDER);
         y += 3;
 
-        // ---- 曲名 ----
-        g.drawString(font, GuiUtil.truncate(font, track.title(), w),
-                x, y, FontPalette.title(), false);
+        // ---- 曲名，刚调过音量时临时改显音量 ----
+        boolean showVolume = System.currentTimeMillis() < volumeShownUntil;
+        String line = showVolume
+                ? Component.translatable("mcphone.music.volume",
+                        Math.round(LocalPlayback.getVolume() * 100)).getString()
+                : track.title();
+        g.drawString(font, GuiUtil.truncate(font, line, w), x, y,
+                showVolume ? FontPalette.link() : FontPalette.title(), false);
         y += font.lineHeight + 2;
 
         // ---- 进度条 ----
@@ -317,7 +341,16 @@ public final class MusicPage {
      * 旧版本根本没接这个方法，19 首原版唱片加上自定义文件，一屏之外的
      * 全都够不着——这是它"没法用"的头号原因。
      */
-    public boolean mouseScrolled(double scrollY) {
+    public boolean mouseScrolled(double scrollY, double mouseY) {
+        // 停在播放条上滚＝调音量。那一条上没有列表可滚，这块地方空着也是空着，
+        // 而音量是唯一还没有入口的常用控制
+        if (barVisible && mouseY >= barTop) {
+            LocalPlayback.setVolume(LocalPlayback.getVolume() + (float) scrollY * VOLUME_STEP);
+            ClientConfig.saveMusicVolume(LocalPlayback.getVolume());
+            volumeShownUntil = System.currentTimeMillis() + VOLUME_HINT_MS;
+            return true;
+        }
+
         if (scrollY > 0 && scrollOffset > 0) {
             scrollOffset--;
             return true;
