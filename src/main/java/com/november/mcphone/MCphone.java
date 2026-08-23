@@ -59,6 +59,11 @@ public class MCphone {
         net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener(
                 com.november.mcphone.core.net.RequestThrottle::onPlayerLoggedOut);
 
+        // 服主的开关。用 SERVER 类型而不是 COMMON：它必须由服主一份说了算，
+        // 而且 NeoForge 会把它同步给连上来的客户端，界面才能据此藏按钮
+        modContainer.registerConfig(net.neoforged.fml.config.ModConfig.Type.SERVER,
+                com.november.mcphone.core.ServerConfig.SPEC, "mcphone-server.toml");
+
         // 与外部模组的兼容处理。放在自家注册之后：兼容模块可能要看我们已经
         // 注册了什么，反过来则不成立。
         com.november.mcphone.compat.CompatModules.init(modEventBus);

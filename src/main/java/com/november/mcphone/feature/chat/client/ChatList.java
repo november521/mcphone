@@ -1,5 +1,6 @@
 package com.november.mcphone.feature.chat.client;
 
+import com.november.mcphone.core.ServerConfig;
 import com.november.mcphone.core.client.FontPalette;
 import com.november.mcphone.core.client.PhoneSkin;
 import com.november.mcphone.core.client.PhoneTheme;
@@ -285,15 +286,18 @@ public final class ChatList {
 
         // ---- 传送图标：行的右下角，只给在线的人 ----
         // 离线传不过去，画一个点了没反应的按钮比不画更让人困惑。
+        // 服主把功能关掉时同理：那是服务端配置，NeoForge 会同步给客户端，
+        // 所以这里读得到。真正的拦截在服务端，界面只是不给入口
         //
         // 位置先算出来、图最后再画：第二行的预览文字要按它让出的宽度截断，
         // 而悬停与否又决定那行写的是预览还是提示，顺序绕不开
+        boolean canTeleport = c.online() && ServerConfig.allowFriendTeleport();
         int secondLineY = y + font.lineHeight + 1;
         int tpW = 0;
         int tpX = 0;
         int tpY = 0;
         boolean tpHovered = false;
-        if (c.online()) {
+        if (canTeleport) {
             // 往里缩 TP_HIT_PAD，不贴着行的右边缘：悬停高亮铺的是【点击区】，
             // 贴边的话那块高亮会比整行的高亮宽出 3px，凸在外面很显眼
             tpW = TP_ICON_SIZE + TP_HIT_PAD + TP_GAP;
@@ -335,7 +339,7 @@ public final class ChatList {
         g.drawString(font, GuiUtil.truncate(font, preview, w - (nameX - x) - tpW),
                 nameX, secondLineY, previewColor, false);
 
-        if (c.online()) renderTeleportIcon(g, font, tpX, tpY, tpHovered);
+        if (canTeleport) renderTeleportIcon(g, font, tpX, tpY, tpHovered);
 
         return tpHovered;
     }

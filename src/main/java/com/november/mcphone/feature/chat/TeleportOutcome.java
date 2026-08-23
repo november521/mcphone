@@ -32,7 +32,16 @@ public enum TeleportOutcome implements ChatOutcome {
      * 在线状态，那 3 秒里对方随时可能退出游戏。玩家看到的是一个绿点、点了
      * 却没反应，不解释的话他只会以为传送坏了。
      */
-    PEER_OFFLINE;
+    PEER_OFFLINE,
+
+    /**
+     * 服主把这个功能关了。
+     *
+     * 必须告诉玩家，而且不能与 NOTHING 合并：那几种是"正常客户端走不到"，
+     * 而这一种是玩家的手机上明明有过这个按钮（配置改之前）、或者他见别人
+     * 用过。不解释的话他只会以为坏了，然后来问。
+     */
+    DISABLED;
 
     /**
      * 只有"对方下线了"要说。OK 时人已经到了，眼睛看得见；NOTHING 那几种
@@ -40,8 +49,10 @@ public enum TeleportOutcome implements ChatOutcome {
      */
     @Override
     public Component message() {
-        return this == PEER_OFFLINE
-                ? Component.translatable("mcphone.chat.teleport_offline")
-                : null;
+        return switch (this) {
+            case PEER_OFFLINE -> Component.translatable("mcphone.chat.teleport_offline");
+            case DISABLED -> Component.translatable("mcphone.chat.teleport_disabled");
+            case OK, NOTHING -> null;
+        };
     }
 }

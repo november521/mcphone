@@ -1,5 +1,6 @@
 package com.november.mcphone.feature.chat;
 
+import com.november.mcphone.core.ServerConfig;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
@@ -67,6 +68,11 @@ public final class TeleportService {
      * @return 结果，由网络层决定要不要说话
      */
     public static TeleportOutcome teleportToFriend(ServerPlayer self, UUID targetId) {
+        // 服主的开关排在最前：关掉之后这个功能就不该存在，后面几道校验
+        // 连跑都不必跑。界面那边也会藏掉图标，但拦截必须在这里——界面只是
+        // 不给入口，伪造客户端照样发得出包
+        if (!ServerConfig.allowFriendTeleport()) return TeleportOutcome.DISABLED;
+
         // 手机在身上 + 确实是好友。两道门与发消息共用同一处实现，
         // 理由（它们是安全边界，不是风格）见 FriendGuard
         if (!FriendGuard.mayActOn(self, targetId)) return TeleportOutcome.NOTHING;
