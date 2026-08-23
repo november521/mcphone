@@ -62,6 +62,9 @@ import java.util.UUID;
  * 但有一条必须由 PhoneScreen 配合：本界面下所有按键都得被吞掉，否则打
  * 拼音按到 e 就命中背包键，手机当场关掉。命名界面早踩过这个坑。
  *
+ * 还有一条自己扛：EditBox 会把可见文字裁进框里，但【光标不受那道裁剪】，
+ * 所以输入框的宽度要额外让出一个光标的位置，见 cursorRoom。
+ *
  * ESC 例外，它被 PhoneScreen 抢走当关机键（1.4.2 起，此前是退回会话列表）
  * ——原版聊天框按 ESC 也是直接关掉，就算它同时是输入法取消候选的键。让
  * ESC 只取消候选的话，玩家就没有任何一个键能从会话里出去了，两害相权取其轻。
@@ -100,6 +103,19 @@ public final class ChatConversation {
 
     /** 文字距输入栏左右边缘的距离 */
     private static final int INPUT_TEXT_PAD = 3;
+
+    /**
+     * 右端为光标额外留出的宽度。
+     *
+     * 原版 EditBox 把可见文字裁到 getInnerWidth() 是对的，但**光标不受这道
+     * 裁剪**：光标在末尾时它画的是一个 "_"，起笔位置正是文字末端，于是整个
+     * 字宽都溢在框外。打长消息时输入栏一满，这个 "_" 就戳进右边的发送键。
+     *
+     * 按 "_" 的实际字宽留，不写死像素：中文字体下它比英文宽。
+     */
+    private static int cursorRoom(Font font) {
+        return font.width("_");
+    }
 
     private static final DateTimeFormatter TIME_FORMAT = DateTimeFormatter.ofPattern("HH:mm");
     private static final DateTimeFormatter DATE_TIME_FORMAT = DateTimeFormatter.ofPattern("MM-dd HH:mm");
@@ -339,9 +355,12 @@ public final class ChatConversation {
         // 代价是 EditBox 不再自己垂直居中（原版只在有边框时居中），
         // 所以这里手动把它摆到栏中间
         int textY = y + (INPUT_H - font.lineHeight) / 2 + 1;
+        // 可见文字的宽度还要再减去光标那一格，理由见 cursorRoom
+        int textW = boxW - INPUT_TEXT_PAD * 2 - cursorRoom(font);
+
         if (box == null) {
             box = new EditBox(font, x + INPUT_TEXT_PAD, textY,
-                    boxW - INPUT_TEXT_PAD * 2, INPUT_H - 4,
+                    textW, INPUT_H - 4,
                     Component.translatable("mcphone.app.chat"));
             box.setMaxLength(ChatMessage.MAX_TEXT_LENGTH);
             box.setBordered(false);
@@ -349,7 +368,7 @@ public final class ChatConversation {
         } else {
             box.setX(x + INPUT_TEXT_PAD);
             box.setY(textY);
-            box.setWidth(boxW - INPUT_TEXT_PAD * 2);
+            box.setWidth(textW);
         }
         box.render(g, mouseX, mouseY, partialTick);
 
