@@ -57,13 +57,14 @@ public final class ChatService {
             String name = resolveName(server, friends, peer, online);
             if (isOnline) friends.rememberName(peer, name);
 
-            ChatMessage last = chat.getLastMessage(selfId, peer);
-            int unread = chat.countAfter(selfId, peer, read.getLastRead(peer));
+            // 一次查表拿到最后一条与未读数：这两样以前是两个方法，
+            // 各查一遍同一个会话，而这是每人每 3 秒、每个好友都要走的路
+            ChatData.Tail tail = chat.tail(selfId, peer, read.getLastRead(peer));
 
-            out.add(last == null
+            out.add(tail.last() == null
                     ? ConversationSummary.empty(peer, name, isOnline)
                     : new ConversationSummary(peer, name, isOnline,
-                            last.text(), last.time(), unread));
+                            tail.last().text(), tail.last().time(), tail.unread()));
         }
 
         // 有消息的按最后一条时间倒序排在前，没聊过的沉底

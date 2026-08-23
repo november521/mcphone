@@ -12,6 +12,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
 import java.util.UUID;
 
 /**
@@ -31,7 +32,8 @@ import java.util.UUID;
  * ============================================================
  *
  * 1. 会话键要归一化。A→B 与 B→A 必须落到同一个会话，否则同一对人
- *    会各自看到半截记录。做法是把两个 UUID 按字典序排序后拼接。
+ *    会各自看到半截记录。这件事交给 {@link ConversationKey}——运行时它是
+ *    一个记录（哈希不分配任何东西），只在读写存档时才变回 "a|b" 那串字符。
  *
  * 2. 必须有容量上限。这是"离线可存"的代价：一个跑了几个月的服务器，
  *    不设上限的话存档会被聊天记录撑爆。每对会话只保留最近
@@ -46,8 +48,9 @@ public class ChatData extends SavedData {
     public static final int MAX_MESSAGES_PER_CONVERSATION = 100;
 
     /** 会话表：归一化后的会话键 → 按时间升序的消息列表 */
-    private final Map<String, List<ChatMessage>> conversations;
+    private final Map<ConversationKey, List<ChatMessage>> conversations;
 
+    /** 存档格式仍是 "a|b" → 消息列表，与 1.4.16 及更早一个字节不差 */
     private static final Codec<Map<String, List<ChatMessage>>> CONVERSATIONS_CODEC =
             Codec.unboundedMap(Codec.STRING, ChatMessage.CODEC.listOf());
 
@@ -55,7 +58,7 @@ public class ChatData extends SavedData {
         this.conversations = new HashMap<>();
     }
 
-    private ChatData(Map<String, List<ChatMessage>> conversations) {
+    private ChatData(Map<ConversationKey, List<ChatMessage>> conversations) {
         this.conversations = conversations;
     }
 
@@ -83,10 +86,10 @@ public class ChatData extends SavedData {
      * 把两个玩家 UUID 归一化成同一个会话键。
      *
      * 排序是关键：不排的话 A 发给 B 与 B 发给 A 会落进两个不同的会话，
-     * 双方各自只看得到自己发的那一半。
+     * 双方各自只看得到自己发的那一半。规则与代价见 {@link ConversationKey}。
      */
-    public static String conversationKey(UUID a, UUID b) {
-        return FriendGraph.pairKey(a, b);
+    public static ConversationKey conversationKey(UUID a, UUID b) {
+        return ConversationKey.of(a, b);
     }
 
     // ============================================================
@@ -139,43 +142,62 @@ public class ChatData extends SavedData {
         setDirty();
     }
 
-    /** 最后一条消息，用于会话列表的摘要行。没有则返回 null */
-    public ChatMessage getLastMessage(UUID a, UUID b) {
-        List<ChatMessage> list = conversations.get(conversationKey(a, b));
-        return (list == null || list.isEmpty()) ? null : list.get(list.size() - 1);
+    /**
+     * 会话列表那一行要的两样东西：最后一条消息、未读条数。
+     *
+     * @param last   最后一条消息，还没聊过则为 null
+     * @param unread 未读条数
+     */
+    public record Tail(ChatMessage last, int unread) {
+        static final Tail EMPTY = new Tail(null, 0);
     }
 
     /**
-     * 未读条数 —— 会话中由 {@code peer} 发出、且晚于 since 的消息条数。
+     * 一次查表算出这两样。
      *
-     * 必须只数对方发的：把自己发的也算进去的话，自己发一条消息就会给
+     * 原先是 getLastMessage 与 countAfter 两个方法，各查一次【同一个】会话
+     * ——键构造与哈希查找都白做了一遍，而这是每人每 3 秒、每个好友都要走的
+     * 那条路。合成一次之后开销减半。
+     *
+     * 未读必须只数对方发的：把自己发的也算进去的话，自己发一条消息就会给
      * 自己涨一个未读，而"已读时刻"要等下次打开会话才会推进，红点就一直
      * 挂在那儿。
      *
-     * @param self 本人
-     * @param peer 对端
+     * @param self  本人
+     * @param peer  对端
+     * @param since 本人与他的会话已读到哪个时刻
      */
-    public int countAfter(UUID self, UUID peer, long since) {
+    public Tail tail(UUID self, UUID peer, long since) {
         List<ChatMessage> list = conversations.get(conversationKey(self, peer));
-        if (list == null) return 0;
+        if (list == null || list.isEmpty()) return Tail.EMPTY;
 
-        int n = 0;
+        int unread = 0;
         // 从尾部往前数，未读通常很少，不必遍历整个列表
         for (int i = list.size() - 1; i >= 0; i--) {
             ChatMessage m = list.get(i);
             if (m.time() <= since) break;
-            if (m.sender().equals(peer)) n++;
+            if (m.sender().equals(peer)) unread++;
         }
-        return n;
+        return new Tail(list.get(list.size() - 1), unread);
     }
 
     // ============================================================
     //  序列化
     // ============================================================
 
+    /**
+     * 写出去时把记录键变回 "a|b"。
+     *
+     * 用 TreeMap 而不是 HashMap：顺序不稳的话，明明什么都没改，存档文件
+     * 也会每次都不同——排查问题时那是纯噪音。与 FriendGraph.toPairKeys
+     * 用 TreeSet 是同一个理由。
+     */
     @Override
     public CompoundTag save(CompoundTag tag, HolderLookup.Provider registries) {
-        CONVERSATIONS_CODEC.encodeStart(NbtOps.INSTANCE, conversations)
+        Map<String, List<ChatMessage>> encodable = new TreeMap<>();
+        conversations.forEach((key, list) -> encodable.put(key.toStorageKey(), list));
+
+        CONVERSATIONS_CODEC.encodeStart(NbtOps.INSTANCE, encodable)
                 .resultOrPartial(err -> MCphone.LOGGER.error("聊天记录写入失败: {}", err))
                 .ifPresent(encoded -> tag.put("conversations", encoded));
         return tag;
@@ -187,10 +209,21 @@ public class ChatData extends SavedData {
                 .resultOrPartial(err -> MCphone.LOGGER.error("聊天记录读取失败: {}", err))
                 .orElse(Map.of());
 
-        // Codec 解出来的是不可变集合，而运行时要往里加消息，
-        // 必须复制成可变的，否则第一条新消息就会抛 UnsupportedOperationException
-        Map<String, List<ChatMessage>> mutable = new HashMap<>();
-        loaded.forEach((k, v) -> mutable.put(k, new ArrayList<>(v)));
+        // 两件事一起做：把键解析成记录，把不可变列表复制成可变的。
+        // 后者不做的话，读过档的世界里第一条新消息就会抛
+        // UnsupportedOperationException——只在"读过档"时复现，最容易漏测。
+        //
+        // 读不懂的键跳过而不是抛：这份存档玩家可以手改，为一条坏记录让
+        // 整个服务端起不来，代价完全不成比例
+        Map<ConversationKey, List<ChatMessage>> mutable = new HashMap<>();
+        loaded.forEach((k, v) -> {
+            ConversationKey key = ConversationKey.parse(k);
+            if (key == null) {
+                MCphone.LOGGER.warn("[MCphone] 跳过一条读不懂的会话键: {}", k);
+                return;
+            }
+            mutable.put(key, new ArrayList<>(v));
+        });
         return new ChatData(mutable);
     }
 }

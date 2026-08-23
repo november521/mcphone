@@ -36,7 +36,7 @@ import java.util.UUID;
  *
  * 不在消息上打"已读"标记（那要改写别人会话里的消息），而是每个对端记一个
  * "上次已读时刻"。未读数 = 该会话中对方发出、且晚于这个时刻的消息条数，
- * 由 {@link ChatData#countAfter} 现算。读消息不会去动共享的会话记录。
+ * 由 {@link ChatData#tail} 现算。读消息不会去动共享的会话记录。
  */
 public record ChatReadState(Map<UUID, Long> lastRead) {
 
