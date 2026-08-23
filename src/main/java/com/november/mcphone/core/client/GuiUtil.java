@@ -1,6 +1,7 @@
 package com.november.mcphone.core.client;
 
 import net.minecraft.client.gui.Font;
+import net.minecraft.client.gui.GuiGraphics;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -83,6 +84,50 @@ public final class GuiUtil {
         if (maxWidth <= 0) return "";
         if (font.width(text) <= maxWidth) return text;
         return font.plainSubstrByWidth(text, Math.max(0, maxWidth - font.width("…"))) + "…";
+    }
+
+    /**
+     * 画图标下面那一行名字：按格子宽度截断，再居中缩放。
+     *
+     * ============================================================
+     * 为什么必须截断
+     * ============================================================
+     *
+     * 主屏与商店的格子步距是 28 像素（图标 20 + 间距 8），而名字此前一个
+     * 约束都没有：英文的 "Ender Chest" 缩放后仍有 40 像素，直接压在左右
+     * 邻居的名字上；中文名多一个字也顶得出去。名字是玩家分辨图标的唯一
+     * 依据，糊成一片比截断难受得多。
+     *
+     * ============================================================
+     * 截断必须在缩放【前】的坐标系里做
+     * ============================================================
+     *
+     * 缩放后的 1 像素对应缩放前的 1/scale 像素。拿 cellWidth 直接去截，
+     * 0.6 的缩放下会多截掉将近一半，短名字也会莫名其妙带上省略号。
+     * 所以先把可用宽度换算回缩放前（除以 scale），截完再缩。
+     *
+     * ============================================================
+     * 变换的顺序也不能改
+     * ============================================================
+     *
+     * 先 translate 到目标位置再 scale，最后在原点画——而不是缩放一个非
+     * 原点的坐标。原先主屏那份把缩放锚点放在文字中心却仍从左端起笔，
+     * 实际中心比图标中线偏右 nw×scale×(1-scale)/2 像素，名字越长偏得越多。
+     * 1.0.42 修过一次，别再重蹈覆辙。
+     *
+     * @param cellWidth 这一格能占的宽度（图标宽 + 一个格子间距）
+     */
+    public static void drawIconLabel(GuiGraphics g, Font font, String name,
+                                     int iconX, int iconY, int iconSize,
+                                     int cellWidth, float scale, int color) {
+        String shown = truncate(font, name, Math.round(cellWidth / scale));
+        float shownW = font.width(shown) * scale;
+
+        g.pose().pushPose();
+        g.pose().translate(iconX + (iconSize - shownW) / 2f, iconY + iconSize + 2, 0);
+        g.pose().scale(scale, scale, 1f);
+        g.drawString(font, shown, 0, 0, color, false);
+        g.pose().popPose();
     }
 
     // ============================================================

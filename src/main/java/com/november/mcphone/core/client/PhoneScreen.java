@@ -877,22 +877,18 @@ public final class PhoneScreen extends Screen {
     }
 
     /**
-     * 画图标下面那行名字，缩放后仍要对准图标中线。
+     * 画图标下面那行名字。
      *
-     * 先 translate 到目标位置再 scale，最后在原点画——而不是缩放一个
-     * 非原点的坐标。原先的写法把缩放锚点放在文字中心、却仍从左端起笔，
-     * 结果实际中心比图标中线偏右 nw×ns×(1-ns)/2 像素，名字越长偏得越多。
-     * 这类错位只在缩放时出现，肉眼看着"就是有点歪"，很难想到是变换写反了。
+     * 截断、居中、缩放三件事全在 {@link GuiUtil#drawIconLabel} 里，商店的
+     * 格子共用同一份——这两处此前各抄了一遍变换代码，也各自都没做截断。
+     *
+     * 可用宽度是格子步距（图标宽 + 一个间距），不是图标宽：名字本来就允许
+     * 比图标宽一点，只是不能宽到压着邻居。
      */
     private void drawAppName(GuiGraphics g, String name, int ix, int iy, int is) {
-        float ns = PhoneTheme.APP_NAME_SCALE;
-        float nw = font.width(name) * ns;   // 缩放【后】的实际宽度
-
-        g.pose().pushPose();
-        g.pose().translate(ix + (is - nw) / 2f, iy + is + 2, 0);
-        g.pose().scale(ns, ns, 1f);
-        g.drawString(font, name, 0, 0, FontPalette.appName(), false);
-        g.pose().popPose();
+        GuiUtil.drawIconLabel(g, font, name, ix, iy, is,
+                is + PhoneTheme.APP_GRID_SPACING_X,
+                PhoneTheme.APP_NAME_SCALE, FontPalette.appName());
     }
 
     // ============================================================

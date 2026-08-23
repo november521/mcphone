@@ -321,19 +321,13 @@ public final class AppStore {
     /**
      * 图标下面那行名字。
      *
-     * 变换的写法与主屏的 drawAppName 一致：先 translate 到目标位置再 scale，
-     * 最后在原点画。缩放一个非原点坐标会让名字越长偏得越多——1.0.42 修过
-     * 一次，别在这里重蹈覆辙。
+     * 与主屏共用 {@link GuiUtil#drawIconLabel}：那边此前也抄了一遍同样的
+     * 变换代码，两份各自都没做截断，长名字会压到左右邻居身上。
      */
     private void drawName(GuiGraphics g, Font font, String name, int ix, int iy, int is) {
-        float ns = PhoneTheme.APP_NAME_SCALE;
-        float nw = font.width(name) * ns;
-
-        g.pose().pushPose();
-        g.pose().translate(ix + (is - nw) / 2f, iy + is + 2, 0);
-        g.pose().scale(ns, ns, 1f);
-        g.drawString(font, name, 0, 0, FontPalette.appName(), false);
-        g.pose().popPose();
+        GuiUtil.drawIconLabel(g, font, name, ix, iy, is,
+                is + PhoneTheme.APP_GRID_SPACING_X,
+                PhoneTheme.APP_NAME_SCALE, FontPalette.appName());
     }
 
     /** 翻页条。只有一页时整块不画 */
