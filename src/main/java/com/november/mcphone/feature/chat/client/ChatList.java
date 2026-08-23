@@ -59,6 +59,14 @@ public final class ChatList {
     /** 传送按钮与右侧未读数／时间之间的空隙 */
     private static final int TP_GAP = 3;
 
+    /**
+     * 名字至少要占这么宽，不然这一行就没法分辨是谁了。
+     *
+     * 36px 大约是 6 个拉丁字符或 3 个汉字——短是短，好歹还能认人。
+     * 详见下面 renderRow 里为它让路的那段。
+     */
+    private static final int MIN_NAME_W = 36;
+
     // ---- 颜色 ----
     private static int colorName() { return FontPalette.title(); }
     private static int colorPreview() { return FontPalette.preview(); }
@@ -237,6 +245,22 @@ public final class ChatList {
 
         int nameX = x + AVATAR_SIZE + AVATAR_GAP;
         int nameMaxW = w - (nameX - x) - rightW - tpW - 4;
+
+        // 挤不下时先牺牲时间戳，不牺牲名字。
+        //
+        // 屏幕宽度是死的 120px，而「传送」两个汉字比英文的 TP 宽出一截——
+        // 到底宽多少取决于原版字体的中日韩字形步进，那不是我们能定的数。
+        // 所以这里不去赌那个数字，只保证名字有个下限：真挤到底了，就把
+        // 时间戳去掉。三样东西里它最不重要——列表本来按时间排序，第二行
+        // 还有内容预览，而名字是唯一能分辨"这是谁"的东西。
+        //
+        // 未读数不让路：那是玩家打开这个 App 真正在找的东西。
+        if (nameMaxW < MIN_NAME_W && c.unread() == 0 && !right.isEmpty()) {
+            right = "";
+            rightW = 0;
+            nameMaxW = w - (nameX - x) - tpW - 4;
+        }
+
         String name = GuiUtil.truncate(font, c.name(), nameMaxW);
         g.drawString(font, name, nameX, y, colorName(), false);
 
