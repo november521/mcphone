@@ -10,6 +10,7 @@ import com.november.mcphone.core.menu.ModMenus;
 import com.november.mcphone.feature.camera.client.CameraHandler;
 import com.november.mcphone.feature.chat.client.ChatNotifier;
 import com.november.mcphone.feature.chat.net.ChatClientCache;
+import com.november.mcphone.feature.music.client.DiscClientCache;
 import com.november.mcphone.feature.music.client.MusicController;
 import com.november.mcphone.feature.music.client.playback.LocalPlayback;
 import com.november.mcphone.feature.notes.net.NotesClientCache;
@@ -84,6 +85,7 @@ public class MCphoneClient {
                     // 音乐停下并把音频设备还给系统。不还的话每次进出世界
                     // 都漏一个 OpenAL 设备句柄，而且上一个世界的歌会一直放
                     LocalPlayback.shutdown();
+                    DiscClientCache.clear();
                 });
 
         // 进世界时读这个存档自己的安装状态。不能在客户端启动时读——那会儿

@@ -5,6 +5,7 @@ import com.november.mcphone.feature.chat.ChatReadState;
 import com.november.mcphone.feature.notes.NoteList;
 import com.november.mcphone.feature.settings.WallpaperData;
 import com.november.mcphone.feature.store.PurchasedApps;
+import com.november.mcphone.feature.music.DiscState;
 import net.neoforged.neoforge.attachment.AttachmentType;
 import net.neoforged.neoforge.registries.DeferredRegister;
 import net.neoforged.neoforge.registries.NeoForgeRegistries;
@@ -49,6 +50,24 @@ public final class ModAttachments {
             "chat_read_state",
             () -> AttachmentType.builder(() -> ChatReadState.DEFAULT)
                     .serialize(ChatReadState.CODEC)
+                    .copyOnDeath()
+                    .build()
+    );
+
+    /**
+     * 手机唱片仓里的唱片，以及它是不是正在外放。
+     *
+     * 存在玩家身上而不是手机物品上：与笔记同一个理由——物品组件要参与
+     * 容器每 tick 的快照比对，还会随任何一次容器同步整份下发，而唱片仓
+     * 绝大多数时候没人在看。
+     *
+     * copyOnDeath：死一次唱片就没了，那不是惩罚，是把玩家的东西吞掉。
+     * 唱片是可以掉落的物品，凭空消失比掉在地上更糟——后者他还能捡回来。
+     */
+    public static final Supplier<AttachmentType<DiscState>> DISC = ATTACHMENT_TYPES.register(
+            "phone_disc",
+            () -> AttachmentType.builder(() -> DiscState.EMPTY)
+                    .serialize(DiscState.CODEC)
                     .copyOnDeath()
                     .build()
     );

@@ -102,6 +102,7 @@ public final class NetworkHandler {
         com.november.mcphone.feature.chat.net.ChatNetworking.register(registrar);
         com.november.mcphone.feature.notes.net.NotesNetworking.register(registrar);
         com.november.mcphone.feature.store.net.StoreNetworking.register(registrar);
+        com.november.mcphone.feature.music.net.MusicNetworking.register(registrar);
     }
 
     // ============================================================
