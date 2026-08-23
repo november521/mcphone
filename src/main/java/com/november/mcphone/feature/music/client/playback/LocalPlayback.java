@@ -9,7 +9,6 @@ import net.minecraft.sounds.SoundSource;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
 
 import java.io.IOException;
-import java.nio.file.Path;
 
 /**
  * 本地播放 —— 「耳机」那一半：只有自己听得见，但功能齐全。
@@ -30,6 +29,14 @@ import java.nio.file.Path;
  *
  * 代价是多开一个 OpenAL 设备。换来的是：不碰游戏的音频状态、坏了也只坏
  * 我们自己这一摊、以及上面那些功能。
+ *
+ * ================================================================
+ * 它只认一条流，不认文件
+ * ================================================================
+ *
+ * play 收的是已经打开好的 {@link AudioStream}，不是路径。把"文件在哪、
+ * 怎么解码"留给音源，这一层才可能被网络音源复用——那边根本没有路径这
+ * 回事。id 只用来记日志和回答"现在放的是谁"。
  *
  * ================================================================
  * 音量必须自己乘游戏的滑块
@@ -76,7 +83,9 @@ public final class LocalPlayback {
     private static boolean deviceFailed;
 
     private static State state = State.IDLE;
-    private static Path currentFile;
+
+    /** 正在放的是谁（曲目的 key），只用于日志与界面回显 */
+    private static String currentId;
 
     /** App 里那个音量，0..1。真正的输出还要乘游戏的两个滑块 */
     private static float volume = 1.0F;
@@ -93,25 +102,29 @@ public final class LocalPlayback {
     // ============================================================
 
     /**
-     * 从头播放一个文件。会先把正在放的停掉。
+     * 从头播放一条流。会先把正在放的停掉。
      *
-     * @return 真的开始放了才返回 true；设备开不起来、格式不认得、文件坏了
-     *         都返回 false，由调用方决定要不要跳过这一首
+     * **流的所有权交给这里**：无论成功失败，调用方都不必再关它。这条规矩
+     * 必须清楚，否则要么漏关（每首歌漏一个文件句柄），要么关两次。
+     *
+     * @param stream 已经打开好的 PCM 流，由音源提供
+     * @param id     这首曲子的 key，只用于日志与回显
+     * @return 真的开始放了才返回 true；设备开不起来、通道用光了都返回 false
      */
-    public static boolean play(Path file) {
+    public static boolean play(AudioStream stream, String id) {
         stop();
 
-        if (!ensureDevice()) return false;
-
-        AudioStream opened = AudioDecoders.open(file);
-        if (opened == null) return false;
+        if (stream == null) return false;
+        if (!ensureDevice()) {
+            closeQuietly(stream);
+            return false;
+        }
 
         Channel ch = library.acquireChannel(Library.Pool.STREAMING);
         if (ch == null) {
             // 通道池被占满。原版流式音效也从这个池子里拿，同时放太多就会没有
-            MCphone.LOGGER.warn("[MCphone] 没有空闲的音频通道，这一首放不了: {}",
-                    file.getFileName());
-            closeQuietly(opened);
+            MCphone.LOGGER.warn("[MCphone] 没有空闲的音频通道，这一首放不了: {}", id);
+            closeQuietly(stream);
             return false;
         }
 
@@ -121,11 +134,11 @@ public final class LocalPlayback {
         ch.disableAttenuation();
 
         channel = ch;
-        stream = opened;
-        currentFile = file;
+        LocalPlayback.stream = stream;
+        currentId = id;
 
         applyVolume();
-        ch.attachBufferStream(opened);
+        ch.attachBufferStream(stream);
         ch.play();
 
         state = State.PLAYING;
@@ -163,7 +176,7 @@ public final class LocalPlayback {
         stream = null;
 
         state = State.IDLE;
-        currentFile = null;
+        currentId = null;
         elapsedMs = 0L;
     }
 
@@ -201,9 +214,9 @@ public final class LocalPlayback {
         return state == State.PAUSED;
     }
 
-    /** 正在放（或暂停在）哪个文件；没有则返回 null */
-    public static Path current() {
-        return currentFile;
+    /** 正在放（或暂停在）哪一首的 key；没有则返回 null */
+    public static String currentId() {
+        return currentId;
     }
 
     /** 已经放了多久。暂停期间不增长 */

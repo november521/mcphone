@@ -10,6 +10,7 @@ import com.november.mcphone.core.menu.ModMenus;
 import com.november.mcphone.feature.camera.client.CameraHandler;
 import com.november.mcphone.feature.chat.client.ChatNotifier;
 import com.november.mcphone.feature.chat.net.ChatClientCache;
+import com.november.mcphone.feature.music.client.MusicController;
 import com.november.mcphone.feature.music.client.playback.LocalPlayback;
 import com.november.mcphone.feature.notes.net.NotesClientCache;
 import com.november.mcphone.feature.settings.client.WallpaperStore;
@@ -57,6 +58,10 @@ public class MCphoneClient {
         // 音乐要每 tick 泵一次音频流：把放完的缓冲换成新的、发现放完了收尾、
         // 跟上音量滑块的变化。没在放的时候第一行就返回，不花钱
         NeoForge.EVENT_BUS.addListener(LocalPlayback::onClientTick);
+
+        // 一首放完自动接下一首。走回调而不是让播放层直接调控制器：
+        // 播放层管一条音轨，顺序是控制器的事，两者不该互相认识
+        LocalPlayback.setFinishListener(MusicController::onTrackFinished);
         NeoForge.EVENT_BUS.addListener(CameraHandler::onRenderGui);
         NeoForge.EVENT_BUS.addListener(CameraHandler::onScreenOpening);
 
