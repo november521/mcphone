@@ -70,11 +70,11 @@ public final class WavDecoder implements AudioDecoder {
 
         // 已经是目标格式就不必再包一层
         if (in.matches(target)) {
-            return new PcmAudioStream(src);
+            return new PcmAudioStream(src, in);
         }
 
         try {
-            return new PcmAudioStream(AudioSystem.getAudioInputStream(target, src));
+            return new PcmAudioStream(AudioSystem.getAudioInputStream(target, src), target);
         } catch (IllegalArgumentException e) {
             src.close();
             throw new IOException("这个编码 JDK 转不了：" + in, e);

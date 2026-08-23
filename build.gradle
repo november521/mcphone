@@ -164,6 +164,20 @@ dependencies {
     // 浏览器时把 jar 手动丢进 run/mods 即可。
     compileOnly "maven.modrinth:mcef:${mcef_version}"
 
+    // JavaMP3 —— MP3 解码。这是【必需】依赖，不是可选联动：玩家往音乐
+    // 目录里丢一个 mp3，不该要求他再去装别的模组。
+    //
+    // jarJar 而不是 implementation：模组 jar 不会自动带上第三方库，只写
+    // implementation 的话开发环境跑得起来、发出去的 jar 一运行就
+    // NoClassDefFoundError。jarJar 把它嵌进 jar 里，由 NeoForge 在加载时
+    // 展开；版本写成区间是 JarJar 的硬要求（它要在多个模组嵌了同一个库时
+    // 挑一个满足所有人的版本）。
+    //
+    // 选它的理由：纯 Java、零依赖、MIT。GitHub 上纯 Java 的 MP3 解码器里，
+    // 非 LGPL 的实际上只有它一个（JLayer 与 mp3spi 都是 LGPL，而 LGPL 的
+    // 库嵌进要分发的 jar 里是个说不清的灰区）。
+    jarJar(implementation("fr.delthas:javamp3:[${javamp3_version},2.0)"))
+
     // Example optional mod dependency with JEI
     // The JEI API is declared for compile time use, while the full JEI artifact is used at runtime
     // compileOnly "mezz.jei:jei-${mc_version}-common-api:${jei_version}"

@@ -36,12 +36,14 @@ public final class AudioDecoders {
     /**
      * 按顺序问。顺序有意义：先问的先认领，所以更专用的放前面。
      *
-     * 眼下两个各管各的扩展名，谁前谁后都一样；等 MP3 进来之后就有讲究了
-     * ——JDK 的 WAV 解码器在装了 mp3 SPI 之后会声称自己也认 .mp3，
-     * 而那条路会绕过我们自己的解码器。
+     * WavDecoder 排在最后是有讲究的：它背后是 JDK 的 javax.sound，而那套
+     * 东西认得的格式取决于运行时有哪些 SPI——别的模组要是带了一个 mp3 SPI
+     * 进来，它就会声称自己也认 .mp3，把这一档从我们自己的解码器手里抢走。
+     * 排在后面就轮不到它抢。
      */
     private static final List<AudioDecoder> DECODERS = List.of(
             new OggDecoder(),
+            new Mp3Decoder(),
             new WavDecoder()
     );
 

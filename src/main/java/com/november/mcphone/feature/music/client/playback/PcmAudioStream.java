@@ -4,12 +4,12 @@ import net.minecraft.client.sounds.AudioStream;
 import org.lwjgl.BufferUtils;
 
 import javax.sound.sampled.AudioFormat;
-import javax.sound.sampled.AudioInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.ByteBuffer;
 
 /**
- * 把 JDK 的 {@link AudioInputStream} 接到 Minecraft 的 {@link AudioStream} 上。
+ * 把任意一条 PCM 字节流接到 Minecraft 的 {@link AudioStream} 上。
  *
  * ================================================================
  * 为什么必须是 direct ByteBuffer
@@ -29,12 +29,24 @@ import java.nio.ByteBuffer;
  */
 public final class PcmAudioStream implements AudioStream {
 
-    private final AudioInputStream in;
+    private final InputStream in;
     private final AudioFormat format;
+    private final int frameSize;
 
-    public PcmAudioStream(AudioInputStream in) {
+    /**
+     * 收裸流而不是 {@link AudioInputStream}：MP3 解码器给出的就是一条普通
+     * 的 InputStream 加一个格式，为它凭空包一层 AudioInputStream 只是绕路。
+     *
+     * @param format 这条流的真实格式。必须是 OpenAL 收得下的 PCM，
+     *               见 {@link AudioDecoder} 的规矩
+     */
+    public PcmAudioStream(InputStream in, AudioFormat format) {
         this.in = in;
-        this.format = in.getFormat();
+        this.format = format;
+        // 帧大小可能是 NOT_SPECIFIED(-1)，那时按位深与声道自己算
+        int fs = format.getFrameSize();
+        this.frameSize = fs > 0 ? fs : Math.max(1,
+                format.getChannels() * format.getSampleSizeInBits() / 8);
     }
 
     @Override
@@ -54,6 +66,11 @@ public final class PcmAudioStream implements AudioStream {
             if (n <= 0) break;      // 文件到尾了
             filled += n;
         }
+
+        // 只交出整帧。裸流在文件末尾可能剩下半帧（ID3v1 那 128 字节的尾巴
+        // 就会造成这种情况），半帧喂进去会让声道错位——从那一刻起整首歌
+        // 变成噪音，而且不报错。最多丢掉结尾几个字节，听不出来
+        filled -= filled % frameSize;
 
         ByteBuffer out = BufferUtils.createByteBuffer(filled);
         out.put(chunk, 0, filled);
