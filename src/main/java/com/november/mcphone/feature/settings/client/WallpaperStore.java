@@ -34,7 +34,15 @@ public final class WallpaperStore {
 
     /** 已加载的壁纸列表 */
     private static final List<WallpaperEntry> WALLPAPERS = new ArrayList<>();
-    private static boolean scanned = false;
+
+    /**
+     * 贴图键的序号，只增不减。
+     *
+     * 键原先由显示名清洗而来，于是 "我的 壁纸.png" 与 "我的_壁纸.png" 会算出
+     * 同一个键，后加载的那张会把前一张顶掉——两张壁纸共用一张图，而且不报错。
+     * 加个序号就不可能撞。
+     */
+    private static int textureSeq;
 
     private WallpaperStore() {}
 
@@ -54,10 +62,33 @@ public final class WallpaperStore {
     //  扫描 & 加载
     // ============================================================
 
+    /** 客户端启动时扫一次，让第一次开机就有壁纸可选 */
     public static void scan() {
-        if (scanned) return;
-        scanned = true;
+        refresh();
+    }
 
+    /**
+     * 重扫壁纸目录 —— 每次打开「更换壁纸」都调。
+     *
+     * ============================================================
+     * 为什么必须能重扫
+     * ============================================================
+     *
+     * 原先只在客户端启动时扫一遍，之后往目录里放的图要重启游戏才认。
+     * 而"把图拷进 wallpapers 文件夹然后马上想换上"恰恰是这个功能唯一的
+     * 用法——玩家不会为了换张壁纸重启一次游戏。
+     *
+     * ============================================================
+     * 增量，不是推倒重来
+     * ============================================================
+     *
+     * 加载一张壁纸要读文件、逐像素转格式、再传一张贴图上显卡，几百毫秒
+     * 起步。每次打开界面把全部重来一遍，图一多就是肉眼可见的卡顿。
+     *
+     * 所以只做差集：新出现的加载，已经没了的释放掉贴图，剩下的原样留着。
+     * 释放不能省——贴图是显存，只加不减的话，反复增删壁纸会一路涨上去。
+     */
+    public static void refresh() {
         Path dir = Path.of(WALLPAPER_DIR);
         if (!Files.isDirectory(dir)) {
             try {
@@ -66,18 +97,53 @@ public final class WallpaperStore {
             } catch (IOException e) {
                 LOGGER.warn("无法创建壁纸目录: {}", e.getMessage());
             }
+            dropAll();
             return;
         }
 
+        List<String> onDisk = new ArrayList<>();
         try (var stream = Files.list(dir)) {
-            stream.filter(p -> p.toString().toLowerCase().endsWith(".png"))
+            stream.filter(Files::isRegularFile)
+                  .filter(p -> p.getFileName().toString().toLowerCase().endsWith(".png"))
                   .sorted()
-                  .forEach(WallpaperStore::loadWallpaper);
+                  .forEach(p -> onDisk.add(p.getFileName().toString()));
         } catch (IOException e) {
             LOGGER.warn("扫描壁纸目录失败: {}", e.getMessage());
+            return;   // 读不到目录时保持现状，别把已经加载好的清空
         }
 
-        LOGGER.info("已加载 {} 张壁纸", WALLPAPERS.size());
+        // ---- 文件没了的：释放贴图再摘掉 ----
+        WALLPAPERS.removeIf(entry -> {
+            if (onDisk.contains(entry.fileName())) return false;
+            Minecraft.getInstance().getTextureManager().release(entry.texture());
+            LOGGER.debug("壁纸已移除: {}", entry.fileName());
+            return true;
+        });
+
+        // ---- 新出现的：加载 ----
+        for (String fileName : onDisk) {
+            if (isLoaded(fileName)) continue;
+            loadWallpaper(dir.resolve(fileName));
+        }
+
+        // 排序放在最后：新加载的都追加在末尾，不排的话新图永远排在最后，
+        // 与文件名顺序对不上
+        WALLPAPERS.sort(java.util.Comparator.comparing(WallpaperEntry::fileName));
+    }
+
+    private static boolean isLoaded(String fileName) {
+        for (WallpaperEntry e : WALLPAPERS) {
+            if (e.fileName().equals(fileName)) return true;
+        }
+        return false;
+    }
+
+    /** 目录整个没了的情况：贴图一并释放，否则那几张显存永远留着 */
+    private static void dropAll() {
+        for (WallpaperEntry e : WALLPAPERS) {
+            Minecraft.getInstance().getTextureManager().release(e.texture());
+        }
+        WALLPAPERS.clear();
     }
 
     private static void loadWallpaper(Path path) {
@@ -110,8 +176,10 @@ public final class WallpaperStore {
                 }
             }
 
-            // 注册为动态纹理 —— 使用图片原始尺寸
-            String texKey = "wp_" + displayName.toLowerCase().replaceAll("[^a-z0-9_]", "_");
+            // 注册为动态纹理 —— 使用图片原始尺寸。
+            // 键里带一个只增不减的序号，理由见 textureSeq
+            String texKey = "wp_" + (textureSeq++) + "_"
+                    + displayName.toLowerCase().replaceAll("[^a-z0-9_]", "_");
             ResourceLocation texLoc = ResourceLocation.fromNamespaceAndPath("mcphone", texKey);
             DynamicTexture dynTex = new DynamicTexture(nativeImage);
             Minecraft.getInstance().getTextureManager().register(texLoc, dynTex);

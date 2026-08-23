@@ -17,6 +17,7 @@ import com.november.mcphone.feature.settings.client.AboutPage;
 import com.november.mcphone.feature.settings.client.DeviceNameEditor;
 import com.november.mcphone.feature.settings.client.FontColorPicker;
 import com.november.mcphone.feature.settings.client.WallpaperPicker;
+import com.november.mcphone.feature.settings.client.WallpaperStore;
 import com.november.mcphone.feature.store.client.AppDetail;
 import com.november.mcphone.feature.store.client.AppStore;
 import com.november.mcphone.feature.store.client.CompanionApps;
@@ -229,6 +230,10 @@ public final class PhoneScreen extends Screen {
         if (target == Mode.CHAT_CONVERSATION) chatConversation.open(pendingConversationPeer);
 
         // 进入列表即拉一次笔记；离开编辑界面即释放当前那条的全文
+        // 进换壁纸页先重扫一次目录：玩家刚拷进去的图得立刻能选，
+        // 不能要求他为换张壁纸重启游戏
+        if (target == Mode.WALLPAPER_PICKER) WallpaperStore.refresh();
+
         if (this.mode == Mode.NOTES) notesList.close();
         if (target == Mode.NOTES) notesList.open();
 
