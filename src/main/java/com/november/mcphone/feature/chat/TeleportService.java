@@ -1,14 +1,10 @@
 package com.november.mcphone.feature.chat;
 
 import com.november.mcphone.core.PhoneItem;
-import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
-import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
-import net.minecraft.world.phys.AABB;
-import net.minecraft.world.phys.Vec3;
 
 import java.util.UUID;
 
@@ -46,19 +42,24 @@ import java.util.UUID;
  * 三样全在服务端查——否则改过的客户端能瞬移到服务器上任何一个人身边，
  * 而这是所有玩法里最经不起伪造的一种能力。
  *
+ * ============================================================
+ * 落点就是原版 /tp 的落点，不自己算
+ * ============================================================
+ *
+ * 落在对方站的那个坐标上，朝向也取他的——与 /tp &lt;玩家&gt; &lt;玩家&gt; 一模一样。
+ *
+ * 1.4.4 到 1.4.7 之间这里算过一个"对方身前 1.5 格"的落点，还带碰撞检测
+ * 与踩空检测。那是我们自己发明的一套规则：多三十行、多两个可能算错的
+ * 分支（把人塞进墙里、判成悬空而白白退回），换来的只是落地时不必转身。
+ *
+ * 两人重叠一瞬是这么做的全部代价，而原版自己会把他们推开——玩家对
+ * /tp 的预期本来就是这样。
+ *
  * 本类会被专用服务器加载，一个客户端类都不许出现。
  */
 public final class TeleportService {
 
     private TeleportService() {}
-
-    /**
-     * 落在对方身前多远。
-     *
-     * 1.5 格：比玩家碰撞箱（0.6 宽）宽出一截，两人不会一落地就互相挤开；
-     * 又近到一眼就知道是冲着他来的。再远就成了"在他附近"，不是"面前"。
-     */
-    private static final double FRONT_DISTANCE = 1.5D;
 
     /**
      * 传送到某个好友面前。
@@ -79,26 +80,21 @@ public final class TeleportService {
         ServerPlayer target = self.server.getPlayerList().getPlayer(targetId);
         if (target == null) return TeleportOutcome.PEER_OFFLINE;
 
-        ServerLevel level = target.serverLevel();
-        Vec3 spot = landingSpot(self, target, level);
-
-        // 落地时正对着对方：他的朝向掉个头就是我该朝的方向。
-        // 不这么做的话，人到了却背对着他，得自己转一圈才知道人在哪
-        float yaw = target.getYRot() + 180.0F;
-
         // 出发点先响一声：旁边的人得知道这人是传走了，不是凭空消失。
         // 必须在传送【之前】响，之后 self 已经在另一头了
         self.level().playSound(null, self.getX(), self.getY(), self.getZ(),
                 SoundEvents.ENDERMAN_TELEPORT, SoundSource.PLAYERS, 1.0F, 1.0F);
 
-        // 这一个调用同时覆盖同维度与跨维度，不必自己判断在哪个世界。
+        // 落点、朝向全取对方的，与原版 /tp <玩家> <玩家> 同一个语义。
         //
-        // 也不必自己先下马：它进门第二件事就是 stopRiding()（1.21.1 的
-        // ServerPlayer.teleportTo，字节码核过）。自己再判一次 isPassenger
-        // 是死代码，而且会让人以为不写就会留下一匹被拉长到几百格外的马
-        self.teleportTo(level, spot.x, spot.y, spot.z, yaw, 0.0F);
+        // 这一个调用同时覆盖同维度与跨维度，不必自己判断在哪个世界；也不必
+        // 自己先下马，它进门第二件事就是 stopRiding()（1.21.1 的
+        // ServerPlayer.teleportTo，字节码核过）
+        self.teleportTo(target.serverLevel(),
+                target.getX(), target.getY(), target.getZ(),
+                target.getYRot(), target.getXRot());
 
-        level.playSound(null, spot.x, spot.y, spot.z,
+        target.serverLevel().playSound(null, target.getX(), target.getY(), target.getZ(),
                 SoundEvents.ENDERMAN_TELEPORT, SoundSource.PLAYERS, 1.0F, 1.0F);
 
         // 告知，不是请求许可。走动作栏而不是聊天框：这是一次即时事件，
@@ -110,31 +106,4 @@ public final class TeleportService {
         return TeleportOutcome.OK;
     }
 
-    /**
-     * 算落点：对方面朝方向的前方 1.5 格，站不住就退回对方的准确坐标。
-     *
-     * 两道检查，缺一不可：
-     *
-     *   放得下  —— 那 1.5 格外可能是一堵墙、一棵树、一个只有半格高的洞。
-     *              按【本人】的碰撞箱量，不是按一个固定尺寸：潜行、游泳、
-     *              爬行时人是矮的，用站姿去量会把本来能进的地方判成不行
-     *   踩得着  —— 对方站在悬崖边朝外看时，他"面前"是几十格的空气。
-     *              传过去等于把人推下崖，而他连自己怎么死的都不知道
-     *
-     * 任一不过就退回 target.position()。那个点一定安全——对方正站在那儿。
-     * 代价只是两人重叠一瞬，原版自己会把他们推开。
-     */
-    private static Vec3 landingSpot(ServerPlayer self, ServerPlayer target, ServerLevel level) {
-        Vec3 front = target.position().add(
-                Vec3.directionFromRotation(0.0F, target.getYRot()).scale(FRONT_DISTANCE));
-
-        AABB box = self.getDimensions(self.getPose()).makeBoundingBox(front);
-        if (!level.noCollision(self, box)) return target.position();
-
-        BlockPos below = BlockPos.containing(front.x, front.y - 0.5D, front.z);
-        if (level.getBlockState(below).getCollisionShape(level, below).isEmpty()) {
-            return target.position();
-        }
-        return front;
-    }
 }
