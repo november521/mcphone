@@ -9,7 +9,6 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.level.saveddata.SavedData;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -94,10 +93,32 @@ public class ChatData extends SavedData {
     //  读写
     // ============================================================
 
-    /** 取某对玩家之间的消息，按时间升序。没有会话时返回空列表而不是 null */
+    /**
+     * 取某对玩家之间的消息，按时间升序。没有会话时返回空列表而不是 null。
+     *
+     * ============================================================
+     * 必须是拷贝，不能是 unmodifiableList 那种【视图】
+     * ============================================================
+     *
+     * 这份列表的唯一去处是 SyncMessagesPacket，而网络包不是当场编码的：
+     * 处理函数跑在服务端主线程，编码发生在稍后的 netty 线程上。中间只要
+     * 主线程往这个会话里 addMessage 一条，netty 那边正在遍历的迭代器就会
+     * 抛 ConcurrentModificationException——表现是那名玩家莫名掉线，
+     * 而栈里一个字都不会提到聊天。
+     *
+     * 触发条件很具体：玩家点进某人会话的同一瞬间，那个人发来一条消息。
+     * 窗口很窄，但服务器跑久了总会撞上一次。
+     *
+     * 单机与开局域网更直接：本地连接根本不做序列化，包里装的就是这个
+     * 对象本身，客户端渲染线程读的是服务端正在改的那份列表。
+     *
+     * 拷贝的代价：每次点进会话复制最多 100 个引用，而这条路径本就有
+     * 500 毫秒限流。FriendData 那边所有 getter 早就是这么做的，
+     * 这里是最后一个漏网的。
+     */
     public List<ChatMessage> getMessages(UUID a, UUID b) {
         List<ChatMessage> list = conversations.get(conversationKey(a, b));
-        return list == null ? List.of() : Collections.unmodifiableList(list);
+        return list == null ? List.of() : List.copyOf(list);
     }
 
     /**
