@@ -1,7 +1,6 @@
 package com.november.mcphone.feature.chat;
 
 import com.november.mcphone.core.ModAttachments;
-import com.november.mcphone.core.PhoneItem;
 import com.november.mcphone.feature.chat.net.ConversationSummary;
 import com.november.mcphone.feature.chat.net.OnlinePlayer;
 import com.november.mcphone.feature.chat.net.Relation;
@@ -79,14 +78,9 @@ public final class ChatService {
     /**
      * 发一条消息。所有规则集中在这里，网络层只管收包与回包。
      *
-     * 校验逐条都有原因，少一条都能被伪造客户端利用：
+     * 前两道门（手机在身上、收件人是好友）走 {@link FriendGuard}，它们是
+     * 每个"对好友做的事"都要过的同一道，理由写在那里。这里只剩第三条：
      *
-     *   - 身上得有手机：没有这条，改个客户端就能凭空聊天，
-     *     "得有一部手机"这个前提形同虚设。拿在手上、放在背包、挂在
-     *     饰品槽都算，见 PhoneItem.isCarriedBy
-     *   - 收件人必须是好友：这是双向好友模型的意义所在。同时堵掉了
-     *     "对着随便编造的 UUID 发消息"——那既能把存档撑满，
-     *     又能给素未谋面的玩家凭空塞一条会话
      *   - 正文清洗后不能为空：纯空格或纯格式符的消息没有意义
      *
      * 不必单独判断"不能发给自己"：自己不会是自己的好友，上面那条已经拦住了。
@@ -97,11 +91,9 @@ public final class ChatService {
      * @return 落库后的消息；未通过校验时返回 null
      */
     public static ChatMessage sendMessage(ServerPlayer sender, UUID targetId, String rawText) {
-        if (!PhoneItem.isCarriedBy(sender)) return null;
+        if (!FriendGuard.mayActOn(sender, targetId)) return null;
 
         UUID senderId = sender.getUUID();
-        if (!FriendData.get(sender.server).areFriends(senderId, targetId)) return null;
-
         String text = TextSanitizer.sanitize(rawText, ChatMessage.MAX_TEXT_LENGTH);
         if (text.isEmpty()) return null;
 
@@ -152,7 +144,7 @@ public final class ChatService {
      * @return 结果。加不上时说明是哪一种加不上，由网络层转达给玩家
      */
     public static FriendOutcome sendFriendRequest(ServerPlayer self, UUID targetId) {
-        if (!PhoneItem.isCarriedBy(self)) return FriendOutcome.NOTHING;
+        if (!FriendGuard.carriesPhone(self)) return FriendOutcome.NOTHING;
 
         UUID selfId = self.getUUID();
         if (selfId.equals(targetId)) return FriendOutcome.NOTHING;
@@ -210,7 +202,7 @@ public final class ChatService {
      */
     public static FriendOutcome respondFriendRequest(ServerPlayer self, UUID requesterId,
                                                      boolean accept) {
-        if (!PhoneItem.isCarriedBy(self)) return FriendOutcome.NOTHING;
+        if (!FriendGuard.carriesPhone(self)) return FriendOutcome.NOTHING;
 
         UUID selfId = self.getUUID();
         FriendData friends = FriendData.get(self.server);
@@ -247,7 +239,7 @@ public final class ChatService {
      * 聊天记录不删：那是双方共有的，单方面抹掉等于替对方做决定。
      */
     public static boolean removeFriend(ServerPlayer self, UUID targetId) {
-        if (!PhoneItem.isCarriedBy(self)) return false;
+        if (!FriendGuard.carriesPhone(self)) return false;
 
         FriendData friends = FriendData.get(self.server);
         if (!friends.removeFriendship(self.getUUID(), targetId)) return false;

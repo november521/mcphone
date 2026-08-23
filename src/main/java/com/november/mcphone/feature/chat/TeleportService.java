@@ -1,6 +1,5 @@
 package com.november.mcphone.feature.chat;
 
-import com.november.mcphone.core.PhoneItem;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
@@ -38,9 +37,10 @@ import java.util.UUID;
  * 校验全在这里，客户端一句都不算数
  * ============================================================
  *
- * 客户端发来的只有一个 UUID。手机在不在身上、是不是好友、对方在不在线，
- * 三样全在服务端查——否则改过的客户端能瞬移到服务器上任何一个人身边，
- * 而这是所有玩法里最经不起伪造的一种能力。
+ * 客户端发来的只有一个 UUID。手机在不在身上、是不是好友（这两道走
+ * {@link FriendGuard}）、对方在不在线，三样全在服务端查——否则改过的
+ * 客户端能瞬移到服务器上任何一个人身边，而这是所有玩法里最经不起伪造的
+ * 一种能力。
  *
  * ============================================================
  * 落点就是原版 /tp 的落点，不自己算
@@ -67,15 +67,9 @@ public final class TeleportService {
      * @return 结果，由网络层决定要不要说话
      */
     public static TeleportOutcome teleportToFriend(ServerPlayer self, UUID targetId) {
-        // 与发消息、加好友同一条线：写操作必须手机真在身上。
-        // 主手、副手、背包、饰品槽都算，见 PhoneItem.isCarriedBy
-        if (!PhoneItem.isCarriedBy(self)) return TeleportOutcome.NOTHING;
-
-        // 必须是好友。这一条同时堵掉了"对着随便编造的 UUID 传送"——
-        // 否则只要猜到一个人的 UUID 就能落到他家里
-        if (!FriendData.get(self.server).areFriends(self.getUUID(), targetId)) {
-            return TeleportOutcome.NOTHING;
-        }
+        // 手机在身上 + 确实是好友。两道门与发消息共用同一处实现，
+        // 理由（它们是安全边界，不是风格）见 FriendGuard
+        if (!FriendGuard.mayActOn(self, targetId)) return TeleportOutcome.NOTHING;
 
         ServerPlayer target = self.server.getPlayerList().getPlayer(targetId);
         if (target == null) return TeleportOutcome.PEER_OFFLINE;
