@@ -32,6 +32,7 @@ public final class MusicSources {
     private MusicSources() {}
 
     private static final List<MusicSource> SOURCES = List.of(
+            new VanillaDiscSource(),
             new LocalFileSource()
     );
 

@@ -10,6 +10,7 @@ import com.november.mcphone.feature.music.Track;
 import com.november.mcphone.feature.music.client.playback.AudioDecoders;
 import com.november.mcphone.feature.music.client.playback.LocalPlayback;
 import com.november.mcphone.feature.music.client.source.MusicSources;
+import com.november.mcphone.feature.music.client.source.VanillaDiscSource;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
@@ -209,7 +210,10 @@ public final class MusicPage {
                 g.fill(x, y, x + w, y + rowH, PhoneTheme.COLOR_ROW_ACTIVE);
             }
 
-            g.drawString(font, GuiUtil.truncate(font, t.title(), w - 4), x + 2, y + 1,
+            // 前面那个符号区分来源：唱片与本地文件混在一列里，不标的话
+            // 玩家分不出哪些是游戏自带的。旧界面就是这么标的，习惯留着
+            String label = sourceGlyph(t) + t.title();
+            g.drawString(font, GuiUtil.truncate(font, label, w - 4), x + 2, y + 1,
                     isCurrent ? FontPalette.title() : FontPalette.body(), false);
             y += rowH;
         }
@@ -287,6 +291,17 @@ public final class MusicPage {
 
         g.drawString(font, glyph, x + (BTN - font.width(glyph)) / 2, y,
                 hovered ? FontPalette.title() : FontPalette.link(), false);
+    }
+
+    /**
+     * 曲目前面那个符号。
+     *
+     * 用字符而不是贴图：它跟在文字前面、随文字一起截断，是这一行文本的
+     * 一部分，不是一个独立的视觉元素。真要换成贴图，得先把它从字符串里
+     * 拆出来单独排版，为一个符号不值得。
+     */
+    private static String sourceGlyph(Track track) {
+        return VanillaDiscSource.ID.equals(track.sourceId()) ? "♫ " : "♪ ";
     }
 
     private static PhoneSkin.Element modeElement(PlayMode mode) {
