@@ -1,5 +1,7 @@
 package com.november.mcphone.feature.chat;
 
+import net.minecraft.network.chat.Component;
+
 /**
  * 传送操作的结果 —— 与 {@link FriendOutcome} 同一个用意：让"没成功"能说出
  * 是为什么，由网络层挑一句话告诉玩家。
@@ -8,7 +10,7 @@ package com.november.mcphone.feature.chat;
  * 不必像好友那边分出四种失败——那边的每一种都是玩家自己能补救的
  * （解除一个再加、等对方处理），这边不是。
  */
-public enum TeleportOutcome {
+public enum TeleportOutcome implements ChatOutcome {
 
     /** 传过去了 */
     OK,
@@ -30,5 +32,16 @@ public enum TeleportOutcome {
      * 在线状态，那 3 秒里对方随时可能退出游戏。玩家看到的是一个绿点、点了
      * 却没反应，不解释的话他只会以为传送坏了。
      */
-    PEER_OFFLINE
+    PEER_OFFLINE;
+
+    /**
+     * 只有"对方下线了"要说。OK 时人已经到了，眼睛看得见；NOTHING 那几种
+     * 正常客户端走不到，告诉它是哪条规则拦住的等于帮伪造客户端调试。
+     */
+    @Override
+    public Component message() {
+        return this == PEER_OFFLINE
+                ? Component.translatable("mcphone.chat.teleport_offline")
+                : null;
+    }
 }

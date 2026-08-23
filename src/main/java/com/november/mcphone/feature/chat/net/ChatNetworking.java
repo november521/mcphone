@@ -2,9 +2,7 @@ package com.november.mcphone.feature.chat.net;
 
 import com.november.mcphone.feature.chat.ChatMessage;
 import com.november.mcphone.feature.chat.ChatService;
-import com.november.mcphone.feature.chat.FriendData;
-import com.november.mcphone.feature.chat.FriendOutcome;
-import com.november.mcphone.feature.chat.TeleportOutcome;
+import com.november.mcphone.feature.chat.ChatOutcome;
 import com.november.mcphone.feature.chat.TeleportService;
 import com.november.mcphone.core.net.RequestThrottle;
 import net.minecraft.network.chat.Component;
@@ -261,21 +259,15 @@ public final class ChatNetworking {
      * 走动作栏而不是聊天框：这是一次操作的即时反馈，不该在公屏历史里留一行。
      * 与印笔记的成功/失败提示是同一套做法。
      *
-     * OK 与 NOTHING 都不说话。前者界面上自己看得见变化；后者要么是正常
-     * 客户端走不到的路径（身上没手机、申请不存在），要么本来就是那个状态。
+     * 说什么由结果自己决定（见 {@link ChatOutcome}），这里只管送达。所以
+     * 好友、传送、以及以后加的任何功能都共用这一个方法——加一种结果不必
+     * 再回来碰网络层。哪几种不说话的判断也在那边。
      */
-    private static void tell(ServerPlayer player, FriendOutcome outcome) {
-        String key = switch (outcome) {
-            case SELF_FULL       -> "mcphone.chat.friend_self_full";
-            case PEER_FULL       -> "mcphone.chat.friend_peer_full";
-            case PEER_INBOX_FULL -> "mcphone.chat.friend_peer_inbox_full";
-            case UNKNOWN_PLAYER  -> "mcphone.chat.friend_unknown_player";
-            case OK, NOTHING     -> null;
-        };
-        if (key == null) return;
+    private static void tell(ServerPlayer player, ChatOutcome outcome) {
+        Component message = outcome.message();
+        if (message == null) return;
 
-        player.displayClientMessage(
-                Component.translatable(key, FriendData.MAX_FRIENDS), true);
+        player.displayClientMessage(message, true);
     }
 
     /** 解除好友。同样回发两份列表让界面归位 */
@@ -303,21 +295,8 @@ public final class ChatNetworking {
             if (!(ctx.player() instanceof ServerPlayer player)) return;
             if (!RequestThrottle.allow(player, RequestThrottle.Kind.TELEPORT)) return;
 
-            tellTeleport(player, TeleportService.teleportToFriend(player, packet.target()));
+            tell(player, TeleportService.teleportToFriend(player, packet.target()));
         });
-    }
-
-    /**
-     * 传送没成时说一句为什么。
-     *
-     * 只有"对方下线了"要说，理由见 TeleportOutcome：OK 时人已经到了，
-     * 眼睛看得见；NOTHING 那几种正常客户端走不到，告诉它是哪条规则拦住的
-     * 等于帮伪造客户端调试。
-     */
-    private static void tellTeleport(ServerPlayer player, TeleportOutcome outcome) {
-        if (outcome != TeleportOutcome.PEER_OFFLINE) return;
-        player.displayClientMessage(
-                Component.translatable("mcphone.chat.teleport_offline"), true);
     }
 
     /**

@@ -1,5 +1,7 @@
 package com.november.mcphone.feature.chat;
 
+import net.minecraft.network.chat.Component;
+
 /**
  * 好友操作的结果 —— 让"没成功"能说出是为什么。
  *
@@ -25,7 +27,7 @@ package com.november.mcphone.feature.chat;
  * 任何一个包体带着它过网。放进 net 包会让人以为它是协议的一部分，
  * 日后加字段时被迫考虑兼容性，而它根本不需要。
  */
-public enum FriendOutcome {
+public enum FriendOutcome implements ChatOutcome {
 
     /** 成了：申请已发出，或已成为好友，或已拒绝 */
     OK,
@@ -49,5 +51,29 @@ public enum FriendOutcome {
     PEER_INBOX_FULL,
 
     /** 服务端没见过这个人：没在线过，名字缓存与资料缓存里也都没有 */
-    UNKNOWN_PLAYER
+    UNKNOWN_PLAYER;
+
+    /**
+     * 这一种要跟玩家说什么。
+     *
+     * 原先这段 switch 在 ChatNetworking 里。搬过来是因为"哪种结果配哪句话"
+     * 是这个枚举自己的事，网络层只该管怎么送达——那边现在只剩一个 tell，
+     * 加新功能不必再碰它。
+     *
+     * OK 与 NOTHING 都不说话：前者界面上自己看得见变化；后者要么是正常
+     * 客户端走不到的路径（身上没手机、申请不存在），要么本来就是那个状态。
+     */
+    @Override
+    public Component message() {
+        String key = switch (this) {
+            case SELF_FULL       -> "mcphone.chat.friend_self_full";
+            case PEER_FULL       -> "mcphone.chat.friend_peer_full";
+            case PEER_INBOX_FULL -> "mcphone.chat.friend_peer_inbox_full";
+            case UNKNOWN_PLAYER  -> "mcphone.chat.friend_unknown_player";
+            case OK, NOTHING     -> null;
+        };
+        // 上限那个参数只有 SELF_FULL 用得上，多传的参数会被翻译器忽略，
+        // 为一句话单开一个分支不值得
+        return key == null ? null : Component.translatable(key, FriendData.MAX_FRIENDS);
+    }
 }
