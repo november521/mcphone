@@ -5,6 +5,7 @@ import com.november.mcphone.api.client.app.IPhoneApp;
 import com.november.mcphone.api.client.app.RequiredMod;
 import com.november.mcphone.compat.CuriosCompat;
 import com.november.mcphone.core.client.FontPalette;
+import com.november.mcphone.core.client.GuiUtil;
 import com.november.mcphone.core.client.PhoneScreenRegistry;
 import com.november.mcphone.core.client.PhoneTheme;
 import net.minecraft.SharedConstants;
@@ -124,13 +125,12 @@ public final class AboutPage {
         return List.copyOf(byId.values());
     }
 
-    /** 一行"标签 …… 值"，值靠右 */
+    /** 一行"标签 …… 值"，值靠右。排法与截断规则见 GuiUtil.drawLabelValueRow */
     private static int row(GuiGraphics g, Font font, int x, int y, int w,
                            String labelKey, String value) {
-        String label = Component.translatable(labelKey).getString();
-        g.drawString(font, label, x, y, FontPalette.subtle(), false);
-        g.drawString(font, value, x + w - font.width(value), y,
-                FontPalette.body(), false);
+        GuiUtil.drawLabelValueRow(g, font, x, y, w,
+                Component.translatable(labelKey).getString(), FontPalette.subtle(),
+                value, FontPalette.body());
         return y + font.lineHeight + 1;
     }
 
@@ -144,9 +144,12 @@ public final class AboutPage {
                                  String modName, boolean loaded) {
         String value = Component.translatable(
                 loaded ? "mcphone.about.installed" : "mcphone.about.missing").getString();
-        g.drawString(font, modName, x, y, FontPalette.subtle(), false);
-        g.drawString(font, value, x + w - font.width(value), y,
-                loaded ? FontPalette.confirm() : FontPalette.subtle(), false);
+        // 模组名会很长（"Waystones（传送石碑）"就快占满整行），必须给右边
+        // 那两个字让路——否则"已装"正压在名字上，这一页恰恰是玩家截图来
+        // 问问题时在看的
+        GuiUtil.drawLabelValueRow(g, font, x, y, w,
+                modName, FontPalette.subtle(),
+                value, loaded ? FontPalette.confirm() : FontPalette.subtle());
         return y + font.lineHeight + 1;
     }
 }

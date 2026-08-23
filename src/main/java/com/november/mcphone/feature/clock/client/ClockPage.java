@@ -1,6 +1,7 @@
 package com.november.mcphone.feature.clock.client;
 
 import com.november.mcphone.core.client.FontPalette;
+import com.november.mcphone.core.client.GuiUtil;
 import com.november.mcphone.core.client.PhoneTheme;
 import com.november.mcphone.feature.clock.WorldClock;
 import com.november.mcphone.feature.clock.Greeting;
@@ -247,11 +248,11 @@ public final class ClockPage {
     //  小工具
     // ============================================================
 
-    /** 一行"标签 …… 值"，值靠右。与关于页同一套排法 */
+    /** 一行"标签 …… 值"，值靠右。与关于页共用 GuiUtil.drawLabelValueRow */
     private static int drawRow(GuiGraphics g, Font font, int x, int y, int w,
                                String label, String value, int valueColor) {
-        g.drawString(font, label, x, y, FontPalette.subtle(), false);
-        g.drawString(font, value, x + w - font.width(value), y, valueColor, false);
+        GuiUtil.drawLabelValueRow(g, font, x, y, w,
+                label, FontPalette.subtle(), value, valueColor);
         return y + font.lineHeight + 3;
     }
 

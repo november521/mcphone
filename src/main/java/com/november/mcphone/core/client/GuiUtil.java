@@ -86,6 +86,34 @@ public final class GuiUtil {
         return font.plainSubstrByWidth(text, Math.max(0, maxWidth - font.width("…"))) + "…";
     }
 
+    /** 标签与右侧的值之间至少留这么宽，否则两段字会看着连成一句 */
+    private static final int LABEL_VALUE_GAP = 4;
+
+    /**
+     * 一行"标签 …… 值"，值靠右。
+     *
+     * ============================================================
+     * 谁让路：标签
+     * ============================================================
+     *
+     * 这种行此前有三份实现（关于页两种、时钟页一种），三份都是左边原样画、
+     * 右边靠右画，谁也不管谁——两段一样长就直接叠在一起。关于页的联动模组
+     * 那一行现在就是这样：「Waystones（传送石碑）」几乎占满整行，右边的
+     * 「已装」正压在它上面。
+     *
+     * 让标签让路而不是让值：值通常是这一行真正的信息（已装/未装、维度、
+     * 月相），而标签是提示语，截了还认得出。何况值靠右，截它得从左边截，
+     * 那更难看懂。
+     */
+    public static void drawLabelValueRow(GuiGraphics g, Font font, int x, int y, int w,
+                                         String label, int labelColor,
+                                         String value, int valueColor) {
+        int valueW = font.width(value);
+        g.drawString(font, truncate(font, label, w - valueW - LABEL_VALUE_GAP),
+                x, y, labelColor, false);
+        g.drawString(font, value, x + w - valueW, y, valueColor, false);
+    }
+
     /**
      * 画图标下面那一行名字：按格子宽度截断，再居中缩放。
      *
