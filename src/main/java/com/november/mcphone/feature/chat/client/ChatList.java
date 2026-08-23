@@ -43,6 +43,20 @@ import java.util.UUID;
  * 先问图标，再问行。反过来的话，点图标会连带把会话也打开。
  *
  * ============================================================
+ * 悬停记的是【谁】，不是【第几行】
+ * ============================================================
+ *
+ * 列表每 3 秒被服务端整份换掉，而且换的时机与玩家点击完全无关：有人发来
+ * 一条消息，那一行就会排到最前，整列跟着重排。
+ *
+ * 若把"鼠标停在第几行"记成一个下标，点击时再拿它去索引【那一刻】的列表，
+ * 中间只要插进一次替换，点到的就是另一个人。这一列里现在有两个不可撤销
+ * 的动作——传送和解除好友——点错的后果一个是被传走，一个是好友没了。
+ *
+ * 记 UUID 就没有这个问题：点击时直接拿它发包，根本不碰列表。对方要是刚好
+ * 被解除了好友，服务端那三道校验会拦下来，客户端不必自己防。
+ *
+ * ============================================================
  * 这个按钮为什么是图标不是文字
  * ============================================================
  *
@@ -102,8 +116,10 @@ public final class ChatList {
 
     private long lastRequestMs;
     private int scrollOffset;
-    private int hoveredIdx = -1;
     private boolean addContactHovered;
+
+    /** 鼠标停在谁那一行上，null 表示没有。记人不记下标，理由见类注释 */
+    private UUID hoveredPeer;
 
     /** 待消费的"打开某个会话"请求 */
     private UUID pendingOpen;
@@ -111,8 +127,8 @@ public final class ChatList {
     /** 待消费的"打开加联系人界面"请求 */
     private boolean pendingAddContact;
 
-    /** 鼠标停在哪一行的传送图标上，-1 表示没有 */
-    private int teleportHoveredIdx = -1;
+    /** 鼠标停在谁那一行的传送图标上，null 表示没有 */
+    private UUID teleportHoveredPeer;
 
     /** 待消费的"把手机关掉"请求 */
     private boolean pendingClose;
@@ -124,19 +140,19 @@ public final class ChatList {
     /** 进入会话列表：立刻拉一次，不必等定时刷新 */
     public void open() {
         scrollOffset = 0;
-        hoveredIdx = -1;
+        hoveredPeer = null;
         lastRequestMs = 0L;      // 置零＝下一帧立即请求
         pendingOpen = null;
         pendingAddContact = false;
-        teleportHoveredIdx = -1;
+        teleportHoveredPeer = null;
         pendingClose = false;
     }
 
     /** 离开会话列表：停止定时刷新 */
     public void close() {
-        hoveredIdx = -1;
+        hoveredPeer = null;
         addContactHovered = false;
-        teleportHoveredIdx = -1;
+        teleportHoveredPeer = null;
     }
 
     /** 取走"打开某个会话"的请求，没有则返回 null */
@@ -186,8 +202,8 @@ public final class ChatList {
         List<ConversationSummary> list = ChatClientCache.getConversations();
         if (list.isEmpty()) {
             renderEmpty(g, font, x, y, w);
-            hoveredIdx = -1;
-            teleportHoveredIdx = -1;
+            hoveredPeer = null;
+            teleportHoveredPeer = null;
             return;
         }
 
@@ -229,8 +245,8 @@ public final class ChatList {
     private void renderRows(GuiGraphics g, Font font, List<ConversationSummary> list,
                             int x, int y, int w, int bottom, int mouseX, int mouseY) {
         final int rowH = rowHeight(font);
-        hoveredIdx = -1;
-        teleportHoveredIdx = -1;
+        hoveredPeer = null;
+        teleportHoveredPeer = null;
 
         for (int i = scrollOffset; i < list.size(); i++) {
             if (y + rowH > bottom) break;
@@ -238,13 +254,13 @@ public final class ChatList {
             ConversationSummary c = list.get(i);
             boolean hovered = mouseX >= x && mouseX <= x + w && mouseY >= y && mouseY < y + rowH;
             if (hovered) {
-                hoveredIdx = i;
+                hoveredPeer = c.id();
                 g.fill(x, y, x + w, y + rowH, COLOR_ROW_HOVER);
             }
 
             // 悬停判定与绘制在同一处完成：按钮画在哪儿，点击区就在哪儿，
             // 两处各算一遍迟早会算出不一样的结果
-            if (renderRow(g, font, c, x, y, w, mouseX, mouseY)) teleportHoveredIdx = i;
+            if (renderRow(g, font, c, x, y, w, mouseX, mouseY)) teleportHoveredPeer = c.id();
             y += rowH;
         }
     }
@@ -336,21 +352,18 @@ public final class ChatList {
             return true;
         }
 
-        List<ConversationSummary> list = ChatClientCache.getConversations();
-
         // 传送必须抢在"点进会话"之前：图标的点击区整个落在那一行里面，
         // 后判的话点图标会连带把会话也打开
-        if (teleportHoveredIdx >= 0 && teleportHoveredIdx < list.size()) {
+        if (teleportHoveredPeer != null) {
             // 只发包，不改本地状态：能不能传全由服务端说了算，
             // 与加好友、解除好友同一条规矩
-            PacketDistributor.sendToServer(
-                    new TeleportToFriendPacket(list.get(teleportHoveredIdx).id()));
+            PacketDistributor.sendToServer(new TeleportToFriendPacket(teleportHoveredPeer));
             pendingClose = true;
             return true;
         }
 
-        if (hoveredIdx >= 0 && hoveredIdx < list.size()) {
-            pendingOpen = list.get(hoveredIdx).id();
+        if (hoveredPeer != null) {
+            pendingOpen = hoveredPeer;
             return true;
         }
         return false;

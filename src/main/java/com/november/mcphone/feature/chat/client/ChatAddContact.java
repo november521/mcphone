@@ -36,6 +36,18 @@ import java.util.List;
  * 所有操作都只发包、不改本地状态：服务端处理完会回发新的在线列表，
  * 按钮状态以那份为准。本地抢先改的话，一旦服务端因为超上限拒绝了，
  * 界面就会显示成功的假象。
+ *
+ * ============================================================
+ * 悬停记的是【那一行的内容】，不是【第几行】
+ * ============================================================
+ *
+ * 这份在线列表每 3 秒被服务端整份换掉，有人上线下线顺序就变。把"停在
+ * 第几行"记成下标、点击时再去索引那一刻的列表，中间插进一次替换就会
+ * 点到另一个人——而这一列的动作是加好友和【解除好友】。
+ *
+ * 记下整条 OnlinePlayer（它是不可变记录，自带 id 与关系）还多解决一件事：
+ * 按钮上写的动作与真正发出去的动作必定一致。按下标重查的话，玩家看到的
+ * 是「+ 添加」、发出去的可能已经是「✕ 解除」。
  */
 public final class ChatAddContact {
 
@@ -59,16 +71,18 @@ public final class ChatAddContact {
 
     private long lastRequestMs;
     private int scrollOffset;
-    private int hoveredIdx = -1;
+
+    /** 鼠标停在哪一条上（连同它当时的关系），null 表示没有。理由见类注释 */
+    private OnlinePlayer hovered;
 
     public void open() {
         scrollOffset = 0;
-        hoveredIdx = -1;
+        hovered = null;
         lastRequestMs = 0L;   // 置零＝下一帧立即请求
     }
 
     public void close() {
-        hoveredIdx = -1;
+        hovered = null;
     }
 
     // ============================================================
@@ -109,7 +123,7 @@ public final class ChatAddContact {
                 g.drawString(font, line, x, y, FontPalette.subtle(), false);
                 y += font.lineHeight;
             }
-            hoveredIdx = -1;
+            hovered = null;
             return;
         }
 
@@ -120,15 +134,15 @@ public final class ChatAddContact {
     private void renderRows(GuiGraphics g, Font font, List<OnlinePlayer> players,
                             int x, int y, int w, int bottom, int mouseX, int mouseY) {
         final int rowH = rowHeight();
-        hoveredIdx = -1;
+        hovered = null;
 
         for (int i = scrollOffset; i < players.size(); i++) {
             if (y + rowH > bottom) break;
 
             OnlinePlayer p = players.get(i);
-            boolean hovered = mouseX >= x && mouseX <= x + w && mouseY >= y && mouseY < y + rowH;
-            if (hovered) {
-                hoveredIdx = i;
+            boolean isHovered = mouseX >= x && mouseX <= x + w && mouseY >= y && mouseY < y + rowH;
+            if (isHovered) {
+                hovered = p;
                 g.fill(x, y, x + w, y + rowH, COLOR_ROW_HOVER);
             }
 
@@ -159,11 +173,12 @@ public final class ChatAddContact {
     public boolean mouseClicked(double mx, double my, int button) {
         if (button != 0) return false;
 
-        List<OnlinePlayer> players = ChatClientCache.getOnlinePlayers();
-        if (hoveredIdx < 0 || hoveredIdx >= players.size()) return false;
+        OnlinePlayer p = hovered;
+        if (p == null) return false;
 
-        OnlinePlayer p = players.get(hoveredIdx);
-        // 只发包，不改本地状态：服务端会回发新列表，按钮以那份为准
+        // 只发包，不改本地状态：服务端会回发新列表，按钮以那份为准。
+        // 用的是【画那一行时手里的那条记录】，所以按钮上写的动作与真正
+        // 发出去的动作必定一致
         switch (p.relation()) {
             case NONE -> PacketDistributor.sendToServer(new FriendRequestPacket(p.id()));
             case REQUEST_RECEIVED ->
