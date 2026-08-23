@@ -262,6 +262,14 @@ public final class PhoneTheme {
     public static final int COLOR_UNREAD_BADGE = 0xFFDD3333;
 
 
+    // -- 音乐 --
+
+    /** 进度条已播过的那一段 */
+    public static final int COLOR_MUSIC_PROGRESS = 0xFF55DD88;
+
+    /** 进度条没播到的那一段。比已播的暗一档，两段要能一眼分开 */
+    public static final int COLOR_MUSIC_PROGRESS_BG = 0x44FFFFFF;
+
     // -- 通知 --
     // 兜底色，见 PhoneSkin.Element.TOAST_BG
 

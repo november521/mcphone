@@ -10,7 +10,7 @@ import com.november.mcphone.feature.chat.client.ChatAddContact;
 import com.november.mcphone.feature.chat.client.ChatConversation;
 import com.november.mcphone.feature.chat.client.ChatList;
 import com.november.mcphone.feature.gallery.client.Gallery;
-import com.november.mcphone.feature.music.client.MusicPlayer;
+import com.november.mcphone.feature.music.client.MusicPage;
 import com.november.mcphone.feature.notes.client.NoteEditor;
 import com.november.mcphone.feature.notes.client.NotesList;
 import com.november.mcphone.feature.settings.client.AboutPage;
@@ -73,7 +73,7 @@ public final class PhoneScreen extends Screen {
     private int appManagerHover = -1;
 
     // ---- 音乐播放器 ----
-    private final MusicPlayer musicPlayer = new MusicPlayer();
+    private final MusicPage musicPage = new MusicPage();
 
     // ---- 应用商店 ----
     private final AppStore appStore = new AppStore();
@@ -231,6 +231,11 @@ public final class PhoneScreen extends Screen {
         // 进入列表即拉一次笔记；离开编辑界面即释放当前那条的全文
         if (this.mode == Mode.NOTES) notesList.close();
         if (target == Mode.NOTES) notesList.open();
+
+        // 进音乐页要重扫一次曲库：玩家刚往文件夹里丢的歌得立刻在列表里。
+        // 离开【不停音乐】——退出播放器界面歌还在放，那是手机的常识
+        if (this.mode == Mode.MUSIC_PLAYER) musicPage.close();
+        if (target == Mode.MUSIC_PLAYER) musicPage.open();
 
         if (this.mode == Mode.NOTE_EDIT) noteEditor.close();
 
@@ -1058,7 +1063,7 @@ public final class PhoneScreen extends Screen {
     // ============================================================
 
     private void renderMusicPlayer(GuiGraphics g, int mx, int my) {
-        musicPlayer.render(g, phoneLeft, phoneTop,
+        musicPage.render(g, phoneLeft, phoneTop,
                 PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
                 PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT,
                 mx, my, font);
@@ -1351,7 +1356,7 @@ public final class PhoneScreen extends Screen {
                 yield true;
             }
             case MUSIC_PLAYER -> {
-                if (musicPlayer.mouseClicked(mx, my, button)) yield true;
+                musicPage.mouseClicked(mx, my, button);
                 yield true;
             }
             case APP_STORE -> {
@@ -1545,6 +1550,7 @@ public final class PhoneScreen extends Screen {
         if (mode == Mode.CHAT_ADD_CONTACT && chatAddContact.mouseScrolled(scrollY)) return true;
         if (mode == Mode.CHAT_CONVERSATION && chatConversation.mouseScrolled(scrollY)) return true;
         if (mode == Mode.NOTES && notesList.mouseScrolled(scrollY)) return true;
+        if (mode == Mode.MUSIC_PLAYER && musicPage.mouseScrolled(scrollY)) return true;
         if (mode == Mode.NOTE_EDIT && noteEditor.mouseScrolled(mx, my, scrollX, scrollY)) return true;
         if (mode == Mode.ADDON_PAGE
                 && callPage(p -> p.mouseScrolled(mx, my, scrollY))) return true;

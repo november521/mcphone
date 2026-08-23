@@ -177,6 +177,45 @@ public final class PhoneSkin {
         STORE_COMPANION("store/companion", "store_companion"),
 
         /**
+         * 音乐播放器底部那一条上的「上一首」。建议 9×9，与行内文字等高。
+         *
+         * 缺图时画 ⏮ 字符，与导航栏三个键、传送图标同一套做法：兜底也要
+         * 能看懂是什么，不能只剩一个色块。
+         */
+        MUSIC_PREV("music/prev", "music_prev"),
+
+        /**
+         * 「播放」键。建议 9×9。缺图时画 ▶ 字符。
+         *
+         * 与暂停分成两张而不是一张调色：那个键在两种状态下画什么，该由
+         * 画贴图的人决定，与商店的"点不动"按钮同一个理由。
+         */
+        MUSIC_PLAY("music/play", "music_play"),
+
+        /** 「暂停」键。建议 9×9。缺图时画 ⏸ 字符。与 {@link #MUSIC_PLAY} 成对 */
+        MUSIC_PAUSE("music/pause", "music_pause"),
+
+        /** 「下一首」。建议 9×9。缺图时画 ⏭ 字符 */
+        MUSIC_NEXT("music/next", "music_next"),
+
+        /**
+         * 循环模式键 —— 顺序播放。建议 9×9，缺图时画 → 字符。
+         *
+         * 四种模式各一张，而不是一张图配四个角标：它们在任何播放器里都是
+         * 四个完全不同的图形（→ ↻ ① ⇄），拼不出来。
+         */
+        MUSIC_MODE_SEQUENTIAL("music/mode_sequential", "music_mode_sequential"),
+
+        /** 循环模式键 —— 列表循环。建议 9×9，缺图时画 ↻ 字符 */
+        MUSIC_MODE_LIST_LOOP("music/mode_list_loop", "music_mode_list_loop"),
+
+        /** 循环模式键 —— 单曲循环。建议 9×9，缺图时画 ① 字符 */
+        MUSIC_MODE_SINGLE_LOOP("music/mode_single_loop", "music_mode_single_loop"),
+
+        /** 循环模式键 —— 随机播放。建议 9×9，缺图时画 ⇄ 字符 */
+        MUSIC_MODE_SHUFFLE("music/mode_shuffle", "music_mode_shuffle"),
+
+        /**
          * 浏览器那块大面板的底。建议 320×200，会被整张拉伸到面板大小。
          *
          * 绝大部分会被网页盖住，真正看得见的只有地址栏那一条和加载中的空白期，
