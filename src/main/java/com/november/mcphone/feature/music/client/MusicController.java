@@ -189,19 +189,13 @@ public final class MusicController {
             return;
         }
 
-        int nextIndex = switch (mode) {
+        // 三种模式都不会走到列表外面：循环取模、随机在范围内挑。
+        // 1.4.30 之前还有一个"放到头就停"的分支，那是顺序播放留下的，
+        // 砍掉那一档之后它就是死代码了
+        index = switch (mode) {
             case SINGLE_LOOP, LIST_LOOP -> (index + 1) % queue.size();
-            case SEQUENTIAL -> index + 1;
             case SHUFFLE -> randomOther();
         };
-
-        // 顺序模式放到头了：停下，但保留队列——玩家再点播放键还能从头开始
-        if (nextIndex >= queue.size()) {
-            LocalPlayback.stop();
-            return;
-        }
-
-        index = nextIndex;
         startCurrent();
     }
 

@@ -199,14 +199,11 @@ public final class PhoneSkin {
         MUSIC_NEXT("music/next", "music_next"),
 
         /**
-         * 循环模式键 —— 顺序播放。建议 9×9，缺图时画 → 字符。
+         * 循环模式键 —— 列表循环。建议 9×9，缺图时画 ↻ 字符。
          *
-         * 四种模式各一张，而不是一张图配四个角标：它们在任何播放器里都是
-         * 四个完全不同的图形（→ ↻ ① ⇄），拼不出来。
+         * 三种模式各一张，而不是一张图配三个角标：它们在任何播放器里都是
+         * 完全不同的图形（↻ ① ⇄），拼不出来。
          */
-        MUSIC_MODE_SEQUENTIAL("music/mode_sequential", "music_mode_sequential"),
-
-        /** 循环模式键 —— 列表循环。建议 9×9，缺图时画 ↻ 字符 */
         MUSIC_MODE_LIST_LOOP("music/mode_list_loop", "music_mode_list_loop"),
 
         /** 循环模式键 —— 单曲循环。建议 9×9，缺图时画 ① 字符 */

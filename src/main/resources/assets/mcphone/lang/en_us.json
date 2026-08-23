@@ -52,7 +52,6 @@
   "mcphone.music.empty_hint": "Drop music into config/mcphone/music/ — %s supported",
   "mcphone.music.source.local": "Local Music",
   "mcphone.music.source.disc": "Music Discs",
-  "mcphone.music.mode.sequential": "In order",
   "mcphone.music.mode.list_loop": "Repeat all",
   "mcphone.music.mode.single_loop": "Repeat one",
   "mcphone.music.mode.shuffle": "Shuffle",

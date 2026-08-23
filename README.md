@@ -121,7 +121,6 @@ NeoForge 的注册阶段只要收到任何一个模组抛的异常，就会把�
 | `music/play.png` | 「播放」键 | 9×9 | 画 ▶ 字符 |
 | `music/pause.png` | 「暂停」键 | 9×9 | 画 ⏸ 字符 |
 | `music/next.png` | 「下一首」 | 9×9 | 画 ⏭ 字符 |
-| `music/mode_sequential.png` | 循环模式：顺序播放 | 9×9 | 画 → 字符 |
 | `music/mode_list_loop.png` | 循环模式：列表循环 | 9×9 | 画 ↻ 字符 |
 | `music/mode_single_loop.png` | 循环模式：单曲循环 | 9×9 | 画 ① 字符 |
 | `music/mode_shuffle.png` | 循环模式：随机播放 | 9×9 | 画 ⇄ 字符 |

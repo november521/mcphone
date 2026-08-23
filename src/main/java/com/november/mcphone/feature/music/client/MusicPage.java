@@ -306,7 +306,6 @@ public final class MusicPage {
 
     private static PhoneSkin.Element modeElement(PlayMode mode) {
         return switch (mode) {
-            case SEQUENTIAL -> PhoneSkin.Element.MUSIC_MODE_SEQUENTIAL;
             case LIST_LOOP -> PhoneSkin.Element.MUSIC_MODE_LIST_LOOP;
             case SINGLE_LOOP -> PhoneSkin.Element.MUSIC_MODE_SINGLE_LOOP;
             case SHUFFLE -> PhoneSkin.Element.MUSIC_MODE_SHUFFLE;
