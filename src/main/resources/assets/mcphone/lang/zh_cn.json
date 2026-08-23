@@ -120,6 +120,8 @@
   "mcphone.chat.friend_peer_full": "对方的好友已满，加不上",
   "mcphone.chat.friend_peer_inbox_full": "对方待处理的申请太多了，晚点再试",
   "mcphone.chat.friend_unknown_player": "服务端没见过这个玩家",
+  "mcphone.chat.teleport_offline": "对方已经不在线了",
+  "mcphone.chat.teleport_arrived": "%s 传送到了你身边",
   "mcphone.app.clock": "时钟",
   "mcphone.app.clock.desc": "游戏里几点了，现实里几点了，还有多久天黑。在下界也照常走——原版时钟在那儿只会乱转。",
   "mcphone.clock.day": "第 %s 天",

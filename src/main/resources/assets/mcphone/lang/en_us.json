@@ -120,6 +120,8 @@
   "mcphone.chat.friend_peer_full": "Their friend list is full",
   "mcphone.chat.friend_peer_inbox_full": "They have too many pending requests, try later",
   "mcphone.chat.friend_unknown_player": "The server has never seen that player",
+  "mcphone.chat.teleport_offline": "They are not online anymore",
+  "mcphone.chat.teleport_arrived": "%s teleported to you",
   "mcphone.app.clock": "Clock",
   "mcphone.app.clock.desc": "The time in game, the time out here, and how long until dark. Works in the Nether too — the vanilla clock just spins there.",
   "mcphone.clock.day": "Day %s",

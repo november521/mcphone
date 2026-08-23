@@ -4,6 +4,8 @@ import com.november.mcphone.feature.chat.ChatMessage;
 import com.november.mcphone.feature.chat.ChatService;
 import com.november.mcphone.feature.chat.FriendData;
 import com.november.mcphone.feature.chat.FriendOutcome;
+import com.november.mcphone.feature.chat.TeleportOutcome;
+import com.november.mcphone.feature.chat.TeleportService;
 import com.november.mcphone.core.net.RequestThrottle;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
@@ -111,6 +113,13 @@ public final class ChatNetworking {
                 RemoveFriendPacket.TYPE,
                 RemoveFriendPacket.STREAM_CODEC,
                 ChatNetworking::handleRemoveFriend
+        );
+
+        // C2S: 传送到某个好友面前
+        registrar.playToServer(
+                TeleportToFriendPacket.TYPE,
+                TeleportToFriendPacket.STREAM_CODEC,
+                ChatNetworking::handleTeleportToFriend
         );
     }
 
@@ -277,6 +286,38 @@ public final class ChatNetworking {
             ChatService.removeFriend(player, packet.target());
             replyState(ctx, player);
         });
+    }
+
+    /**
+     * 传送到某个好友面前。
+     *
+     * 不回发任何列表，与另外三个写操作不同：客户端点下按钮的同一帧就把手机
+     * 关掉了（人传过去了还举着手机，看不见自己落在哪），回一份列表过去没有
+     * 界面会读它。下次开机自然会拉到新的。
+     *
+     * 传送规则全在 TeleportService，这里只做传输层的事。
+     */
+    private static void handleTeleportToFriend(TeleportToFriendPacket packet,
+                                               IPayloadContext ctx) {
+        ctx.enqueueWork(() -> {
+            if (!(ctx.player() instanceof ServerPlayer player)) return;
+            if (!RequestThrottle.allow(player, RequestThrottle.Kind.TELEPORT)) return;
+
+            tellTeleport(player, TeleportService.teleportToFriend(player, packet.target()));
+        });
+    }
+
+    /**
+     * 传送没成时说一句为什么。
+     *
+     * 只有"对方下线了"要说，理由见 TeleportOutcome：OK 时人已经到了，
+     * 眼睛看得见；NOTHING 那几种正常客户端走不到，告诉它是哪条规则拦住的
+     * 等于帮伪造客户端调试。
+     */
+    private static void tellTeleport(ServerPlayer player, TeleportOutcome outcome) {
+        if (outcome != TeleportOutcome.PEER_OFFLINE) return;
+        player.displayClientMessage(
+                Component.translatable("mcphone.chat.teleport_offline"), true);
     }
 
     /**
