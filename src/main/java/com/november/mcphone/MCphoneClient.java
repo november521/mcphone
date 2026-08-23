@@ -10,6 +10,7 @@ import com.november.mcphone.core.menu.ModMenus;
 import com.november.mcphone.feature.camera.client.CameraHandler;
 import com.november.mcphone.feature.chat.client.ChatNotifier;
 import com.november.mcphone.feature.chat.net.ChatClientCache;
+import com.november.mcphone.feature.music.client.playback.LocalPlayback;
 import com.november.mcphone.feature.notes.net.NotesClientCache;
 import com.november.mcphone.feature.settings.client.WallpaperStore;
 import com.november.mcphone.feature.store.net.StoreClientCache;
@@ -52,6 +53,10 @@ public class MCphoneClient {
 
         // 快捷键开机，同样在游戏总线上读按键
         NeoForge.EVENT_BUS.addListener(PhoneKeyHandler::onClientTick);
+
+        // 音乐要每 tick 泵一次音频流：把放完的缓冲换成新的、发现放完了收尾、
+        // 跟上音量滑块的变化。没在放的时候第一行就返回，不花钱
+        NeoForge.EVENT_BUS.addListener(LocalPlayback::onClientTick);
         NeoForge.EVENT_BUS.addListener(CameraHandler::onRenderGui);
         NeoForge.EVENT_BUS.addListener(CameraHandler::onScreenOpening);
 
@@ -70,6 +75,10 @@ public class MCphoneClient {
                     // 本次游玩计时归零。不清的话，回主菜单再进另一个存档，
                     // "本次"会从上一个世界就开始算
                     PlayTime.onWorldLeave();
+
+                    // 音乐停下并把音频设备还给系统。不还的话每次进出世界
+                    // 都漏一个 OpenAL 设备句柄，而且上一个世界的歌会一直放
+                    LocalPlayback.shutdown();
                 });
 
         // 进世界时读这个存档自己的安装状态。不能在客户端启动时读——那会儿
