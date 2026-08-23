@@ -282,7 +282,9 @@ public final class ChatService {
             UUID id = p.getUUID();
             if (id.equals(selfId)) continue;
 
-            String name = p.getGameProfile().getName();
+            // 截断在这里做，不在 rememberName 里：存进缓存的是真名，
+            // 下发出去的才需要迁就编解码器的上限
+            String name = ConversationSummary.clampName(p.getGameProfile().getName());
             friends.rememberName(id, name);
 
             if (out.size() >= limit) continue;   // 仍要走完循环，名字缓存不能漏
@@ -336,6 +338,18 @@ public final class ChatService {
      */
     public static String resolveName(MinecraftServer server, FriendData friends,
                                      UUID id, ServerPlayer online) {
+        return ConversationSummary.clampName(rawName(server, friends, id, online));
+    }
+
+    /**
+     * 上面那四步的原样结果，截断由调用方统一做。
+     *
+     * 四条路都可能给出超长的名字（Geyser 的前缀、代理改过的资料缓存），
+     * 而超长的名字进了网络包会在编码阶段抛异常、打断整条连接。截断只在
+     * resolveName 那一处收口，四条路各截一遍迟早漏一条。
+     */
+    private static String rawName(MinecraftServer server, FriendData friends,
+                                  UUID id, ServerPlayer online) {
         if (online != null) {
             return online.getGameProfile().getName();
         }
