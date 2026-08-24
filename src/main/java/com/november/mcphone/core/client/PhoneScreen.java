@@ -581,10 +581,15 @@ public final class PhoneScreen extends Screen {
         // 拖动时按"抽出来、再插进去"的结果画，而不是画原顺序再叠个提示：
         // 玩家看到的直接就是松手后的样子，不必先松手再确认自己摆对没有。
         // 用的是与 moveApp 同一个 HomeLayout.reorder，预览与落定不可能对不上
-        List<IPhoneApp> ordered = new ArrayList<>(PhoneScreenRegistry.getApps());
+        // 只有拖动时才拷一份：reorder 会就地改，而 getApps() 交出来的是
+        // Collections.unmodifiableList，改它会抛 UnsupportedOperationException。
+        // 没拖的时候直接用那个只读视图，省掉每帧一次全量拷贝 —— 主屏是最常
+        // 看的一页
+        List<IPhoneApp> ordered = PhoneScreenRegistry.getApps();
         IPhoneApp floatingApp = null;
         int floatingIndex = -1;
         if (draggingApp && pressedAppIndex >= 0 && pressedAppIndex < ordered.size()) {
+            ordered = new ArrayList<>(ordered);
             floatingApp = ordered.get(pressedAppIndex);
             floatingIndex = Math.max(0, Math.min(dragTargetIndex, ordered.size() - 1));
             HomeLayout.reorder(ordered, pressedAppIndex, floatingIndex);
