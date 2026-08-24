@@ -147,8 +147,19 @@ public final class DiscService {
      * 还不进背包就【不取出】，而不是丢在地上：玩家在整理界面，脚下突然
      * 掉个东西他多半不会注意，走两步就没了。让操作失败并说明原因，
      * 比悄悄把他的唱片扔了好。
+     *
+     * 与 insert、toggle 一样要手机在身上
+     *
+     * 1.7.8 之前这一条漏了。走正常界面是够不到的 —— 那一页本来就得先有
+     * 手机才打得开 —— 但包是公开的接口，能发就得当成会被发：判据该与界面
+     * 的前提一致，不该看哪条路碰巧没人走。
+     *
+     * 唱片不会因此拿不回来：它存在玩家附件里，跟着人走、死了不掉，手机丢了
+     * 也一直在。再拿到一部手机，它还在仓里。
      */
     public static Outcome eject(ServerPlayer player) {
+        if (!PhoneItem.isCarriedBy(player)) return Outcome.NOTHING;
+
         DiscState state = player.getData(ModAttachments.DISC.get());
         if (!state.hasDisc()) return Outcome.NOTHING;
 
