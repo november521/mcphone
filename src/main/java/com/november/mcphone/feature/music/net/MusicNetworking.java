@@ -6,6 +6,7 @@ import com.november.mcphone.feature.music.DiscState;
 import com.november.mcphone.feature.music.client.DiscClientCache;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
+import net.neoforged.neoforge.network.PacketDistributor;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 import net.neoforged.neoforge.network.registration.PayloadRegistrar;
 
@@ -79,6 +80,17 @@ public final class MusicNetworking {
         if (key == null) return;
 
         player.displayClientMessage(Component.translatable(key), true);
+    }
+
+    /**
+     * 主动把唱片仓的最新样子推给这名玩家。
+     *
+     * 平时不需要：客户端每次动作都会收到一份回执（见 handleAction）。但唱片
+     * 仓的菜单界面走的是原版容器同步，不经过这里 —— 玩家在那儿放完唱片
+     * 关掉界面，手机上那一条读的还是进菜单之前的快照。
+     */
+    public static void sync(ServerPlayer player) {
+        PacketDistributor.sendToPlayer(player, stateOf(player));
     }
 
     /** 把服务端的真值打包。"在不在放"由服务端算，客户端不自己推 */

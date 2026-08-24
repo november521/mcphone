@@ -177,6 +177,24 @@ public final class DiscService {
     }
 
     /**
+     * 掐掉正在外放的那一份，并把状态记成"没在放"。
+     *
+     * 换碟与取出唱片都要走这里。原版音效一旦发出去就会自己放到完，服务端
+     * 并不盯着它（见 {@link DiscState} 的类注释：在不在放是算出来的，没有
+     * tick）—— 所以把唱片拿走的那一刻必须主动发停止包，否则玩家手里已经
+     * 没有唱片了，音乐还在他身上响到底。
+     *
+     * 必须趁【旧唱片还在仓里】时调：停止包是按那张唱片的音效 ID 发的。
+     */
+    public static void stopPlayback(ServerPlayer player) {
+        DiscState state = player.getData(ModAttachments.DISC.get());
+        if (state.startedTick() < 0) return;
+
+        stopSound(player, state);
+        player.setData(ModAttachments.DISC.get(), state.stopped());
+    }
+
+    /**
      * 把已经在放的那一份掐掉。
      *
      * 停止包是按音效 ID 停的，也就是说：如果旁边正好有台唱片机在放【同一张】
