@@ -54,6 +54,11 @@ public class MCphone {
         net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener(
                 com.november.mcphone.core.net.RequestThrottle::onPlayerLoggedOut);
 
+        // 同上：丢掉他那份"谁听见了我的外放"的名单。漏了同样没有症状，
+        // 只是表不缩小
+        net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener(
+                com.november.mcphone.feature.music.DiscService::onPlayerLoggedOut);
+
         // 服主的开关。用 SERVER 类型而不是 COMMON：它必须由服主一份说了算，
         // 而且 NeoForge 会把它同步给连上来的客户端，界面才能据此藏按钮
         modContainer.registerConfig(net.neoforged.fml.config.ModConfig.Type.SERVER,

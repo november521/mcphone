@@ -17,8 +17,16 @@ import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.JukeboxSong;
+import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * 唱片外放 —— 「外放」那一半：周围人都听得见，声音跟着你走。
@@ -61,6 +69,38 @@ public final class DiscService {
      * 顺带决定了能传多远：原版音量大于 1 时会按倍数放大可听范围。
      */
     private static final float VOLUME = 4.0F;
+
+    /**
+     * 谁听见了这一份外放。key ＝ 放歌的那个人，value ＝ 收到开始的那些人。
+     *
+     * 为什么不能到停止时再按距离挑一遍
+     *
+     * 外放的整个设定是"扛着唱片机到处走"，声音绑在人身上跟着他移动。于是
+     * 开始与停止之间，他完全可能已经走出去很远，或者换了个维度：
+     *
+     *   A 与 B 站一起，A 按播放   → B 收到，声音挂在 A 身上
+     *   A 走出 100 格             → B 那一份照旧在放，只是远得听不见
+     *   A 按停止                  → 按此刻的距离挑，B 不在名单里，收不到
+     *   A 走回来                  → B 又听见了，而 A 的手机显示没在放
+     *   A 再按播放                → B 那边两份叠在一起
+     *
+     * 1.7.7 之前就是这样。半径公式两处是一致的，可位置变了照样对不上 ——
+     * 一致的是算法，不一致的是算的时候人在哪儿。
+     *
+     * 为什么不干脆全服广播
+     *
+     * 原版的停止包只能按【音效 ID】停（见 {@link #stopSound}）。广播出去会
+     * 把一千格外用唱片机放同一张唱片的人也一起停掉 —— 那是拿一个 bug 换
+     * 另一个。记名单则谁也不多停。
+     *
+     * 只记 UUID 不记玩家对象：那些人随时可能下线，攥着 ServerPlayer 会把
+     * 已经离开的玩家留在内存里。发的时候现查，查不到就是他不在了，正好
+     * 也不必发。
+     *
+     * 包处理都在服务端主线程（enqueueWork），本不必并发容器；用它是为了
+     * 不必去论证"将来也一定只有主线程碰它"——与 RequestThrottle 同一条。
+     */
+    private static final Map<UUID, Set<UUID>> LISTENERS = new ConcurrentHashMap<>();
 
     /** 结果：这次操作成没成，以及为什么没成 */
     public enum Outcome {
@@ -217,6 +257,10 @@ public final class DiscService {
     private static boolean startSound(ServerPlayer player, ItemStack disc) {
         Optional<Holder<JukeboxSong>> vanilla = songOf(player, disc);
         if (vanilla.isPresent()) {
+            // 名单要在发声之前记：原版 playSound 自己按同一个半径挑收件人，
+            // 我们照它的公式再算一遍，两边得到的是同一批人
+            rememberAudience(player);
+
             // 绑在玩家身上，声音就跟着他走。第一个参数传 null ＝ 包括他自己
             // 在内所有听得见的人都收到
             player.level().playSound(null, player,
@@ -227,10 +271,48 @@ public final class DiscService {
 
         return NetMusicCompat.songOf(disc)
                 .map(song -> {
-                    broadcastNearby(player, new PlayNetSongPacket(player.getId(), song));
+                    sendTo(rememberAudience(player),
+                            new PlayNetSongPacket(player.getId(), song));
                     return true;
                 })
                 .orElse(false);
+    }
+
+    /**
+     * 算出此刻听得见的人，记进名单，并把他们交回来。
+     *
+     * 每次开始都整份换掉，不累加 —— 上一首的听众与这一首无关。
+     */
+    private static List<ServerPlayer> rememberAudience(ServerPlayer player) {
+        List<ServerPlayer> audience = nearbyPlayers(player);
+
+        Set<UUID> ids = new HashSet<>(audience.size());
+        for (ServerPlayer p : audience) ids.add(p.getUUID());
+        LISTENERS.put(player.getUUID(), ids);
+
+        return audience;
+    }
+
+    /**
+     * 当初听见开始的那些人，还在线的。
+     *
+     * 名单不在时退回按此刻的距离挑。这种情况只有一种来路：服务端重启过，
+     * 而"正在外放"是从存档里读回来的（唱片状态是持久化的，名单不是）。
+     * 那时按距离挑不完美，但比一个都不发强。
+     */
+    private static List<ServerPlayer> audienceOf(ServerPlayer player) {
+        Set<UUID> ids = LISTENERS.get(player.getUUID());
+        if (ids == null) return nearbyPlayers(player);
+
+        var server = player.getServer();
+        if (server == null) return List.of();
+
+        List<ServerPlayer> out = new ArrayList<>(ids.size());
+        for (UUID id : ids) {
+            ServerPlayer p = server.getPlayerList().getPlayer(id);
+            if (p != null) out.add(p);
+        }
+        return out;
     }
 
     /**
@@ -247,19 +329,31 @@ public final class DiscService {
                 || NetMusicCompat.songOf(stack).isPresent();
     }
 
-    /**
-     * 把包发给听得见的人。
-     *
-     * 半径与 stopSound 用同一套算法 —— 两处不一致的话会出现"听得见开始
-     * 却收不到停止"，那首歌就在他耳朵里放到完。
-     */
-    private static void broadcastNearby(ServerPlayer player, CustomPacketPayload packet) {
+    /** 此刻听得见的人。只在【开始】那一刻用，停止走的是名单 */
+    private static List<ServerPlayer> nearbyPlayers(ServerPlayer player) {
         double radiusSq = audibleRadius() * audibleRadius();
+
+        List<ServerPlayer> out = new ArrayList<>();
         for (ServerPlayer nearby : ((ServerLevel) player.level()).players()) {
-            if (nearby.distanceToSqr(player) <= radiusSq) {
-                PacketDistributor.sendToPlayer(nearby, packet);
-            }
+            if (nearby.distanceToSqr(player) <= radiusSq) out.add(nearby);
         }
+        return out;
+    }
+
+    private static void sendTo(List<ServerPlayer> audience, CustomPacketPayload packet) {
+        for (ServerPlayer p : audience) PacketDistributor.sendToPlayer(p, packet);
+    }
+
+    /**
+     * 玩家下线时把他那份听众名单丢掉。
+     *
+     * 由 MCphone 的构造函数显式挂到游戏总线上，与 RequestThrottle 那条同一个
+     * 做法、同一个理由：漏了不会有任何症状，只是这张表再也不缩小了。
+     *
+     * 丢掉是安全的：人都走了，外放当然也停了；他再上线时按播放会重记一份。
+     */
+    public static void onPlayerLoggedOut(PlayerEvent.PlayerLoggedOutEvent event) {
+        LISTENERS.remove(event.getEntity().getUUID());
     }
 
     /**
@@ -303,25 +397,24 @@ public final class DiscService {
     private static void stopSound(ServerPlayer player, DiscState state) {
         if (state.startedTick() < 0) return;
 
+        // 发给当初听见开始的那些人，不是此刻在附近的那些人。理由见 LISTENERS
+        List<ServerPlayer> audience = audienceOf(player);
+        LISTENERS.remove(player.getUUID());
+
         Optional<Holder<JukeboxSong>> vanilla = songOf(player, state.disc());
         if (vanilla.isPresent()) {
             SoundEvent sound = vanilla.get().value().soundEvent().value();
             ClientboundStopSoundPacket packet =
                     new ClientboundStopSoundPacket(sound.getLocation(), SoundSource.RECORDS);
 
-            double radiusSq = audibleRadius() * audibleRadius();
-            for (ServerPlayer nearby : ((ServerLevel) player.level()).players()) {
-                if (nearby.distanceToSqr(player) <= radiusSq) {
-                    nearby.connection.send(packet);
-                }
-            }
+            for (ServerPlayer p : audience) p.connection.send(packet);
             return;
         }
 
         // NetMusic 的 CD：停的是我们自己那个声源，按实体停得准 —— 不像
         // 原版那个包只能按音效 ID 停，会把旁边放同一张唱片的人一起停掉
         if (NetMusicCompat.songOf(state.disc()).isPresent()) {
-            broadcastNearby(player, new StopNetSongPacket(player.getId()));
+            sendTo(audience, new StopNetSongPacket(player.getId()));
         }
     }
 
