@@ -81,7 +81,7 @@ public final class Mp3Decoder implements AudioDecoder {
                 throw new IOException("MP3 解码器给出的格式不是 16 位有符号小端 PCM：" + format);
             }
 
-            return new PcmAudioStream(sound, format);
+            return new PcmAudioStream(sound, format, file.getFileName().toString());
         } catch (IOException | RuntimeException e) {
             raw.close();
             throw e instanceof IOException io ? io : new IOException(e);
