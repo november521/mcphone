@@ -51,7 +51,6 @@
   "mcphone.music.empty": "Nothing here yet",
   "mcphone.music.empty_hint": "Drop music into config/mcphone/music/ — %s supported",
   "mcphone.music.source.local": "Local Music",
-  "mcphone.music.source.disc": "Music Discs",
   "mcphone.music.disc.not_a_disc": "That is not a music disc",
   "mcphone.music.disc.insert_hint": "Insert a disc — others hear it too",
   "mcphone.music.disc.occupied": "There is already a disc inside",

@@ -11,7 +11,6 @@ import com.november.mcphone.feature.music.client.playback.AudioDecoders;
 import com.november.mcphone.feature.music.client.playback.LocalPlayback;
 import com.november.mcphone.feature.music.client.source.MusicSources;
 import com.november.mcphone.feature.music.net.DiscActionPacket;
-import com.november.mcphone.feature.music.client.source.VanillaDiscSource;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
@@ -37,6 +36,10 @@ import java.util.List;
  * 各管各的：唱片仓走服务端、周围人听得见、只有播和停；曲库走本地解码、
  * 只有自己听得见、能暂停能看进度。两者可以同时响，就像真的一边戴耳机
  * 一边开外放——没必要禁止，玩家自己会关掉一个。
+ *
+ * "各管各的"到 1.5.2 才算真的做到：在那之前存档里【所有】唱片都被塞进
+ * 曲库当曲目，玩家自己那几首歌被几十张唱片埋着。现在曲库只有
+ * config/mcphone/music/ 下的文件，唱片只在上面那一条里出现。
  *
  * ============================================================
  * 界面不持有播放状态
@@ -309,9 +312,10 @@ public final class MusicPage {
                 g.fill(x, y, x + w, y + rowH, PhoneTheme.COLOR_ROW_ACTIVE);
             }
 
-            // 前面那个符号区分来源：唱片与本地文件混在一列里，不标的话
-            // 玩家分不出哪些是游戏自带的。旧界面就是这么标的，习惯留着
-            String label = sourceGlyph(t) + t.title();
+            // 行首那个音符纯粹是装饰，旧界面就有，习惯留着。1.5.2 之前它还
+            // 兼着区分来源（♫ 是原版唱片、♪ 是本地文件），现在曲库里只剩
+            // 本地文件了，那个区分也就没有意义
+            String label = "♪ " + t.title();
             g.drawString(font, GuiUtil.truncate(font, label, w - 4), x + 2, y + 1,
                     isCurrent ? FontPalette.title() : FontPalette.body(), false);
             y += rowH;
@@ -390,17 +394,6 @@ public final class MusicPage {
 
         g.drawString(font, glyph, x + (BTN - font.width(glyph)) / 2, y,
                 hovered ? FontPalette.title() : FontPalette.link(), false);
-    }
-
-    /**
-     * 曲目前面那个符号。
-     *
-     * 用字符而不是贴图：它跟在文字前面、随文字一起截断，是这一行文本的
-     * 一部分，不是一个独立的视觉元素。真要换成贴图，得先把它从字符串里
-     * 拆出来单独排版，为一个符号不值得。
-     */
-    private static String sourceGlyph(Track track) {
-        return VanillaDiscSource.ID.equals(track.sourceId()) ? "♫ " : "♪ ";
     }
 
     private static PhoneSkin.Element modeElement(PlayMode mode) {

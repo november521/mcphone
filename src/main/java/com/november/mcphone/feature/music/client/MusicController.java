@@ -238,8 +238,11 @@ public final class MusicController {
     /**
      * 把曲目交给对应的音源打开，再交给播放层。
      *
-     * SHARED 类型（唱片）不走这里——它由服务端播，这一层还没有接上，
-     * 先当作放不出来跳过。接上外放之后这里会多一个分支。
+     * 只放 LOCAL 的。SHARED（外放）由服务端播，这一层拿不到也不需要那份
+     * 音频数据——1.5.2 起曲库里根本不会出现 SHARED 的曲目（原版唱片已经
+     * 从音源名单里摘掉，只在唱片仓那一条里出现），这道判断留着当防线：
+     * 将来接 NetMusic 的外放时，忘了加分支会在这里安静地跳过，而不是
+     * 拿一条空流去喂音频通道。
      */
     private static boolean openAndPlay(Track track) {
         if (track.kind() != Track.Kind.LOCAL) return false;
