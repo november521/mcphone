@@ -8,7 +8,6 @@ import net.minecraft.resources.ResourceLocation;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.ServiceLoader;
 
 /**
  * App 价格表 —— "下载这个 App 要花什么"的唯一权威。

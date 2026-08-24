@@ -150,7 +150,7 @@ public final class WeatherPage {
     /**
      * 放大居中画一行字。
      *
-     * 先 translate 再 scale，最后在原点画——理由见 PhoneScreen.drawAppName，
+     * 先 translate 再 scale，最后在原点画——理由见 HomeGrid.drawAppName，
      * 反过来写会让实际中心随字数偏移。
      */
     private static void drawBigCentered(GuiGraphics g, Font font, String text,

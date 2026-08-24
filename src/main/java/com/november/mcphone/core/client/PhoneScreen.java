@@ -137,7 +137,6 @@ public final class PhoneScreen extends Screen {
     private final HomeGrid homeGrid = new HomeGrid();
 
     private int phoneLeft, phoneTop;
-    private int gridStartX, gridStartY;
     private boolean layoutDirty = true;
     private long nowMs;
 
@@ -434,9 +433,6 @@ public final class PhoneScreen extends Screen {
         this.phoneLeft = (this.width - phoneW) / 2 + PhoneTheme.PHONE_BORDER;
         this.phoneTop = (this.height - phoneH) / 2 + PhoneTheme.PHONE_BORDER + PhoneTheme.SCREEN_Y_OFFSET;
 
-        this.gridStartX = this.phoneLeft + PhoneTheme.APP_GRID_PADDING_LEFT;
-        this.gridStartY = this.phoneTop + PhoneTheme.STATUS_BAR_HEIGHT + PhoneTheme.APP_GRID_PADDING_TOP;
-
         this.layoutDirty = false;
     }
 
@@ -469,9 +465,8 @@ public final class PhoneScreen extends Screen {
         renderStatusBar(g);
 
         switch (mode) {
-            case MAIN              -> homeGrid.render(g, phoneLeft, phoneTop,
-                    gridStartX, gridStartY, font, nowMs, animationDone,
-                    unscaledX(mouseX), unscaledY(mouseY));
+            case MAIN              -> homeGrid.render(g, phoneLeft, phoneTop, font,
+                    nowMs, animationDone, unscaledX(mouseX), unscaledY(mouseY));
             case SETTINGS          -> {
                 buildSettingItems();
                 settingsList.render(g, phoneLeft, phoneTop,
@@ -479,7 +474,10 @@ public final class PhoneScreen extends Screen {
                         PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT,
                         mouseX, mouseY, font);
             }
-            case WALLPAPER_PICKER  -> renderWallpaperPicker(g, mouseX, mouseY);
+            case WALLPAPER_PICKER  -> wallpaperPicker.render(g, phoneLeft, phoneTop,
+                    PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
+                    PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT,
+                    mouseX, mouseY, font);
             case FONT_COLOR_PICKER -> fontColorPicker.render(g, phoneLeft, phoneTop,
                     PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
                     PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT,
@@ -488,9 +486,18 @@ public final class PhoneScreen extends Screen {
                     PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
                     PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT,
                     mouseX, mouseY, font);
-            case MUSIC_PLAYER      -> renderMusicPlayer(g, mouseX, mouseY);
-            case APP_STORE         -> renderAppStore(g, mouseX, mouseY);
-            case APP_DETAIL        -> renderAppDetail(g, mouseX, mouseY);
+            case MUSIC_PLAYER      -> musicPage.render(g, phoneLeft, phoneTop,
+                    PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
+                    PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT,
+                    mouseX, mouseY, font);
+            case APP_STORE         -> appStore.render(g, phoneLeft, phoneTop,
+                    PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
+                    PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT,
+                    mouseX, mouseY, font);
+            case APP_DETAIL        -> appDetail.render(g, phoneLeft, phoneTop,
+                    PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
+                    PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT,
+                    mouseX, mouseY, font);
             case ADDON_PAGE        -> renderAddonPage(g, mouseX, mouseY, partialTick);
             case COMPANION_APPS    -> companionApps.render(g, phoneLeft, phoneTop,
                     PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
@@ -499,11 +506,26 @@ public final class PhoneScreen extends Screen {
             case ABOUT             -> AboutPage.render(g, phoneLeft, phoneTop,
                     PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
                     PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT, font);
-            case GALLERY           -> renderGallery(g, mouseX, mouseY);
-            case DEVICE_NAME       -> renderDeviceName(g, mouseX, mouseY, partialTick);
-            case CHAT              -> renderChat(g, mouseX, mouseY);
-            case CHAT_ADD_CONTACT  -> renderChatAddContact(g, mouseX, mouseY);
-            case CHAT_CONVERSATION -> renderChatConversation(g, mouseX, mouseY, partialTick);
+            case GALLERY           -> gallery.render(g, phoneLeft, phoneTop,
+                    PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
+                    PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT,
+                    mouseX, mouseY, font);
+            case DEVICE_NAME       -> deviceNameEditor.render(g, phoneLeft, phoneTop,
+                    PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
+                    PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT,
+                    mouseX, mouseY, partialTick, font);
+            case CHAT              -> chatList.render(g, phoneLeft, phoneTop,
+                    PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
+                    PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT,
+                    mouseX, mouseY, font);
+            case CHAT_ADD_CONTACT  -> chatAddContact.render(g, phoneLeft, phoneTop,
+                    PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
+                    PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT,
+                    mouseX, mouseY, font);
+            case CHAT_CONVERSATION -> chatConversation.render(g, phoneLeft, phoneTop,
+                    PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
+                    PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT,
+                    mouseX, mouseY, partialTick, font);
             case NOTES             -> notesList.render(g, phoneLeft, phoneTop,
                     PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
                     PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT, mouseX, mouseY, font);
@@ -600,69 +622,21 @@ public final class PhoneScreen extends Screen {
 
     //  壁纸选择器
 
-    private void renderWallpaperPicker(GuiGraphics g, int mx, int my) {
-        wallpaperPicker.render(g, phoneLeft, phoneTop,
-                PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
-                PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT,
-                mx, my, font);
-    }
 
     //  音乐播放器
 
-    private void renderMusicPlayer(GuiGraphics g, int mx, int my) {
-        musicPage.render(g, phoneLeft, phoneTop,
-                PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
-                PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT,
-                mx, my, font);
-    }
 
     //  应用商店
 
-    private void renderAppStore(GuiGraphics g, int mx, int my) {
-        appStore.render(g, phoneLeft, phoneTop,
-                PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
-                PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT,
-                mx, my, font);
-    }
 
-    private void renderAppDetail(GuiGraphics g, int mx, int my) {
-        appDetail.render(g, phoneLeft, phoneTop,
-                PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
-                PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT,
-                mx, my, font);
-    }
 
     //  设备名称
 
-    private void renderDeviceName(GuiGraphics g, int mx, int my, float partialTick) {
-        deviceNameEditor.render(g, phoneLeft, phoneTop,
-                PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
-                PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT,
-                mx, my, partialTick, font);
-    }
 
     //  聊天
 
-    private void renderChat(GuiGraphics g, int mx, int my) {
-        chatList.render(g, phoneLeft, phoneTop,
-                PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
-                PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT,
-                mx, my, font);
-    }
 
-    private void renderChatAddContact(GuiGraphics g, int mx, int my) {
-        chatAddContact.render(g, phoneLeft, phoneTop,
-                PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
-                PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT,
-                mx, my, font);
-    }
 
-    private void renderChatConversation(GuiGraphics g, int mx, int my, float partialTick) {
-        chatConversation.render(g, phoneLeft, phoneTop,
-                PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
-                PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT,
-                mx, my, partialTick, font);
-    }
 
     /** 设置列表右侧显示的当前设备名，未命名时显示占位文案 */
     private String currentDeviceNameLabel() {
@@ -681,12 +655,6 @@ public final class PhoneScreen extends Screen {
 
     //  相册
 
-    private void renderGallery(GuiGraphics g, int mx, int my) {
-        gallery.render(g, phoneLeft, phoneTop,
-                PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
-                PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT,
-                mx, my, font);
-    }
 
     //  底部导航栏
 
@@ -715,7 +683,8 @@ public final class PhoneScreen extends Screen {
      * 必须做同样的逆变换，否则那 150 毫秒里点击位置会偏。
      *
      * 【结果仍然是屏幕坐标】，原点没有挪到手机左上角——所以它算出来的值可以
-     * 直接和 phoneLeft、gridStartY、dotsTop() 这些比。
+     * 直接和 phoneLeft、phoneTop 这些比，也可以原样交给按屏幕坐标排版的
+     * 各个页面组件（主屏就是这么收的）。
      *
      * 1.3.24 之前这两个方法叫 toLocalX/toLocalY，存下来的字段叫
      * pressLocalX/dragLocalX。那个 "Local" 让人以为是相对手机的局部坐标，

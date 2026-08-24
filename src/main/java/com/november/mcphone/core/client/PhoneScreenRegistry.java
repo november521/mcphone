@@ -365,7 +365,7 @@ public final class PhoneScreenRegistry {
      * 原先是 getApps().size() —— 为了拿一个整数，先建一个 ArrayList，再让
      * List.copyOf 把它拷成第二个数组，然后只读 size。
      *
-     * 这不是理论上的浪费：主屏一帧里它至少被调四次（renderAppGrid 的边缘
+     * 这不是理论上的浪费：主屏一帧里它至少被调四次（HomeGrid 里边缘
      * 翻页结算、pageCount、goToPage 的夹取、updateAppHover），拖动时还要
      * 再加一次。每帧十次数组分配，只为几个个位数的计数。
      *

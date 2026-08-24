@@ -254,7 +254,7 @@ public final class ClockPage {
      *
      * 先 translate 到目标位置再 scale，最后在原点画——不是缩放一个非原点的
      * 坐标。后者会让实际中心比屏幕中线偏，字越长偏得越多。主屏图标下面那行
-     * App 名字踩过同一个坑，见 PhoneScreen.drawAppName。
+     * App 名字踩过同一个坑，见 HomeGrid.drawAppName。
      */
     private static void drawBigCentered(GuiGraphics g, Font font, String text,
                                         int phoneLeft, int screenW, int y) {

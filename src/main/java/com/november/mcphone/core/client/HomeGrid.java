@@ -79,11 +79,6 @@ public final class HomeGrid {
     /** 松手判定为"点开"的那个 App，等 PhoneScreen 来取 */
     private IPhoneApp pendingLaunch;
 
-    /** 进入主屏时清掉悬停，免得沿用上一次离开时停在哪一格 */
-    public void open() {
-        hoveredAppIndex = -1;
-    }
-
     /**
      * 画主屏。
      *
@@ -91,14 +86,19 @@ public final class HomeGrid {
      * @param nowMs       这一帧的时刻。由调用方统一取一次传进来 —— 同一帧里
      *                    翻页动画与边缘停留都要读它，各自取一次会对不齐
      */
-    public void render(GuiGraphics g, int phoneLeft, int phoneTop,
-                       int gridStartX, int gridStartY, Font font,
+    public void render(GuiGraphics g, int phoneLeft, int phoneTop, Font font,
                        long nowMs, boolean animationDone,
                        double localMouseX, double localMouseY) {
         this.phoneLeft = phoneLeft;
         this.phoneTop = phoneTop;
-        this.gridStartX = gridStartX;
-        this.gridStartY = gridStartY;
+
+        // 格子起点自己算，不劳调用方传 —— 它就是机身左上角加两个常量，
+        // 而这两个常量是网格自己的排版参数。让 PhoneScreen 存一份再递过来，
+        // 等于把网格的几何知识拆到两个类里
+        this.gridStartX = phoneLeft + PhoneTheme.APP_GRID_PADDING_LEFT;
+        this.gridStartY = phoneTop + PhoneTheme.STATUS_BAR_HEIGHT
+                + PhoneTheme.APP_GRID_PADDING_TOP;
+
         this.font = font;
         this.nowMs = nowMs;
         this.animationDone = animationDone;
