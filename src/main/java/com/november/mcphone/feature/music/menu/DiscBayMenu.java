@@ -127,6 +127,26 @@ public class DiscBayMenu extends AbstractContainerMenu {
      *
      * 从背包往仓里搬时，{@code moveItemStackTo} 会替我们问格子的 mayPlace，
      * 所以 shift 点一块石头不会把它塞进唱片仓 —— 不必在这里再判一次。
+     *
+     * 往外搬必须搬副本
+     *
+     * 唱片仓交出去的是【活的】那一张（见 DiscBayContainer.getItem：原版格子
+     * 要就地改它，交副本的话那些改动会落在空气上）。而 moveItemStackTo 正是
+     * 就地改的 —— 核过它的源码，走的是 stack.split / shrink / setCount(0)。
+     *
+     * 于是直接把 slot.getItem() 递进去会这样：
+     *
+     *   moveItemStackTo(那张活的) → 附件里的唱片被就地清成空
+     *   slot.set(EMPTY)           → setDisc → DiscService.stopPlayback
+     *   stopPlayback 读 state.disc() → 已经是空的，认不出是哪张唱片
+     *                               → 停止包发不出去
+     *
+     * 结果是唱片已经回到背包，那首歌还在所有听众耳朵里放到完。鼠标拖出来
+     * 那条路没有这个问题（removeItemNoUpdate 先 copy 再 setDisc），只有
+     * shift 点击这一条错。
+     *
+     * 所以这一支搬副本，搬完再把剩下的写回格子 —— 写回那一刻仓里那张还是
+     * 原封不动的，停得掉。
      */
     @Override
     public ItemStack quickMoveStack(Player player, int index) {
@@ -138,14 +158,18 @@ public class DiscBayMenu extends AbstractContainerMenu {
 
         if (index < DiscBayContainer.SIZE) {
             // 唱片仓 → 背包。reverse=true 从快捷栏那头开始填，与原版一致
-            if (!moveItemStackTo(stack, DiscBayContainer.SIZE, this.slots.size(), true)) {
+            ItemStack moving = original.copy();
+            if (!moveItemStackTo(moving, DiscBayContainer.SIZE, this.slots.size(), true)) {
                 return ItemStack.EMPTY;
             }
-        } else {
-            // 背包 → 唱片仓
-            if (!moveItemStackTo(stack, 0, DiscBayContainer.SIZE, false)) {
-                return ItemStack.EMPTY;
-            }
+            slot.setByPlayer(moving, original);
+            return original;
+        }
+
+        // 背包 → 唱片仓。这一支就地改的是【背包里】那一张，正是原版的做法；
+        // 而落进仓里那一步走的是 setItem，那时旧唱片还在，停得掉
+        if (!moveItemStackTo(stack, 0, DiscBayContainer.SIZE, false)) {
+            return ItemStack.EMPTY;
         }
 
         if (stack.isEmpty()) {
