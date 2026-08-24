@@ -506,7 +506,7 @@ public final class PhoneScreen extends Screen {
         g.pose().scale(scale, scale, 1.0f);
         g.pose().translate(-cx, -cy, 0);
 
-        renderPhoneFrame(g);
+        renderScreenBackground(g);
         renderStatusBar(g);
 
         switch (mode) {
@@ -550,6 +550,13 @@ public final class PhoneScreen extends Screen {
         }
 
         renderNavBar(g, mouseX, mouseY);
+
+        // 外壳最后画，盖在所有内容之上 —— 这样贴图在屏幕区域里画的东西
+        // （内圆角、刘海之类）才显示得出来。状态栏与导航栏都是不透明的，
+        // 横跨整宽，只"画在壁纸之上"是不够的，必须在它们之后。
+        // 仍在 pushPose 之内：开机动画要把外壳一起缩放
+        PhoneChassis.drawFrame(g, phoneLeft, phoneTop);
+
         g.pose().popPose();
 
         if (mode == Mode.MAIN)           updateAppHover(mouseX, mouseY);
@@ -557,10 +564,10 @@ public final class PhoneScreen extends Screen {
         if (mode == Mode.APP_MANAGER)    updateAppManagerHover(mouseX, mouseY);
     }
 
-    //  手机外壳 + 壁纸背景
+    //  屏幕背景（壁纸）。外壳不在这儿，它画在最上层，见 render 末尾
 
-    private void renderPhoneFrame(GuiGraphics g) {
-        PhoneChassis.drawFrameAndWallpaper(g, phoneLeft, phoneTop);
+    private void renderScreenBackground(GuiGraphics g) {
+        PhoneChassis.drawScreenBackground(g, phoneLeft, phoneTop);
     }
 
     //  状态栏

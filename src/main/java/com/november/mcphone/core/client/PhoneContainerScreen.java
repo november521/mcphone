@@ -44,6 +44,11 @@ public class PhoneContainerScreen extends AbstractContainerScreen<PhoneContainer
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
         renderBackground(g, mouseX, mouseY, partialTick);
         super.render(g, mouseX, mouseY, partialTick);
+
+        // 外壳画在格子与物品之后：它只覆盖机身外的那一圈（格子都在里面），
+        // 而贴图在内圈画的圆角要盖住背景才看得见。与主屏同一条规矩
+        PhoneChassis.drawFrame(g, leftPos, topPos, imageWidth, imageHeight);
+
         // 光标下的物品提示由父类的 renderTooltip 负责，必须在最后画
         renderTooltip(g, mouseX, mouseY);
     }

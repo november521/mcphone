@@ -102,7 +102,7 @@ public final class PhoneTheme {
     //
     // 手机上的字分两类，分界线是「底是什么」：
     //
-    //   一类画在【壁纸】上——每一页都由 PhoneChassis.drawFrameAndWallpaper
+    //   一类画在【壁纸】上——每一页都由 PhoneChassis.drawScreenBackground
     //   铺底，不只主屏。底是玩家自己选的，可深可浅。
     //
     //   另一类画在【手机自带的构件】上——导航栏、通知、未读角标、聊天气泡、

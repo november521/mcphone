@@ -32,8 +32,14 @@ public final class PhoneChassis {
      * @param phoneLeft 屏幕内区域左上角 X（不含边框）
      * @param phoneTop  屏幕内区域左上角 Y（不含边框）
      */
-    public static void drawFrameAndWallpaper(GuiGraphics g, int phoneLeft, int phoneTop) {
-        drawFrameAndWallpaper(g, phoneLeft, phoneTop,
+    public static void drawScreenBackground(GuiGraphics g, int phoneLeft, int phoneTop) {
+        drawScreenBackground(g, phoneLeft, phoneTop,
+                PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT);
+    }
+
+    /** 标准竖屏机身的外壳。画在最上层，理由见 {@link #drawFrame} */
+    public static void drawFrame(GuiGraphics g, int phoneLeft, int phoneTop) {
+        drawFrame(g, phoneLeft, phoneTop,
                 PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT);
     }
 
@@ -49,8 +55,9 @@ public final class PhoneChassis {
     public static void drawContainerBackdrop(GuiGraphics g, int leftPos, int topPos,
                                              int imageWidth, int imageHeight,
                                              Iterable<Slot> slots) {
-        // 外壳与壁纸按本界面的尺寸绘制，视觉上仍是同一部手机
-        drawFrameAndWallpaper(g, leftPos, topPos, imageWidth, imageHeight);
+        // 壁纸按本界面的尺寸绘制。外壳不在这儿 —— 它要画在最上层，
+        // 由各界面在 render 的末尾调 drawFrame
+        drawScreenBackground(g, leftPos, topPos, imageWidth, imageHeight);
 
         // 壁纸可能很亮，压一层暗色蒙版保证文字与物品看得清
         g.fill(leftPos, topPos, leftPos + imageWidth, topPos + imageHeight,
@@ -78,50 +85,68 @@ public final class PhoneChassis {
      * @param screenW 屏幕内区域宽（不含边框）
      * @param screenH 屏幕内区域高（不含边框）
      */
-    public static void drawFrameAndWallpaper(GuiGraphics g, int phoneLeft, int phoneTop,
-                                             int screenW, int screenH) {
-        final int fl = phoneLeft - PhoneTheme.PHONE_BORDER;
-        final int ft = phoneTop - PhoneTheme.PHONE_BORDER;
-        final int fw = screenW + PhoneTheme.PHONE_BORDER * 2;
-        final int fh = screenH + PhoneTheme.PHONE_BORDER * 2;
-
-        // 外壳可换肤：贴图覆盖整个机身（含边框），没有贴图就画纯色边框加顶部高光
-        if (!PhoneSkin.draw(g, PhoneSkin.Element.FRAME, fl, ft, fw, fh)) {
-            g.fill(fl, ft, fl + fw, ft + fh, PhoneTheme.COLOR_FRAME);
-            g.fill(fl, ft, fl + fw, ft + 2, PhoneTheme.COLOR_FRAME_HIGHLIGHT);
-        }
-
+    public static void drawScreenBackground(GuiGraphics g, int phoneLeft, int phoneTop,
+                                            int screenW, int screenH) {
         String wpName = NetworkHandler.WakeholderData.get();
         WallpaperStore.WallpaperEntry wp = WallpaperStore.findEntry(wpName);
 
-        if (wp != null) {
-            // 按 cover 方式等比缩放：覆盖整个屏幕，超出部分居中裁剪
-            int texW = wp.imageWidth();
-            int texH = wp.imageHeight();
-            float sw = (float) screenW / texW;
-            float sh = (float) screenH / texH;
-            float s = Math.max(sw, sh);
-            int srcW = (int) (screenW / s);
-            int srcH = (int) (screenH / s);
-            int srcX = (texW - srcW) / 2;
-            int srcY = (texH - srcH) / 2;
-
-            // 参数顺序按 GuiGraphics 的 11 参重载：
-            //   (贴图, x, y, 目标宽, 目标高, u, v, 源区宽, 源区高, 纹理宽, 纹理高)
-            // 目标宽高在前、UV 在后，写反会导致目标矩形取到 srcX/srcY，
-            // 而居中裁剪下二者必有一个为 0，壁纸就整个画不出来
-            g.blit(wp.texture(),
-                    phoneLeft, phoneTop,
-                    screenW, screenH,
-                    srcX, srcY,
-                    srcW, srcH,
-                    texW, texH);
-        } else {
+        if (wp == null) {
             g.fill(phoneLeft, phoneTop,
-                    phoneLeft + screenW,
-                    phoneTop + screenH,
+                    phoneLeft + screenW, phoneTop + screenH,
                     PhoneTheme.COLOR_SCREEN_BG);
+            return;
         }
+
+        // 按 cover 方式等比缩放：覆盖整个屏幕，超出部分居中裁剪
+        int texW = wp.imageWidth();
+        int texH = wp.imageHeight();
+        float s = Math.max((float) screenW / texW, (float) screenH / texH);
+        int srcW = (int) (screenW / s);
+        int srcH = (int) (screenH / s);
+
+        // 参数顺序按 GuiGraphics 的 11 参重载：
+        //   (贴图, x, y, 目标宽, 目标高, u, v, 源区宽, 源区高, 纹理宽, 纹理高)
+        // 目标宽高在前、UV 在后，写反会导致目标矩形取到 srcX/srcY，
+        // 而居中裁剪下二者必有一个为 0，壁纸就整个画不出来
+        g.blit(wp.texture(),
+                phoneLeft, phoneTop,
+                screenW, screenH,
+                (texW - srcW) / 2, (texH - srcH) / 2,
+                srcW, srcH,
+                texW, texH);
+    }
+
+    /**
+     * 画外壳。
+     *
+     * 必须画在【最上层】—— 壁纸、页面内容、状态栏、导航栏全画完之后再画它。
+     *
+     * 1.6.12 之前是先画外壳再画壁纸，于是外壳贴图中间那一块必然被盖住，
+     * 玩家只能做外圆角；屏幕四角永远是直角。改成最后画之后，贴图在屏幕
+     * 区域里画的东西（内圆角、刘海、听筒之类）就都能盖在内容上了。
+     *
+     * 由此多出一条对贴图的硬要求：<b>中间那块必须是透明的</b>。不透明的话
+     * 现在会把整个屏幕糊掉 —— 以前无所谓，因为反正会被壁纸盖住。
+     *
+     * 同一条也落在兜底路径上：没有贴图时只画四条边组成的那一圈，不能像
+     * 以前那样填满整个机身。
+     */
+    public static void drawFrame(GuiGraphics g, int phoneLeft, int phoneTop,
+                                 int screenW, int screenH) {
+        final int b = PhoneTheme.PHONE_BORDER;
+        final int fl = phoneLeft - b;
+        final int ft = phoneTop - b;
+        final int fw = screenW + b * 2;
+        final int fh = screenH + b * 2;
+
+        if (PhoneSkin.draw(g, PhoneSkin.Element.FRAME, fl, ft, fw, fh)) return;
+
+        // 兜底：只画那一圈，理由见方法注释
+        g.fill(fl, ft, fl + fw, ft + b, PhoneTheme.COLOR_FRAME);                 // 上
+        g.fill(fl, ft + fh - b, fl + fw, ft + fh, PhoneTheme.COLOR_FRAME);       // 下
+        g.fill(fl, ft + b, fl + b, ft + fh - b, PhoneTheme.COLOR_FRAME);         // 左
+        g.fill(fl + fw - b, ft + b, fl + fw, ft + fh - b, PhoneTheme.COLOR_FRAME); // 右
+        g.fill(fl, ft, fl + fw, ft + 2, PhoneTheme.COLOR_FRAME_HIGHLIGHT);       // 顶部高光
     }
 
     /** 状态栏没有贴图时的兜底底色（半透明黑，压在壁纸上仍看得清） */
