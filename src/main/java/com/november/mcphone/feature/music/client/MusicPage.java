@@ -67,8 +67,17 @@ public final class MusicPage {
     /** 一行曲目的高度：一行字加上下各 1 像素 */
     private static final int ROW_EXTRA = 2;
 
-    /** 底部播放条的高度：曲名一行 + 进度条 + 按钮一行 */
-    private static final int BAR_H = 28;
+    /**
+     * 底部播放条的高度：曲名一行 + 进度条 + 按钮一行，末尾再留一个 HIT_PAD。
+     *
+     * 那 3 像素不是留白：四个键的悬停高亮向下也铺一个 HIT_PAD，28 的时候
+     * 键的底边正好压在导航栏上沿，高亮就铺到导航栏里去了。眼下看不出来
+     * ——导航栏是后画的，底色又不透明，正好盖住——但这个模组的每个元素
+     * 都可以换贴图，玩家给 nav_bar 画一张半透明的，它立刻就露出来。
+     *
+     * 代价是曲库少 3 像素，不到半行。
+     */
+    private static final int BAR_H = 31;
 
     /** 唱片仓那一条的高度。16 是物品图标的边长，上下各留 1 */
     private static final int BAY_H = 18;
@@ -87,6 +96,18 @@ public final class MusicPage {
 
     /** 点击区四边各放宽多少，与传送图标同一个理由：9 像素太难点中 */
     private static final int HIT_PAD = 3;
+
+    /**
+     * 靠右的键要往里缩多少。
+     *
+     * 必须正好等于 HIT_PAD：{@link #drawButton} 的悬停高亮铺的是【点击区】，
+     * 比键本身四周各宽 HIT_PAD。键要是贴着内容区右缘放，那块高亮就会一直
+     * 铺到机身边框上，看着像画出屏幕了 —— 内容区右边总共才留 4px。
+     *
+     * 会话列表里那个传送图标早就是这么处理的（见 ChatList 的 tpX），
+     * 这一页 1.5.12 之前一直没跟上，三个靠右的键全是贴边放的。
+     */
+    private static final int EDGE_INSET = HIT_PAD;
 
     private int scrollOffset;
 
@@ -189,7 +210,7 @@ public final class MusicPage {
 
         String refresh = Component.translatable("mcphone.music.refresh").getString();
         int rw = font.width(refresh);
-        int rx = x + w - rw;
+        int rx = x + w - rw - EDGE_INSET;
         refreshHovered = GuiUtil.hit(mouseX, mouseY, rx - HIT_PAD, y - 2,
                 rw + HIT_PAD * 2, font.lineHeight + 4);
         g.drawString(font, refresh, rx, y,
@@ -229,7 +250,7 @@ public final class MusicPage {
             // 右边那个键：打开带背包的唱片仓界面。手机界面里没有背包，
             // 而放入只认主手——没有这个键，唱片收在背包里的玩家得关手机、
             // 翻到主手、再开手机
-            discBackpackX = x + w - BTN;
+            discBackpackX = x + w - BTN - EDGE_INSET;
             int bagY = y + (BAY_H - BTN) / 2;
             boolean bagHovered = hitAt(mouseX, mouseY, discBackpackX, bagY);
 
@@ -256,7 +277,7 @@ public final class MusicPage {
         g.renderItem(disc, x + 1, y + 1);
 
         boolean playing = DiscClientCache.isPlaying();
-        discEjectX = x + w - BTN;
+        discEjectX = x + w - BTN - EDGE_INSET;
         discToggleX = discEjectX - BTN - BTN_GAP;
 
         int textX = x + ITEM_SIZE + 4;
@@ -383,7 +404,7 @@ public final class MusicPage {
         prevX = x + (w - groupW) / 2;
         playX = prevX + BTN + BTN_GAP;
         nextX = playX + BTN + BTN_GAP;
-        modeX = x + w - BTN;
+        modeX = x + w - BTN - EDGE_INSET;
 
         boolean playing = LocalPlayback.isPlaying();
         drawButton(g, font, PhoneSkin.Element.MUSIC_PREV, "⏮", prevX, y, mouseX, mouseY);
@@ -424,7 +445,11 @@ public final class MusicPage {
 
         if (PhoneSkin.draw(g, element, x, y, BTN, BTN)) return;
 
-        g.drawString(font, glyph, x + (BTN - font.width(glyph)) / 2, y,
+        // 兜底字符未必塞得进 9 像素：① 实测就是 10px（accented.png 里墨宽
+        // 占满 9/9 再加 1 的间距）。直接居中会算出负偏移，把字画到键框左边
+        // 去。夹住下限，宁可它贴着左边也不出框
+        int glyphX = x + Math.max(0, (BTN - font.width(glyph)) / 2);
+        g.drawString(font, glyph, glyphX, y,
                 hovered ? FontPalette.title() : FontPalette.link(), false);
     }
 
