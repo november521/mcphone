@@ -53,6 +53,7 @@
   "mcphone.music.disc.not_a_disc": "That is not a music disc",
   "mcphone.music.disc.insert_hint": "Insert a disc",
   "mcphone.music.disc.backpack_hint": "From your bag",
+  "mcphone.music.disc.swap_hint": "Swap disc",
   "mcphone.music.disc.occupied": "There is already a disc inside",
   "mcphone.music.disc.inventory_full": "Your inventory is full",
   "mcphone.music.mode.list_loop": "Repeat all",

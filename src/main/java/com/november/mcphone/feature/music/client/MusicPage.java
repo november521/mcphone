@@ -218,8 +218,18 @@ public final class MusicPage {
      * 纯属为难人。右边另有一个键，打开带背包的界面——手机里没有背包，
      * 唱片收在背包深处的玩家没有别的路。
      *
-     * 放着唱片时右边两个键：播放/停止，以及取出。没有暂停继续——原版音效
-     * 系统只有开始和停止，给一个按下去会从头开始的"继续"比不给更糟。
+     * 放着唱片时右边三个键：播放/停止、取出、以及同一个"开背包"。没有暂停
+     * 继续——原版音效系统只有开始和停止，给一个按下去会从头开始的"继续"
+     * 比不给更糟。
+     *
+     * 开背包那个键两种状态下都钉在最右边
+     *
+     * 同一个图标、同一个位置、同一件事，玩家学一次就够了。代价是取出键要
+     * 往左让一格 —— 那是一次性的适应，而"最右边那个小键永远是开背包"是
+     * 一条能一直用下去的规矩。
+     *
+     * 仓里有唱片时也给这个入口，是因为换一张唱片本来只能"先取出、关界面、
+     * 再点开"三步。现在一步。
      */
     private int renderDiscBay(GuiGraphics g, Font font, int x, int y, int w,
                               int mouseX, int mouseY) {
@@ -251,7 +261,7 @@ public final class MusicPage {
             String hint = Component.translatable(bagHovered
                     ? "mcphone.music.disc.backpack_hint"
                     : "mcphone.music.disc.insert_hint").getString();
-            g.drawString(font, GuiUtil.truncate(font, hint, discBackpackX - textX - 2),
+            g.drawString(font, GuiUtil.truncate(font, hint, textLimit(textX, discBackpackX)),
                     textX, y + (BAY_H - font.lineHeight) / 2,
                     bagHovered ? FontPalette.link() : FontPalette.dim(), false);
 
@@ -267,24 +277,47 @@ public final class MusicPage {
         g.renderItem(disc, x + 1, y + 1);
 
         boolean playing = DiscClientCache.isPlaying(gameTime());
-        discEjectX = x + w - BTN - EDGE_INSET;
+
+        // 从右往左排：开背包钉在最右，与空仓时同一个位置
+        discBackpackX = x + w - BTN - EDGE_INSET;
+        discEjectX = discBackpackX - BTN - BTN_GAP;
         discToggleX = discEjectX - BTN - BTN_GAP;
 
-        int textX = x + ITEM_SIZE + 4;
-        int textW = discToggleX - textX - 2;
-        g.drawString(font, GuiUtil.truncate(font, discTitle(disc), textW),
-                textX, y + (BAY_H - font.lineHeight) / 2,
-                playing ? FontPalette.title() : FontPalette.body(), false);
-
         int btnY2 = y + (BAY_H - BTN) / 2;
+        boolean bagHovered = hitAt(mouseX, mouseY, discBackpackX, btnY2);
+
+        // 停在开背包那个键上时，这一行改说它是干什么的 —— 与空仓那一支
+        // 同一个做法：地方本来就在，不必为一句话另外挤空间
+        int textX = x + ITEM_SIZE + 4;
+        int textW = textLimit(textX, discToggleX);
+        String line = bagHovered
+                ? Component.translatable("mcphone.music.disc.swap_hint").getString()
+                : discTitle(disc);
+        g.drawString(font, GuiUtil.truncate(font, line, textW),
+                textX, y + (BAY_H - font.lineHeight) / 2,
+                bagHovered ? FontPalette.link()
+                        : (playing ? FontPalette.title() : FontPalette.body()), false);
+
         drawButton(g, font,
                 playing ? PhoneSkin.Element.MUSIC_PAUSE : PhoneSkin.Element.MUSIC_PLAY,
                 playing ? "■" : "▶", discToggleX, btnY2, mouseX, mouseY);
         drawButton(g, font, PhoneSkin.Element.MUSIC_EJECT, "⏏",
                 discEjectX, btnY2, mouseX, mouseY);
+        drawButton(g, font, PhoneSkin.Element.MUSIC_BACKPACK, "▤",
+                discBackpackX, btnY2, mouseX, mouseY);
 
         g.fill(x, y + BAY_H, x + w, y + BAY_H + 1, PhoneTheme.COLOR_DIVIDER);
         return y + BAY_H + 4;
+    }
+
+    /**
+     * 曲名/提示能占多宽 —— 到最左那个键的【命中区】为止，不是到键本身。
+     *
+     * 键的悬停高亮铺的是命中区，比键本身四周各宽一个 HIT_PAD。按键本身算的话
+     * 文字右端会伸进高亮里一个像素，鼠标一停就看得出来。再退 1 像素留条缝。
+     */
+    private static int textLimit(int textX, int firstButtonX) {
+        return firstButtonX - HIT_PAD - 1 - textX;
     }
 
     /**
@@ -518,20 +551,24 @@ public final class MusicPage {
     private boolean hitDiscBay(double mx, double my) {
         if (my < bayY || my >= bayY + BAY_H) return false;
 
+        final int btnY2 = bayY + (BAY_H - BTN) / 2;
+
+        // 开背包那个键两种状态下都在，而且都要先判：空仓时它盖在
+        // "整条＝放入"上面，后判会被抢走
+        if (hitAt(mx, my, discBackpackX, btnY2)) {
+            PacketDistributor.sendToServer(new OpenDiscBayPacket());
+            return true;
+        }
+
         if (bayEmpty) {
-            // 先判那个键：它盖在这一条上，后判会被"整条＝放入"抢走
-            if (hitAt(mx, my, discBackpackX, bayY + (BAY_H - BTN) / 2)) {
-                PacketDistributor.sendToServer(new OpenDiscBayPacket());
-                return true;
-            }
             send(DiscActionPacket.Action.INSERT);
             return true;
         }
-        if (hitAt(mx, my, discToggleX, bayY + (BAY_H - BTN) / 2)) {
+        if (hitAt(mx, my, discToggleX, btnY2)) {
             send(DiscActionPacket.Action.TOGGLE);
             return true;
         }
-        if (hitAt(mx, my, discEjectX, bayY + (BAY_H - BTN) / 2)) {
+        if (hitAt(mx, my, discEjectX, btnY2)) {
             send(DiscActionPacket.Action.EJECT);
             return true;
         }
