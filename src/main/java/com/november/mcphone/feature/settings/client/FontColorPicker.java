@@ -42,8 +42,8 @@ public final class FontColorPicker {
     /** 色块与名字之间的空隙 */
     private static final int SWATCH_GAP = 5;
 
-    /** 色块里那三条分别取哪一档明显度 */
-    private static final int[] SWATCH_STEPS = {10, 5, 0};
+    /** 明显度的最高档，见 FontPalette。色块从这一档渐变到 0 */
+    private static final int MAX_PROMINENCE = 10;
 
     /** 当前生效的那一项右侧的标记 */
     private static final String CURRENT_MARK = "✔";
@@ -108,19 +108,30 @@ public final class FontColorPicker {
     }
 
     /**
-     * 画一个预设的色块：三条竖着排的横带，外加一圈边。
+     * 画一个预设的色块：从最显眼渐变到最不显眼，外加一圈边。
+     *
+     * 为什么是渐变而不是几块颜色
+     *
+     * 1.6.15 之前这里画三块离散色块（明显度 10 / 5 / 0）。三块颜色摆在
+     * 一起，读起来就是"这一类里有三个颜色可以选"—— 而它们其实是同一条
+     * 渐变上的三个采样点，点一下选中的是【整条】。这个误读是界面自己
+     * 造成的，不是玩家想歪了。
+     *
+     * 逐列画，每一列取一档明显度，画出来就是一条渐变，一眼看得出是
+     * "从亮到暗"而不是"三选一"。取的值与界面真正在用的是同一套
+     * （都走 FontPalette.sample），所以色块承诺什么、屏幕上就是什么。
      *
      * 那一圈边不是装饰。BLACK 预设最亮的一档是纯黑，画在深色壁纸上时
      * 色块与背景连成一片，看着像"这一格没画出来"。
      */
     private static void drawSwatch(GuiGraphics g, FontPreset preset, int x, int y) {
-        int bandW = SWATCH_W / SWATCH_STEPS.length;
-
-        for (int i = 0; i < SWATCH_STEPS.length; i++) {
-            int bx = x + bandW * i;
-            // 最后一条补齐除不尽的余数，否则右边会缺一像素
-            int bw = (i == SWATCH_STEPS.length - 1) ? SWATCH_W - bandW * i : bandW;
-            g.fill(bx, y, bx + bw, y + SWATCH_H, FontPalette.sample(preset, SWATCH_STEPS[i]));
+        for (int i = 0; i < SWATCH_W; i++) {
+            // 四舍五入而不是直接截断：截断会让最右一列取不到明显度 0，
+            // 渐变的暗端就差一档
+            int prominence = MAX_PROMINENCE
+                    - (i * MAX_PROMINENCE + SWATCH_W / 2) / SWATCH_W;
+            g.fill(x + i, y, x + i + 1, y + SWATCH_H,
+                    FontPalette.sample(preset, prominence));
         }
 
         g.renderOutline(x - 1, y - 1, SWATCH_W + 2, SWATCH_H + 2, PhoneTheme.COLOR_DIVIDER);
