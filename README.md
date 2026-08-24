@@ -149,6 +149,7 @@ NeoForge 的注册阶段只要收到任何一个模组抛的异常，就会把�
 | `music/mode_list_loop.png` | 循环模式：列表循环 | 9×9 | 画 ↻ 字符 |
 | `music/mode_single_loop.png` | 循环模式：单曲循环 | 9×9 | 画 ① 字符 |
 | `music/mode_shuffle.png` | 循环模式：随机播放 | 9×9 | 画 ⇄ 字符 |
+| `gallery/delete.png` | 相册单张查看里的「删除」键（点过一次之后变成文字「再点一次确认」，那一态不走贴图） | 9×9 | 画「删除」两个字 |
 | `phone/toast.png` | 收到消息时右上角的通知底 | 160×32 | 纯色加一圈描边 |
 | `phone/unread_badge.png` | 未读条数的角标底 | 12×9 | 纯色 |
 | `store/button.png` | 应用详情页上可点的按钮底（购买 / 下载） | 100×16 | 纯色 |

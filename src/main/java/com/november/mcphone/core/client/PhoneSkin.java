@@ -236,6 +236,18 @@ public final class PhoneSkin {
         MUSIC_MODE_SHUFFLE("music/mode_shuffle", "music_mode_shuffle"),
 
         /**
+         * 相册单张查看里的「删除」键。建议 9×9，与音乐页那几个键同尺寸。
+         *
+         * 缺图时画「删除」两个字，不画字符：字体里没有垃圾桶这个字形，而两个
+         * 字本来就是 1.7.16 之前这个键的样子。
+         *
+         * 只管"还没上膛"的那一态。点过一次之后这个键变成「再点一次确认」——
+         * 那句话本身就是信息，换成一个红图标反而说不清，所以上膛之后一律是
+         * 文字，不走贴图。
+         */
+        GALLERY_DELETE("gallery/delete", "gallery_delete"),
+
+        /**
          * 浏览器那块大面板的底。建议 320×200，会被整张拉伸到面板大小。
          *
          * 绝大部分会被网页盖住，真正看得见的只有地址栏那一条和加载中的空白期，
@@ -315,6 +327,18 @@ public final class PhoneSkin {
         g.blit(tex.location(), x, y, w, h, 0, 0,
                 tex.width(), tex.height(), tex.width(), tex.height());
         return true;
+    }
+
+    /**
+     * 这个元素有没有贴图。
+     *
+     * 给"贴图与兜底的【形状】不一样"的地方用：相册的删除键有图是 9×9 的
+     * 图标，没图是两个字 —— 命中区的宽度不同，得在画之前就知道走哪一支。
+     * 大多数元素不需要它：图与兜底占同一块地方，直接看 {@link #draw} 的
+     * 返回值就够了。
+     */
+    public static boolean has(Element element) {
+        return resolve(element).isPresent();
     }
 
     /** 画贴图；没有贴图则用兜底色填满同一区域 */

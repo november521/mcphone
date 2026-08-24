@@ -1,6 +1,7 @@
 package com.november.mcphone.feature.gallery.client;
 
 import com.november.mcphone.core.client.FontPalette;
+import com.november.mcphone.core.client.PhoneSkin;
 import com.november.mcphone.core.client.PhoneTheme;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
@@ -50,6 +51,9 @@ public final class Gallery {
      * 四边一样宽，不然命中区与看到的那行字对不上，玩家会觉得"这个键有点偏"。
      */
     private static final int HIT_PAD = 2;
+
+    /** 删除键的贴图边长。与音乐页那几个键一样大，它们是同一家的 */
+    private static final int BTN = 9;
 
     // ==================== 颜色 ====================
 
@@ -321,11 +325,15 @@ public final class Gallery {
         boolean onNext = mouseX >= x + w - ARROW_HIT_W && mouseX < x + w
                       && mouseY >= btnRowY && mouseY < btnRowY + rowH;
 
+        // 删除键：贴图优先（垃圾桶），缺图画「删除」两个字。上膛之后一律是
+        // 文字 —— 理由见 PhoneSkin.Element.GALLERY_DELETE。
+        // 两支的宽度不一样，命中区得在画之前算，所以先问一句有没有图
+        boolean delIcon = !deleteArmed && PhoneSkin.has(PhoneSkin.Element.GALLERY_DELETE);
         String del = Component.translatable(
                 deleteArmed ? "mcphone.gallery.delete_confirm" : "mcphone.gallery.delete").getString();
-        int delW = font.width(del);
+        int delW = delIcon ? BTN : font.width(del);
         int delX = x + (w - delW) / 2;
-        boolean onDelete = mouseX >= delX - 2 && mouseX < delX + delW + 2
+        boolean onDelete = mouseX >= delX - HIT_PAD && mouseX < delX + delW + HIT_PAD
                         && mouseY >= btnRowY && mouseY < btnRowY + rowH;
 
         hoveredBtn = onBack ? ViewBtn.BACK
@@ -349,9 +357,20 @@ public final class Gallery {
                 canPrev ? (onPrev ? colorCellBorder() : colorPager()) : colorPagerOff(), false);
         g.drawString(font, ARROW_NEXT, x + w - font.width(ARROW_NEXT), btnRowY,
                 canNext ? (onNext ? colorCellBorder() : colorPager()) : colorPagerOff(), false);
-        g.drawString(font, del, delX, btnRowY,
-                deleteArmed ? FontPalette.dangerArmed()
-                        : (onDelete ? FontPalette.danger() : colorPager()), false);
+        if (delIcon) {
+            // 图标在 11 像素的行里居中；悬停铺一层"危险"色的底，与 App 管理器
+            // 里卸载那一行同一块色 —— 文字那一支是变红，图标不能变色，就让底变
+            int delY = btnRowY + (rowH - BTN) / 2;
+            if (onDelete) {
+                g.fill(delX - HIT_PAD, delY - HIT_PAD, delX + BTN + HIT_PAD, delY + BTN + HIT_PAD,
+                        PhoneTheme.COLOR_ROW_HOVER_DANGER);
+            }
+            PhoneSkin.draw(g, PhoneSkin.Element.GALLERY_DELETE, delX, delY, BTN, BTN);
+        } else {
+            g.drawString(font, del, delX, btnRowY,
+                    deleteArmed ? FontPalette.dangerArmed()
+                            : (onDelete ? FontPalette.danger() : colorPager()), false);
+        }
     }
 
     /** 大图区域：黑底 + 等比居中的照片 */
