@@ -1,7 +1,7 @@
 package com.november.mcphone.feature.music.client.playback;
 
-import com.november.mcphone.MCphone;
 import net.minecraft.client.sounds.AudioStream;
+import net.minecraft.network.chat.Component;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -60,23 +60,36 @@ public final class AudioDecoders {
     /**
      * 打开一个文件。
      *
-     * @return 一条 PCM 流，调用方负责关闭；没人认得或者打不开时返回 null
+     * 打不开就抛 {@link UnplayableException}，而不是返回 null —— 原因要能
+     * 一路带到界面上去，玩家才知道自己那首歌为什么点了没反应。1.5.6 之前
+     * 这里是"记一行日志然后返回 null"，日志他不会去翻。
+     *
+     * @return 一条 PCM 流，调用方负责关闭
+     * @throws UnplayableException 没人认得、或者解不开
      */
-    public static AudioStream open(Path file) {
+    public static AudioStream open(Path file) throws IOException {
         AudioDecoder decoder = find(file);
         if (decoder == null) {
-            MCphone.LOGGER.warn("[MCphone] 没有解码器认得这个文件: {}", file.getFileName());
-            return null;
+            throw new UnplayableException(
+                    Component.translatable("mcphone.music.problem.unsupported"),
+                    "没有解码器认得这个文件：" + file.getFileName());
         }
 
         try {
-            return decoder.open(file);
+            AudioStream stream = decoder.open(file);
+            if (stream != null) return stream;
+
+            throw new UnplayableException(
+                    Component.translatable("mcphone.music.problem.broken"),
+                    decoder.formatName() + " 解码器打不开它，也没说为什么：" + file.getFileName());
+        } catch (UnplayableException e) {
+            throw e;        // 解码器自己已经说清楚了，别再套一层笼统的
         } catch (IOException | RuntimeException e) {
-            // 连 RuntimeException 一起兜住：解码库遇到坏文件时抛什么全凭它们高兴，
-            // 而一首歌放不出来不该让整个界面崩掉
-            MCphone.LOGGER.warn("[MCphone] {} 解码失败: {} —— {}",
-                    decoder.formatName(), file.getFileName(), e.toString());
-            return null;
+            // 连 RuntimeException 一起兜住：解码库遇到坏文件时抛什么全凭它们
+            // 高兴，而一首歌放不出来不该让整个界面崩掉
+            throw new UnplayableException(
+                    Component.translatable("mcphone.music.problem.broken"),
+                    decoder.formatName() + " 解码失败：" + file.getFileName() + " —— " + e, e);
         }
     }
 

@@ -312,12 +312,27 @@ public final class MusicPage {
                 g.fill(x, y, x + w, y + rowH, PhoneTheme.COLOR_ROW_ACTIVE);
             }
 
+            // 上次没放出来的，这一行变灰；停上去就用这一行把原因说了。
+            // 借这一行说而不是另开一个提示层，与会话列表上那个传送提示同一个
+            // 做法（见 ChatList）：地方本来就在，不必为一句话另外挤空间
+            Component problem = MusicProblems.of(t);
+
             // 行首那个音符纯粹是装饰，旧界面就有，习惯留着。1.5.2 之前它还
             // 兼着区分来源（♫ 是原版唱片、♪ 是本地文件），现在曲库里只剩
             // 本地文件了，那个区分也就没有意义
-            String label = "♪ " + t.title();
+            String label = (problem != null && hovered)
+                    ? "♪ " + problem.getString()
+                    : "♪ " + t.title();
+
+            int color;
+            if (problem != null) {
+                color = hovered ? FontPalette.notice() : FontPalette.dim();
+            } else {
+                color = isCurrent ? FontPalette.title() : FontPalette.body();
+            }
+
             g.drawString(font, GuiUtil.truncate(font, label, w - 4), x + 2, y + 1,
-                    isCurrent ? FontPalette.title() : FontPalette.body(), false);
+                    color, false);
             y += rowH;
         }
     }
@@ -412,6 +427,9 @@ public final class MusicPage {
         if (button != 0) return false;
 
         if (refreshHovered) {
+            // 顺手把"放不了"的旧结论清掉：玩家多半就是换掉了那个文件才来
+            // 点刷新的，还留着旧结论会让他以为没生效
+            MusicProblems.clearAll();
             MusicSources.refreshAll();
             return true;
         }

@@ -3,7 +3,9 @@ package com.november.mcphone.feature.music.client.source;
 import com.november.mcphone.MCphone;
 import com.november.mcphone.feature.music.Track;
 import com.november.mcphone.feature.music.client.playback.AudioDecoders;
+import com.november.mcphone.feature.music.client.playback.UnplayableException;
 import net.minecraft.client.sounds.AudioStream;
+import net.minecraft.network.chat.Component;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -88,14 +90,15 @@ public final class LocalFileSource implements MusicSource {
     }
 
     @Override
-    public AudioStream open(Track track) {
+    public AudioStream open(Track track) throws IOException {
         Path file = MUSIC_DIR.resolve(track.id());
 
         // 校验一次：track.id() 是文件名，而它一路从缓存传过来，中间文件
         // 可能已经被删了。不查的话 open 会抛一个语焉不详的 NoSuchFileException
         if (!Files.isRegularFile(file)) {
-            MCphone.LOGGER.warn("[MCphone] 文件已经不在了: {}", file);
-            return null;
+            throw new UnplayableException(
+                    Component.translatable("mcphone.music.problem.missing"),
+                    "文件已经不在了：" + file);
         }
         return AudioDecoders.open(file);
     }

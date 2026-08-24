@@ -6,8 +6,10 @@ import com.november.mcphone.feature.music.PlayMode;
 import com.november.mcphone.feature.music.Track;
 import com.november.mcphone.feature.music.client.playback.LocalPlayback;
 import com.november.mcphone.feature.music.client.source.MusicSource;
+import com.november.mcphone.feature.music.client.playback.UnplayableException;
 import com.november.mcphone.feature.music.client.source.MusicSources;
 import net.minecraft.client.sounds.AudioStream;
+import net.minecraft.network.chat.Component;
 
 import java.io.IOException;
 import java.util.List;
@@ -194,7 +196,14 @@ public final class MusicController {
                 consecutiveFailures = 0;
                 advance(false);
             }
-            case SILENT -> failAndSkip();
+            case SILENT -> {
+                // 打开成功却一声没出。这不该发生 —— 帧头都自检过了 ——
+                // 所以真出现时要留痕，别让它像 1.5.4 之前那样悄悄转圈
+                noteProblem(current(),
+                        Component.translatable("mcphone.music.problem.silent"),
+                        "打开成功，但解码器一个字节都没出");
+                failAndSkip();
+            }
             case STARVED -> { }
         }
     }
@@ -284,11 +293,38 @@ public final class MusicController {
 
         try {
             AudioStream stream = source.open(track);
-            if (stream == null) return false;
-            return LocalPlayback.play(stream, track.key());
+            if (stream == null) {
+                // 音源没给流也没说原因，只能给一句笼统的
+                noteProblem(track, Component.translatable("mcphone.music.problem.broken"),
+                        "音源返回了空流");
+                return false;
+            }
+            if (!LocalPlayback.play(stream, track.key())) return false;
+
+            // 放成了，把上次的结论撤掉 —— 玩家可能刚把文件换成了能放的
+            MusicProblems.clear(track);
+            return true;
         } catch (IOException e) {
-            MCphone.LOGGER.warn("[MCphone] 打开曲目失败 {}: {}", track.key(), e.toString());
+            noteProblem(track, reasonOf(e), e.getMessage());
             return false;
         }
+    }
+
+    /**
+     * 记下这一首为什么没放出来：界面上标出来，日志里留详细的。
+     *
+     * 两处分开写，因为受众不同 —— 界面那一行只有一行字的宽度，而日志是
+     * 排查用的，越详细越好。见 {@link UnplayableException}。
+     */
+    private static void noteProblem(Track track, Component reason, String detail) {
+        MusicProblems.record(track, reason);
+        MCphone.LOGGER.warn("[MCphone] 放不了 {}：{}",
+                track == null ? "?" : track.key(), detail);
+    }
+
+    /** 能对玩家说清楚的就照说，说不清楚的（磁盘报错之类）给一句笼统的 */
+    private static Component reasonOf(IOException e) {
+        return e instanceof UnplayableException u ? u.reason()
+                : Component.translatable("mcphone.music.problem.broken");
     }
 }

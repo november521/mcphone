@@ -3,6 +3,7 @@ package com.november.mcphone.feature.music.client.playback;
 import com.november.mcphone.MCphone;
 import fr.delthas.javamp3.Sound;
 import net.minecraft.client.sounds.AudioStream;
+import net.minecraft.network.chat.Component;
 
 import javax.sound.sampled.AudioFormat;
 import java.io.BufferedInputStream;
@@ -94,14 +95,19 @@ public final class Mp3Decoder implements AudioDecoder {
 
             // 先自己认一遍。放不了的当场说清楚，别让解码库去抛数组越界
             Mp3Header header = Mp3Header.peek(raw);
-            // 消息里不再重复文件名 —— AudioDecoders 记这一条时已经带上了
+            // 两句话各说各的：reason 给界面（一行放得下），message 给日志
             if (header == null) {
-                throw new IOException("找不到 MPEG 帧头，这个文件多半不是 MP3");
+                throw new UnplayableException(
+                        Component.translatable("mcphone.music.problem.not_mp3"),
+                        "找不到 MPEG 帧头，这个文件多半不是 MP3：" + name);
             }
             if (!header.isSupported()) {
-                throw new IOException(header.describe()
-                        + " —— 这个播放器只认 MPEG-1（44100 / 48000 / 32000 Hz），"
-                        + "请转成 44.1kHz 再放进来");
+                throw new UnplayableException(
+                        Component.translatable("mcphone.music.problem.not_mpeg1",
+                                header.version().toString()),
+                        "放不了 " + name + " —— " + header.describe()
+                                + "。这个播放器只认 MPEG-1（44100 / 48000 / 32000 Hz），"
+                                + "请转成 44.1kHz 再放进来");
             }
             MCphone.LOGGER.info("[MCphone] 打开 MP3 {} —— {}", name, header.describe());
 
