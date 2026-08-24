@@ -1,5 +1,6 @@
 package com.november.mcphone.feature.music.client.playback;
 
+import com.november.mcphone.MCphone;
 import fr.delthas.javamp3.Sound;
 import net.minecraft.client.sounds.AudioStream;
 
@@ -26,6 +27,27 @@ import java.nio.file.Path;
  * MIT 许可让我们可以自己接手那 5 个类。
  *
  * 打包方式见 build.gradle 里的 jarJar：模组 jar 不会自动带第三方库。
+ *
+ * ================================================================
+ * 它只认 MPEG-1，所以我们先自己查一遍
+ * ================================================================
+ *
+ * 这一条 1.5.5 才补上，之前不知道。作者在仓库 issue #8 里写着
+ * "The project currently supports MPEG 1 files only"，至今开着 —— 而代码里
+ * 的表现是：帧头里的版本位读出来【赋给一个再没被用过的变量】，然后一律按
+ * MPEG-1 的表和 144×码率/采样率 的帧长公式算。
+ *
+ * 喂它一个 MPEG-2 的文件（22050 / 24000 / 16000 Hz，低码率 MP3 都是这一档）
+ * 会在构造时抛 ArrayIndexOutOfBoundsException —— 实测 22050Hz 单声道的文件
+ * 换 300 个起始偏移都是这个结果，MPEG-2.5 同样。异常我们接得住，但玩家看到
+ * 的是"歌在列表里，点了没反应"，日志里只有一行看不懂的数组越界。
+ *
+ * 所以现在交给它之前先用 {@link Mp3Header} 自己读一遍帧头：不是 MPEG-1 就
+ * 当场说清楚是什么、该怎么办；是 MPEG-1 就把规格写进日志。
+ *
+ * 顺带还核一道它报的格式与我们读到的一致不一致 —— issue #6 报的
+ * "16000Hz 被说成 32000Hz"就是查错表的直接后果，而采样率报错的表现是
+ * 整首歌以错误的速度播放，不会有任何报错。
  *
  * ================================================================
  * 输出格式不必转换
@@ -65,9 +87,23 @@ public final class Mp3Decoder implements AudioDecoder {
 
     @Override
     public AudioStream open(Path file) throws IOException {
+        String name = file.getFileName().toString();
         InputStream raw = new BufferedInputStream(Files.newInputStream(file));
         try {
             skipId3v2(raw);
+
+            // 先自己认一遍。放不了的当场说清楚，别让解码库去抛数组越界
+            Mp3Header header = Mp3Header.peek(raw);
+            // 消息里不再重复文件名 —— AudioDecoders 记这一条时已经带上了
+            if (header == null) {
+                throw new IOException("找不到 MPEG 帧头，这个文件多半不是 MP3");
+            }
+            if (!header.isSupported()) {
+                throw new IOException(header.describe()
+                        + " —— 这个播放器只认 MPEG-1（44100 / 48000 / 32000 Hz），"
+                        + "请转成 44.1kHz 再放进来");
+            }
+            MCphone.LOGGER.info("[MCphone] 打开 MP3 {} —— {}", name, header.describe());
 
             Sound sound = new Sound(raw);
             AudioFormat format = sound.getAudioFormat();
@@ -81,7 +117,18 @@ public final class Mp3Decoder implements AudioDecoder {
                 throw new IOException("MP3 解码器给出的格式不是 16 位有符号小端 PCM：" + format);
             }
 
-            return new PcmAudioStream(sound, format, file.getFileName().toString());
+            // 它说的与我们自己读到的对不上，就不能信它。采样率错了不会报错，
+            // 只会让整首歌以错误的速度播放；声道数错了则是左右声道错位成噪音
+            if ((int) format.getSampleRate() != header.sampleRate()
+                    || format.getChannels() != header.channels()) {
+                sound.close();
+                throw new IOException("MP3 解码器报的格式与帧头对不上：它说 "
+                        + (int) format.getSampleRate() + "Hz/" + format.getChannels()
+                        + "声道，帧头写的是 " + header.sampleRate() + "Hz/"
+                        + header.channels() + "声道：" + name);
+            }
+
+            return new PcmAudioStream(sound, format, name);
         } catch (IOException | RuntimeException e) {
             raw.close();
             throw e instanceof IOException io ? io : new IOException(e);
