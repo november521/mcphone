@@ -126,14 +126,19 @@ public final class MusicNetworking {
         PacketDistributor.sendToPlayer(player, stateOf(player));
     }
 
-    /** 把服务端的真值打包。"在不在放"由服务端算，客户端不自己推 */
+    /**
+     * 把服务端的真值打包。
+     *
+     * 下发的是外放的【终点刻】而不是"在不在放"，理由见 SyncDiscStatePacket
+     * 那个字段的注释：布尔量会过期，而唱片放完时没有任何人会来通知客户端。
+     */
     private static SyncDiscStatePacket stateOf(ServerPlayer player) {
         DiscState state = player.getData(ModAttachments.DISC.get());
-        return new SyncDiscStatePacket(state.disc().copy(), DiscService.isPlaying(player));
+        return new SyncDiscStatePacket(state.disc().copy(), DiscService.playingUntil(player));
     }
 
     /** 收到状态，存进客户端缓存供界面读取 */
     private static void handleSync(SyncDiscStatePacket packet, IPayloadContext ctx) {
-        ctx.enqueueWork(() -> DiscClientCache.set(packet.disc(), packet.playing()));
+        ctx.enqueueWork(() -> DiscClientCache.set(packet.disc(), packet.endsAtTick()));
     }
 }

@@ -1,12 +1,17 @@
 package com.november.mcphone.feature.music.client;
 
+import com.november.mcphone.feature.music.DiscState;
 import net.minecraft.world.item.ItemStack;
 
 /**
  * 唱片仓在客户端的快照 —— 界面每帧从这里读，不发包。
  *
  * 与聊天那份缓存同一个道理：真值全在服务端，这里只是一份用来渲染的影子。
- * 界面不自己推算"是不是还在放"——它不知道唱片有多长，服务端算好了下发。
+ *
+ * 唯一一件界面要自己算的事是"到点没到点"：服务端下发的是外放的【终点刻】，
+ * 而不是一个"在不在放"的布尔量。理由见 SyncDiscStatePacket ——
+ * 服务端没有 tick 盯着唱片放完，布尔量会一直停在"在放"，玩家点那个键
+ * 反倒把唱片从头又放一遍。终点是死的，拿现在的游戏刻一比就知道。
  *
  * 放在 client 包下是安全的：本类只被界面与网络处理函数的【客户端那一支】
  * 触及，而 ItemStack 是两端都有的类型。
@@ -16,7 +21,9 @@ public final class DiscClientCache {
     private DiscClientCache() {}
 
     private static ItemStack disc = ItemStack.EMPTY;
-    private static boolean playing;
+
+    /** 外放放到哪一刻为止；{@link DiscState#NOT_PLAYING} 表示没在放 */
+    private static long endsAtTick = DiscState.NOT_PLAYING;
 
     public static ItemStack getDisc() {
         return disc;
@@ -26,13 +33,22 @@ public final class DiscClientCache {
         return !disc.isEmpty();
     }
 
-    public static boolean isPlaying() {
-        return playing;
+    /**
+     * 此刻还在外放吗。
+     *
+     * 收当前游戏刻而不是自己去问 Minecraft.getInstance()：本类会被专用
+     * 服务器加载（网络包的注册与处理函数都在同一个类里引用它），碰一下
+     * 客户端类型就会被 dist 校验当场拦下。取时间的那一步留在界面里做。
+     *
+     * @param nowTick 当前游戏刻，由界面从自己的世界里取
+     */
+    public static boolean isPlaying(long nowTick) {
+        return endsAtTick != DiscState.NOT_PLAYING && nowTick < endsAtTick;
     }
 
-    public static void set(ItemStack stack, boolean isPlaying) {
+    public static void set(ItemStack stack, long playingUntilTick) {
         disc = stack;
-        playing = isPlaying;
+        endsAtTick = playingUntilTick;
     }
 
     /**
@@ -43,6 +59,6 @@ public final class DiscClientCache {
      */
     public static void clear() {
         disc = ItemStack.EMPTY;
-        playing = false;
+        endsAtTick = DiscState.NOT_PLAYING;
     }
 }

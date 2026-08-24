@@ -276,7 +276,7 @@ public final class MusicPage {
         ItemStack disc = DiscClientCache.getDisc();
         g.renderItem(disc, x + 1, y + 1);
 
-        boolean playing = DiscClientCache.isPlaying();
+        boolean playing = DiscClientCache.isPlaying(gameTime());
         discEjectX = x + w - BTN - EDGE_INSET;
         discToggleX = discEjectX - BTN - BTN_GAP;
 
@@ -295,6 +295,18 @@ public final class MusicPage {
 
         g.fill(x, y + BAY_H, x + w, y + BAY_H + 1, PhoneTheme.COLOR_DIVIDER);
         return y + BAY_H + 4;
+    }
+
+    /**
+     * 当前游戏刻，用来算外放到点没到点。
+     *
+     * 没有世界时返回 Long.MAX_VALUE：判据是"现在 < 终点才算在放"，给一个
+     * 最大值就让它一律不成立。给 0 或 MIN_VALUE 都是反的 —— 那会让任何
+     * 终点都还在未来，界面上那张唱片就永远显示在放。
+     */
+    private static long gameTime() {
+        var mc = net.minecraft.client.Minecraft.getInstance();
+        return mc.level == null ? Long.MAX_VALUE : mc.level.getGameTime();
     }
 
     /**

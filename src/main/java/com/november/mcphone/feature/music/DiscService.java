@@ -128,20 +128,45 @@ public final class DiscService {
     //  播放 / 停止
     // ============================================================
 
-    /** 正在外放吗 —— 算出来的，见 DiscState 类注释 */
-    public static boolean isPlaying(ServerPlayer player) {
-        DiscState state = player.getData(ModAttachments.DISC.get());
-        return isPlaying(player, state);
+    /**
+     * 外放会放到哪一个游戏刻为止；没在放则是 {@link DiscState#NOT_PLAYING}。
+     *
+     * ============================================================
+     * 为什么下发终点，而不是一个"在不在放"的布尔量
+     * ============================================================
+     *
+     * 因为布尔量会过期，而且过期得无声无息。服务端没有任何 tick 盯着唱片
+     * 放完（见 {@link DiscState} 的类注释，那是刻意的），放完的那一刻不会
+     * 有人通知客户端；而状态包只在玩家【主动操作】时才回一份。
+     *
+     * 于是唱片自然放完之后，界面上那个键一直停在"停止"的样子。玩家点它，
+     * 服务端一算根本没在放，就【又从头放了一遍】—— 按停止反而重头响，
+     * 而且可以一直这样。1.5.14 之前就是这个样子。
+     *
+     * 给终点则不会：客户端拿同一个时间基准（游戏刻是服务端权威的，客户端
+     * 那一份跟着同步）做同一道算术，到点了自己就知道。
+     */
+    public static long playingUntil(ServerPlayer player) {
+        return playingUntil(player, player.getData(ModAttachments.DISC.get()));
+    }
+
+    private static long playingUntil(ServerPlayer player, DiscState state) {
+        if (state.startedTick() < 0 || !state.hasDisc()) return DiscState.NOT_PLAYING;
+
+        Optional<Holder<JukeboxSong>> song = songOf(player, state.disc());
+        if (song.isEmpty()) return DiscState.NOT_PLAYING;
+
+        long now = player.level().getGameTime();
+        long ends = state.startedTick() + song.get().value().lengthInTicks();
+
+        // now < startedTick 只在游戏刻倒流时出现（存档回滚之类）。当作没在放，
+        // 否则会算出一个遥远的终点，那张唱片就再也停不下来了
+        if (now < state.startedTick() || now >= ends) return DiscState.NOT_PLAYING;
+        return ends;
     }
 
     private static boolean isPlaying(ServerPlayer player, DiscState state) {
-        if (state.startedTick() < 0 || !state.hasDisc()) return false;
-
-        Optional<Holder<JukeboxSong>> song = songOf(player, state.disc());
-        if (song.isEmpty()) return false;
-
-        long elapsed = player.level().getGameTime() - state.startedTick();
-        return elapsed >= 0 && elapsed < song.get().value().lengthInTicks();
+        return playingUntil(player, state) != DiscState.NOT_PLAYING;
     }
 
     /**

@@ -34,8 +34,14 @@ import net.minecraft.world.item.ItemStack;
  */
 public record DiscState(ItemStack disc, long startedTick) {
 
+    /**
+     * "没在放"。startedTick 与下发给客户端的终点刻共用这一个哨兵值 ——
+     * 两边各写各的 -1 迟早会有一边改了另一边没跟上。
+     */
+    public static final long NOT_PLAYING = -1L;
+
     /** 没放唱片、也没在放 */
-    public static final DiscState EMPTY = new DiscState(ItemStack.EMPTY, -1L);
+    public static final DiscState EMPTY = new DiscState(ItemStack.EMPTY, NOT_PLAYING);
 
     public static final Codec<DiscState> CODEC = RecordCodecBuilder.create(instance ->
             instance.group(
