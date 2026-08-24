@@ -14,8 +14,11 @@ package com.november.mcphone.core.client;
  *
  * 尺寸对照（GUI 比例 = 2 时窗口 427×240）：
  *
- *   手机总尺寸（含边框） 128 × 208
+ *   手机总尺寸（含边框） 136 × 216
  *   屏幕内区域           120 × 200   状态栏 10 / 导航栏 14 / 中间是 App 网格
+ *
+ * 屏幕内区域是所有页面排版的基准，不动；边框加厚只让机身长大，
+ * 页面一行代码都不用改。
  */
 public final class PhoneTheme {
 
@@ -29,13 +32,26 @@ public final class PhoneTheme {
     /** 手机屏幕内高（不含边框），单位：像素 */
     public static final int PHONE_HEIGHT = 200;
 
-    /** 手机边框厚度，单位：像素 */
-    public static final int PHONE_BORDER = 4;
+    /**
+     * 手机边框（机身可见的那一圈）厚度，单位：像素。
+     *
+     * 1.6.10 从 4 加到 8，为的是让外壳贴图画得下圆角。4 像素宽的一圈里
+     * 圆角要么小到看不出来，要么把边角削得只剩一丝 —— 圆角会削掉边角的
+     * 材料，边框在 45° 方向最窄处是 √2×(厚度 − 0.293×半径)，厚度只有 4 时
+     * 半径超过 5 就开始明显变细。
+     *
+     * 8 能撑到 11 像素半径（约机身宽度的 8%，现代手机就是这个比例）。
+     *
+     * 再往上是竖直方向卡住：Minecraft 保证的最小逻辑高度是 240，而整机高
+     * ＝ 200 + 边框×2。边框 8 时整机 216，上下各留 12；边框 12 就只剩 8，
+     * 小窗口下手机会贴到屏幕边上。
+     */
+    public static final int PHONE_BORDER = 8;
 
-    /** 手机总宽度（含边框）= PHONE_WIDTH + PHONE_BORDER*2 = 128 */
+    /** 手机总宽度（含边框）= PHONE_WIDTH + PHONE_BORDER*2 = 136 */
     public static final int PHONE_TOTAL_WIDTH = PHONE_WIDTH + PHONE_BORDER * 2;
 
-    /** 手机总高度（含边框）= PHONE_HEIGHT + PHONE_BORDER*2 = 208 */
+    /** 手机总高度（含边框）= PHONE_HEIGHT + PHONE_BORDER*2 = 216 */
     public static final int PHONE_TOTAL_HEIGHT = PHONE_HEIGHT + PHONE_BORDER * 2;
 
     // ==================== 颜色方案 ====================
