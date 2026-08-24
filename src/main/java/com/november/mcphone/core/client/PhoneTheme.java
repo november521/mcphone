@@ -64,8 +64,23 @@ public final class PhoneTheme {
     public static final int COLOR_FRAME_HIGHLIGHT = 0xFF4A4A4A;
 
     // -- 屏幕内部颜色 --
-    /** 主屏幕背景色 */
-    public static final int COLOR_SCREEN_BG = 0xFF1A1A2E;
+    /**
+     * 没有壁纸时的屏幕底色 —— 夜空藏蓝。
+     *
+     * 1.7.5 从 1A1A2E 换过来。那个值蓝减红只有 20，看着是偏紫的灰而不是蓝；
+     * 现在是 57，够蓝了，饱和 83% —— 再高就成电光蓝，星空是暗而不艳的。
+     *
+     * 换色时同时盯着三件事，缺一件就会出问题：
+     *
+     *   与白字的对比    正文（#DBDBDB）12.6，比换之前的 12.3 还高一点
+     *   离导航栏多远    RGB 距离 18，与换之前持平。导航栏是 16213E，
+     *                   同属藏蓝一族，越把底色调蓝就越容易与它糊成一片
+     *   亮度            0.010，略低于原先，更像夜里
+     *
+     * 这个值还被在线圆点的描边（PlayerAvatar）与浏览器面板底用着 —— 那是
+     * 刻意的：它们要与屏幕底同色才显得是"从背景里挖出来的"。
+     */
+    public static final int COLOR_SCREEN_BG = 0xFF0C1445;
 
     /** 状态栏背景色 */
     public static final int COLOR_STATUS_BAR = 0xFF0F3460;
