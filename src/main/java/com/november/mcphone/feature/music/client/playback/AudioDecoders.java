@@ -47,9 +47,18 @@ public final class AudioDecoders {
             new WavDecoder()
     );
 
-    /** 界面上提示"支持哪些格式"用，如 "OGG、WAV" */
+    /**
+     * 界面上提示"支持哪些格式"用，如 "OGG、MP3、WAV"。
+     *
+     * 算一次存着：这个值由上面那份写死的名单决定，永远不会变，而调用它的
+     * 是空曲库那一页的提示语 —— 那一句每帧都要拼一次。1.5.19 之前每次调用
+     * 都要走一遍 stream + toList + join。
+     */
+    private static final String SUPPORTED_NAMES =
+            String.join("、", DECODERS.stream().map(AudioDecoder::formatName).toList());
+
     public static String supportedNames() {
-        return String.join("、", DECODERS.stream().map(AudioDecoder::formatName).toList());
+        return SUPPORTED_NAMES;
     }
 
     /** 这个文件有没有人认得。扫目录时用来筛掉封面图、歌词之类的杂文件 */

@@ -47,20 +47,48 @@ public final class MusicSources {
             new LocalFileSource()
     );
 
-    public static List<MusicSource> all() {
-        return SOURCES;
-    }
+    /**
+     * 拼好的那张表，缓存着。null 表示要重拼。
+     *
+     * 只在客户端线程上读写（界面绘制、点击、网络包处理都在那条线程），
+     * 所以不加锁也不用 volatile。
+     */
+    private static List<Track> cached;
 
     /** 重扫所有音源。打开 App 或点刷新时调 */
     public static void refreshAll() {
         for (MusicSource s : SOURCES) s.refresh();
+        cached = null;
     }
 
-    /** 所有音源的曲目拼成一张表，就是曲库页显示的顺序 */
+    /**
+     * 所有音源的曲目拼成一张表，就是曲库页显示的顺序。
+     *
+     * ============================================================
+     * 这张表必须缓存，因为界面每帧都问一次
+     * ============================================================
+     *
+     * {@link MusicSource} 的接口注释写着"list() 必须便宜，界面每帧都可能
+     * 问一次"。各音源确实守住了 —— 它们返回的是自己缓存好的表。可 1.5.19
+     * 之前这个方法本身不便宜：每次都 new 一个 ArrayList、addAll 拷一遍，
+     * 再 List.copyOf 又拷一遍。
+     *
+     * 于是 200 首歌的曲库，光是打开着音乐 App 站在那儿，每秒就要拷 2 万多
+     * 次引用、分配一百多个数组 —— 全是垃圾，一帧都用不到第二次。
+     *
+     * 现在拼一次存着，{@link #refreshAll} 时失效。这也是各音源的 refresh
+     * 必须只经由那个方法调用的原因：绕过去改了 list() 的内容，这里就发现
+     * 不了。
+     */
     public static List<Track> allTracks() {
+        List<Track> tracks = cached;
+        if (tracks != null) return tracks;
+
         List<Track> out = new ArrayList<>();
         for (MusicSource s : SOURCES) out.addAll(s.list());
-        return List.copyOf(out);
+
+        cached = List.copyOf(out);
+        return cached;
     }
 
     /** 按曲目找回它的音源。播放时要靠它把曲目打开 */
