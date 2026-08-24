@@ -158,7 +158,8 @@ public final class LocalPlayback {
      * 从头播放一条流。会先把正在放的停掉。
      *
      * **流的所有权交给这里**：无论成功失败，调用方都不必再关它。这条规矩
-     * 必须清楚，否则要么漏关（每首歌漏一个文件句柄），要么关两次。
+     * 必须清楚，否则每首歌漏一个文件句柄。至于这一层内部关几次，见
+     * {@link #stop()}。
      *
      * @param stream 已经打开好的 PCM 流，由音源提供
      * @param id     这首曲子的 key，只用于日志与回显
@@ -233,7 +234,23 @@ public final class LocalPlayback {
         state = State.PLAYING;
     }
 
-    /** 停止并释放通道。可以随便调，没在放时什么都不做 */
+    /**
+     * 停止并释放通道。可以随便调，没在放时什么都不做。
+     *
+     * 流会被关两次，这是故意的
+     *
+     * releaseChannel 里的 Channel.destroy 会把挂上去的流一起关掉（核过它的
+     * 源码），所以下面那句 closeQuietly 是第二次。留着有两个理由：
+     *
+     *   它不总是第二次   attachBufferStream 之前流就已经记在字段上了。那一句
+     *                    要是炸了（SoundBuffer 分配失败之类），通道那边根本
+     *                    没挂上流，destroy 不会去关它 —— 这时这一句是唯一的
+     *                    一次
+     *   关两次没有代价   InputStream.close 按约定就是幂等的
+     *
+     * 反过来，把它删掉就等于把"文件句柄会不会漏"押在原版某个实现细节上，
+     * 而那个细节换个版本就可能变。
+     */
     public static void stop() {
         if (channel != null) {
             try (Scope scope = new Scope()) {
