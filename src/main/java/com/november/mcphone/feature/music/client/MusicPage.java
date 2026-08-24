@@ -11,6 +11,7 @@ import com.november.mcphone.feature.music.client.playback.AudioDecoders;
 import com.november.mcphone.feature.music.client.playback.LocalPlayback;
 import com.november.mcphone.feature.music.client.source.MusicSources;
 import com.november.mcphone.feature.music.net.DiscActionPacket;
+import com.november.mcphone.feature.music.net.OpenDiscBayPacket;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
@@ -102,8 +103,8 @@ public final class MusicPage {
     /** 播放条的上沿，滚轮判定要用 */
     private int barTop;
 
-    /** 唱片仓上三个点击区的横坐标与上沿，绘制时算出、点击时用 */
-    private int bayY, discToggleX, discEjectX;
+    /** 唱片仓上几个点击区的横坐标与上沿，绘制时算出、点击时用 */
+    private int bayY, discToggleX, discEjectX, discBackpackX;
     private boolean bayEmpty;
 
     /**
@@ -202,8 +203,9 @@ public final class MusicPage {
     /**
      * 唱片仓 —— 外放那一半的入口。
      *
-     * 空着时整条都是"放入"的点击区：那时候这一条只有一个意思，把点击区
-     * 缩小到某个小按钮上纯属为难人。
+     * 空着时整条都是"放入主手那张"的点击区：把点击区缩小到某个小按钮上
+     * 纯属为难人。右边另有一个键，打开带背包的界面——手机里没有背包，
+     * 唱片收在背包深处的玩家没有别的路。
      *
      * 放着唱片时右边两个键：播放/停止，以及取出。没有暂停继续——原版音效
      * 系统只有开始和停止，给一个按下去会从头开始的"继续"比不给更糟。
@@ -224,11 +226,26 @@ public final class MusicPage {
             PhoneSkin.drawOrFill(g, PhoneSkin.Element.HOME_DROP_SLOT,
                     x + 1, y + 1, ITEM_SIZE, ITEM_SIZE, PhoneTheme.COLOR_APP_DROP_SLOT);
 
+            // 右边那个键：打开带背包的唱片仓界面。手机界面里没有背包，
+            // 而放入只认主手——没有这个键，唱片收在背包里的玩家得关手机、
+            // 翻到主手、再开手机
+            discBackpackX = x + w - BTN;
+            int bagY = y + (BAY_H - BTN) / 2;
+            boolean bagHovered = hitAt(mouseX, mouseY, discBackpackX, bagY);
+
+            // 停在那个键上时，这一行改说它是干什么的。9 像素的图标画什么
+            // 都得让人猜，而这一行本来就在，不必为提示另外挤空间——与会话
+            // 列表上那个传送图标同一个做法（见 ChatList）
             int textX = x + ITEM_SIZE + 4;
-            g.drawString(font, GuiUtil.truncate(font,
-                            Component.translatable("mcphone.music.disc.insert_hint").getString(),
-                            w - (textX - x)),
-                    textX, y + (BAY_H - font.lineHeight) / 2, FontPalette.dim(), false);
+            String hint = Component.translatable(bagHovered
+                    ? "mcphone.music.disc.backpack_hint"
+                    : "mcphone.music.disc.insert_hint").getString();
+            g.drawString(font, GuiUtil.truncate(font, hint, discBackpackX - textX - 2),
+                    textX, y + (BAY_H - font.lineHeight) / 2,
+                    bagHovered ? FontPalette.link() : FontPalette.dim(), false);
+
+            drawButton(g, font, PhoneSkin.Element.MUSIC_BACKPACK, "▤",
+                    discBackpackX, bagY, mouseX, mouseY);
 
             g.fill(x, y + BAY_H, x + w, y + BAY_H + 1, PhoneTheme.COLOR_DIVIDER);
             return y + BAY_H + 4;
@@ -460,6 +477,11 @@ public final class MusicPage {
         if (my < bayY || my >= bayY + BAY_H) return false;
 
         if (bayEmpty) {
+            // 先判那个键：它盖在这一条上，后判会被"整条＝放入"抢走
+            if (hitAt(mx, my, discBackpackX, bayY + (BAY_H - BTN) / 2)) {
+                PacketDistributor.sendToServer(new OpenDiscBayPacket());
+                return true;
+            }
             send(DiscActionPacket.Action.INSERT);
             return true;
         }
