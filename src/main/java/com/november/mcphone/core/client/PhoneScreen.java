@@ -14,6 +14,7 @@ import com.november.mcphone.feature.music.client.MusicPage;
 import com.november.mcphone.feature.notes.client.NoteEditor;
 import com.november.mcphone.feature.notes.client.NotesList;
 import com.november.mcphone.feature.settings.client.AboutPage;
+import com.november.mcphone.feature.settings.client.AppManagerPage;
 import com.november.mcphone.feature.settings.client.DeviceNameEditor;
 import com.november.mcphone.feature.settings.client.FontColorPicker;
 import com.november.mcphone.feature.settings.client.WallpaperPicker;
@@ -70,8 +71,7 @@ public final class PhoneScreen extends Screen {
     private int hoveredSettingIdx = -1;
 
     // ---- App 管理器 ----
-    private final List<IPhoneApp> appManagerApps = new ArrayList<>();
-    private int appManagerHover = -1;
+    private final AppManagerPage appManagerPage = new AppManagerPage();
 
     // ---- 音乐播放器 ----
     private final MusicPage musicPage = new MusicPage();
@@ -234,6 +234,7 @@ public final class PhoneScreen extends Screen {
 
         if (this.mode == Mode.NOTES) notesList.close();
         if (target == Mode.NOTES) notesList.open();
+        if (target == Mode.APP_MANAGER) appManagerPage.open();
 
         // 进音乐页要重扫一次曲库：玩家刚往文件夹里丢的歌得立刻在列表里。
         // 离开【不停音乐】——退出播放器界面歌还在放，那是手机的常识
@@ -517,7 +518,10 @@ public final class PhoneScreen extends Screen {
                     PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
                     PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT,
                     mouseX, mouseY, font);
-            case APP_MANAGER       -> renderAppManager(g, mouseX, mouseY);
+            case APP_MANAGER       -> appManagerPage.render(g, phoneLeft, phoneTop,
+                    PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
+                    PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT,
+                    mouseX, mouseY, font);
             case MUSIC_PLAYER      -> renderMusicPlayer(g, mouseX, mouseY);
             case APP_STORE         -> renderAppStore(g, mouseX, mouseY);
             case APP_DETAIL        -> renderAppDetail(g, mouseX, mouseY);
@@ -561,7 +565,6 @@ public final class PhoneScreen extends Screen {
 
         if (mode == Mode.MAIN)           updateAppHover(mouseX, mouseY);
         if (mode == Mode.SETTINGS)       updateSettingsHover(mouseX, mouseY);
-        if (mode == Mode.APP_MANAGER)    updateAppManagerHover(mouseX, mouseY);
     }
 
     //  屏幕背景（壁纸）。外壳不在这儿，它画在最上层，见 render 末尾
@@ -973,78 +976,8 @@ public final class PhoneScreen extends Screen {
 
     //  App 管理器
 
-    /**
-     * 重建 App 管理器列表：列出全部已安装 App。
-     * 系统 App 也在列表内，渲染时标灰且不响应点击。
-     */
-    private void refreshAppManagerList() {
-        appManagerApps.clear();
-        appManagerApps.addAll(PhoneScreenRegistry.getApps());
-    }
 
-    private void renderAppManager(GuiGraphics g, int mx, int my) {
-        refreshAppManagerList();
 
-        int y = phoneTop + PhoneTheme.STATUS_BAR_HEIGHT + 4;
-        int x = phoneLeft + 6;
-        int w = PhoneTheme.PHONE_WIDTH - 12;
-        int bottom = phoneTop + PhoneTheme.PHONE_HEIGHT - PhoneTheme.NAV_BAR_HEIGHT;
-
-        String title = Component.translatable("mcphone.app.app_manager").getString();
-        g.drawString(font, title, x, y, FontPalette.title(), true);
-        y += font.lineHeight + 4;
-
-        g.fill(x, y, x + w, y + 1, PhoneTheme.COLOR_DIVIDER);
-        y += 4;
-
-        if (appManagerApps.isEmpty()) {
-            g.drawString(font, Component.translatable("mcphone.gui.app_manager_empty").getString(),
-                    x, y, FontPalette.subtle(), false);
-            return;
-        }
-
-        final String uninstall = Component.translatable("mcphone.gui.uninstall").getString();
-        final String systemTag = Component.translatable("mcphone.gui.system_app").getString();
-
-        for (int i = 0; i < appManagerApps.size(); i++) {
-            if (y + font.lineHeight + 6 > bottom) break;
-            IPhoneApp app = appManagerApps.get(i);
-            int rowH = font.lineHeight + 4;
-            boolean system = app.isSystemApp();
-
-            // 系统 App 不可卸载，不画 hover 高亮
-            if (i == appManagerHover && !system) {
-                g.fill(x, y, x + w, y + rowH, PhoneTheme.COLOR_ROW_HOVER_DANGER);
-            }
-
-            g.drawString(font, app.getDisplayName().getString(), x + 2, y + 2,
-                    system ? FontPalette.dim() : FontPalette.body(), false);
-
-            String tag = system ? systemTag : uninstall;
-            int tx = x + w - font.width(tag) - 4;
-            g.drawString(font, tag, tx, y + 2, system ? FontPalette.dim() : FontPalette.uninstall(), false);
-
-            y += rowH + 2;
-        }
-    }
-
-    private void updateAppManagerHover(int mx, int my) {
-        int y = phoneTop + PhoneTheme.STATUS_BAR_HEIGHT + 4 + font.lineHeight + 4 + 4;
-        int x = phoneLeft + 6;
-        int w = PhoneTheme.PHONE_WIDTH - 12;
-
-        appManagerHover = -1;
-        for (int i = 0; i < appManagerApps.size(); i++) {
-            int rowH = font.lineHeight + 4;
-            // 系统 App 行不可选中；但 y 仍需累加，否则后续行的命中区会整体错位
-            if (!appManagerApps.get(i).isSystemApp()
-                    && mx >= x && mx <= x + w && my >= y && my <= y + rowH) {
-                appManagerHover = i;
-                return;
-            }
-            y += rowH + 2;
-        }
-    }
 
     //  壁纸选择器
 
@@ -1321,15 +1254,7 @@ public final class PhoneScreen extends Screen {
                 yield true;
             }
             case APP_MANAGER -> {
-                if (appManagerHover >= 0 && appManagerHover < appManagerApps.size()) {
-                    IPhoneApp toUninstall = appManagerApps.get(appManagerHover);
-                    if (!toUninstall.isSystemApp()) {
-                        PhoneScreenRegistry.uninstall(toUninstall.getId());
-                        refreshAppManagerList();
-                        // 重置 hover：卸载后该索引会指向顶上来的另一个 App
-                        appManagerHover = -1;
-                    }
-                }
+                appManagerPage.mouseClicked(mx, my, button);
                 yield true;
             }
             case MUSIC_PLAYER -> {
