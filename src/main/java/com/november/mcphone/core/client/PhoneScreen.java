@@ -15,6 +15,7 @@ import com.november.mcphone.feature.notes.client.NoteEditor;
 import com.november.mcphone.feature.notes.client.NotesList;
 import com.november.mcphone.feature.settings.client.AboutPage;
 import com.november.mcphone.feature.settings.client.AppManagerPage;
+import com.november.mcphone.feature.settings.client.SettingsList;
 import com.november.mcphone.feature.settings.client.DeviceNameEditor;
 import com.november.mcphone.feature.settings.client.FontColorPicker;
 import com.november.mcphone.feature.settings.client.WallpaperPicker;
@@ -57,18 +58,10 @@ public final class PhoneScreen extends Screen {
     private final WallpaperPicker wallpaperPicker = new WallpaperPicker();
     private final FontColorPicker fontColorPicker = new FontColorPicker();
 
-    // ---- 设置列表项 ----
-    /**
-     * @param value 右侧显示的当前值，null 表示画 ">" 箭头。
-     *              用 Supplier 而非定值：列表只构建一次，
-     *              而设备名是会变的，每帧现取才不会显示过期的名字。
-     */
-    private static final record SettingItem(String label, Runnable action,
-                                            java.util.function.Supplier<String> value) {
-        SettingItem(String label, Runnable action) { this(label, action, null); }
-    }
-    private final List<SettingItem> settingItems = new ArrayList<>();
-    private int hoveredSettingIdx = -1;
+    // ---- 设置列表 ----
+    /** 内容由本类构建（每一项的动作都是跳到某一页），画与判命中交给组件 */
+    private final SettingsList settingsList = new SettingsList();
+    private final List<SettingsList.Item> settingItems = new ArrayList<>();
 
     // ---- App 管理器 ----
     private final AppManagerPage appManagerPage = new AppManagerPage();
@@ -250,7 +243,7 @@ public final class PhoneScreen extends Screen {
         if (this.mode == Mode.CLOCK) ClockPage.reset();
 
         this.mode = target;
-        this.hoveredSettingIdx = -1;
+        settingsList.open();
     }
 
     public void back() {
@@ -512,7 +505,13 @@ public final class PhoneScreen extends Screen {
 
         switch (mode) {
             case MAIN              -> renderAppGrid(g);
-            case SETTINGS          -> renderSettingsList(g, mouseX, mouseY);
+            case SETTINGS          -> {
+                buildSettingItems();
+                settingsList.render(g, phoneLeft, phoneTop,
+                        PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
+                        PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT,
+                        mouseX, mouseY, font);
+            }
             case WALLPAPER_PICKER  -> renderWallpaperPicker(g, mouseX, mouseY);
             case FONT_COLOR_PICKER -> fontColorPicker.render(g, phoneLeft, phoneTop,
                     PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
@@ -564,7 +563,6 @@ public final class PhoneScreen extends Screen {
         g.pose().popPose();
 
         if (mode == Mode.MAIN)           updateAppHover(mouseX, mouseY);
-        if (mode == Mode.SETTINGS)       updateSettingsHover(mouseX, mouseY);
     }
 
     //  屏幕背景（壁纸）。外壳不在这儿，它画在最上层，见 render 末尾
@@ -904,75 +902,36 @@ public final class PhoneScreen extends Screen {
 
     //  设置列表
 
+    /**
+     * 建一次就够，之后交给 {@link SettingsList} 拿着画。
+     *
+     * 标签在建的这一刻定死。PhoneScreen 每次开机都是新造的，所以换语言
+     * 之后重开一次手机就跟上了，不必每帧重建。
+     */
     private void buildSettingItems() {
         if (!settingItems.isEmpty()) return;
-        settingItems.add(new SettingItem(
+
+        settingItems.add(new SettingsList.Item(
                 Component.translatable("mcphone.gui.wallpaper").getString(),
                 () -> navigateTo(Mode.WALLPAPER_PICKER)));
-        settingItems.add(new SettingItem(
+        settingItems.add(new SettingsList.Item(
                 Component.translatable("mcphone.settings.font_color").getString(),
                 () -> navigateTo(Mode.FONT_COLOR_PICKER),
                 PhoneScreen::currentFontColorLabel));
-        settingItems.add(new SettingItem(
+        settingItems.add(new SettingsList.Item(
                 Component.translatable("mcphone.settings.device_name").getString(),
                 () -> navigateTo(Mode.DEVICE_NAME),
                 this::currentDeviceNameLabel));
-        settingItems.add(new SettingItem(
+        settingItems.add(new SettingsList.Item(
                 Component.translatable("mcphone.app.app_manager").getString(),
                 () -> navigateTo(Mode.APP_MANAGER)));
-        settingItems.add(new SettingItem(
+        settingItems.add(new SettingsList.Item(
                 Component.translatable("mcphone.gui.about").getString(),
                 () -> navigateTo(Mode.ABOUT)));
+
+        settingsList.setItems(settingItems);
     }
 
-    private void renderSettingsList(GuiGraphics g, int mouseX, int mouseY) {
-        buildSettingItems();
-
-        int y = phoneTop + PhoneTheme.STATUS_BAR_HEIGHT + 4;
-        int x = phoneLeft + 6;
-        int w = PhoneTheme.PHONE_WIDTH - 12;
-        int bottom = phoneTop + PhoneTheme.PHONE_HEIGHT - PhoneTheme.NAV_BAR_HEIGHT;
-
-        // 标题
-        String title = Component.translatable("mcphone.gui.settings").getString();
-        g.drawString(font, title, x, y, FontPalette.title(), true);
-        y += font.lineHeight + 4;
-
-        // 分割线
-        g.fill(x, y, x + w, y + 1, PhoneTheme.COLOR_DIVIDER);
-        y += 4;
-
-        for (int i = 0; i < settingItems.size(); i++) {
-            if (y + font.lineHeight + 6 > bottom) break;
-
-            SettingItem item = settingItems.get(i);
-            int rowH = font.lineHeight + 4;
-
-            if (i == hoveredSettingIdx) {
-                g.fill(x, y, x + w, y + rowH, PhoneTheme.COLOR_ROW_HOVER);
-            }
-
-            g.drawString(font, item.label(), x + 2, y + 2, FontPalette.body(), false);
-
-            // 有当前值就显示值，否则画右箭头
-            String right = item.value() != null ? item.value().get() : ">";
-            // 值过长会与左侧标题撞上，按剩余宽度截断
-            int maxRightW = w - font.width(item.label()) - 10;
-            if (font.width(right) > maxRightW) {
-                right = font.plainSubstrByWidth(right, Math.max(6, maxRightW - 4)) + "…";
-            }
-            int ax = x + w - font.width(right) - 4;
-            g.drawString(font, right, ax, y + 2, FontPalette.subtle(), false);
-
-            y += rowH + 2;
-        }
-
-        // 空列表提示
-        if (settingItems.isEmpty()) {
-            String noItems = Component.translatable("mcphone.gui.no_settings").getString();
-            g.drawString(font, noItems, x, y, FontPalette.subtle(), false);
-        }
-    }
 
     //  App 管理器
 
@@ -1162,21 +1121,6 @@ public final class PhoneScreen extends Screen {
         }
     }
 
-    private void updateSettingsHover(int mx, int my) {
-        int y = phoneTop + PhoneTheme.STATUS_BAR_HEIGHT + 4 + font.lineHeight + 4 + 4;
-        int x = phoneLeft + 6;
-        int w = PhoneTheme.PHONE_WIDTH - 12;
-
-        hoveredSettingIdx = -1;
-        for (int i = 0; i < settingItems.size(); i++) {
-            int rowH = font.lineHeight + 4;
-            if (mx >= x && mx <= x + w && my >= y && my <= y + rowH) {
-                hoveredSettingIdx = i;
-                return;
-            }
-            y += rowH + 2;
-        }
-    }
 
     //  鼠标点击
 
@@ -1235,10 +1179,7 @@ public final class PhoneScreen extends Screen {
                 yield true;
             }
             case SETTINGS -> {
-                if (hoveredSettingIdx >= 0 && hoveredSettingIdx < settingItems.size()) {
-                    settingItems.get(hoveredSettingIdx).action().run();
-                    yield true;
-                }
+                settingsList.mouseClicked(mx, my, button);
                 yield true;
             }
             case WALLPAPER_PICKER -> {
