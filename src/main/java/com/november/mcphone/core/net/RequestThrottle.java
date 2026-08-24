@@ -41,8 +41,17 @@ import java.util.concurrent.ConcurrentHashMap;
  *   单次很贵   —— 跨维度传送要加载目标区块，是原版里最贵的单次操作之一。
  *                 一秒二十次的话，代价不在我们这个模组，在整台服务器
  *
- * 它挡的是发包频率，【不是】玩法上的冷却。真要给传送加冷却是另一件事，
- * 该由玩法层面决定，不该藏在一个叫"限流"的类里。
+ * 第二个例外：唱片仓那几个键
+ *
+ * 同样两点都对得上：
+ *
+ *   丢了看得见 —— 唱片没进去、歌没响，一眼就知道没成，再按一下就是了
+ *   单次很贵   —— 按一下播放，服务端要给 64 格内【所有人】发一个音效包，
+ *                 停止还要再发一轮。一秒二十次的话，代价落在周围每一个
+ *                 玩家身上，而不在按的那个人身上
+ *
+ * 它挡的是发包频率，【不是】玩法上的冷却。真要给传送或唱片加冷却是另一件
+ * 事，该由玩法层面决定，不该藏在一个叫"限流"的类里。
  *
  * 间隔为什么是 500 毫秒
  *
@@ -54,6 +63,16 @@ import java.util.concurrent.ConcurrentHashMap;
  * 500 毫秒已经把 20 次/秒压到 2 次/秒。剩下的那点开销由 1.3.23 的
  * 邻接表兜住——限流和降复杂度是两件事，都做了才算数：只限流，单次
  * 仍然贵；只优化，仍然架不住每 tick 一次。
+ *
+ * 按下去的键要短一些
+ *
+ * 上面那个数是给【轮询】定的，而唱片仓那几个键是玩家按一下才有一次的
+ * 动作，节奏完全不同：500 毫秒会把"停一下再放"这种正常操作吃掉一次，
+ * 而玩家只会觉得这个键有时候不灵。
+ *
+ * 所以间隔挂在 {@link Kind} 上，各类各的。按键那一档取 250 毫秒：人按不
+ * 了这么快，而它已经把 20 次/秒压到 4 次/秒 —— 要挡的是每 tick 一个包的
+ * 包风暴，不是手快。
  */
 public final class RequestThrottle {
 
@@ -80,12 +99,29 @@ public final class RequestThrottle {
         NOTE,
         /** 购买记录 */
         PURCHASED,
-        /** 传送到好友身边。唯一一个"做事情"的包，理由见类注释 */
-        TELEPORT
+        /** 传送到好友身边。"做事情"的包之一，理由见类注释 */
+        TELEPORT,
+        /** 唱片仓的状态查询。打开音乐 App 时来一次 */
+        DISC_STATE,
+        /** 唱片仓上的按键：放入、取出、播放停止、开背包。理由见类注释 */
+        DISC_ACTION(PRESS_INTERVAL_MS);
+
+        private final long minIntervalMs;
+
+        Kind() {
+            this(POLL_INTERVAL_MS);
+        }
+
+        Kind(long minIntervalMs) {
+            this.minIntervalMs = minIntervalMs;
+        }
     }
 
-    /** 同一类请求两次之间至少隔这么久 */
-    private static final long MIN_INTERVAL_MS = 500L;
+    /** 轮询类请求两次之间至少隔这么久 */
+    private static final long POLL_INTERVAL_MS = 500L;
+
+    /** 玩家按一下才有一次的那些，间隔短一些，理由见类注释 */
+    private static final long PRESS_INTERVAL_MS = 250L;
 
     /**
      * 每个玩家上次各类请求的时刻。
@@ -109,7 +145,7 @@ public final class RequestThrottle {
                 player.getUUID(), k -> new long[Kind.values().length]);
 
         long last = stamps[kind.ordinal()];
-        if (now - last < MIN_INTERVAL_MS) {
+        if (now - last < kind.minIntervalMs) {
             // debug 而不是 warn：正常客户端在界面切换时也可能偶尔撞上，
             // 刷屏的日志会把真正值得看的东西淹掉
             MCphone.LOGGER.debug("[MCphone] 丢弃 {} 的 {} 请求：距上次仅 {} 毫秒",

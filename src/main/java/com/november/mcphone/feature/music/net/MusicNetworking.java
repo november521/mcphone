@@ -2,6 +2,7 @@ package com.november.mcphone.feature.music.net;
 
 import com.november.mcphone.core.ModAttachments;
 import com.november.mcphone.core.PhoneItem;
+import com.november.mcphone.core.net.RequestThrottle;
 import com.november.mcphone.feature.music.DiscService;
 import com.november.mcphone.feature.music.DiscState;
 import com.november.mcphone.feature.music.client.DiscClientCache;
@@ -75,6 +76,14 @@ public final class MusicNetworking {
         ctx.enqueueWork(() -> {
             if (!(ctx.player() instanceof ServerPlayer player)) return;
 
+            // 查询与按键分两个计时：打开 App 会先来一个 QUERY，紧接着玩家
+            // 就可能按播放 —— 共用一个的话那一按会被刚才那次查询挡掉
+            if (!RequestThrottle.allow(player, packet.action() == DiscActionPacket.Action.QUERY
+                    ? RequestThrottle.Kind.DISC_STATE
+                    : RequestThrottle.Kind.DISC_ACTION)) {
+                return;
+            }
+
             DiscService.Outcome outcome = switch (packet.action()) {
                 case INSERT -> DiscService.insert(player);
                 case EJECT -> DiscService.eject(player);
@@ -101,6 +110,7 @@ public final class MusicNetworking {
         ctx.enqueueWork(() -> {
             if (!(ctx.player() instanceof ServerPlayer player)) return;
             if (!PhoneItem.isCarriedBy(player)) return;
+            if (!RequestThrottle.allow(player, RequestThrottle.Kind.DISC_ACTION)) return;
 
             player.openMenu(new SimpleMenuProvider(
                     (containerId, inventory, p) -> new DiscBayMenu(
