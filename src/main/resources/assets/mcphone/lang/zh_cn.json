@@ -70,6 +70,7 @@
   "mcphone.item.tooltip.version": "§8MCphone v%s",
   "mcphone.app.ender_chest": "末影箱",
   "mcphone.container.ender_chest": "末影箱",
+  "mcphone.container.disc_bay": "唱片仓",
   "mcphone.app.chat": "美西螈",
   "mcphone.chat.empty": "还没有会话",
   "mcphone.chat.empty_hint": "点右上角 + 添加联系人",

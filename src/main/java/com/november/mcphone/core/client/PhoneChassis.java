@@ -4,6 +4,7 @@ import com.november.mcphone.core.net.NetworkHandler;
 import com.november.mcphone.feature.settings.client.WallpaperStore;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.world.inventory.Slot;
 
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
@@ -35,6 +36,37 @@ public final class PhoneChassis {
         drawFrameAndWallpaper(g, phoneLeft, phoneTop,
                 PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT);
     }
+
+    /**
+     * 容器界面的整块底 —— 外壳与壁纸、压暗的蒙版、每个格子的底板。
+     *
+     * 抽出来是因为带格子的界面不止一个（末影箱、唱片仓），而这三步谁少画
+     * 一步都会立刻看出来：不画蒙版则亮壁纸上的白字读不了，不画底板则格子
+     * 在花壁纸上没有边界。本类的存在理由就是"这种东西不能抄两遍"。
+     *
+     * @param slots 菜单里的全部格子，用来画底板。不活跃的跳过
+     */
+    public static void drawContainerBackdrop(GuiGraphics g, int leftPos, int topPos,
+                                             int imageWidth, int imageHeight,
+                                             Iterable<Slot> slots) {
+        // 外壳与壁纸按本界面的尺寸绘制，视觉上仍是同一部手机
+        drawFrameAndWallpaper(g, leftPos, topPos, imageWidth, imageHeight);
+
+        // 壁纸可能很亮，压一层暗色蒙版保证文字与物品看得清
+        g.fill(leftPos, topPos, leftPos + imageWidth, topPos + imageHeight,
+                PhoneTheme.COLOR_SCRIM);
+
+        for (Slot slot : slots) {
+            if (!slot.isActive()) continue;
+            // 格子的 x/y 是物品左上角，18×18 的框要往外扩 1px
+            int sx = leftPos + slot.x - 1;
+            int sy = topPos + slot.y - 1;
+            g.fill(sx, sy, sx + SLOT_BACKPLATE, sy + SLOT_BACKPLATE, PhoneTheme.COLOR_SLOT_BG);
+        }
+    }
+
+    /** 格子底板的边长：16px 物品 + 每边 1px 边框，与原版格子一致 */
+    private static final int SLOT_BACKPLATE = 18;
 
     /**
      * 画任意尺寸的外壳与屏幕背景。

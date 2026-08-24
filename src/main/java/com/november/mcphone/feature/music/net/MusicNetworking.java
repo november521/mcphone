@@ -1,11 +1,15 @@
 package com.november.mcphone.feature.music.net;
 
 import com.november.mcphone.core.ModAttachments;
+import com.november.mcphone.core.PhoneItem;
 import com.november.mcphone.feature.music.DiscService;
 import com.november.mcphone.feature.music.DiscState;
 import com.november.mcphone.feature.music.client.DiscClientCache;
+import com.november.mcphone.feature.music.menu.DiscBayContainer;
+import com.november.mcphone.feature.music.menu.DiscBayMenu;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.SimpleMenuProvider;
 import net.neoforged.neoforge.network.PacketDistributor;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 import net.neoforged.neoforge.network.registration.PayloadRegistrar;
@@ -29,6 +33,13 @@ public final class MusicNetworking {
                 DiscActionPacket.TYPE,
                 DiscActionPacket.STREAM_CODEC,
                 MusicNetworking::handleAction
+        );
+
+        // C2S: 打开唱片仓那个带背包的界面
+        registrar.playToServer(
+                OpenDiscBayPacket.TYPE,
+                OpenDiscBayPacket.STREAM_CODEC,
+                MusicNetworking::handleOpenBay
         );
 
         // S2C: 下发唱片仓现在是什么样
@@ -58,6 +69,28 @@ public final class MusicNetworking {
 
             tell(player, outcome);
             ctx.reply(stateOf(player));
+        });
+    }
+
+    /**
+     * 服务端收到：给玩家打开唱片仓的界面（唱片格 ＋ 他自己的背包）。
+     *
+     * 校验玩家身上确实带着手机 —— 包是客户端发的，不能信。没有这道检查，
+     * 任何人改个客户端就能凭空开出一个能动自己背包的界面，"手机"这个前提
+     * 形同虚设。判据与 DiscService 里那几处是同一个方法，见 DiscBayMenu
+     * 的 stillValid：两处不一致会出现"服务端放你开、菜单自检又把你踢出去"。
+     *
+     * 唱片仓不是付费 App，所以不像末影箱那样还要查购买记录。
+     */
+    private static void handleOpenBay(OpenDiscBayPacket packet, IPayloadContext ctx) {
+        ctx.enqueueWork(() -> {
+            if (!(ctx.player() instanceof ServerPlayer player)) return;
+            if (!PhoneItem.isCarriedBy(player)) return;
+
+            player.openMenu(new SimpleMenuProvider(
+                    (containerId, inventory, p) -> new DiscBayMenu(
+                            containerId, inventory, new DiscBayContainer(player)),
+                    Component.translatable("mcphone.container.disc_bay")));
         });
     }
 

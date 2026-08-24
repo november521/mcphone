@@ -10,6 +10,7 @@ import com.november.mcphone.core.menu.ModMenus;
 import com.november.mcphone.feature.camera.client.CameraHandler;
 import com.november.mcphone.feature.chat.client.ChatNotifier;
 import com.november.mcphone.feature.chat.net.ChatClientCache;
+import com.november.mcphone.feature.music.client.DiscBayScreen;
 import com.november.mcphone.feature.music.client.DiscClientCache;
 import com.november.mcphone.feature.music.client.MusicController;
 import com.november.mcphone.feature.music.client.playback.LocalPlayback;
@@ -135,6 +136,7 @@ public class MCphoneClient {
     @SubscribeEvent
     static void onRegisterMenuScreens(RegisterMenuScreensEvent event) {
         event.register(ModMenus.ENDER_CHEST.get(), PhoneContainerScreen::new);
+        event.register(ModMenus.DISC_BAY.get(), DiscBayScreen::new);
     }
 
     @SubscribeEvent

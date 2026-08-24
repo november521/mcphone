@@ -70,6 +70,7 @@
   "mcphone.item.tooltip.version": "§8MCphone v%s",
   "mcphone.app.ender_chest": "Ender Chest",
   "mcphone.container.ender_chest": "Ender Chest",
+  "mcphone.container.disc_bay": "Disc Bay",
   "mcphone.app.chat": "Axolotl",
   "mcphone.chat.empty": "No conversations yet",
   "mcphone.chat.empty_hint": "Tap + to add a contact",
