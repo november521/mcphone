@@ -164,6 +164,20 @@ dependencies {
     // 浏览器时把 jar 手动丢进 run/mods 即可。
     compileOnly "maven.modrinth:mcef:${mcef_version}"
 
+    // NetMusic（网络音乐机）—— 可选依赖：装了就能把它刻出来的 CD 塞进手机的
+    // 唱片仓，走到哪儿放到哪儿、周围人都听得见；没装则唱片仓照旧只收原版唱片。
+    //
+    // 同样是 compileOnly：所有引用都关在 NetMusicCompat 与音乐那一支的客户端
+    // 播放层里，运行期由 ModList 判断在不在场。
+    //
+    // 要当心的是它【没有对外的 API 包】：我们用到的 ItemMusicCD.getSongInfo
+    // 与 MusicPlayManager.play 都在它的内部包里。所以接触面必须小 —— 只读
+    // 一个数据组件、只调一个播放入口，别顺手用它别的东西。它改版时断的地方
+    // 越少越好，而断了会是 NoSuchMethodError 这类 Error，兼容层里兜的是
+    // Throwable 不是 Exception，正是为了这个。
+    compileOnly "maven.modrinth:net-music:${netmusic_version}"
+    localRuntime "maven.modrinth:net-music:${netmusic_version}"
+
     // JavaMP3 —— MP3 解码。这是【必需】依赖，不是可选联动：玩家往音乐
     // 目录里丢一个 mp3，不该要求他再去装别的模组。
     //
