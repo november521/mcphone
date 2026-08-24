@@ -60,9 +60,11 @@ public class MCphoneClient {
         // 跟上音量滑块的变化。没在放的时候第一行就返回，不花钱
         NeoForge.EVENT_BUS.addListener(LocalPlayback::onClientTick);
 
-        // 一首放完自动接下一首。走回调而不是让播放层直接调控制器：
-        // 播放层管一条音轨，顺序是控制器的事，两者不该互相认识
-        LocalPlayback.setFinishListener(MusicController::onTrackFinished);
+        // 一首停下来时通知控制器，并带上停的原因（放完了 / 一声没出 /
+        // 缓冲喂不上）——三种情况该做的事完全不同，见 LocalPlayback.Ending。
+        // 走回调而不是让播放层直接调控制器：播放层管一条音轨，顺序是控制器
+        // 的事，两者不该互相认识
+        LocalPlayback.setEndListener(MusicController::onTrackEnded);
         NeoForge.EVENT_BUS.addListener(CameraHandler::onRenderGui);
         NeoForge.EVENT_BUS.addListener(CameraHandler::onScreenOpening);
 

@@ -6,9 +6,13 @@ import com.november.mcphone.MCphone;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.sounds.AudioStream;
 import net.minecraft.sounds.SoundSource;
+
+import javax.sound.sampled.AudioFormat;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.util.function.Consumer;
 
 /**
  * 本地播放 —— 「耳机」那一半：只有自己听得见，但功能齐全。
@@ -58,15 +62,26 @@ import java.io.IOException;
  * 那时读的是网络流，会卡住主线程。
  *
  * ================================================================
- * 放完了怎么知道
+ * "通道停了"有三种意思，必须分开
  * ================================================================
  *
- * 流读到尾时 read 返回一个空 buffer，Channel 就不再排队；已排的放完之后
- * 通道进入 stopped 状态。所以"stopped 即放完"。
+ * 1.5.4 之前这里写的是"stopped 即放完"，理由是 attachBufferStream 一上来
+ * 就排了 4 秒（核过字节码：pumpBuffers(4)，每格 1 秒），要卡满 4 秒才会
+ * 误判。那个推理漏了一整类情况 —— 通道也可能【从来没响过】就 stopped：
+ * 解码器一个字节都没解出来时，排进去的全是空 buffer，alSourcePlay 之后
+ * 立刻就是 stopped。
  *
- * 理论上缓冲喂不上也会 stopped（underrun），但 attachBufferStream 一上来
- * 就排了 4 秒（核过字节码：pumpBuffers(4)，每格 1 秒），而我们每 tick
- * 泵一次 —— 要卡满 4 秒才可能误判，那时候游戏本身也已经卡死了。
+ * 而那时 play() 返回的是 true，于是 MusicController 把连续失败计数清零，
+ * 下一 tick 又 stopped、又"放完了"、又换一首……每秒 20 首地转下去，
+ * 转不完，也停不下来。这正是玩家报的"乱音，还停不下来"。
+ *
+ * 所以现在把流包一层（{@link TrackedStream}），记两件事：出过声没有、
+ * 是不是真读到尾了。三种停法分别处理：
+ *
+ *   读到尾 + 出过声   → 正常放完，通知上层接下一首
+ *   一个字节都没出声  → 这首根本放不出来，当失败上报，由失败计数兜底
+ *   没读到尾但出过声  → 缓冲喂不上（underrun），停下并说明，【不】自动
+ *                       往下转 —— 转下去只会把一次卡顿变成一串半截歌
  */
 public final class LocalPlayback {
 
@@ -75,9 +90,22 @@ public final class LocalPlayback {
     /** 播放状态。故意不用布尔量：三态用两个布尔量表达迟早会出现"既停又暂停" */
     public enum State { IDLE, PLAYING, PAUSED }
 
+    /**
+     * 一首为什么停了。理由见类注释 —— 上层要靠它决定接下来做什么，
+     * 三种情况的正确反应完全不同。
+     */
+    public enum Ending {
+        /** 流读到尾，而且真的出过声 —— 正常放完 */
+        FINISHED,
+        /** 一个字节都没出声就停了。解码器根本没工作，这首等于放不出来 */
+        SILENT,
+        /** 出过声，但流还没到尾通道就停了 —— 缓冲喂不上 */
+        STARVED
+    }
+
     private static Library library;
     private static Channel channel;
-    private static AudioStream stream;
+    private static TrackedStream stream;
 
     /** 设备开不起来就永久放弃，不每次播放都重试一遍——那只会刷满日志 */
     private static boolean deviceFailed;
@@ -94,8 +122,8 @@ public final class LocalPlayback {
     private static long elapsedMs;
     private static long lastResumeAt;
 
-    /** 一首放完时叫一声。队列层装上它就能自动下一首 */
-    private static Runnable finishListener = () -> {};
+    /** 一首停下来时叫一声，带上原因。队列层据此决定接不接下一首 */
+    private static Consumer<Ending> endListener = e -> {};
 
     // ============================================================
     //  控制
@@ -133,12 +161,16 @@ public final class LocalPlayback {
         ch.setRelative(true);
         ch.disableAttenuation();
 
+        // 包一层来记"出过声没有 / 读到尾没有"，理由见类注释。
+        // 必须在 attachBufferStream 之前包好：那一句就已经开始泵流了
+        TrackedStream tracked = new TrackedStream(stream);
+
         channel = ch;
-        LocalPlayback.stream = stream;
+        LocalPlayback.stream = tracked;
         currentId = id;
 
         applyVolume();
-        ch.attachBufferStream(stream);
+        ch.attachBufferStream(tracked);
         ch.play();
 
         state = State.PLAYING;
@@ -193,9 +225,9 @@ public final class LocalPlayback {
         return volume;
     }
 
-    /** 装一个"这首放完了"的回调。队列层用它自动下一首 */
-    public static void setFinishListener(Runnable listener) {
-        finishListener = listener == null ? () -> {} : listener;
+    /** 装一个"这首停了"的回调，参数是停的原因。队列层用它决定下一步 */
+    public static void setEndListener(Consumer<Ending> listener) {
+        endListener = listener == null ? e -> {} : listener;
     }
 
     // ============================================================
@@ -249,10 +281,21 @@ public final class LocalPlayback {
             channel.updateStream();
             applyVolume();
 
-            // stopped 即放完，理由见类注释
             if (channel.stopped()) {
+                // 先问清楚是哪一种停法，再 stop() —— stop() 会把流丢掉
+                Ending ending = stream.ending();
+                String who = currentId;
+
                 stop();
-                finishListener.run();
+
+                if (ending == Ending.STARVED) {
+                    // 不往下转：这不是文件的问题，是这一刻喂不上。转下去
+                    // 只会把一次卡顿变成一串各放两秒的半截歌
+                    MCphone.LOGGER.warn(
+                            "[MCphone] 音频缓冲喂不上，停在这里了: {}（解码跟不上，"
+                            + "或者游戏刚卡了一下超过 4 秒）", who);
+                }
+                endListener.accept(ending);
             }
         }
     }
@@ -308,6 +351,54 @@ public final class LocalPlayback {
         float master = mc.options.getSoundSourceVolume(SoundSource.MASTER);
         float records = mc.options.getSoundSourceVolume(SoundSource.RECORDS);
         channel.setVolume(volume * master * records);
+    }
+
+    /**
+     * 包在真正的流外面，记两件事：一共交出去多少字节、以及有没有读到尾。
+     *
+     * 只看不动：{@link ByteBuffer#remaining()} 不改变 position，交给
+     * Channel 的还是原封不动那一个 buffer。
+     */
+    private static final class TrackedStream implements AudioStream {
+
+        private final AudioStream inner;
+
+        /** 一共交出去多少字节。0 表示这条流从头到尾没出过声 */
+        private long delivered;
+
+        /** 读到尾了 —— read 交回一个空 buffer 就是这个意思 */
+        private boolean exhausted;
+
+        TrackedStream(AudioStream inner) {
+            this.inner = inner;
+        }
+
+        @Override
+        public AudioFormat getFormat() {
+            return inner.getFormat();
+        }
+
+        @Override
+        public ByteBuffer read(int size) throws IOException {
+            ByteBuffer buf = inner.read(size);
+            if (buf == null || !buf.hasRemaining()) {
+                exhausted = true;
+                return buf;
+            }
+            delivered += buf.remaining();
+            return buf;
+        }
+
+        @Override
+        public void close() throws IOException {
+            inner.close();
+        }
+
+        /** 通道停了，那是哪一种停法。判断顺序有讲究，见 Ending 的注释 */
+        Ending ending() {
+            if (delivered == 0L) return Ending.SILENT;
+            return exhausted ? Ending.FINISHED : Ending.STARVED;
+        }
     }
 
     private static void closeQuietly(AudioStream s) {

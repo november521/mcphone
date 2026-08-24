@@ -41,6 +41,12 @@ import java.util.RandomAccess;
  * 文件坏了、格式其实不对、文件刚被删掉，play 都会返回 false。这时该自动
  * 试下一首——但如果整个目录的文件都坏了，那就成了一个转不完的圈，
  * 而且每转一圈都写一行日志。所以连续失败到一定次数就彻底停下。
+ *
+ * "失败"不止 play 返回 false 一种。还有一种更阴的：play 明明返回了 true，
+ * 可那条流一个字节都没解出来（{@link LocalPlayback.Ending#SILENT}）。
+ * 1.5.4 之前这种情况被当成"放完了"，而计数又恰好在 play 成功时清零，
+ * 于是每 tick 换一首、永远转不完 —— 玩家报的"停不下来"就是它。
+ * 现在计数只在一首【真的放完】时才清零。
  */
 public final class MusicController {
 
@@ -169,13 +175,28 @@ public final class MusicController {
     // ============================================================
 
     /**
-     * 一首放完了 —— 由 LocalPlayback 在音频流跑完时叫。
+     * 一首停下来了 —— 由 LocalPlayback 在通道停止时叫，带上停的原因。
      *
-     * 与手动点「下一首」的区别只有一个：单曲循环模式下，自动放完要再放
-     * 一遍这一首，而手动点是真的换一首。
+     * 三种原因的正确反应完全不同，见 {@link LocalPlayback.Ending}：
+     *
+     *   FINISHED  真放完了。清零失败计数，接下一首。与手动点「下一首」的
+     *             区别只有一个：单曲循环模式下自动放完要再放一遍这一首，
+     *             而手动点是真的换一首
+     *   SILENT    打开成功却一声没出，等同于放不出来。当失败处理，让计数
+     *             去兜底 —— 这一条就是 1.5.4 修的那个转不完的圈
+     *   STARVED   缓冲喂不上。不是文件的问题，也不该往下转（转下去只会
+     *             把一次卡顿变成一串各放两秒的半截歌）。LocalPlayback 已经
+     *             记过日志并停下了，这里什么都不做
      */
-    public static void onTrackFinished() {
-        advance(false);
+    public static void onTrackEnded(LocalPlayback.Ending ending) {
+        switch (ending) {
+            case FINISHED -> {
+                consecutiveFailures = 0;
+                advance(false);
+            }
+            case SILENT -> failAndSkip();
+            case STARVED -> { }
+        }
     }
 
     /**
@@ -219,11 +240,19 @@ public final class MusicController {
         Track track = current();
         if (track == null) return;
 
-        if (openAndPlay(track)) {
-            consecutiveFailures = 0;
-            return;
-        }
+        if (openAndPlay(track)) return;
+        failAndSkip();
+    }
 
+    /**
+     * 这一首没成，跳去下一首；连续太多次就彻底停下。
+     *
+     * 【不】在 play() 成功时清零计数，只在一首真的放完时清（见
+     * {@link #onTrackEnded}）。1.5.4 之前是在 play() 成功时清的，于是碰上
+     * "打开成功但一声没出"的文件，计数每次都被重置，这个跳下一首的圈就
+     * 永远转不完 —— 每秒 20 首，还停不下来。
+     */
+    private static void failAndSkip() {
         consecutiveFailures++;
         if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
             MCphone.LOGGER.warn("[MCphone] 连续 {} 首都放不出来，停止播放",
