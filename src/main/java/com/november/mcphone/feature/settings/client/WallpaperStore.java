@@ -190,14 +190,6 @@ public final class WallpaperStore {
         return Collections.unmodifiableList(WALLPAPERS);
     }
 
-    public static ResourceLocation findTexture(String fileName) {
-        if (fileName == null || fileName.isEmpty()) return null;
-        return WALLPAPERS.stream()
-                .filter(w -> w.fileName().equals(fileName))
-                .findFirst()
-                .map(WallpaperEntry::texture)
-                .orElse(null);
-    }
 
     public static WallpaperEntry findEntry(String fileName) {
         if (fileName == null || fileName.isEmpty()) return null;
@@ -207,9 +199,6 @@ public final class WallpaperStore {
                 .orElse(null);
     }
 
-    public static int getWallpaperCount() {
-        return WALLPAPERS.size();
-    }
 
     public static WallpaperEntry getWallpaper(int index) {
         return (index >= 0 && index < WALLPAPERS.size()) ? WALLPAPERS.get(index) : null;

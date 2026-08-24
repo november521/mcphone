@@ -280,11 +280,6 @@ public final class PhoneScreenRegistry {
         return true;
     }
 
-    /** 目录中的全部 App，含未安装的 */
-    public static List<IPhoneApp> getCatalog() {
-        ensureLoaded();
-        return List.copyOf(CATALOG.values());
-    }
 
     /** 目录中尚未安装的 App —— 应用商店的"可下载"列表 */
     public static List<IPhoneApp> getAvailable() {
@@ -315,10 +310,6 @@ public final class PhoneScreenRegistry {
         return List.copyOf(out);
     }
 
-    /** 这个 App 是不是因为前置没装而没能进目录 */
-    public static boolean isUnavailable(IPhoneApp app) {
-        return app != null && UNAVAILABLE.containsKey(app.getId());
-    }
 
     /**
      * 读一个 App 声明的前置，读不出来就当没有。

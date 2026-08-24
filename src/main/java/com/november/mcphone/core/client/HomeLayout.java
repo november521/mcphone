@@ -55,11 +55,6 @@ public final class HomeLayout {
         return Math.max(0, Math.min(page, pageCount(appCount, pageSize) - 1));
     }
 
-    /** 第 index 个 App 在第几页 */
-    public static int pageOf(int index, int pageSize) {
-        if (pageSize <= 0) return 0;
-        return Math.max(0, index) / pageSize;
-    }
 
     /**
      * 鼠标落在【这一页的】第几格，0 起、行优先。

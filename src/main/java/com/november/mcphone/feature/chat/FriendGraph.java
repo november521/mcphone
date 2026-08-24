@@ -132,12 +132,6 @@ public final class FriendGraph {
         return of == null ? 0 : of.size();
     }
 
-    /** 全服一共几条好友关系。每条只算一次 */
-    public int edgeCount() {
-        int halves = 0;
-        for (Set<UUID> of : adjacency.values()) halves += of.size();
-        return halves / 2;
-    }
 
     //  存档格式转换
 

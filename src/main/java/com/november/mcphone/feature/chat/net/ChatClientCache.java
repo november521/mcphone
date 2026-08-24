@@ -57,9 +57,6 @@ public final class ChatClientCache {
 
     //  当前会话
 
-    public static UUID getOpenPeer() {
-        return openPeer;
-    }
 
     /**
      * 界面点进某个会话时调用，先把对端记下来。

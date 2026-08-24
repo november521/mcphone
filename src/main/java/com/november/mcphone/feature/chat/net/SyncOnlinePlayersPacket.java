@@ -47,8 +47,4 @@ public record SyncOnlinePlayersPacket(List<OnlinePlayer> players, int totalOnlin
         return TYPE;
     }
 
-    /** 列表是否被截断过 —— 界面据此决定要不要显示提示 */
-    public boolean truncated() {
-        return totalOnline > players.size();
-    }
 }

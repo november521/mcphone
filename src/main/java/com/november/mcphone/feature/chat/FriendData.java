@@ -188,20 +188,6 @@ public class FriendData extends SavedData {
         return incoming == null ? Map.of() : Map.copyOf(incoming);
     }
 
-    /**
-     * 某人发出去、还没被处理的申请。
-     *
-     * 需要遍历全表，但只在打开"加联系人"界面时用得上，且待处理申请
-     * 总量本就受上限约束，不值得为它再维护一份反向索引——那要在每次
-     * 增删时两边同步，出错的机会反而更多。
-     */
-    public List<UUID> getOutgoingRequests(UUID player) {
-        List<UUID> out = new ArrayList<>();
-        pendingRequests.forEach((to, incoming) -> {
-            if (incoming.containsKey(player)) out.add(to);
-        });
-        return out;
-    }
 
     //  玩家名缓存
 
