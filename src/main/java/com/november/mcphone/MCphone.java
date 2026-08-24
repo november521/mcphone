@@ -51,6 +51,7 @@ public class MCphone {
         ModCreativeTabs.TABS.register(modEventBus);
         com.november.mcphone.core.menu.ModMenus.MENUS.register(modEventBus);
         ModAttachments.ATTACHMENT_TYPES.register(modEventBus);
+        com.november.mcphone.core.ModSounds.SOUND_EVENTS.register(modEventBus);
         modEventBus.addListener(com.november.mcphone.core.net.NetworkHandler::register);
 
         // 玩家下线时丢掉他的请求限流计时。挂在【游戏总线】上，显式添加而不

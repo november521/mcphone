@@ -2,6 +2,7 @@ package com.november.mcphone.feature.music.menu;
 
 import com.november.mcphone.core.PhoneItem;
 import com.november.mcphone.core.menu.ModMenus;
+import com.november.mcphone.feature.music.DiscService;
 import com.november.mcphone.feature.music.net.MusicNetworking;
 import net.minecraft.core.RegistryAccess;
 import net.minecraft.server.level.ServerPlayer;
@@ -91,16 +92,19 @@ public class DiscBayMenu extends AbstractContainerMenu {
         // ---- 唱片格 ----
         addSlot(new Slot(container, 0, DISC_SLOT_X, DISC_SLOT_Y) {
             /**
-             * 只收唱片。
+             * 只收放得响的唱片。
              *
-             * 不按物品类型判断，而是查 JUKEBOX_PLAYABLE 组件 —— 1.21 起
-             * "能不能塞进唱片机"是数据驱动的，别的模组的唱片、数据包自定义
-             * 的唱片都认得。判据与 DiscService.songOf 是同一个，两处不一致
-             * 会出现"拖得进去却放不响"。
+             * 判据整个委托给 {@link DiscService#isPlayableDisc} —— 主手放入
+             * 那条路用的是同一个方法。两处各写各的会出现"拖得进去却按不响"
+             * 或者反过来，而那种不一致玩家根本看不出原因。
+             *
+             * 认两种：原版唱片（查 JUKEBOX_PLAYABLE 组件，1.21 起这是数据
+             * 驱动的，别的模组与数据包自定义的都认得），以及 NetMusic 刻好
+             * 的 CD。空白 CD 不收 —— 放进去只会得到一个按了没反应的播放键。
              */
             @Override
             public boolean mayPlace(ItemStack stack) {
-                return JukeboxSong.fromStack(registries, stack).isPresent();
+                return DiscService.isPlayableDisc(registries, stack);
             }
 
             /** 一格只放一张。唱片本来就不叠，别的模组的未必守这条规矩 */

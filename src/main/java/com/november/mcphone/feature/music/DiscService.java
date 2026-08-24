@@ -1,7 +1,13 @@
 package com.november.mcphone.feature.music;
 
+import com.november.mcphone.compat.NetMusicCompat;
 import com.november.mcphone.core.ModAttachments;
 import com.november.mcphone.core.PhoneItem;
+import com.november.mcphone.feature.music.net.PlayNetSongPacket;
+import com.november.mcphone.feature.music.net.StopNetSongPacket;
+import net.minecraft.core.RegistryAccess;
+import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+import net.neoforged.neoforge.network.PacketDistributor;
 import net.minecraft.core.Holder;
 import net.minecraft.network.protocol.game.ClientboundStopSoundPacket;
 import net.minecraft.server.level.ServerLevel;
@@ -95,7 +101,7 @@ public final class DiscService {
         if (state.hasDisc()) return Outcome.OCCUPIED;
 
         ItemStack held = player.getItemInHand(InteractionHand.MAIN_HAND);
-        if (songOf(player, held).isEmpty()) return Outcome.NOT_A_DISC;
+        if (!isPlayableDisc(player.level().registryAccess(), held)) return Outcome.NOT_A_DISC;
 
         // 只收一张：唱片本来就不叠，但别的模组的唱片未必守这条规矩
         ItemStack one = held.copyWithCount(1);
@@ -153,11 +159,11 @@ public final class DiscService {
     private static long playingUntil(ServerPlayer player, DiscState state) {
         if (state.startedTick() < 0 || !state.hasDisc()) return DiscState.NOT_PLAYING;
 
-        Optional<Holder<JukeboxSong>> song = songOf(player, state.disc());
-        if (song.isEmpty()) return DiscState.NOT_PLAYING;
+        long length = lengthInTicks(player, state.disc());
+        if (length <= 0L) return DiscState.NOT_PLAYING;
 
         long now = player.level().getGameTime();
-        long ends = state.startedTick() + song.get().value().lengthInTicks();
+        long ends = state.startedTick() + length;
 
         // now < startedTick 只在游戏刻倒流时出现（存档回滚之类）。当作没在放，
         // 否则会算出一个遥远的终点，那张唱片就再也停不下来了
@@ -167,6 +173,19 @@ public final class DiscService {
 
     private static boolean isPlaying(ServerPlayer player, DiscState state) {
         return playingUntil(player, state) != DiscState.NOT_PLAYING;
+    }
+
+    /**
+     * 仓里那张东西有多长（游戏刻）。不认识就返回 -1。
+     *
+     * 原版唱片自带 lengthInTicks，NetMusic 的 CD 上刻的是秒数 —— 两者换算到
+     * 同一个单位，上面那道"放到哪一刻为止"的算术才对两种唱片都成立。
+     */
+    private static long lengthInTicks(ServerPlayer player, ItemStack disc) {
+        Optional<Holder<JukeboxSong>> vanilla = songOf(player, disc);
+        if (vanilla.isPresent()) return vanilla.get().value().lengthInTicks();
+
+        return NetMusicCompat.songOf(disc).map(NetSong::lengthInTicks).orElse(-1L);
     }
 
     /**
@@ -188,17 +207,84 @@ public final class DiscService {
             return Outcome.OK;
         }
 
-        Optional<Holder<JukeboxSong>> song = songOf(player, state.disc());
-        if (song.isEmpty()) return Outcome.NOTHING;
-
-        // 绑在玩家身上，声音就跟着他走。第一个参数传 null ＝ 包括他自己在内
-        // 所有听得见的人都收到
-        player.level().playSound(null, player,
-                song.get().value().soundEvent().value(), SoundSource.RECORDS, VOLUME, 1.0F);
+        if (!startSound(player, state.disc())) return Outcome.NOTHING;
 
         player.setData(ModAttachments.DISC.get(),
                 state.playingSince(player.level().getGameTime()));
         return Outcome.OK;
+    }
+
+    /**
+     * 开始外放仓里那张东西。
+     *
+     * 两支走法，因为两种"唱片"能被听见的方式根本不同：
+     *
+     *   原版唱片    它是一个注册过的音效，服务端一句话全场就都听得见
+     *   NetMusic CD 歌在网上。服务端只广播一个地址，每个客户端自己去拉
+     *
+     * 后者正是 Track.Kind 里那条"本地文件不能外放"想不通的地方 —— 硬盘上
+     * 那个 mp3 别人没有，而网上那首歌人人都拿得到。
+     *
+     * @return 这张东西放不了（不是唱片、CD 上没刻东西、NetMusic 没装）
+     *         返回 false
+     */
+    private static boolean startSound(ServerPlayer player, ItemStack disc) {
+        Optional<Holder<JukeboxSong>> vanilla = songOf(player, disc);
+        if (vanilla.isPresent()) {
+            // 绑在玩家身上，声音就跟着他走。第一个参数传 null ＝ 包括他自己
+            // 在内所有听得见的人都收到
+            player.level().playSound(null, player,
+                    vanilla.get().value().soundEvent().value(),
+                    SoundSource.RECORDS, VOLUME, 1.0F);
+            return true;
+        }
+
+        return NetMusicCompat.songOf(disc)
+                .map(song -> {
+                    broadcastNearby(player, new PlayNetSongPacket(player.getId(), song));
+                    return true;
+                })
+                .orElse(false);
+    }
+
+    /**
+     * 这个物品能不能放进唱片仓。
+     *
+     * 唱片仓那一格与主手放入两处都用它，两处必须是同一个判据 —— 不一致就会
+     * 出现"拖得进去却按不响"或者反过来。
+     *
+     * @param registries 世界的注册表。原版唱片是数据驱动的，判定要查它
+     */
+    public static boolean isPlayableDisc(RegistryAccess registries, ItemStack stack) {
+        if (stack.isEmpty()) return false;
+        return JukeboxSong.fromStack(registries, stack).isPresent()
+                || NetMusicCompat.songOf(stack).isPresent();
+    }
+
+    /**
+     * 把包发给听得见的人。
+     *
+     * 半径与 stopSound 用同一套算法 —— 两处不一致的话会出现"听得见开始
+     * 却收不到停止"，那首歌就在他耳朵里放到完。
+     */
+    private static void broadcastNearby(ServerPlayer player, CustomPacketPayload packet) {
+        double radiusSq = audibleRadius() * audibleRadius();
+        for (ServerPlayer nearby : ((ServerLevel) player.level()).players()) {
+            if (nearby.distanceToSqr(player) <= radiusSq) {
+                PacketDistributor.sendToPlayer(nearby, packet);
+            }
+        }
+    }
+
+    /**
+     * 外放能传多远。
+     *
+     * 原版音量大于 1 时按倍数放大可听范围，16 是基准距离 —— 这与
+     * Level.playSound 内部挑收件人的算法是同一条，抄它是为了两种唱片
+     * 传得一样远。
+     */
+    private static double audibleRadius() {
+        return 16.0D * VOLUME;
     }
 
     /**
@@ -231,22 +317,25 @@ public final class DiscService {
     private static void stopSound(ServerPlayer player, DiscState state) {
         if (state.startedTick() < 0) return;
 
-        Optional<Holder<JukeboxSong>> song = songOf(player, state.disc());
-        if (song.isEmpty()) return;
+        Optional<Holder<JukeboxSong>> vanilla = songOf(player, state.disc());
+        if (vanilla.isPresent()) {
+            SoundEvent sound = vanilla.get().value().soundEvent().value();
+            ClientboundStopSoundPacket packet =
+                    new ClientboundStopSoundPacket(sound.getLocation(), SoundSource.RECORDS);
 
-        SoundEvent sound = song.get().value().soundEvent().value();
-        ClientboundStopSoundPacket packet =
-                new ClientboundStopSoundPacket(sound.getLocation(), SoundSource.RECORDS);
-
-        // 半径按外放音量算：原版音量大于 1 时可听范围按倍数放大，
-        // 16 是基准距离
-        double radius = 16.0D * VOLUME;
-        double radiusSq = radius * radius;
-
-        for (ServerPlayer nearby : ((ServerLevel) player.level()).players()) {
-            if (nearby.distanceToSqr(player) <= radiusSq) {
-                nearby.connection.send(packet);
+            double radiusSq = audibleRadius() * audibleRadius();
+            for (ServerPlayer nearby : ((ServerLevel) player.level()).players()) {
+                if (nearby.distanceToSqr(player) <= radiusSq) {
+                    nearby.connection.send(packet);
+                }
             }
+            return;
+        }
+
+        // NetMusic 的 CD：停的是我们自己那个声源，按实体停得准 —— 不像
+        // 原版那个包只能按音效 ID 停，会把旁边放同一张唱片的人一起停掉
+        if (NetMusicCompat.songOf(state.disc()).isPresent()) {
+            broadcastNearby(player, new StopNetSongPacket(player.getId()));
         }
     }
 

@@ -72,6 +72,7 @@
   "mcphone.app.ender_chest": "Ender Chest",
   "mcphone.container.ender_chest": "Ender Chest",
   "mcphone.container.disc_bay": "Disc Bay",
+  "subtitle.mcphone.disc_stream": "Phone playing music",
   "mcphone.app.chat": "Axolotl",
   "mcphone.chat.empty": "No conversations yet",
   "mcphone.chat.empty_hint": "Tap + to add a contact",

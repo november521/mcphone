@@ -5,6 +5,7 @@ import com.november.mcphone.core.PhoneItem;
 import com.november.mcphone.feature.music.DiscService;
 import com.november.mcphone.feature.music.DiscState;
 import com.november.mcphone.feature.music.client.DiscClientCache;
+import com.november.mcphone.feature.music.client.NetSongPlayback;
 import com.november.mcphone.feature.music.menu.DiscBayContainer;
 import com.november.mcphone.feature.music.menu.DiscBayMenu;
 import net.minecraft.network.chat.Component;
@@ -47,6 +48,20 @@ public final class MusicNetworking {
                 SyncDiscStatePacket.TYPE,
                 SyncDiscStatePacket.STREAM_CODEC,
                 MusicNetworking::handleSync
+        );
+
+        // S2C: 某个人开始 / 停止外放一首网络歌。
+        // 与原版唱片那一支不同，这两个包是发给【听得见的每一个人】的，
+        // 不只是放歌的那个 —— 外放的意义就在于周围人也听得见
+        registrar.playToClient(
+                PlayNetSongPacket.TYPE,
+                PlayNetSongPacket.STREAM_CODEC,
+                MusicNetworking::handlePlayNetSong
+        );
+        registrar.playToClient(
+                StopNetSongPacket.TYPE,
+                StopNetSongPacket.STREAM_CODEC,
+                MusicNetworking::handleStopNetSong
         );
     }
 
@@ -135,6 +150,16 @@ public final class MusicNetworking {
     private static SyncDiscStatePacket stateOf(ServerPlayer player) {
         DiscState state = player.getData(ModAttachments.DISC.get());
         return new SyncDiscStatePacket(state.disc().copy(), DiscService.playingUntil(player));
+    }
+
+    /** 有人开始外放一首网络歌 —— 在自己这边把它放出来 */
+    private static void handlePlayNetSong(PlayNetSongPacket packet, IPayloadContext ctx) {
+        ctx.enqueueWork(() -> NetSongPlayback.start(packet.entityId(), packet.song()));
+    }
+
+    /** 有人停了 */
+    private static void handleStopNetSong(StopNetSongPacket packet, IPayloadContext ctx) {
+        ctx.enqueueWork(() -> NetSongPlayback.stop(packet.entityId()));
     }
 
     /** 收到状态，存进客户端缓存供界面读取 */
