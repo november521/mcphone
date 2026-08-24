@@ -50,7 +50,6 @@
   "mcphone.config.music_volume": "Music Volume",
   "mcphone.music.empty": "Nothing here yet",
   "mcphone.music.empty_hint": "Drop music into config/mcphone/music/ — %s supported",
-  "mcphone.music.source.local": "Local Music",
   "mcphone.music.disc.not_a_disc": "That is not a music disc",
   "mcphone.music.disc.insert_hint": "Insert a disc",
   "mcphone.music.disc.backpack_hint": "From your bag",

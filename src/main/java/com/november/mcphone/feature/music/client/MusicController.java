@@ -13,7 +13,6 @@ import net.minecraft.network.chat.Component;
 
 import java.io.IOException;
 import java.util.List;
-import java.util.RandomAccess;
 
 /**
  * 播放控制器 —— 队列、循环模式、上一首下一首。界面读它，不自己记状态。
@@ -142,14 +141,6 @@ public final class MusicController {
     /** 正在放（或暂停在）哪一首；没有则 null */
     public static Track current() {
         return (index >= 0 && index < queue.size()) ? queue.get(index) : null;
-    }
-
-    public static List<Track> currentQueue() {
-        return queue;
-    }
-
-    public static int currentIndex() {
-        return index;
     }
 
     public static PlayMode getMode() {

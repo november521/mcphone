@@ -39,9 +39,6 @@ public interface MusicSource {
     /** 稳定标识，写进 {@link Track#sourceId()}。别改，它会进播放记录 */
     String id();
 
-    /** 界面上的分组名。用翻译键，别写死字符串 */
-    String displayNameKey();
-
     /** 当前的曲目。必须便宜，理由见接口注释 */
     List<Track> list();
 

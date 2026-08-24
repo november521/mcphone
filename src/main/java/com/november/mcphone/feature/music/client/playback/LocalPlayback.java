@@ -242,15 +242,6 @@ public final class LocalPlayback {
         return state == State.PLAYING;
     }
 
-    public static boolean isPaused() {
-        return state == State.PAUSED;
-    }
-
-    /** 正在放（或暂停在）哪一首的 key；没有则返回 null */
-    public static String currentId() {
-        return currentId;
-    }
-
     /** 已经放了多久。暂停期间不增长 */
     public static long elapsedMillis() {
         if (state == State.PLAYING) {

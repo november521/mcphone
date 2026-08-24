@@ -167,9 +167,4 @@ public final class NetSongSound extends AbstractTickableSoundInstance {
             }
         }, Util.backgroundExecutor());
     }
-
-    /** 声音挂在谁身上 —— 停止时要按这个找回对应的声源 */
-    public Entity source() {
-        return source;
-    }
 }

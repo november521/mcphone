@@ -51,11 +51,6 @@ public final class LocalFileSource implements MusicSource {
     }
 
     @Override
-    public String displayNameKey() {
-        return "mcphone.music.source.local";
-    }
-
-    @Override
     public List<Track> list() {
         return cached;
     }

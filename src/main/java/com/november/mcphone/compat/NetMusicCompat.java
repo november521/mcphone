@@ -63,16 +63,6 @@ public final class NetMusicCompat {
     }
 
     /**
-     * 这是一张 NetMusic 的 CD，而且上面确实刻着一首歌吗。
-     *
-     * 唱片仓用它决定收不收 —— 空白 CD（刻录机里还没写进去的那种）读不出
-     * 歌来，放进去也只会得到一个按下去没反应的播放键，不如一开始就不收。
-     */
-    public static boolean isPlayableCD(ItemStack stack) {
-        return songOf(stack).isPresent();
-    }
-
-    /**
      * 把 CD 上那首歌读出来。
      *
      * @return 不是 NetMusic 的 CD、CD 上没刻东西、或者没装 NetMusic，

@@ -50,7 +50,6 @@
   "mcphone.config.music_volume": "音乐音量",
   "mcphone.music.empty": "曲库是空的",
   "mcphone.music.empty_hint": "把音乐放进 config/mcphone/music/，支持 %s",
-  "mcphone.music.source.local": "本地音乐",
   "mcphone.music.disc.not_a_disc": "手上拿的不是唱片",
   "mcphone.music.disc.insert_hint": "放入一个唱片",
   "mcphone.music.disc.backpack_hint": "从背包里挑一张",
