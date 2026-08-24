@@ -4,6 +4,7 @@ import com.november.mcphone.api.client.app.RequiredMod;
 import com.november.mcphone.compat.WaystonesCompat;
 import com.november.mcphone.core.client.PhoneApp;
 import com.november.mcphone.feature.waystone.net.OpenWaystoneSelectionPacket;
+import net.minecraft.network.chat.Component;
 import net.neoforged.neoforge.network.PacketDistributor;
 
 import java.util.List;
@@ -44,7 +45,7 @@ public final class WaystoneApp extends PhoneApp {
     public List<RequiredMod> requiredMods() {
         return List.of(new RequiredMod(
                 WaystonesCompat.WAYSTONES_MODID,
-                "Waystones（传送石碑）"));
+                Component.translatable("mcphone.compat.waystones").getString()));
     }
 
     /**

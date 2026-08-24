@@ -91,8 +91,11 @@ public final class AboutPage {
         // 一个 App，所以从 App 的前置声明里汇总不出来，只能单独写在这儿。
         // 这一页存在的理由就是回答玩家"我怎么没有这个"，漏一条他就会把
         // "功能不见了"当成 bug 来报
-        y = compatRow(g, font, x, y, w, "Curios（饰品栏）", CuriosCompat.isLoaded());
-        y = compatRow(g, font, x, y, w, "NetMusic（唱片仓放网络歌）",
+        y = compatRow(g, font, x, y, w,
+                Component.translatable("mcphone.compat.curios").getString(),
+                CuriosCompat.isLoaded());
+        y = compatRow(g, font, x, y, w,
+                Component.translatable("mcphone.compat.netmusic").getString(),
                 NetMusicCompat.isLoaded());
 
         // 其余从各 App 声明的前置汇总。这一段【不能】改回手写清单：
