@@ -73,6 +73,18 @@ NeoForge 的注册阶段只要收到任何一个模组抛的异常，就会把�
 
 **支持的格式**：OGG / OGA（游戏自带解码器，最省事）、MP3 / MP2 / MP1、WAV / AIFF / AU。放进 `config/mcphone/music/` 就行，进音乐 App 会自动重扫，不用重启游戏。MP3 靠打包进来的 [JavaMP3](https://github.com/delthas/JavaMP3)（MIT 许可），许可证全文在 jar 里的 `THIRD-PARTY.txt`。
 
+**MP3 只认 MPEG-1**（采样率 44100 / 48000 / 32000 Hz，绝大多数音乐都是这一档）。MPEG-2 与 MPEG-2.5 放不了 —— 那是低采样率的 MP3（22050 / 24000 / 16000 / 11025 / 12000 / 8000 Hz），常见于低码率的语音与老文件。这是打包的解码库的限制，它自己的 [issue #8](https://github.com/delthas/JavaMP3/issues/8) 就是这一条。
+
+碰上了不会没声没响：曲库里那一行会变灰，鼠标停上去写着「MPEG-2 放不了，只认 MPEG-1」，日志里则有完整的规格，形如
+
+```
+[MCphone] 打开 MP3 我的歌.mp3 —— MPEG-1 Layer III, 44100Hz, 立体声, 320kbps
+[MCphone] 放不了 local:老歌.mp3：MPEG-2 Layer III, 22050Hz, 单声道, 64kbps。
+          这个播放器只认 MPEG-1（44100 / 48000 / 32000 Hz），请转成 44.1kHz 再放进来
+```
+
+用任何转码工具转成 44.1kHz 的 MP3 即可，或者干脆转成 OGG —— 那一档走游戏自带的解码器，最稳。
+
 上限：好友 100 人，每人待处理申请 50 条，每对会话保留最近 100 条消息，单条 256 字。
 
 **联动 App**：有些 App 靠别的模组撑着（传送石要 Waystones，浏览器要 MCEF）。前置没装时它们不会出现在主屏和商店的普通列表里——商店里躺着一个点了必然报错的东西，比它不存在更糟。
