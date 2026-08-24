@@ -43,6 +43,14 @@ public final class Gallery {
     /** 翻页箭头热区宽度。比字形大一圈——手机屏幕上字太小不好点 */
     private static final int ARROW_HIT_W = 16;
 
+    /**
+     * 文字按钮的命中区四边各放宽多少。
+     *
+     * 正好按字的边界算会点不中：这一行字才 9 像素高，而手机整体是缩放显示的。
+     * 四边一样宽，不然命中区与看到的那行字对不上，玩家会觉得"这个键有点偏"。
+     */
+    private static final int HIT_PAD = 2;
+
     // ==================== 颜色 ====================
 
     private static final int COLOR_CELL_BG      = PhoneTheme.COLOR_SCRIM;
@@ -250,13 +258,17 @@ public final class Gallery {
 
         int ty = y + (h - font.lineHeight) / 2;
 
-        g.drawString(font, ARROW_PREV, x + 2, ty,
+        // 贴内容区边缘，与标题、总数、以及单张查看里的返回同一列。
+        // 原先这两个箭头各往里缩 2 像素 —— 那不是在补字形边距（◁ ▷ 在
+        // unifont 里是 8 点宽的半角字，墨迹列 1..6，左边距只有半个像素），
+        // 只是当初随手加的，结果是这一行比上下几行都窄一圈
+        g.drawString(font, ARROW_PREV, x, ty,
                 canPrev ? (onPrev ? colorCellBorder() : colorPager()) : colorPagerOff(), false);
 
         String label = (cur + 1) + "/" + pageCount;
         g.drawString(font, label, x + (w - font.width(label)) / 2, ty, colorPager(), false);
 
-        g.drawString(font, ARROW_NEXT, x + w - font.width(ARROW_NEXT) - 2, ty,
+        g.drawString(font, ARROW_NEXT, x + w - font.width(ARROW_NEXT), ty,
                 canNext ? (onNext ? colorCellBorder() : colorPager()) : colorPagerOff(), false);
     }
 
@@ -280,10 +292,18 @@ public final class Gallery {
         final int rowH = font.lineHeight + 2;
 
         // ---- 顶部：返回 + 序号 ----
-        int headerY = phoneTop + statusH + 2;
+        // 与网格那一页的标题行同一个基线（都是 statusH + 4）。原先这里是 +2，
+        // 于是点开一张照片时顶上那一行会往上跳 2 像素
+        int headerY = phoneTop + statusH + 4;
+
         String back = ARROW_PREV + " " + Component.translatable("mcphone.gallery.back").getString();
-        boolean onBack = mouseX >= x && mouseX < x + font.width(back) + 4
-                      && mouseY >= headerY && mouseY < headerY + rowH;
+
+        // 命中区四边各放 HIT_PAD。原先是"左 0 右 4、上 0 下 2"——按到的地方
+        // 与看到的那行字对不上
+        boolean onBack = mouseX >= x - HIT_PAD && mouseX < x + font.width(back) + HIT_PAD
+                      && mouseY >= headerY - HIT_PAD
+                      && mouseY < headerY + font.lineHeight + HIT_PAD;
+
         g.drawString(font, back, x, headerY, onBack ? colorCellBorder() : colorPager(), false);
 
         String idx = (viewing + 1) + "/" + photos.size();
@@ -324,9 +344,10 @@ public final class Gallery {
         if (font.width(name) > w) name = font.plainSubstrByWidth(name, w - 6) + "…";
         g.drawString(font, name, x + (w - font.width(name)) / 2, nameRowY, colorHint(), false);
 
-        g.drawString(font, ARROW_PREV, x + 2, btnRowY,
+        // 与顶部那个返回的 ◁ 同一列，理由见 renderPager
+        g.drawString(font, ARROW_PREV, x, btnRowY,
                 canPrev ? (onPrev ? colorCellBorder() : colorPager()) : colorPagerOff(), false);
-        g.drawString(font, ARROW_NEXT, x + w - font.width(ARROW_NEXT) - 2, btnRowY,
+        g.drawString(font, ARROW_NEXT, x + w - font.width(ARROW_NEXT), btnRowY,
                 canNext ? (onNext ? colorCellBorder() : colorPager()) : colorPagerOff(), false);
         g.drawString(font, del, delX, btnRowY,
                 deleteArmed ? FontPalette.dangerArmed()
