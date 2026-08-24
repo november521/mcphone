@@ -182,11 +182,6 @@ public class FriendData extends SavedData {
         return true;
     }
 
-    /** 某人收到的全部申请：申请人 → 申请时刻 */
-    public Map<UUID, Long> getIncomingRequests(UUID player) {
-        Map<UUID, Long> incoming = pendingRequests.get(player);
-        return incoming == null ? Map.of() : Map.copyOf(incoming);
-    }
 
 
     //  玩家名缓存
