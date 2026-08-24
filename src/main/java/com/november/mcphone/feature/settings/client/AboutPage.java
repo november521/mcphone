@@ -4,6 +4,7 @@ import com.november.mcphone.MCphone;
 import com.november.mcphone.api.client.app.IPhoneApp;
 import com.november.mcphone.api.client.app.RequiredMod;
 import com.november.mcphone.compat.CuriosCompat;
+import com.november.mcphone.compat.NetMusicCompat;
 import com.november.mcphone.core.client.FontPalette;
 import com.november.mcphone.core.client.GuiUtil;
 import com.november.mcphone.core.client.PhoneScreenRegistry;
@@ -90,9 +91,13 @@ public final class AboutPage {
                 x, y, FontPalette.subtle(), false);
         y += font.lineHeight + 2;
 
-        // Curios 是"能力型"联动：装了手机能挂腰上，它不对应任何一个 App，
-        // 所以从 App 的前置声明里汇总不出来，只能单独写这一行
+        // Curios 与 NetMusic 都是"能力型"联动：装了多点东西，但都不对应任何
+        // 一个 App，所以从 App 的前置声明里汇总不出来，只能单独写在这儿。
+        // 这一页存在的理由就是回答玩家"我怎么没有这个"，漏一条他就会把
+        // "功能不见了"当成 bug 来报
         y = compatRow(g, font, x, y, w, "Curios（饰品栏）", CuriosCompat.isLoaded());
+        y = compatRow(g, font, x, y, w, "NetMusic（唱片仓放网络歌）",
+                NetMusicCompat.isLoaded());
 
         // 其余从各 App 声明的前置汇总。这一段【不能】改回手写清单：
         // v1.2.0 加了浏览器 App 却忘了往这儿加 MCEF，玩家看不到自己缺什么，
