@@ -83,9 +83,7 @@ public final class ChatAddContact {
         hovered = null;
     }
 
-    // ============================================================
     //  渲染
-    // ============================================================
 
     public void render(GuiGraphics g, int phoneLeft, int phoneTop,
                        int screenW, int screenH, int statusH, int navH,
@@ -164,9 +162,7 @@ public final class ChatAddContact {
         }
     }
 
-    // ============================================================
     //  鼠标
-    // ============================================================
 
     public boolean mouseClicked(double mx, double my, int button) {
         if (button != 0) return false;
@@ -221,9 +217,7 @@ public final class ChatAddContact {
         return false;
     }
 
-    // ============================================================
     //  内部
-    // ============================================================
 
     private void maybeRefresh() {
         long now = System.currentTimeMillis();

@@ -72,9 +72,7 @@ public final class ClientConfig {
         SPEC = builder.build();
     }
 
-    // ============================================================
     //  配置 → FontPalette
-    // ============================================================
 
     /** 配置文件首次读进来 */
     public static void onLoad(ModConfigEvent.Loading event) {
@@ -102,9 +100,7 @@ public final class ClientConfig {
         LocalPlayback.setVolume(MUSIC_VOLUME.get() / 100.0F);
     }
 
-    // ============================================================
     //  手机界面 → 配置
-    // ============================================================
 
     /**
      * 玩家在手机的「设置 → 字体颜色」里选了一个。

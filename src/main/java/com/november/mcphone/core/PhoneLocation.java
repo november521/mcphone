@@ -112,9 +112,7 @@ public sealed interface PhoneLocation {
                 .map(ref -> new InCurio(ref.slotId(), ref.index()));
     }
 
-    // ============================================================
     //  网络
-    // ============================================================
 
     /** 槽位 id 的长度上限，够任何合理的命名，也堵住超长字符串 */
     int MAX_SLOT_ID_LENGTH = 64;

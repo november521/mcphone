@@ -285,9 +285,7 @@ public final class PhoneSkin {
         PATH_CACHE.clear();
     }
 
-    // ============================================================
     //  绘制
-    // ============================================================
 
     /**
      * 画贴图，拉伸到目标区域。
@@ -316,9 +314,7 @@ public final class PhoneSkin {
         }
     }
 
-    // ============================================================
     //  探测
-    // ============================================================
 
     private static Optional<SkinTexture> resolve(Element element) {
         return CACHE.computeIfAbsent(element, PhoneSkin::probe);

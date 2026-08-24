@@ -61,9 +61,7 @@ public final class DiscBayContainer implements Container {
         player.setData(ModAttachments.DISC.get(), state().withDisc(stack));
     }
 
-    // ============================================================
     //  Container
-    // ============================================================
 
     @Override
     public int getContainerSize() {

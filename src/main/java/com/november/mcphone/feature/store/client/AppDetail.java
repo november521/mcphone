@@ -94,9 +94,7 @@ public final class AppDetail {
         return r;
     }
 
-    // ============================================================
     //  状态
-    // ============================================================
 
     /** 按钮此刻是哪一种 */
     private enum State { LOADING, BUY, CANT_AFFORD, DOWNLOAD, INSTALLED }
@@ -128,9 +126,7 @@ public final class AppDetail {
         };
     }
 
-    // ============================================================
     //  渲染
-    // ============================================================
 
     public void render(GuiGraphics g, int phoneLeft, int phoneTop,
                        int screenW, int screenH, int statusH, int navH,
@@ -232,9 +228,7 @@ public final class AppDetail {
                 false);
     }
 
-    // ============================================================
     //  鼠标
-    // ============================================================
 
     public boolean mouseClicked(double mx, double my, int button) {
         if (info == null || !btnHovered) return false;

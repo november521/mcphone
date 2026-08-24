@@ -46,9 +46,7 @@ public final class WallpaperStore {
 
     private WallpaperStore() {}
 
-    // ============================================================
     //  数据类 —— 记录图片原始宽高
-    // ============================================================
 
     public record WallpaperEntry(
             String fileName,
@@ -58,9 +56,7 @@ public final class WallpaperStore {
             int imageHeight
     ) {}
 
-    // ============================================================
     //  扫描 & 加载
-    // ============================================================
 
     /** 客户端启动时扫一次，让第一次开机就有壁纸可选 */
     public static void scan() {
@@ -188,9 +184,7 @@ public final class WallpaperStore {
         }
     }
 
-    // ============================================================
     //  查询
-    // ============================================================
 
     public static List<WallpaperEntry> getWallpapers() {
         return Collections.unmodifiableList(WALLPAPERS);

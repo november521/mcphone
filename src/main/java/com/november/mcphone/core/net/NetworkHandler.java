@@ -105,9 +105,7 @@ public final class NetworkHandler {
         com.november.mcphone.feature.music.net.MusicNetworking.register(registrar);
     }
 
-    // ============================================================
     //  处理函数
-    // ============================================================
 
     /** 服务端收到：记录壁纸选择，广播给该玩家的客户端 */
     private static void handleSetWallpaper(SetWallpaperPacket packet, IPayloadContext ctx) {

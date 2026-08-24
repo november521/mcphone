@@ -23,9 +23,7 @@ import java.util.List;
  */
 public interface IPhoneApp {
 
-    // ================================================================
     //  必须实现
-    // ================================================================
 
     /**
      * App 唯一标识，形如 {@code mymod:calculator}，命名空间用你自己的 modid。
@@ -49,9 +47,7 @@ public interface IPhoneApp {
     /** 用户点击 App 图标时触发。在此打开 GUI、执行业务逻辑。 */
     void onPress();
 
-    // ================================================================
     //  可选覆盖
-    // ================================================================
 
     /** 绘制图标。默认 blit 整个纹理。 */
     default void renderIcon(GuiGraphics g, int x, int y, int size, float partialTick) {

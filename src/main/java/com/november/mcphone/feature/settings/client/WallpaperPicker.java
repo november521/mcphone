@@ -31,9 +31,7 @@ public final class WallpaperPicker {
 
     public WallpaperPicker() {}
 
-    // ============================================================
     //  渲染
-    // ============================================================
 
     public void render(GuiGraphics g, int phoneLeft, int phoneTop,
                        int screenW, int screenH, int statusH, int navH,
@@ -121,9 +119,7 @@ public final class WallpaperPicker {
         this.hoveredIdx = hovered;
     }
 
-    // ============================================================
     //  缩略图：按比例缩放居中绘制到预览框内
-    // ============================================================
 
     /**
      * 将任意尺寸纹理等比例缩放到 boxW×boxH 区域内居中绘制。
@@ -153,9 +149,7 @@ public final class WallpaperPicker {
                 texW, texH);     // 纹理总宽高
     }
 
-    // ============================================================
     //  点击
-    // ============================================================
 
     /**
      * 返回 true 表示选择了壁纸（界面应返回设置列表），false 表示点击在空白处。

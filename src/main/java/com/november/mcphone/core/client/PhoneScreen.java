@@ -183,9 +183,7 @@ public final class PhoneScreen extends Screen {
         this.animationDone = PhoneTheme.OPEN_ANIMATION_MS <= 0;
     }
 
-    // ============================================================
     //  导航
-    // ============================================================
 
     public void navigateTo(Mode target) {
         if (this.mode == target) return;
@@ -268,9 +266,7 @@ public final class PhoneScreen extends Screen {
         return mode == Mode.CHAT_CONVERSATION && chatConversation.isViewing(peer);
     }
 
-    // ============================================================
     //  附属 App 的页面
-    // ============================================================
     //
     // 这里是整个界面里唯一一处"代码由别人写"的地方。每一个进出口都要兜住
     // Throwable：附属的页面抛异常只该让这一页被关掉并记一条日志，不该拖垮
@@ -461,9 +457,7 @@ public final class PhoneScreen extends Screen {
         return false;
     }
 
-    // ============================================================
     //  布局
-    // ============================================================
 
     private void computeLayout() {
         if (!layoutDirty) return;
@@ -487,9 +481,7 @@ public final class PhoneScreen extends Screen {
     @Override
     public void resize(Minecraft mc, int w, int h) { super.resize(mc, w, h); invalidateLayout(); }
 
-    // ============================================================
     //  渲染入口
-    // ============================================================
 
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
@@ -565,25 +557,19 @@ public final class PhoneScreen extends Screen {
         if (mode == Mode.APP_MANAGER)    updateAppManagerHover(mouseX, mouseY);
     }
 
-    // ============================================================
     //  手机外壳 + 壁纸背景
-    // ============================================================
 
     private void renderPhoneFrame(GuiGraphics g) {
         PhoneChassis.drawFrameAndWallpaper(g, phoneLeft, phoneTop);
     }
 
-    // ============================================================
     //  状态栏
-    // ============================================================
 
     private void renderStatusBar(GuiGraphics g) {
         PhoneChassis.drawStatusBar(g, font, phoneLeft, phoneTop);
     }
 
-    // ============================================================
     //  App 网格
-    // ============================================================
 
     private void renderAppGrid(GuiGraphics g) {
         final int is = PhoneTheme.APP_ICON_SIZE;
@@ -901,9 +887,7 @@ public final class PhoneScreen extends Screen {
                 PhoneTheme.APP_NAME_SCALE, FontPalette.appName());
     }
 
-    // ============================================================
     //  设置列表
-    // ============================================================
 
     private void buildSettingItems() {
         if (!settingItems.isEmpty()) return;
@@ -975,9 +959,7 @@ public final class PhoneScreen extends Screen {
         }
     }
 
-    // ============================================================
     //  App 管理器
-    // ============================================================
 
     /**
      * 重建 App 管理器列表：列出全部已安装 App。
@@ -1052,9 +1034,7 @@ public final class PhoneScreen extends Screen {
         }
     }
 
-    // ============================================================
     //  壁纸选择器
-    // ============================================================
 
     private void renderWallpaperPicker(GuiGraphics g, int mx, int my) {
         wallpaperPicker.render(g, phoneLeft, phoneTop,
@@ -1063,9 +1043,7 @@ public final class PhoneScreen extends Screen {
                 mx, my, font);
     }
 
-    // ============================================================
     //  音乐播放器
-    // ============================================================
 
     private void renderMusicPlayer(GuiGraphics g, int mx, int my) {
         musicPage.render(g, phoneLeft, phoneTop,
@@ -1074,9 +1052,7 @@ public final class PhoneScreen extends Screen {
                 mx, my, font);
     }
 
-    // ============================================================
     //  应用商店
-    // ============================================================
 
     private void renderAppStore(GuiGraphics g, int mx, int my) {
         appStore.render(g, phoneLeft, phoneTop,
@@ -1092,9 +1068,7 @@ public final class PhoneScreen extends Screen {
                 mx, my, font);
     }
 
-    // ============================================================
     //  设备名称
-    // ============================================================
 
     private void renderDeviceName(GuiGraphics g, int mx, int my, float partialTick) {
         deviceNameEditor.render(g, phoneLeft, phoneTop,
@@ -1103,9 +1077,7 @@ public final class PhoneScreen extends Screen {
                 mx, my, partialTick, font);
     }
 
-    // ============================================================
     //  聊天
-    // ============================================================
 
     private void renderChat(GuiGraphics g, int mx, int my) {
         chatList.render(g, phoneLeft, phoneTop,
@@ -1143,9 +1115,7 @@ public final class PhoneScreen extends Screen {
         return Component.translatable(FontPalette.current().translationKey()).getString();
     }
 
-    // ============================================================
     //  相册
-    // ============================================================
 
     private void renderGallery(GuiGraphics g, int mx, int my) {
         gallery.render(g, phoneLeft, phoneTop,
@@ -1154,17 +1124,13 @@ public final class PhoneScreen extends Screen {
                 mx, my, font);
     }
 
-    // ============================================================
     //  底部导航栏
-    // ============================================================
 
     private void renderNavBar(GuiGraphics g, int mouseX, int mouseY) {
         PhoneChassis.drawNavBar(g, font, phoneLeft, phoneTop, mouseX, mouseY);
     }
 
-    // ============================================================
     //  动画
-    // ============================================================
 
     private float getAnimationScale() {
         if (animationDone) return 1f;
@@ -1176,9 +1142,7 @@ public final class PhoneScreen extends Screen {
         return (float)(1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2)) * 0.4f + 0.6f;
     }
 
-    // ============================================================
     //  坐标换算
-    // ============================================================
 
     /**
      * 撤掉开场动画的缩放，回到界面元素真正被摆在哪儿的那套坐标。
@@ -1217,9 +1181,7 @@ public final class PhoneScreen extends Screen {
             && ly >= ft && ly < ft + PhoneTheme.PHONE_TOTAL_HEIGHT;
     }
 
-    // ============================================================
     //  鼠标 hover
-    // ============================================================
 
     private void updateAppHover(int mx, int my) {
         // 走 unscaledX/Y 而不是把那两行算式再抄一遍：抄的那份此前已经和
@@ -1271,9 +1233,7 @@ public final class PhoneScreen extends Screen {
         }
     }
 
-    // ============================================================
     //  鼠标点击
-    // ============================================================
 
     @Override
     public boolean mouseClicked(double mx, double my, int button) {
@@ -1460,9 +1420,7 @@ public final class PhoneScreen extends Screen {
         };
     }
 
-    // ============================================================
     //  拖动 / 松手 / 滚轮
-    // ============================================================
 
     @Override
     public boolean mouseDragged(double mx, double my, int button, double dx, double dy) {
@@ -1562,9 +1520,7 @@ public final class PhoneScreen extends Screen {
         return super.mouseScrolled(mx, my, scrollX, scrollY);
     }
 
-    // ============================================================
     //  键盘
-    // ============================================================
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {

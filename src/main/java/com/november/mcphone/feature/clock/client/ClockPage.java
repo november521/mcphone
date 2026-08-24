@@ -52,9 +52,7 @@ public final class ClockPage {
     /** 游戏时间放大到这个倍数 */
     private static final float BIG_SCALE = 2.0f;
 
-    // ============================================================
     //  "时间停了吗"
-    // ============================================================
 
     /** 上一次看到的 dayTime */
     private static long lastDayTime = -1;
@@ -77,9 +75,7 @@ public final class ClockPage {
         stillFrames = 0;
     }
 
-    // ============================================================
     //  绘制
-    // ============================================================
 
     public static void render(GuiGraphics g, int phoneLeft, int phoneTop,
                               int screenW, int screenH, int statusH, int navH, Font font) {
@@ -238,9 +234,7 @@ public final class ClockPage {
         return drawRow(g, font, x, y, w, label, value, color);
     }
 
-    // ============================================================
     //  小工具
-    // ============================================================
 
     /** 一行"标签 …… 值"，值靠右。与关于页共用 GuiUtil.drawLabelValueRow */
     private static int drawRow(GuiGraphics g, Font font, int x, int y, int w,

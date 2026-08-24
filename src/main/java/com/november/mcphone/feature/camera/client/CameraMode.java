@@ -44,9 +44,7 @@ public final class CameraMode {
 
     private CameraMode() {}
 
-    // ============================================================
     //  进入 / 退出
-    // ============================================================
 
     public static boolean isActive() { return active; }
 
@@ -73,9 +71,7 @@ public final class CameraMode {
         cleanFrameReady = false;
     }
 
-    // ============================================================
     //  拍照流程
-    // ============================================================
 
     /** 按下拍照键时调用 */
     public static void requestCapture() {
@@ -102,9 +98,7 @@ public final class CameraMode {
         flashAtMs = System.currentTimeMillis();
     }
 
-    // ============================================================
     //  供渲染层读取
-    // ============================================================
 
     public static long getEnteredAtMs() { return enteredAtMs; }
     public static long getFlashAtMs() { return flashAtMs; }

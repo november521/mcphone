@@ -177,9 +177,7 @@ public final class ChatConversation {
     private record Block(boolean stamp, boolean self, List<FormattedCharSequence> lines,
                          int w, int h) {}
 
-    // ============================================================
     //  生命周期
-    // ============================================================
 
     /**
      * 进入某个会话。
@@ -234,9 +232,7 @@ public final class ChatConversation {
         ChatClientCache.closeConversation();
     }
 
-    // ============================================================
     //  渲染
-    // ============================================================
 
     public void render(GuiGraphics g, int phoneLeft, int phoneTop,
                        int screenW, int screenH, int statusH, int navH,
@@ -375,9 +371,7 @@ public final class ChatConversation {
                 empty ? COLOR_SEND_OFF : (sendHovered ? COLOR_SEND_HOVER : COLOR_SEND), false);
     }
 
-    // ============================================================
     //  排版
-    // ============================================================
 
     /**
      * 把消息列表排成一块块可画的内容。
@@ -432,9 +426,7 @@ public final class ChatConversation {
         laidOutWidth = maxW;
     }
 
-    // ============================================================
     //  输入
-    // ============================================================
 
     public boolean mouseClicked(double mx, double my, int button) {
         if (button == 0 && sendHovered) {
@@ -485,9 +477,7 @@ public final class ChatConversation {
         scrollPx = 0;
     }
 
-    // ============================================================
     //  鼠标
-    // ============================================================
 
     public boolean mouseScrolled(double scrollY) {
         if (maxScroll <= 0) return false;
@@ -497,9 +487,7 @@ public final class ChatConversation {
         return true;
     }
 
-    // ============================================================
     //  内部
-    // ============================================================
 
     /**
      * 定时拉一次会话摘要。

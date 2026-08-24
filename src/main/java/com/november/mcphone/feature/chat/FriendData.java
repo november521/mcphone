@@ -106,9 +106,7 @@ public class FriendData extends SavedData {
                 FILE_NAME);
     }
 
-    // ============================================================
     //  好友关系
-    // ============================================================
 
     public boolean areFriends(UUID a, UUID b) {
         return friends.areFriends(a, b);
@@ -149,9 +147,7 @@ public class FriendData extends SavedData {
         return friends.countFriends(player);
     }
 
-    // ============================================================
     //  好友申请
-    // ============================================================
 
     /** to 是否收到过 from 的申请 */
     public boolean hasRequest(UUID from, UUID to) {
@@ -207,9 +203,7 @@ public class FriendData extends SavedData {
         return out;
     }
 
-    // ============================================================
     //  玩家名缓存
-    // ============================================================
 
     /**
      * 记下某人当前的名字。名字没变就不标脏，避免每次有人上线都触发
@@ -228,9 +222,7 @@ public class FriendData extends SavedData {
         return knownNames.get(id);
     }
 
-    // ============================================================
     //  序列化
-    // ============================================================
 
     @Override
     public CompoundTag save(CompoundTag tag, HolderLookup.Provider registries) {

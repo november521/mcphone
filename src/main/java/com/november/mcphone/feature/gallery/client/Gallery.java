@@ -87,9 +87,7 @@ public final class Gallery {
      */
     private boolean deleteArmed = false;
 
-    // ============================================================
     //  进入 / 离开
-    // ============================================================
 
     /** 进入相册时调用：重扫目录，这样刚拍的照片立刻可见 */
     public void open() {
@@ -109,9 +107,7 @@ public final class Gallery {
         PhotoLibrary.releaseAll();
     }
 
-    // ============================================================
     //  渲染
-    // ============================================================
 
     public void render(GuiGraphics g, int phoneLeft, int phoneTop,
                        int screenW, int screenH, int statusH, int navH,
@@ -264,9 +260,7 @@ public final class Gallery {
                 canNext ? (onNext ? colorCellBorder() : colorPager()) : colorPagerOff(), false);
     }
 
-    // ============================================================
     //  单张查看
-    // ============================================================
 
     /**
      * 单张查看：顶部返回与序号，中间大图，底部文件名与「◁ 删除 ▷」。
@@ -394,9 +388,7 @@ public final class Gallery {
         if (perPage > 0) page = index / perPage;
     }
 
-    // ============================================================
     //  交互
-    // ============================================================
 
     public boolean mouseClicked(double mx, double my, int button) {
         if (button != 0) return false;

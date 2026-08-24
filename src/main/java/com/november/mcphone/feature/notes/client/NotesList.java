@@ -79,9 +79,7 @@ public final class NotesList {
     /** 待消费的"新建一条"请求 */
     private boolean pendingNew;
 
-    // ============================================================
     //  生命周期
-    // ============================================================
 
     public void open() {
         scrollOffset = 0;
@@ -111,9 +109,7 @@ public final class NotesList {
         return out;
     }
 
-    // ============================================================
     //  渲染
-    // ============================================================
 
     public void render(GuiGraphics g, int phoneLeft, int phoneTop,
                        int screenW, int screenH, int statusH, int navH,
@@ -218,9 +214,7 @@ public final class NotesList {
         }
     }
 
-    // ============================================================
     //  鼠标
-    // ============================================================
 
     public boolean mouseClicked(double mx, double my, int button) {
         if (button != 0) return false;
@@ -289,9 +283,7 @@ public final class NotesList {
         return false;
     }
 
-    // ============================================================
     //  内部
-    // ============================================================
 
     /** 每行两行文字：标题 + 预览 */
     private static int rowHeight(Font font) {

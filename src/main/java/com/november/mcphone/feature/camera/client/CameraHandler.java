@@ -26,9 +26,7 @@ public final class CameraHandler {
 
     private CameraHandler() {}
 
-    // ============================================================
     //  按键与截图
-    // ============================================================
 
     public static void onClientTick(ClientTickEvent.Post event) {
         if (!CameraMode.isActive()) return;
@@ -56,9 +54,7 @@ public final class CameraHandler {
         }
     }
 
-    // ============================================================
     //  取景框渲染
-    // ============================================================
 
     public static void onRenderGui(RenderGuiEvent.Post event) {
         if (!CameraMode.isActive()) return;
@@ -78,9 +74,7 @@ public final class CameraHandler {
                 System.currentTimeMillis());
     }
 
-    // ============================================================
     //  安全网
-    // ============================================================
 
     /**
      * 打开任意界面（背包、暂停菜单等）时自动退出相机模式。

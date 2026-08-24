@@ -45,9 +45,7 @@ public final class GuiUtil {
 
     private GuiUtil() {}
 
-    // ============================================================
     //  命中判定
-    // ============================================================
 
     /**
      * 点在这个矩形里吗。
@@ -63,9 +61,7 @@ public final class GuiUtil {
         return mx >= x && mx <= x + w && my >= y && my <= y + h;
     }
 
-    // ============================================================
     //  文字
-    // ============================================================
 
     /**
      * 太长就截断，末尾补省略号。
@@ -146,9 +142,7 @@ public final class GuiUtil {
         g.pose().popPose();
     }
 
-    // ============================================================
     //  时间
-    // ============================================================
 
     private static final DateTimeFormatter TIME_FORMAT = DateTimeFormatter.ofPattern("HH:mm");
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("MM-dd");

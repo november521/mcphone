@@ -73,9 +73,7 @@ public final class BrowserScreen extends Screen {
     /** 导航图标的放大倍数。默认字号在这块大面板上显得像针尖 */
     private static final float NAV_GLYPH_SCALE = 1.6f;
 
-    // ============================================================
     //  送给网页的修饰键掩码 —— 用 GLFW 那一套，不是 AWT 的
-    // ============================================================
     //
     // 这件事必须写在这儿：MCEF 把我们给的 modifiers 原样塞进 CefKeyEvent 与
     // CefMouseWheelEvent，而它自己判断时用的就是 GLFW 的值——字节码里 Alt 判的是
@@ -144,9 +142,7 @@ public final class BrowserScreen extends Screen {
         this.parent = parent;
     }
 
-    // ============================================================
     //  生命周期
-    // ============================================================
 
     @Override
     protected void init() {
@@ -270,9 +266,7 @@ public final class BrowserScreen extends Screen {
         return false;
     }
 
-    // ============================================================
     //  渲染
-    // ============================================================
 
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
@@ -433,9 +427,7 @@ public final class BrowserScreen extends Screen {
         return toPx(Math.max(viewY, Math.min(mouseY, viewY + viewH)) - viewY);
     }
 
-    // ============================================================
     //  输入
-    // ============================================================
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {

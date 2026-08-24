@@ -75,9 +75,7 @@ public final class DeviceNameEditor {
     private enum Btn { NONE, SAVE, CANCEL }
     private Btn hovered = Btn.NONE;
 
-    // ============================================================
     //  进入 / 离开
-    // ============================================================
 
     /** 进入编辑界面：把当前设备名填进输入框 */
     public void open(PhoneLocation location) {
@@ -105,9 +103,7 @@ public final class DeviceNameEditor {
         return name == null ? "" : name;
     }
 
-    // ============================================================
     //  渲染
-    // ============================================================
 
     public void render(GuiGraphics g, int phoneLeft, int phoneTop,
                        int screenW, int screenH, int statusH, int navH,
@@ -174,9 +170,7 @@ public final class DeviceNameEditor {
         g.drawString(font, cancel, cancelX, btnY, onCancel ? colorBtnOn() : colorBtn(), false);
     }
 
-    // ============================================================
     //  交互
-    // ============================================================
 
     /**
      * @return true 表示应当返回设置列表
@@ -217,9 +211,7 @@ public final class DeviceNameEditor {
         return true;
     }
 
-    // ============================================================
     //  保存
-    // ============================================================
 
     /**
      * 发包让服务端写入。客户端这边先清洗一次是必须的：

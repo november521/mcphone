@@ -45,9 +45,7 @@ public final class ChatClientCache {
     /** 当前打开会话的消息，按时间升序 */
     private static List<ChatMessage> messages = List.of();
 
-    // ============================================================
     //  会话列表
-    // ============================================================
 
     public static List<ConversationSummary> getConversations() {
         return conversations;
@@ -57,9 +55,7 @@ public final class ChatClientCache {
         conversations = List.copyOf(list);
     }
 
-    // ============================================================
     //  当前会话
-    // ============================================================
 
     public static UUID getOpenPeer() {
         return openPeer;
@@ -136,9 +132,7 @@ public final class ChatClientCache {
         messages = List.copyOf(next);
     }
 
-    // ============================================================
     //  在线玩家（"加联系人"界面用）
-    // ============================================================
 
     private static List<OnlinePlayer> onlinePlayers = List.of();
     private static int totalOnline;

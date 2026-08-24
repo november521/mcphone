@@ -51,9 +51,7 @@ public final class FontColorPicker {
     /** 鼠标停在第几个预设上，-1 表示不在任何一个上 */
     private int hoveredIdx = -1;
 
-    // ============================================================
     //  渲染
-    // ============================================================
 
     public void render(GuiGraphics g, int phoneLeft, int phoneTop,
                        int screenW, int screenH, int statusH, int navH,
@@ -128,9 +126,7 @@ public final class FontColorPicker {
         g.renderOutline(x - 1, y - 1, SWATCH_W + 2, SWATCH_H + 2, PhoneTheme.COLOR_DIVIDER);
     }
 
-    // ============================================================
     //  点击
-    // ============================================================
 
     /** 返回 true 表示选中了某个预设，界面该退回设置列表 */
     public boolean mouseClicked(int button) {

@@ -136,9 +136,7 @@ public final class MusicPage {
     /** 滚轮一格调多少音量 */
     private static final float VOLUME_STEP = 0.05F;
 
-    // ============================================================
     //  生命周期
-    // ============================================================
 
     /** 进入 App：重扫一次曲库，新丢进目录的歌立刻就在 */
     public void open() {
@@ -161,9 +159,7 @@ public final class MusicPage {
         hoveredTrack = null;
     }
 
-    // ============================================================
     //  渲染
-    // ============================================================
 
     public void render(GuiGraphics g, int phoneLeft, int phoneTop,
                        int screenW, int screenH, int statusH, int navH,
@@ -467,9 +463,7 @@ public final class MusicPage {
         };
     }
 
-    // ============================================================
     //  鼠标
-    // ============================================================
 
     public boolean mouseClicked(double mx, double my, int button) {
         if (button != 0) return false;
@@ -577,9 +571,7 @@ public final class MusicPage {
         return false;
     }
 
-    // ============================================================
     //  内部
-    // ============================================================
 
     private static int indexOf(List<Track> tracks, Track target) {
         for (int i = 0; i < tracks.size(); i++) {

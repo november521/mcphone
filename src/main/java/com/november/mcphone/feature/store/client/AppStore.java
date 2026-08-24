@@ -133,9 +133,7 @@ public final class AppStore {
         refresh();
     }
 
-    // ============================================================
     //  分页
-    // ============================================================
 
     private int perPage() {
         return PhoneTheme.APP_COLUMNS * Math.max(1, rowsPerPage);
@@ -146,9 +144,7 @@ public final class AppStore {
         return Math.max(1, (cellCount() + per - 1) / per);
     }
 
-    // ============================================================
     //  格子索引 —— 「联动 App」入口永远在最后一格
-    // ============================================================
     //
     // 网格里画的东西不再与 available 一一对应：可下载的 App 占 0 到 size-1，
     // 联动入口接在它们后面。分页、命中判定全都走这套合并后的索引，只在真要取
@@ -189,9 +185,7 @@ public final class AppStore {
         if (page < 0) page = 0;
     }
 
-    // ============================================================
     //  渲染
-    // ============================================================
 
     public void render(GuiGraphics g, int phoneLeft, int phoneTop,
                        int screenW, int screenH, int statusH, int navH,
@@ -355,9 +349,7 @@ public final class AppStore {
         g.drawString(font, label, labelX, pagerY, FontPalette.subtle(), false);
     }
 
-    // ============================================================
     //  鼠标
-    // ============================================================
 
     public boolean mouseClicked(double mx, double my, int button) {
         if (hoverPrev) {

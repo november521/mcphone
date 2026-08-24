@@ -126,9 +126,7 @@ public final class ChatList {
     /** 待消费的"把手机关掉"请求 */
     private boolean pendingClose;
 
-    // ============================================================
     //  生命周期
-    // ============================================================
 
     /** 进入会话列表：立刻拉一次，不必等定时刷新 */
     public void open() {
@@ -175,9 +173,7 @@ public final class ChatList {
         return out;
     }
 
-    // ============================================================
     //  渲染
-    // ============================================================
 
     public void render(GuiGraphics g, int phoneLeft, int phoneTop,
                        int screenW, int screenH, int statusH, int navH,
@@ -336,9 +332,7 @@ public final class ChatList {
         return tpHovered;
     }
 
-    // ============================================================
     //  鼠标
-    // ============================================================
 
     public boolean mouseClicked(double mx, double my, int button) {
         if (button != 0) return false;
@@ -377,9 +371,7 @@ public final class ChatList {
         return false;
     }
 
-    // ============================================================
     //  内部
-    // ============================================================
 
     /**
      * 那个"传送到他身边"的小图标。

@@ -75,9 +75,7 @@ public final class NotesNetworking {
         );
     }
 
-    // ============================================================
     //  服务端侧
-    // ============================================================
 
     private static void handleRequestNoteList(RequestNoteListPacket packet, IPayloadContext ctx) {
         ctx.enqueueWork(() -> {
@@ -156,9 +154,7 @@ public final class NotesNetworking {
         });
     }
 
-    // ============================================================
     //  客户端侧
-    // ============================================================
 
     private static void handleSyncNoteList(SyncNoteListPacket packet, IPayloadContext ctx) {
         ctx.enqueueWork(() -> NotesClientCache.setSummaries(packet.notes()));

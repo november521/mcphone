@@ -62,9 +62,7 @@ public final class StoreNetworking {
         );
     }
 
-    // ============================================================
     //  服务端侧
-    // ============================================================
 
     private static void handleRequest(RequestPurchasedAppsPacket packet, IPayloadContext ctx) {
         ctx.enqueueWork(() -> {
@@ -150,9 +148,7 @@ public final class StoreNetworking {
                 Component.translatable(key).withStyle(ChatFormatting.RED), true);
     }
 
-    // ============================================================
     //  客户端侧
-    // ============================================================
 
     private static void handleSync(SyncPurchasedAppsPacket packet, IPayloadContext ctx) {
         ctx.enqueueWork(() -> StoreClientCache.set(packet.purchased()));

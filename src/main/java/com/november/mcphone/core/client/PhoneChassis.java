@@ -140,9 +140,7 @@ public final class PhoneChassis {
         g.drawString(font, "●●●●", phoneLeft + 4, phoneTop + 1, PhoneTheme.FONT_COLOR_STATUS, true);
     }
 
-    // ============================================================
     //  导航栏
-    // ============================================================
 
     /** 导航栏上的三个虚拟按键 */
     public enum NavButton {

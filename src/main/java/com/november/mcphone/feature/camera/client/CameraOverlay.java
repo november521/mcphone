@@ -48,9 +48,7 @@ public final class CameraOverlay {
         renderFlash(g, w, h, nowMs);
     }
 
-    // ============================================================
     //  取景框：四角卡尺 + 中心准星
-    // ============================================================
 
     private static void renderViewfinder(GuiGraphics g, int w, int h) {
         int shortSide = Math.min(w, h);
@@ -81,9 +79,7 @@ public final class CameraOverlay {
         g.fill(cx, cy + 2, cx + 1, cy + RETICLE_ARM + 1, COLOR_RETICLE);
     }
 
-    // ============================================================
     //  提示：进入后显示数秒然后淡出
-    // ============================================================
 
     private static void renderHint(GuiGraphics g, Font font, int w, int h, long nowMs) {
         long elapsed = nowMs - CameraMode.getEnteredAtMs();
@@ -112,9 +108,7 @@ public final class CameraOverlay {
         g.drawString(font, text, x, y, a | COLOR_HINT, false);
     }
 
-    // ============================================================
     //  拍照白闪
-    // ============================================================
 
     private static void renderFlash(GuiGraphics g, int w, int h, long nowMs) {
         long since = nowMs - CameraMode.getFlashAtMs();

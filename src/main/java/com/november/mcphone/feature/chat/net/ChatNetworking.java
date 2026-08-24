@@ -121,9 +121,7 @@ public final class ChatNetworking {
         );
     }
 
-    // ============================================================
     //  服务端处理
-    // ============================================================
 
     /**
      * 客户端请求会话列表。
@@ -317,9 +315,7 @@ public final class ChatNetworking {
                 ChatService.countOnlineExcludingSelf(player));
     }
 
-    // ============================================================
     //  客户端处理
-    // ============================================================
 
     /** 收到会话列表，存进客户端缓存供界面读取 */
     private static void handleSyncConversations(SyncConversationsPacket packet,

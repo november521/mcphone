@@ -35,9 +35,7 @@ public final class NotesClientCache {
      */
     private static int pendingId;
 
-    // ============================================================
     //  列表
-    // ============================================================
 
     public static List<NoteSummary> getSummaries() {
         return summaries;
@@ -47,9 +45,7 @@ public final class NotesClientCache {
         summaries = List.copyOf(list);
     }
 
-    // ============================================================
     //  当前打开的那条
-    // ============================================================
 
     public static Note getOpenNote() {
         return openNote;

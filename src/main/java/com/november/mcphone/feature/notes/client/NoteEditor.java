@@ -109,9 +109,7 @@ public final class NoteEditor {
     /** 保存或删除后置位，PhoneScreen 取走后退回列表 */
     private boolean backRequested;
 
-    // ============================================================
     //  生命周期
-    // ============================================================
 
     /** 编辑已有的一条：先记下 id 再发请求，回包才不会被丢掉 */
     public void open(int id) {
@@ -156,9 +154,7 @@ public final class NoteEditor {
         }
     }
 
-    // ============================================================
     //  渲染
-    // ============================================================
 
     public void render(GuiGraphics g, int phoneLeft, int phoneTop,
                        int screenW, int screenH, int statusH, int navH,
@@ -247,9 +243,7 @@ public final class NoteEditor {
         g.drawString(font, delete, deleteX, y, deleteColor, false);
     }
 
-    // ============================================================
     //  交互
-    // ============================================================
 
     public boolean mouseClicked(double mx, double my, int button) {
         if (button == 0) {
