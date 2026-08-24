@@ -83,7 +83,7 @@ public final class Mp3Decoder implements AudioDecoder {
         String name = file.getFileName().toString();
         InputStream raw = new BufferedInputStream(Files.newInputStream(file));
         try {
-            skipId3v2(raw);
+            long tagBytes = skipId3v2(raw);
 
             // 先自己认一遍。放不了的当场说清楚，别让解码库去抛数组越界
             Mp3Header header = Mp3Header.peek(raw);
@@ -126,7 +126,12 @@ public final class Mp3Decoder implements AudioDecoder {
                         + header.channels() + "声道：" + name);
             }
 
-            return new PcmAudioStream(sound, format, name);
+            // 时长现在算：帧头已经解出码率，Xing 头里还可能写着总帧数。
+            // 只有正在放的这一首需要它，扫目录时一个文件都不必开 ——
+            // 理由见 KnownDuration
+            long durationMs = header.durationMs(Math.max(0L, Files.size(file) - tagBytes));
+
+            return new PcmAudioStream(sound, format, name, durationMs);
         } catch (IOException | RuntimeException e) {
             raw.close();
             throw e instanceof IOException io ? io : new IOException(e);
@@ -136,18 +141,21 @@ public final class Mp3Decoder implements AudioDecoder {
     /**
      * 跳过开头的 ID3v2 标签；没有标签则原样退回去。
      *
+     * 返回跳掉了多少字节：固定码率那一支要拿"文件大小减去标签"当音频字节数，
+     * 而专辑封面动辄几百 KB，不减掉的话时长会算多一大截。
+     *
      * 长度是「同步安全整数」：4 个字节各只用低 7 位，最高位恒为 0——这样
      * 标签长度本身永远不会撞上帧同步字（0xFF 开头）。所以拼的时候要按 7 位
      * 移位，不是 8 位；按 8 位算出来的长度会大得离谱，一跳就跳过了半首歌。
      */
-    private static void skipId3v2(InputStream in) throws IOException {
+    private static long skipId3v2(InputStream in) throws IOException {
         in.mark(ID3V2_HEADER);
 
         byte[] head = in.readNBytes(ID3V2_HEADER);
         if (head.length < ID3V2_HEADER
                 || head[0] != 'I' || head[1] != 'D' || head[2] != '3') {
             in.reset();     // 没有标签，交还给解码器
-            return;
+            return 0L;
         }
 
         int size = ((head[6] & 0x7F) << 21)
@@ -155,6 +163,7 @@ public final class Mp3Decoder implements AudioDecoder {
                  | ((head[8] & 0x7F) << 7)
                  |  (head[9] & 0x7F);
         in.skipNBytes(size);
+        return ID3V2_HEADER + (long) size;
     }
 
     @Override

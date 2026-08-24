@@ -42,7 +42,7 @@ import java.nio.ByteBuffer;
  * 只兜 RuntimeException，不兜 Error：OutOfMemoryError、StackOverflowError
  * 那一类是进程级的坏消息，咽下去只会让故障以更难查的方式出现在别处。
  */
-public final class PcmAudioStream implements AudioStream {
+public final class PcmAudioStream implements AudioStream, KnownDuration {
 
     private final InputStream in;
     private final AudioFormat format;
@@ -54,18 +54,24 @@ public final class PcmAudioStream implements AudioStream {
     /** 解码库已经炸过了。炸过就不再问它，也不再重复刷日志 */
     private boolean broken;
 
+    /** 这条流有多长，{@link KnownDuration#UNKNOWN} 表示不知道 */
+    private final long durationMs;
+
     /**
      * 收裸流而不是 {@link AudioInputStream}：MP3 解码器给出的就是一条普通
      * 的 InputStream 加一个格式，为它凭空包一层 AudioInputStream 只是绕路。
      *
      * @param format 这条流的真实格式。必须是 OpenAL 收得下的 PCM，
      *               见 {@link AudioDecoder} 的规矩
-     * @param name   来源名字（文件名之类），只写进出错时的日志
+     * @param name       来源名字（文件名之类），只写进出错时的日志
+     * @param durationMs 这条流有多长；算不出来传 {@link KnownDuration#UNKNOWN}。
+     *                   解码器算得出就算，算不出不要瞎猜 —— 见 KnownDuration
      */
-    public PcmAudioStream(InputStream in, AudioFormat format, String name) {
+    public PcmAudioStream(InputStream in, AudioFormat format, String name, long durationMs) {
         this.in = in;
         this.format = format;
         this.name = name;
+        this.durationMs = durationMs;
         // 帧大小可能是 NOT_SPECIFIED(-1)，那时按位深与声道自己算
         int fs = format.getFrameSize();
         this.frameSize = fs > 0 ? fs : Math.max(1,
@@ -75,6 +81,11 @@ public final class PcmAudioStream implements AudioStream {
     @Override
     public AudioFormat getFormat() {
         return format;
+    }
+
+    @Override
+    public long durationMs() {
+        return durationMs;
     }
 
     @Override

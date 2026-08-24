@@ -422,17 +422,34 @@ public final class MusicPage {
     /**
      * 进度条。
      *
-     * 时长未知时（OGG 不读完整个文件拿不到时长）画一条走到底的底色，
-     * 不画进度——画一个瞎猜的比例比不画更误导。
+     * 时长未知时（OGG 走的是 Minecraft 自己的解码器，问不到）画一条走到底的
+     * 底色，不画进度——画一个瞎猜的比例比不画更误导。
      */
     private void renderProgress(GuiGraphics g, Track track, int x, int y, int w) {
         g.fill(x, y, x + w, y + PROGRESS_H, PhoneTheme.COLOR_MUSIC_PROGRESS_BG);
 
-        if (!track.hasDuration()) return;
+        long total = totalMillis(track);
+        if (total <= 0L) return;
 
         long elapsed = LocalPlayback.elapsedMillis();
-        float ratio = Math.clamp(elapsed / (float) track.durationMs(), 0.0F, 1.0F);
+        float ratio = Math.clamp(elapsed / (float) total, 0.0F, 1.0F);
         g.fill(x, y, x + (int) (w * ratio), y + PROGRESS_H, PhoneTheme.COLOR_MUSIC_PROGRESS);
+    }
+
+    /**
+     * 这一首有多长，两个来源按先后问。
+     *
+     * 先问播放层：本地文件的时长是【打开文件的那一刻】才知道的（读 MP3 的
+     * 帧头、看 WAV 报的帧数），而扫目录时不许开文件 —— 那条规矩写在
+     * MusicSource 与 MusicProblems 的类注释里。
+     *
+     * 再退回曲目自带的。眼下本地音源一律传"不知道"，所以这一支现在永远
+     * 走不到；它留着是给网络音源的 —— 那边列出来的时候就带着时长
+     * （NetMusic 的 CD 上刻的就是秒数），到那时它才是有值的那一支。
+     */
+    private static long totalMillis(Track track) {
+        long fromStream = LocalPlayback.durationMillis();
+        return fromStream > 0L ? fromStream : track.durationMs();
     }
 
     /** 贴图优先、字符兜底、悬停铺一层高亮 —— 与导航栏三个键同一套 */

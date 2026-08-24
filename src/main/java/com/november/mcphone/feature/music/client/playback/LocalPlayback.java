@@ -141,6 +141,14 @@ public final class LocalPlayback {
     private static long elapsedMs;
     private static long lastResumeAt;
 
+    /**
+     * 这一首总共有多长。{@link KnownDuration#UNKNOWN} 表示不知道。
+     *
+     * 从流上问来的，不是从曲目上：本地文件的时长要打开文件才算得出来，
+     * 而扫目录时不许开文件（理由见 KnownDuration）。
+     */
+    private static long durationMs = KnownDuration.UNKNOWN;
+
     /** 一首停下来时叫一声，带上原因。队列层据此决定接不接下一首 */
     private static Consumer<Ending> endListener = e -> {};
 
@@ -186,6 +194,11 @@ public final class LocalPlayback {
             channel = ch;
             LocalPlayback.stream = tracked;
             currentId = id;
+
+            // 问原始的那一条，不是包好的：TrackedStream 只管记有没有出过声，
+            // 不转发时长
+            durationMs = stream instanceof KnownDuration known
+                    ? known.durationMs() : KnownDuration.UNKNOWN;
 
             applyVolume();
             ch.attachBufferStream(tracked);
@@ -236,6 +249,7 @@ public final class LocalPlayback {
         state = State.IDLE;
         currentId = null;
         elapsedMs = 0L;
+        durationMs = KnownDuration.UNKNOWN;
     }
 
     /**
@@ -272,6 +286,15 @@ public final class LocalPlayback {
             return elapsedMs + (System.currentTimeMillis() - lastResumeAt);
         }
         return elapsedMs;
+    }
+
+    /**
+     * 这一首总共有多长；不知道则是 {@link KnownDuration#UNKNOWN}。
+     *
+     * OGG 一律不知道 —— 走的是 Minecraft 自己的解码器，问不到。
+     */
+    public static long durationMillis() {
+        return durationMs;
     }
 
     /** 音频设备可用吗。界面据此决定要不要提示"你的系统放不了音乐" */

@@ -14,9 +14,11 @@ package com.november.mcphone.feature.music;
  * @param sourceId   来自哪个音源，如 "local"
  * @param id         音源自己的编号。本地文件是文件名，网络歌是歌曲 ID
  * @param title      界面上显示的名字
- * @param durationMs 时长，毫秒。**-1 表示不知道**——OGG 不读完整个文件
- *                   就拿不到时长，而为了显示一个数字去读完整首歌不值得。
- *                   界面遇到 -1 只显示已播时间，不画总长
+ * @param durationMs 时长，毫秒。**-1 表示不知道**。
+ *                   这一项是给【列出来就知道时长】的音源用的，比如网络音源
+ *                   （NetMusic 的 CD 上刻着秒数）。本地文件一律是 -1：那要
+ *                   打开文件才算得出来，而扫目录时不许开文件，所以本地那一
+ *                   档的时长由流自己带着走，见 KnownDuration
  * @param kind       怎么放，见 {@link Kind}
  */
 public record Track(String sourceId, String id, String title, long durationMs, Kind kind) {
@@ -64,8 +66,4 @@ public record Track(String sourceId, String id, String title, long durationMs, K
 
     /** 时长未知 */
     public static final long UNKNOWN_DURATION = -1L;
-
-    public boolean hasDuration() {
-        return durationMs > 0;
-    }
 }

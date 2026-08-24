@@ -54,6 +54,10 @@ public final class WavDecoder implements AudioDecoder {
             throw new IOException("不是能识别的 WAV/AIFF/AU：" + file.getFileName(), e);
         }
 
+        // 时长要在转换之前从源流上取：javax.sound 报的是采样帧数，
+        // 除以帧率就是秒数。转换只改位深不改帧率，所以两边是同一个数
+        long durationMs = durationOf(src);
+
         AudioFormat in = src.getFormat();
         AudioFormat target = new AudioFormat(
                 AudioFormat.Encoding.PCM_SIGNED,
@@ -66,16 +70,31 @@ public final class WavDecoder implements AudioDecoder {
 
         // 已经是目标格式就不必再包一层
         if (in.matches(target)) {
-            return new PcmAudioStream(src, in, file.getFileName().toString());
+            return new PcmAudioStream(src, in, file.getFileName().toString(), durationMs);
         }
 
         try {
             return new PcmAudioStream(AudioSystem.getAudioInputStream(target, src), target,
-                    file.getFileName().toString());
+                    file.getFileName().toString(), durationMs);
         } catch (IllegalArgumentException e) {
             src.close();
             throw new IOException("这个编码 JDK 转不了：" + in, e);
         }
+    }
+
+    /**
+     * 这个文件有多长；报不出来就是不知道。
+     *
+     * 流式的 WAV（长度写成 0xFFFFFFFF 的那种）与某些 AU 文件拿不到帧数，
+     * javax.sound 那时返回 NOT_SPECIFIED(-1)。不知道就说不知道，
+     * 别拿文件大小去猜 —— 压缩编码的 WAV 猜出来能差几倍。
+     */
+    private static long durationOf(AudioInputStream in) {
+        long frames = in.getFrameLength();
+        float rate = in.getFormat().getFrameRate();
+
+        if (frames <= 0L || rate <= 0.0F) return KnownDuration.UNKNOWN;
+        return (long) (frames * 1000.0D / rate);
     }
 
     @Override
