@@ -13,9 +13,7 @@ import org.lwjgl.glfw.GLFW;
  * 自行改键，分类为 "MCphone"。代码中一律通过 KeyMapping 判断按下，
  * 不要写死键码，否则玩家改键后会失效。
  *
- * ================================================================
  * 总线
- * ================================================================
  *
  * RegisterKeyMappingsEvent 是【模组总线】事件，由 MCphoneClient 的
  * 构造函数用 modEventBus.addListener(MCphoneKeyBindings::register) 显式挂载。
