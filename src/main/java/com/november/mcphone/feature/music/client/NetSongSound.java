@@ -98,16 +98,44 @@ public final class NetSongSound extends AbstractTickableSoundInstance {
         if (Minecraft.getInstance().level == null || !source.isAlive()) {
             // 人没了（死亡、退出、切维度）就别再响。不停的话声音会僵在
             // 最后一个坐标上继续放完
-            stop();
+            finish();
             return;
         }
 
         ticks++;
         if (lifeTicks > 0 && ticks > lifeTicks + TAIL_TICKS) {
-            stop();
+            finish();
             return;
         }
         follow();
+    }
+
+    /**
+     * 自己停下来，并从"正在响"的那张表里把自己摘掉。
+     *
+     * 摘这一下是必须的：那张表按实体 ID 记着声源，而声源攥着 {@link Entity}。
+     * 歌自然放完之后没人来删的话，那个实体对象就一直被留着 —— 玩家早就退出
+     * 了，客户端世界也把他移除了，只有我们这张表还攥着他。
+     *
+     * 被外面停掉（玩家按了停止）走的是另一条路，那边 remove 完才调
+     * SoundManager.stop，不会重复。
+     */
+    private void finish() {
+        stop();
+        NetSongPlayback.forget(this);
+    }
+
+    /**
+     * 还没开始就作废。
+     *
+     * 只有一种情况用得上：拉地址那会儿玩家已经把歌停了（见
+     * {@link NetSongPlayback#start}）。造它的工厂必须返回一个实例，
+     * 所以造出来立刻掐掉 —— 引擎下一 tick 看见 isStopped 就会把它收走。
+     *
+     * 不走 finish()：这一份从来没进过那张表，摘不摘都一样。
+     */
+    void cancel() {
+        stop();
     }
 
     /** 把声源坐标贴到那个实体身上 */
