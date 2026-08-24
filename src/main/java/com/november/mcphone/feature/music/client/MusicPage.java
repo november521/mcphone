@@ -105,6 +105,14 @@ public final class MusicPage {
 
     private int scrollOffset;
 
+    /**
+     * scrollOffset 最大能到多少 —— 再往下滚就是一片空白了。
+     *
+     * 渲染时算出来（要知道这一页能放下几行，而那取决于唱片仓占了多高、
+     * 播放条在不在），滚轮判定时用。
+     */
+    private int maxScroll;
+
     /** 鼠标停在哪一首上，null 表示没有。记曲目不记下标，理由见类注释 */
     private Track hoveredTrack;
 
@@ -181,6 +189,7 @@ public final class MusicPage {
         if (tracks.isEmpty()) {
             renderEmpty(g, font, x, y, w);
             hoveredTrack = null;
+            maxScroll = 0;
         } else {
             clampScroll(tracks.size(), listBottom - y, font);
             renderRows(g, font, tracks, x, y, w, listBottom, mouseX, mouseY);
@@ -618,7 +627,7 @@ public final class MusicPage {
             scrollOffset--;
             return true;
         }
-        if (scrollY < 0 && scrollOffset < MusicSources.allTracks().size() - 1) {
+        if (scrollY < 0 && scrollOffset < maxScroll) {
             scrollOffset++;
             return true;
         }
@@ -634,9 +643,17 @@ public final class MusicPage {
         return -1;
     }
 
-    /** 列表变短（删了文件、切了音源）时必须夹紧，否则会滚到一片空白 */
+    /**
+     * 列表变短（删了文件、切了音源）时必须夹紧，否则会滚到一片空白。
+     *
+     * 顺手把上限记下来给滚轮用。滚轮那边原先按"曲目数 − 1"当上限，那是
+     * 把整份列表当成只显示一行算的 —— 于是最后一屏可以一直往下滚，每滚
+     * 一次这里再夹回来，玩家看到的是"滚了没反应"。
+     */
     private void clampScroll(int total, int availableHeight, Font font) {
         int visible = Math.max(1, availableHeight / (font.lineHeight + ROW_EXTRA));
-        scrollOffset = Math.clamp(scrollOffset, 0, Math.max(0, total - visible));
+
+        maxScroll = Math.max(0, total - visible);
+        scrollOffset = Math.clamp(scrollOffset, 0, maxScroll);
     }
 }
