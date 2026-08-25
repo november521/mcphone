@@ -510,6 +510,13 @@ public final class PhoneScreen extends Screen {
     public boolean mouseClicked(double mx, double my, int button) {
         if (button != 0) return super.mouseClicked(mx, my, button);
 
+        // 点在机身外＝收起手机，哪一页都一样。判定必须在分发之前：
+        // 各页的 mouseClicked 一律 yield true 把点击吞掉，放到后面就永远轮不到
+        if (!isInsidePhone(mx, my)) {
+            onClose();
+            return true;
+        }
+
         switch (PhoneChassis.hitTestNavBar(mx, my, phoneLeft, phoneTop)) {
             case BACK -> {
                 // 主屏上按返回不关机
@@ -534,11 +541,8 @@ public final class PhoneScreen extends Screen {
 
                 if (homeGrid.mousePressed(lx, ly)) yield true;
 
-                if (isInsidePhone(mx, my)) {
-                    homeGrid.pressBlank(lx, ly);
-                    yield true;
-                }
-                onClose();
+                // 机身外的已经在上面收走了，到这儿必是机身内的空白处：横着拖是翻页
+                homeGrid.pressBlank(lx, ly);
                 yield true;
             }
             case SETTINGS -> {
