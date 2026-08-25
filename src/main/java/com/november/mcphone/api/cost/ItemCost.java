@@ -8,32 +8,19 @@ import net.minecraft.world.item.ItemStack;
 import java.util.function.Predicate;
 
 /**
- * 从背包里扣物品的代价 —— {@link ICost} 最常见的那种实现。
- *
- * 用谓词而不是直接认物品种类：有些区别在数据组件上，比如空白的书与笔
- * 和写过字的书与笔是同一种物品。多数情况用 {@link ICost#of} 就够了，
- * 那是本类套了一层"认物品种类"的谓词。
- *
- * @param filter      什么样的物品堆算数
- * @param count       要几个
- * @param description 界面上怎么告诉玩家
+ * 从背包里扣物品的代价。用谓词而不是直接认物品种类：有些区别在数据组件上，
+ * 比如空白的书与笔和写过字的是同一种物品。多数情况用 {@link ICost#of} 就够。
  */
 public record ItemCost(Predicate<ItemStack> filter, int count,
                        Component description) implements ICost {
 
     @Override
     public boolean canAfford(Player player) {
-        // 创造模式向来不花钱，原版造方块、刷物品都是这个规矩
         if (player.getAbilities().instabuild) return true;
         return countIn(player) >= count;
     }
 
-    /**
-     * 扣掉。
-     *
-     * 先数够不够再动手：扣到一半发现不够的话，玩家白白损失前半截物品，
-     * 而且他根本不知道发生了什么。这是 ICost 的第二条约定。
-     */
+    /** 先数够不够再动手：扣到一半发现不够会让玩家白白损失前半截物品 */
     @Override
     public boolean consume(Player player) {
         if (player.getAbilities().instabuild) return true;
