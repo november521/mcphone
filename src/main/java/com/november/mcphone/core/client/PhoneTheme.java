@@ -67,6 +67,12 @@ public final class PhoneTheme {
     /** 导航栏符号被鼠标悬着时 */
     public static final int FONT_COLOR_NAV_HOVER = 0xFFFFFFFF;
 
+    /**
+     * 导航栏三个键【用贴图时】悬停提亮的倍数。字符符号走上面那个颜色，贴图改不了颜色只能整张乘一下。
+     * 1.8 让自带的 #828282 亮到 #EAEAEA，与字符版 #888→#FFF 的观感相当；再高会把浅色贴图压成一片白。
+     */
+    public static final float NAV_ICON_HOVER_BRIGHTNESS = 1.8f;
+
     /** 通知里的发信人名字与右上角条数。底是 COLOR_TOAST_BG */
     public static final int FONT_COLOR_TOAST_TITLE = 0xFFFFFFFF;
 
