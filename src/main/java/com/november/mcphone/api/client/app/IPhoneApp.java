@@ -46,6 +46,15 @@ public interface IPhoneApp {
      */
     default IPhonePage openPage() { return null; }
 
+    /**
+     * 主屏图标右上角的角标数，0（默认）表示不画。像手机上的未读红点：有几条没看的就显几。
+     *
+     * <b>每帧每个图标问一次</b>，只能读现成的值——别在这里查数据库、发网络包或做任何要等的事。
+     * 数据要现拉的话，自己按时间间隔限流（内建的美西螈 App 就是这么做的）。
+     * 大于 99 显示成 99+。
+     */
+    default int getBadgeCount() { return 0; }
+
     /** App 被卸载时调用。在此清理持久化数据。 */
     default void onUninstall() {}
 

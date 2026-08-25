@@ -73,7 +73,7 @@ public final class PhoneSkin {
         /** 收到消息的通知底。建议 160×32（原版通知槽位尺寸） */
         TOAST_BG("phone/toast", "toast_bg"),
 
-        /** 未读条数角标底。建议 12×9；会话列表与通知共用 */
+        /** 未读条数角标底。建议 12×9；主屏图标角标、会话列表与通知共用 */
         UNREAD_BADGE("phone/unread_badge", "unread_badge"),
 
         /** 应用详情页可点按钮底（购买/下载）。建议 100×16，整张拉伸；兜底色 {@link PhoneTheme#COLOR_BUTTON} */

@@ -1,5 +1,6 @@
 package com.november.mcphone.core.client;
 
+import com.november.mcphone.MCphone;
 import com.november.mcphone.api.client.app.IPhoneApp;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
@@ -252,7 +253,42 @@ public final class HomeGrid {
             IPhoneApp app = ordered.get(i);
             app.renderIcon(g, ix, iy, is, 0);
 
+            drawBadge(g, app, ix, iy, is);
             drawAppName(g, app.getDisplayName().getString(), ix, iy, is);
+        }
+    }
+
+    /**
+     * 图标右上角的未读角标，0 不画。压出图标 2 像素——真手机就是这么摆的，
+     * 而网格左右各留了 8 像素，压不出屏幕。
+     */
+    private void drawBadge(GuiGraphics g, IPhoneApp app, int ix, int iy, int is) {
+        int count = badgeCountOf(app);
+        if (count <= 0) return;
+
+        String label = count > 99 ? "99+" : String.valueOf(count);
+        int textW = font.width(label);
+        int w = Math.max(font.lineHeight + 1, textW + 4);
+        int h = font.lineHeight + 1;
+        int x = ix + is - w + 2;
+        int y = iy - 2;
+
+        // 与会话列表、通知共用一张贴图，换肤时三处一致
+        PhoneSkin.drawOrFill(g, PhoneSkin.Element.UNREAD_BADGE, x, y, w, h,
+                PhoneTheme.COLOR_UNREAD_BADGE);
+        g.drawString(font, label, x + (w - textW) / 2, y + 1,
+                PhoneTheme.FONT_COLOR_BADGE, false);
+    }
+
+    /** 读一个 App 的角标数，读不出来当没有。兜 Throwable：附属 App 可能引用没装的模组类 */
+    private static int badgeCountOf(IPhoneApp app) {
+        try {
+            return app.getBadgeCount();
+        } catch (Throwable t) {
+            // 每帧每个图标问一次，出了事这里会刷屏，所以只记 debug
+            MCphone.LOGGER.debug("[MCphone] 读 {} 的角标数失败，当作没有",
+                    app.getClass().getName(), t);
+            return 0;
         }
     }
 

@@ -16,6 +16,12 @@ public final class ChatApp extends PhoneApp {
         super("chat");
     }
 
+    /** 未读总数走 {@link ChatBadge}：主屏得自己拉摘要，未读数没有推送 */
+    @Override
+    public int getBadgeCount() {
+        return ChatBadge.unreadCount();
+    }
+
     @Override
     public void onPress() {
         if (Minecraft.getInstance().screen instanceof PhoneScreen ps) {
