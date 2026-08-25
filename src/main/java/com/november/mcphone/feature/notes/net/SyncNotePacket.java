@@ -7,12 +7,7 @@ import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
 
-/**
- * 网络包：服务端 → 客户端，某一条笔记的全文。
- *
- * 笔记可能已经被删掉（比如玩家在另一个界面删了它），这时 id 仍然带回来
- * 但正文为空，由界面自行退回列表——单独设一个"没找到"的包不值得。
- */
+/** 网络包：服务端 → 客户端，某条笔记的全文；已被删时 id 照带但正文为空，由界面退回列表 */
 public record SyncNotePacket(Note note) implements CustomPacketPayload {
 
     public static final CustomPacketPayload.Type<SyncNotePacket> TYPE =

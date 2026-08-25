@@ -6,12 +6,7 @@ import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
 
-/**
- * 网络包：客户端 → 服务端，请求笔记列表。
- *
- * 不带任何字段：要哪个玩家的笔记，服务端从连接上下文就知道。
- * 让客户端指定玩家等于允许翻别人的笔记本。
- */
+/** 网络包：客户端 → 服务端，请求笔记列表。不带字段：玩家取自连接上下文，不许指定别人 */
 public record RequestNoteListPacket() implements CustomPacketPayload {
 
     public static final CustomPacketPayload.Type<RequestNoteListPacket> TYPE =

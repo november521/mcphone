@@ -16,17 +16,7 @@ import net.neoforged.neoforge.network.PacketDistributor;
 
 import java.util.List;
 
-/**
- * 笔记列表 —— 打开记事本看到的第一屏。
- *
- * 数据全部来自 {@link NotesClientCache}，本类不持有真值。
- *
- * 为什么不定时刷新
- *
- * 聊天列表要每隔几秒拉一次，因为别人的上线下线与新消息不归自己控制。
- * 笔记只有自己会改，进来拉一次就够；改完之后服务端会主动回发新列表，
- * 界面自然跟着变。多轮询一次都是白费。
- */
+/** 笔记列表页。数据来自 {@link NotesClientCache}；不轮询，进来拉一次，改完服务端会主动回发 */
 public final class NotesList {
 
     private static final int PAD = 4;
@@ -40,46 +30,23 @@ public final class NotesList {
     private int hoveredIdx = -1;
     private boolean addHovered;
 
-    /**
-     * 鼠标正悬在哪一条的「打印」上，-1 表示没有。
-     *
-     * 与 hoveredIdx 分开记：这两块区域是重叠的（打印就画在行里），点击时必须
-     * 先问打印再问整行，否则点打印会变成打开笔记。
-     */
+    /** 悬停在哪一条的「打印」上，-1 表示没有；与 hoveredIdx 区域重叠，点击时必须先问它 */
     private int printHoveredIdx = -1;
 
-    /**
-     * 手机屏幕里的一行临时提示。
-     *
-     * 打印的结果本来是服务端用动作栏说的，但动作栏在游戏 HUD 上、手机机身之外
-     * ——玩家正盯着手机屏幕，得先关掉手机才看得见那句话，等于白说。所以结果也在
-     * 这块小屏幕里说一遍。
-     */
+    /** 屏幕内的一行临时提示：动作栏在机身之外，玩家看不见 */
     private String toast = "";
     private long toastUntilMs;
 
-    /** 提示停留时长。够读完一行短句，又不至于赖着不走 */
     private static final long TOAST_MS = 2500L;
 
-    /** 临时提示的颜色 */
     private static int colorToast() { return FontPalette.armed(); }
 
-    /**
-     * 打印键的颜色。
-     *
-     * 与编辑页那个「保存」是同一个绿：手机里这两个都是"点了会有结果"的动作键，
-     * 用同一种颜色，玩家扫一眼就知道哪些字是能点的。预览文字是灰的，绿色跳出来
-     * 正好把可点的那部分标出来。
-     */
     private static int colorPrint() { return FontPalette.confirm(); }
 
     /** 待消费的"打开某条"请求，null 表示没有 */
     private Integer pendingOpen;
 
-    /** 待消费的"新建一条"请求 */
     private boolean pendingNew;
-
-    //  生命周期
 
     public void open() {
         scrollOffset = 0;
@@ -109,8 +76,6 @@ public final class NotesList {
         return out;
     }
 
-    //  渲染
-
     public void render(GuiGraphics g, int phoneLeft, int phoneTop,
                        int screenW, int screenH, int statusH, int navH,
                        int mouseX, int mouseY, Font font) {
@@ -133,12 +98,9 @@ public final class NotesList {
         clampScroll(list.size(), bottom - y, font);
         renderRows(g, font, list, x, y, w, bottom, mouseX, mouseY);
 
-        // 提示压在最底下一行：那儿要么是空白，要么是被行高截掉的半行，
-        // 盖住也不损失信息
         renderToast(g, font, x, bottom - font.lineHeight, w);
     }
 
-    /** 标题行：左侧标题，右侧"＋"按钮 */
     private int renderHeader(GuiGraphics g, Font font, int x, int y, int w,
                              int mouseX, int mouseY) {
         g.drawString(font, Component.translatable("mcphone.app.notes").getString(),
@@ -183,19 +145,15 @@ public final class NotesList {
                 g.fill(x, y, x + w, y + rowH, COLOR_ROW_HOVER);
             }
 
-            // 右侧时间先算宽度，标题才知道能占多少
             String time = GuiUtil.formatTime(note.modified());
             int timeW = font.width(time);
             g.drawString(font, time, x + w - timeW, y, colorTime(), false);
 
-            // 正文第一行为空的笔记显示"无标题"，否则列表里会出现一行空白
             String title = note.title().isEmpty()
                     ? Component.translatable("mcphone.notes.untitled").getString()
                     : note.title();
             g.drawString(font, GuiUtil.truncate(font, title, w - timeW - 4), x, y, colorTitle(), false);
 
-            // 预览行右端是「打印」。放这一行而不是标题行：标题行右边已经被
-            // 时间占了，而预览天生是可以截断的那一个
             int printW = font.width(print);
             int printX = x + w - printW;
             boolean printHover = mouseX >= printX - 2 && mouseX <= x + w
@@ -205,16 +163,13 @@ public final class NotesList {
             g.drawString(font, GuiUtil.truncate(font, note.preview(), w - printW - 4),
                     x, y + font.lineHeight + 1, colorPreview(), false);
 
-            // 每一行都画，不是只在悬停那行画：只给悬停行画的话，鼠标一进来
-            // 预览就突然被截短，整行文字跳一下，比多几个字更闹
+            // 每一行都画「打印」：只在悬停行画会让预览文字跳动
             g.drawString(font, print, printX, y + font.lineHeight + 1,
                     printHover ? colorTitle() : colorPrint(), false);
 
             y += rowH;
         }
     }
-
-    //  鼠标
 
     public boolean mouseClicked(double mx, double my, int button) {
         if (button != 0) return false;
@@ -226,8 +181,7 @@ public final class NotesList {
 
         List<NoteSummary> list = NotesClientCache.getSummaries();
 
-        // 打印要抢在整行之前判：两块区域是重叠的，反过来的话点打印会变成
-        // 打开笔记，而玩家根本不会想到是自己点歪了
+        // 打印区域与整行重叠，必须先判打印
         if (printHoveredIdx >= 0 && printHoveredIdx < list.size()) {
             print(list.get(printHoveredIdx).id());
             return true;
@@ -240,15 +194,9 @@ public final class NotesList {
         return false;
     }
 
-    /**
-     * 把某条笔记印成一本书。
-     *
-     * 只发 id，正文以服务端存的那份为准。留在列表里不做任何跳转：打印不改变
-     * 笔记本身，把人踢去别的界面反而像是出了什么事。
-     */
+    /** 只发 id，正文以服务端那份为准；不跳转 */
     private void print(int id) {
-        // 背包在客户端是齐全的，够不够这里就能算准——不必先发一趟包等服务端
-        // 拒绝了再回话。缺书是最常见的失败，就地说清楚
+        // 缺书在客户端就能判定，不必等服务端拒绝
         Minecraft mc = Minecraft.getInstance();
         if (mc.player != null && !NotePrinter.COST.canAfford(mc.player)) {
             showToast("mcphone.notes.print_failed");
@@ -264,7 +212,6 @@ public final class NotesList {
         toastUntilMs = System.currentTimeMillis() + TOAST_MS;
     }
 
-    /** 提示到点自动消失 */
     private void renderToast(GuiGraphics g, Font font, int x, int y, int w) {
         if (toast.isEmpty() || System.currentTimeMillis() > toastUntilMs) return;
         int tw = font.width(toast);
@@ -283,9 +230,6 @@ public final class NotesList {
         return false;
     }
 
-    //  内部
-
-    /** 每行两行文字：标题 + 预览 */
     private static int rowHeight(Font font) {
         return font.lineHeight * 2 + 4;
     }
