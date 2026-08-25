@@ -13,14 +13,8 @@ import java.util.List;
 import java.util.function.Consumer;
 
 /**
- * 本地来源 —— 列出目录中已发现但尚未安装的 App。
- *
- * 这些 App 的实现已经随模组加载进来了，"下载"只是把它们
- * 加进已安装集合而已，所以两个方法都同步地立即回调。
- *
- * App 出现在这里通常有两种原因：
- *   1. 声明了 isPreinstalled() == false，从一开始就不在主屏
- *   2. 被玩家卸载过
+ * 本地来源：列出已发现但尚未安装的 App。实现已随模组加载进来，
+ * 所以两个方法都同步地立即回调。
  */
 public final class LocalAppSource implements IAppSource {
 

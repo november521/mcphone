@@ -16,28 +16,10 @@ import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 
-
 /**
- * 应用详情页 —— 一个 App 的介绍、价格与那个按钮。
- *
- * 按钮只有一个，但它有四种状态
- *
- *   购买     付费 App，还没买过，且付得起
- *   买不起   付费 App，还没买过，付不起 —— 灰，且写明要什么
- *   下载     免费 App，或已经买过 —— 装进主屏
- *   已安装   已经在主屏上了 —— 灰
- *
- * 做成一个按钮而不是"购买"与"下载"两个：任一时刻只有一件事可做，两个按钮
- * 里必然有一个是灰的，那只是在教玩家忽略一半界面。
- *
- * "买过了"这件事客户端说了不算
- *
- * 这里读的 {@link StoreClientCache} 只是服务端那份记录的镜像，用来决定按钮
- * 画成什么样。真正的判断在服务端——把缓存改成"全都买过"也拿不到任何 App，
- * 因为安装前不经过服务端，而付费 App 的购买请求会被服务端按自己的账本驳回。
- *
- * 同步没回来之前按钮显示"加载中"而不是"购买"：那两种状态在玩家眼里差别很
- * 大，把"还不知道"画成"没买过"，会让已经买过的人以为要再花一次钱。
+ * 应用详情页：一个 App 的介绍、价格与唯一的按钮（购买/买不起/下载/已安装 四态）。
+ * "买过了"以服务端账本为准，{@link StoreClientCache} 只是画按钮用的镜像；
+ * 同步没回来之前按钮是"加载中"，别把"还不知道"画成"没买过"。
  */
 public final class AppDetail {
 
@@ -47,25 +29,14 @@ public final class AppDetail {
 
     private AppInfo info;
 
-    /** 按钮的矩形，渲染时算出来，点击时复用。别在两处各算一遍 */
+    /** 渲染时算出来，点击时复用 */
     private int btnX, btnY, btnW;
     private boolean btnHovered;
     private boolean btnEnabled;
 
-    /** 操作结果提示 */
     private Component message = null;
 
-    /**
-     * 上一帧的按钮状态，用来判断"事情有结果了"。
-     *
-     * 点了购买之后这里会显示"正在购买…"，而结果是异步回来的——服务端扣完
-     * 东西才发同步包。买成了状态会变成 DOWNLOAD，那行字就该撤掉；买不起则
-     * 状态原地不动（服务端另发一条 actionbar 说明原因），这行字也不该继续
-     * 赖着，否则看起来像卡住了。
-     *
-     * 规则就一条：状态一变就清提示。没有计时器，也不需要——提示本来就只在
-     * 等结果的那一小会儿存在。
-     */
+    /** 上一帧的按钮状态：状态一变就清提示，没有计时器 */
     private State lastState = null;
 
     /** 请求退回商店首页，等 PhoneScreen 来取 */
@@ -94,9 +65,6 @@ public final class AppDetail {
         return r;
     }
 
-    //  状态
-
-    /** 按钮此刻是哪一种 */
     private enum State { LOADING, BUY, CANT_AFFORD, DOWNLOAD, INSTALLED }
 
     private State state() {
@@ -107,7 +75,6 @@ public final class AppDetail {
         ICost price = AppPriceRegistry.priceOf(info.id());
         if (price == ICost.FREE) return State.DOWNLOAD;
 
-        // 付费 App：得先知道服务端那边的账本
         if (!StoreClientCache.isSynced()) return State.LOADING;
         if (StoreClientCache.has(info.id())) return State.DOWNLOAD;
 
@@ -126,8 +93,6 @@ public final class AppDetail {
         };
     }
 
-    //  渲染
-
     public void render(GuiGraphics g, int phoneLeft, int phoneTop,
                        int screenW, int screenH, int statusH, int navH,
                        int mouseX, int mouseY, Font font) {
@@ -143,16 +108,11 @@ public final class AppDetail {
             return;
         }
 
-        // 状态一变就说明上一次操作有结果了，"正在购买…"该撤掉。
-        //
-        // 这条规则盖不住所有情况：服务端在少数路径上（身上没手机、id 未定价）
-        // 直接静默驳回，状态不会变，那行字会留到玩家离开这一页为止。那几条
-        // 路径正常客户端根本走不到，为它们加一套超时机制不值当。
+        // 状态一变说明上一次操作有结果了，撤掉"正在购买…"
         State s = state();
         if (lastState != null && s != lastState) message = null;
         lastState = s;
 
-        // ---- 大图标 + 名称 ----
         if (info.iconTexture() != null) {
             g.blit(info.iconTexture(), x, y, 0, 0, BIG_ICON, BIG_ICON, BIG_ICON, BIG_ICON);
         } else {
@@ -164,7 +124,6 @@ public final class AppDetail {
         g.drawString(font, GuiUtil.truncate(font, info.displayName().getString(), textW),
                 textX, y + 2, FontPalette.title(), false);
 
-        // 作者与版本挤在一行：屏幕只有 120 宽，各占一行不值得
         String meta = info.author() == null || info.author().isBlank()
                 ? "v" + info.version()
                 : info.author() + " · v" + info.version();
@@ -176,7 +135,6 @@ public final class AppDetail {
         g.fill(x, y, x + w, y + 1, PhoneTheme.COLOR_DIVIDER);
         y += 4;
 
-        // ---- 简介。按钮要占底部，正文只能用中间这段 ----
         int bodyBottom = bottom - BUTTON_H - font.lineHeight - 8;
         String desc = info.description();
         if (desc == null || desc.isBlank()) {
@@ -188,13 +146,11 @@ public final class AppDetail {
             y += font.lineHeight + 1;
         }
 
-        // ---- 提示（购买失败之类） ----
         if (message != null) {
             g.drawString(font, GuiUtil.truncate(font, message.getString(), w),
                     x, bodyBottom, FontPalette.notice(), false);
         }
 
-        // ---- 价格 ----
         ICost price = AppPriceRegistry.priceOf(info.id());
         String priceText = price == ICost.FREE
                 ? Component.translatable("mcphone.store.free").getString()
@@ -204,7 +160,6 @@ public final class AppDetail {
                 price == ICost.FREE ? FontPalette.subtle() : FontPalette.price(),
                 false);
 
-        // ---- 按钮 ----
         btnX = x;
         btnY = bottom - BUTTON_H - 1;
         btnW = w;
@@ -228,15 +183,12 @@ public final class AppDetail {
                 false);
     }
 
-    //  鼠标
-
     public boolean mouseClicked(double mx, double my, int button) {
         if (info == null || !btnHovered) return false;
 
         switch (state()) {
             case BUY -> {
-                // 只是提出请求。买没买成由服务端说了算，结果会以同步包的
-                // 形式回来，按钮届时自己变成"下载"
+                // 只是提出请求：结果随同步包回来，按钮届时自己变成"下载"
                 StoreClientCache.purchase(info.id());
                 message = Component.translatable("mcphone.store.purchasing");
             }
@@ -246,12 +198,7 @@ public final class AppDetail {
         return true;
     }
 
-    /**
-     * 装进主屏。
-     *
-     * 这一步纯客户端：App 的实现已经随模组加载进来了，"下载"只是把它加进
-     * 已安装集合。服务端不参与，也不需要——它管的是钱，不是主屏摆什么。
-     */
+    /** 纯客户端：实现已随模组加载，"下载"只是把它加进已安装集合 */
     private void install() {
         IAppSource source = AppSourceRegistry.getSource(info.sourceId());
         if (source == null) {
