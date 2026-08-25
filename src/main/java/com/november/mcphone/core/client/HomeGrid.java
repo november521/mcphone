@@ -9,51 +9,23 @@ import java.util.List;
 
 /**
  * 主屏 —— App 图标网格、拖动排序、分页与翻页。
- *
- * 从 PhoneScreen 里搬出来的（1.7.3），拆分的第三刀，也是最大的一刀。
- * 那个类原本 1626 行，这一簇占了三百多行加十来个字段，而且状态散在渲染与
- * 四个输入处理器里 —— 是它最难读的一块。
- *
- * 它只认手机本地坐标
- *
- * 开机时整部手机会被缩放着画（{@code PhoneScreen.getAnimationScale}），
- * 所以鼠标坐标要先撤掉那层缩放才能和格子对上。那个反变换留在 PhoneScreen：
- * 动画是它的事。本类的四个输入方法收到的一律是【已经反变换过的】本地坐标。
- *
- * 搬家前这条边界破过一次 —— 反变换的算式被抄了一份放在命中判定里，改动画
- * 曲线时只有一个人被想起来，结果是"开机那一瞬间点图标点不准"。现在算式只
- * 有一处，本类连它长什么样都不知道。
- *
- * 它不知道点开 App 会去哪儿
- *
- * 松手判定是"这一下算点开还是算挪位置"，定完之后本类只把那个 App 记进
- * {@link #consumeLaunchRequest()}，由 PhoneScreen 取走再决定怎么打开。
- * 与会话列表、应用商店那边同一个原则：组件不该知道 PhoneScreen 的导航结构。
- *
- * 每帧的上下文
- *
- * phoneLeft/phoneTop、格子起点、字体、这一帧的时刻、开机动画放完没有 ——
- * 这几样每帧由 {@link #render} 带进来。输入方法用的是上一帧的值，与搬家前
- * 一致（那时它们直接读 PhoneScreen 的字段，同样是上一帧渲染时写的）。
+ * 只认手机本地坐标：四个输入方法收到的一律是已撤掉开机缩放的坐标，反变换留在 PhoneScreen。
+ * 点开 App 只记进 {@link #consumeLaunchRequest()}，由 PhoneScreen 取走再决定怎么开。
+ * 输入方法用的上下文（机身位置、字体、时刻）是上一帧 {@link #render} 带进来的。
  */
 public final class HomeGrid {
 
-    // ---- 每帧由 render 带进来的上下文 ----
     private int phoneLeft, phoneTop;
     private int gridStartX, gridStartY;
     private Font font;
     private long nowMs;
     private boolean animationDone;
 
-    // ---- 主屏自己的状态 ----
-
     /** 鼠标停在第几个 App 上（全局下标），-1 表示没有 */
     private int hoveredAppIndex = -1;
 
-    /** 当前第几页 */
     private int homePage = 0;
 
-    /** 在机身内的空白处按下了 —— 横着拖它就是翻页 */
     private boolean pressedBlank;
 
     /** 翻页动画：从哪一页滑过来的，什么时候开始滑 */
@@ -79,22 +51,13 @@ public final class HomeGrid {
     /** 松手判定为"点开"的那个 App，等 PhoneScreen 来取 */
     private IPhoneApp pendingLaunch;
 
-    /**
-     * 画主屏。
-     *
-     * @param localMouseX 已撤掉开机缩放的鼠标坐标，理由见类注释
-     * @param nowMs       这一帧的时刻。由调用方统一取一次传进来 —— 同一帧里
-     *                    翻页动画与边缘停留都要读它，各自取一次会对不齐
-     */
+    /** localMouse 是已撤掉开机缩放的本地坐标；nowMs 由调用方取一次传进来，同一帧里翻页动画与边缘停留要对齐 */
     public void render(GuiGraphics g, int phoneLeft, int phoneTop, Font font,
                        long nowMs, boolean animationDone,
                        double localMouseX, double localMouseY) {
         this.phoneLeft = phoneLeft;
         this.phoneTop = phoneTop;
 
-        // 格子起点自己算，不劳调用方传 —— 它就是机身左上角加两个常量，
-        // 而这两个常量是网格自己的排版参数。让 PhoneScreen 存一份再递过来，
-        // 等于把网格的几何知识拆到两个类里
         this.gridStartX = phoneLeft + PhoneTheme.APP_GRID_PADDING_LEFT;
         this.gridStartY = phoneTop + PhoneTheme.STATUS_BAR_HEIGHT
                 + PhoneTheme.APP_GRID_PADDING_TOP;
@@ -103,30 +66,18 @@ public final class HomeGrid {
         this.nowMs = nowMs;
         this.animationDone = animationDone;
 
-        // 翻页动画走完就把起点清零。放在这里而不是藏在 slideProgress 里：
-        // 那个方法在渲染与 hover 判定两处被当查询用，让它顺手改状态的话，
-        // "谁先调到它"就成了行为的一部分 —— 这类耦合出问题时极难看出来
+        // 翻页动画走完在这里清起点，slideProgress 保持纯查询
         if (pageSlideStartMs > 0 && nowMs - pageSlideStartMs >= PhoneTheme.PAGE_SLIDE_MS) {
             pageSlideStartMs = 0;
         }
 
         renderAppGrid(g);
 
-        // 悬停在画完之后算，与搬家前一致（那时是 PhoneScreen.render 末尾那一行）
         updateAppHover(localMouseX, localMouseY);
     }
 
-    // ---- 输入。坐标一律是已撤掉开机缩放的本地坐标 ----
-
-    /**
-     * 按下。
-     *
-     * @return true 表示这一下归主屏管；false 表示按在了空处，由 PhoneScreen
-     *         决定是"机身内空白"（那就调 {@link #pressBlank}）还是"机身外"
-     */
+    /** 返回 false 表示按在空处，由 PhoneScreen 决定是机身内空白（调 {@link #pressBlank}）还是机身外 */
     public boolean mousePressed(double lx, double ly) {
-        // 页码点抢在图标之前：它在图标区【下方】，两者不重叠，但先判它一次
-        // 就不必担心将来图标区长高了压过来
         int dot = hitTestPageDot(lx, ly, pageCount());
         if (dot >= 0) {
             homePage = dot;
@@ -135,8 +86,6 @@ public final class HomeGrid {
         }
 
         if (hoveredAppIndex >= 0) {
-            // 先记着是哪一格，别急着开 —— 这一下可能是要把它拖走。
-            // 到底算点开还是算挪位置，由 mouseReleased 定
             pressedAppIndex = hoveredAppIndex;
             pressX = lx;
             pressY = ly;
@@ -147,7 +96,7 @@ public final class HomeGrid {
         return false;
     }
 
-    /** 在机身内的空白处按下了。横着拖它就是翻页 */
+    /** 在机身内的空白处按下了，横着拖就是翻页 */
     public void pressBlank(double lx, double ly) {
         pressedBlank = true;
         pressX = lx;
@@ -155,7 +104,6 @@ public final class HomeGrid {
     }
 
     public boolean mouseDragged(double lx, double ly) {
-        // 没过阈值之前什么都不做，好让这一下还有机会被当成点击
         if (pressedAppIndex >= 0) {
             if (!draggingApp) {
                 if (Math.abs(lx - pressX) < PhoneTheme.APP_DRAG_THRESHOLD
@@ -171,14 +119,11 @@ public final class HomeGrid {
             return true;
         }
 
-        // 空白处横着拖 = 翻页。真手机的划屏，鼠标上的等价物
         if (pressedBlank) {
             double moved = lx - pressX;
             if (Math.abs(moved) >= PhoneTheme.PAGE_SWIPE_THRESHOLD) {
-                // 往左划＝内容跟着往左走＝看后面那一页
                 goToPage(homePage + (moved < 0 ? 1 : -1));
-                // 不管翻没翻成都重设起点：翻成了才能接着往下划连翻两页，
-                // 没翻成（到头了）也得重设，否则按住不动会每帧重复触发
+                // 翻没翻成都重设起点，否则到头后按住不动会每帧重复触发
                 pressX = lx;
             }
             return true;
@@ -186,12 +131,7 @@ public final class HomeGrid {
         return false;
     }
 
-    /**
-     * 松手 —— 这一下才定性：刚才那次按下算"点开"还是"挪位置"。
-     *
-     * 开 App 放在这里而不是按下时，就是为了留出这个判断的余地。代价是点击的
-     * 响应晚了一个"松手"，收益是图标能拖；真手机也是松手才启动 App。
-     */
+    /** 松手才定性：这一下算"点开"还是"挪位置" */
     public boolean mouseReleased(double lx, double ly) {
         if (pressedBlank) {
             pressedBlank = false;
@@ -202,16 +142,14 @@ public final class HomeGrid {
             int to = dragTargetIndex;
             boolean dragged = draggingApp;
 
-            // 先把状态清干净再动作：调用方拿到 launch 请求后可能当场跳去别的
-            // 界面，之后再改这几个字段就是在给一个已经不在的界面收尾
+            // 先清状态再动作：调用方拿到 launch 请求后可能当场跳走
             pressedAppIndex = -1;
             dragTargetIndex = -1;
             draggingApp = false;
 
             if (dragged) {
                 PhoneScreenRegistry.moveApp(from, to);
-                // 顺序变了，原来那个 hover 下标指的已经不是同一个 App，
-                // 留着会让高亮框停在错的格子上直到鼠标下次移动
+                // 顺序变了，旧 hover 下标已不指向同一个 App
                 hoveredAppIndex = -1;
             } else {
                 pendingLaunch = PhoneScreenRegistry.getApp(from);
@@ -221,12 +159,7 @@ public final class HomeGrid {
         return false;
     }
 
-    /**
-     * 滚轮翻页。真手机是横划，鼠标上最接近的等价物就是滚轮 —— 往下滚＝往后翻，
-     * 与所有列表一致。
-     *
-     * 只有一页、或已经到头时也返回 true：把滚轮吃掉，别让它穿到下面去。
-     */
+    /** 滚轮翻页。只有一页或到头时也返回 true，把滚轮吃掉 */
     public boolean mouseScrolled(double scrollY) {
         if (scrollY == 0) return false;
         goToPage(homePage + (scrollY > 0 ? -1 : 1));
@@ -244,16 +177,10 @@ public final class HomeGrid {
         final int is = PhoneTheme.APP_ICON_SIZE;
         final int pageSize = pageSize();
 
-        // 先结算边缘停留：这一帧可能就翻页了，翻完再算下面的预览才是对的
+        // 先结算边缘停留，这一帧可能翻页，之后的预览才对
         updateEdgePageFlip();
 
-        // 拖动时按"抽出来、再插进去"的结果画，而不是画原顺序再叠个提示：
-        // 玩家看到的直接就是松手后的样子，不必先松手再确认自己摆对没有。
-        // 用的是与 moveApp 同一个 HomeLayout.reorder，预览与落定不可能对不上
-        // 只有拖动时才拷一份：reorder 会就地改，而 getApps() 交出来的是
-        // Collections.unmodifiableList，改它会抛 UnsupportedOperationException。
-        // 没拖的时候直接用那个只读视图，省掉每帧一次全量拷贝 —— 主屏是最常
-        // 看的一页
+        // 只有拖动时才拷一份：getApps() 是只读视图，reorder 会就地改
         List<IPhoneApp> ordered = PhoneScreenRegistry.getApps();
         IPhoneApp floatingApp = null;
         int floatingIndex = -1;
@@ -271,7 +198,6 @@ public final class HomeGrid {
         if (slide >= 1f) {
             renderPageIcons(g, ordered, homePage, 0, floatingIndex);
         } else {
-            // 两页一起画，一进一出。裁到屏幕内，否则滑出去的那页会糊在机身边框上
             int dir = homePage > slideFromPage ? 1 : -1;
             int w = PhoneTheme.PHONE_WIDTH;
             int inX = Math.round((1f - slide) * dir * w);
@@ -286,8 +212,7 @@ public final class HomeGrid {
         renderPageDots(g, HomeLayout.pageCount(ordered.size(), pageSize));
         renderEdgeHint(g);
 
-        // 浮起的那张放最后画，才会盖在别的图标上面而不是被它们盖住。
-        // 以鼠标为中心，手指按住哪儿它就在哪儿，不会跟手偏出去半格
+        // 浮起的那张最后画，才盖在别的图标上面
         if (floatingApp != null) {
             int fx = (int) dragX - is / 2;
             int fy = (int) dragY - is / 2;
@@ -296,14 +221,7 @@ public final class HomeGrid {
         }
     }
 
-    /**
-     * 画某一页的图标。
-     *
-     * @param ordered       已经算进拖动预览的完整顺序
-     * @param page          画第几页
-     * @param xOffset       整页横向偏移，翻页动画用；不在动画里时是 0
-     * @param floatingIndex 正被拖着的那个的下标，-1 表示没有
-     */
+    /** 画某一页的图标。xOffset 是整页横向偏移（翻页动画用）；floatingIndex 是正被拖着的下标，-1 表示没有 */
     private void renderPageIcons(GuiGraphics g, List<IPhoneApp> ordered,
                                  int page, int xOffset, int floatingIndex) {
         final int is = PhoneTheme.APP_ICON_SIZE;
@@ -320,15 +238,13 @@ public final class HomeGrid {
             int ix = gridStartX + (slot % cols) * cellW + xOffset;
             int iy = gridStartY + (slot / cols) * cellH;
 
-            // 被拖的那一格只留个空槽——它本人跟着鼠标走，最后单独画
+            // 被拖的那一格只留空槽，它本人跟着鼠标走，最后单独画
             if (i == floatingIndex) {
                 PhoneSkin.drawOrFill(g, PhoneSkin.Element.HOME_DROP_SLOT,
                         ix, iy, is, is, PhoneTheme.COLOR_APP_DROP_SLOT);
                 continue;
             }
 
-            // 拖动中不画 hover 高亮：那会儿鼠标底下的格子表达的是"要插到这儿"，
-            // 再高亮一次容易被理解成"松手是跟它对调"
             if (i == hoveredAppIndex && !draggingApp) {
                 g.fill(ix - 2, iy - 2, ix + is + 2, iy + is + 2, PhoneTheme.COLOR_APP_PRESSED);
             }
@@ -341,13 +257,8 @@ public final class HomeGrid {
     }
 
     /**
-     * 拖着图标停在屏幕左右边上时，自动翻到相邻那一页。
-     *
-     * 没有这条路的话，App 根本挪不到别的页去：拖动只能落在【当前这一页】的格子里，
-     * 而翻页要么得松手（松手就落定了）、要么得腾出另一只手滚滚轮。
-     *
-     * 每帧算一次而不是挂在 mouseDragged 上：玩家把图标停在边上不动时，鼠标不产生
-     * 任何事件，挂在拖动事件上的计时器永远走不完。
+     * 拖着图标停在屏幕左右边上时自动翻页。
+     * 每帧算一次而不是挂在 mouseDragged 上：鼠标不动就没有事件，计时器走不完。
      */
     private void updateEdgePageFlip() {
         if (!draggingApp) {
@@ -366,8 +277,6 @@ public final class HomeGrid {
             side = 1;
         }
 
-        // 那个方向已经没有页了就当没停在边上——让提示条亮着、等半天却什么都不发生，
-        // 比压根不亮更让人困惑
         if (side != 0
                 && HomeLayout.clampPage(homePage + side, count, pageSize) == homePage) {
             side = 0;
@@ -383,13 +292,12 @@ public final class HomeGrid {
             goToPage(homePage + side);
             edgeDwellStartMs = nowMs;   // 按住不放就接着往下翻
 
-            // 页变了，同一个鼠标位置对应的落点也变了——不重算的话，预览还停在
-            // 上一页的那一格上
+            // 页变了，同一鼠标位置的落点也变了
             dragTargetIndex = dropIndexAt(dragX, dragY, count);
         }
     }
 
-    /** 边缘提示条，随停留时长由浅到深。停满就翻页，所以它也是个进度条 */
+    /** 边缘提示条，随停留时长由浅到深 */
     private void renderEdgeHint(GuiGraphics g) {
         if (edgeDwellSide == 0 || !draggingApp) return;
 
@@ -401,8 +309,7 @@ public final class HomeGrid {
         int top = phoneTop + PhoneTheme.STATUS_BAR_HEIGHT;
         int h = dotsTop() - top;
 
-        // 贴图靠 setColor 调制透明度整张淡入；画完必须还原，否则后面的东西
-        // 会跟着一起变淡——这类"全屏莫名其妙变暗"的 bug 极难定位
+        // setColor 调制透明度后必须还原，否则后面的东西跟着变淡
         g.setColor(1f, 1f, 1f, progress);
         boolean drawn = PhoneSkin.draw(g, PhoneSkin.Element.HOME_PAGE_EDGE, x, top, w, h);
         g.setColor(1f, 1f, 1f, 1f);
@@ -414,12 +321,7 @@ public final class HomeGrid {
         }
     }
 
-    /**
-     * 翻页动画进度，1 表示已经停稳。
-     *
-     * 缓出（1-(1-t)²）而不是匀速：真手机的翻页是"甩出去再慢慢停住"，匀速滑动
-     * 看着像幻灯片切换。
-     */
+    /** 翻页动画进度，1 表示已经停稳 */
     private float slideProgress() {
         if (pageSlideStartMs <= 0 || PhoneTheme.PAGE_SLIDE_MS <= 0) return 1f;
 
@@ -430,12 +332,7 @@ public final class HomeGrid {
         return 1f - (1f - t) * (1f - t);
     }
 
-    /**
-     * 底部那排页码点。
-     *
-     * 只有一页时【不画】：一个孤零零的点会让人以为还能往旁边划，划了没反应比
-     * 什么都不画更让人困惑。
-     */
+    /** 底部页码点，只有一页时不画 */
     private void renderPageDots(GuiGraphics g, int pages) {
         if (pages <= 1) return;
 
@@ -456,12 +353,7 @@ public final class HomeGrid {
         }
     }
 
-    /**
-     * 点在了第几个页码点上，没点中返回 -1。
-     *
-     * 判定区比那 3×3 的点大一圈——按点本身的大小算的话，得对着三个像素点才能
-     * 跳页，那不叫"能点"，叫"能瞄准"。
-     */
+    /** 点在了第几个页码点上，没点中返回 -1。判定区比点本身大一圈 */
     private int hitTestPageDot(double lx, double ly, int pages) {
         if (pages <= 1) return -1;
 
@@ -477,12 +369,7 @@ public final class HomeGrid {
         return (idx >= 0 && idx < pages) ? idx : -1;
     }
 
-    /**
-     * 主屏一格的高度：图标加底下那行名字。
-     *
-     * 画、hover 判定、拖动落点判定三处都得用同一个值，抽出来是免得改一处漏两处——
-     * 那种漏改的表现是"看着点在图标上，却没反应"，很难往格子高度上想。
-     */
+    /** 主屏一格的高度：图标加底下那行名字 */
     private int appCellHeight() {
         return PhoneTheme.APP_ICON_SIZE
                 + (int)(font.lineHeight * PhoneTheme.APP_NAME_SCALE) + 4;
@@ -494,26 +381,19 @@ public final class HomeGrid {
                 - PhoneTheme.NAV_BAR_HEIGHT - PhoneTheme.PAGE_DOTS_HEIGHT;
     }
 
-    /** 这块屏幕一页放得下几行图标 */
     private int rowsPerPage() {
         return HomeLayout.rowsThatFit(dotsTop() - gridStartY, appCellHeight(), PhoneTheme.APP_ROWS);
     }
 
-    /** 一页几个 App */
     private int pageSize() {
         return PhoneTheme.APP_COLUMNS * rowsPerPage();
     }
 
-    /** 主屏一共几页 */
     private int pageCount() {
         return HomeLayout.pageCount(PhoneScreenRegistry.getAppCount(), pageSize());
     }
 
-    /**
-     * 翻到第几页。
-     *
-     * @return 真的换页了才 true；已经在头一页还要往前翻，返回 false
-     */
+    /** 翻到第几页，真的换页了才 true */
     private boolean goToPage(int page) {
         int target = HomeLayout.clampPage(page, PhoneScreenRegistry.getAppCount(), pageSize());
         if (target == homePage) return false;
@@ -521,21 +401,14 @@ public final class HomeGrid {
         slideFromPage = homePage;
         homePage = target;
 
-        // 开场动画那 150ms 里不滑：裁剪矩形按屏幕坐标算，而那会儿整个手机
-        // 正被缩放着画，两者对不上，滑出来的两页会在边缘被切歪
+        // 开机动画里不滑：裁剪矩形按屏幕坐标算，与缩放中的手机对不上
         pageSlideStartMs = animationDone ? System.currentTimeMillis() : 0;
 
-        // 换页之后鼠标底下换成了另一个 App，旧的 hover 下标指的已经不是它了
         hoveredAppIndex = -1;
         return true;
     }
 
-    /**
-     * 鼠标位置对应的落点（全局下标），用于拖动时决定松手插到哪儿。
-     *
-     * 落点是"当前这一页的第几格"再加上页偏移——所以在第二页拖动时，松手插的是
-     * 第二页的位置，而不是从头数的那一格。
-     */
+    /** 鼠标位置对应的落点（全局下标，含页偏移） */
     private int dropIndexAt(double lx, double ly, int count) {
         if (count <= 0) return -1;
 
@@ -546,15 +419,7 @@ public final class HomeGrid {
         return HomeLayout.dropIndex(homePage, slot, pageSize(), count);
     }
 
-    /**
-     * 画图标下面那行名字。
-     *
-     * 截断、居中、缩放三件事全在 {@link GuiUtil#drawIconLabel} 里，商店的
-     * 格子共用同一份——这两处此前各抄了一遍变换代码，也各自都没做截断。
-     *
-     * 可用宽度是格子步距（图标宽 + 一个间距），不是图标宽：名字本来就允许
-     * 比图标宽一点，只是不能宽到压着邻居。
-     */
+    /** 图标下面那行名字。可用宽度是格子步距而不是图标宽 */
     private void drawAppName(GuiGraphics g, String name, int ix, int iy, int is) {
         GuiUtil.drawIconLabel(g, font, name, ix, iy, is,
                 is + PhoneTheme.APP_GRID_SPACING_X,
@@ -562,10 +427,6 @@ public final class HomeGrid {
     }
 
     private void updateAppHover(double localX, double localY) {
-        // 收的是【已经撤掉开机缩放】的手机本地坐标。反变换留在 PhoneScreen
-        // 那边做 —— 动画是它的事，本类只认本地坐标。搬家前这两行在这儿，
-        // 而那个算式与正主分开住过一次，改动画曲线时只有一个人被想起来，
-        // 结果是"开机那一瞬间点图标点不准"，短到没人抓得住
         int lx = (int) localX;
         int ly = (int) localY;
 
@@ -577,11 +438,9 @@ public final class HomeGrid {
         final int pageSize = pageSize();
         final int start = homePage * pageSize;
 
-        // 只看当前这一页：别的页的图标压根没画出来，"停在"它们上面没有意义
         hoveredAppIndex = -1;
 
-        // 正在翻页动画里就不认 hover：图标那会儿还在半路上，按它算命中会点开
-        // 一个不在鼠标底下的 App
+        // 翻页动画里不认 hover：图标还在半路上
         if (slideProgress() < 1f) return;
         for (int slot = 0; slot < pageSize; slot++) {
             int i = start + slot;

@@ -1,30 +1,14 @@
 package com.november.mcphone.core.client;
 
-
 /**
  * 手机界面的尺寸与兜底颜色。
- *
- * 贴图不在这里 —— 可换肤元素的清单、路径与建议尺寸全在
- * {@link PhoneSkin.Element}，面向玩家的同一份在 README 的「换肤」一节。
- * 本文件只管【没有贴图时用什么颜色画】，每个 COLOR_* 在 PhoneSkin.Element
- * 对应项的注释里都被点名，两边配对。
- *
- * 这里刻意不再抄一份贴图清单：清单有两份就一定会有一份过期，而过期的
- * 贴图路径不报错，只是"照着做了没反应"。1.2.7 挪目录时就是这么烂掉的。
- *
- * 尺寸对照（GUI 比例 = 2 时窗口 427×240）：
- *
- *   手机总尺寸（含边框） 136 × 216
- *   屏幕内区域           120 × 200   状态栏 10 / 导航栏 14 / 中间是 App 网格
- *
- * 屏幕内区域是所有页面排版的基准，不动；边框加厚只让机身长大，
- * 页面一行代码都不用改。
+ * 贴图清单不在这里：可换肤元素的路径与建议尺寸全在 {@link PhoneSkin.Element}，
+ * 本文件只管没有贴图时用什么颜色画，每个 COLOR_* 与那边的对应项配对。
+ * 屏幕内区域 120×200（状态栏 10 / 导航栏 14）是所有页面排版的基准；含边框整机 136×216。
  */
 public final class PhoneTheme {
 
-    private PhoneTheme() {} // 工具类，禁止实例化
-
-    // ==================== 手机外观尺寸 ====================
+    private PhoneTheme() {}
 
     /** 手机屏幕内宽（不含边框），单位：像素 */
     public static final int PHONE_WIDTH = 120;
@@ -32,68 +16,31 @@ public final class PhoneTheme {
     /** 手机屏幕内高（不含边框），单位：像素 */
     public static final int PHONE_HEIGHT = 200;
 
-    /**
-     * 手机边框（机身可见的那一圈）厚度，单位：像素。
-     *
-     * 1.6.10 从 4 加到 8，为的是让外壳贴图画得下圆角。4 像素宽的一圈里
-     * 圆角要么小到看不出来，要么把边角削得只剩一丝 —— 圆角会削掉边角的
-     * 材料，边框在 45° 方向最窄处是 √2×(厚度 − 0.293×半径)，厚度只有 4 时
-     * 半径超过 5 就开始明显变细。
-     *
-     * 8 能撑到 11 像素半径（约机身宽度的 8%，现代手机就是这个比例）。
-     *
-     * 再往上是竖直方向卡住：Minecraft 保证的最小逻辑高度是 240，而整机高
-     * ＝ 200 + 边框×2。边框 8 时整机 216，上下各留 12；边框 12 就只剩 8，
-     * 小窗口下手机会贴到屏幕边上。
-     */
+    /** 边框厚度。8 能撑到 11px 圆角；再厚整机高会在 240 的最小逻辑高度下顶到屏幕边 */
     public static final int PHONE_BORDER = 8;
 
-    /** 手机总宽度（含边框）= PHONE_WIDTH + PHONE_BORDER*2 = 136 */
     public static final int PHONE_TOTAL_WIDTH = PHONE_WIDTH + PHONE_BORDER * 2;
 
-    /** 手机总高度（含边框）= PHONE_HEIGHT + PHONE_BORDER*2 = 216 */
     public static final int PHONE_TOTAL_HEIGHT = PHONE_HEIGHT + PHONE_BORDER * 2;
 
-    // ==================== 颜色方案 ====================
-
-    // -- 手机外壳颜色 --
-    /** 手机外壳/边框颜色 */
     public static final int COLOR_FRAME = 0xFF2C2C2C;
 
     /** 手机外壳高光色（顶部边缘） */
     public static final int COLOR_FRAME_HIGHLIGHT = 0xFF4A4A4A;
 
-    // -- 屏幕内部颜色 --
     /**
-     * 没有壁纸时的屏幕底色 —— 夜空藏蓝。
-     *
-     * 1.7.5 从 1A1A2E 换过来。那个值蓝减红只有 20，看着是偏紫的灰而不是蓝；
-     * 现在是 57，够蓝了，饱和 83% —— 再高就成电光蓝，星空是暗而不艳的。
-     *
-     * 换色时同时盯着三件事，缺一件就会出问题：
-     *
-     *   与白字的对比    正文（#DBDBDB）12.6，比换之前的 12.3 还高一点
-     *   离导航栏多远    RGB 距离 18，与换之前持平。导航栏是 16213E，
-     *                   同属藏蓝一族，越把底色调蓝就越容易与它糊成一片
-     *   亮度            0.010，略低于原先，更像夜里
-     *
-     * 这个值还被在线圆点的描边（PlayerAvatar）与浏览器面板底用着 —— 那是
-     * 刻意的：它们要与屏幕底同色才显得是"从背景里挖出来的"。
+     * 没有壁纸时的屏幕底色。在线圆点描边（PlayerAvatar）与浏览器面板底刻意同色；
+     * 浏览器面板贴图见 PhoneSkin.Element.BROWSER_PANEL。
      */
     public static final int COLOR_SCREEN_BG = 0xFF0C1445;
 
-    /** 状态栏背景色 */
+    /** 状态栏背景色，贴图见 PhoneSkin.Element.STATUS_BAR */
     public static final int COLOR_STATUS_BAR = 0xFF0F3460;
 
     /** App 图标按下时的覆盖色 */
     public static final int COLOR_APP_PRESSED = 0x44FFFFFF;
 
-    /**
-     * 拖动排序时，"松手就落这儿"的那个空槽提示色。
-     *
-     * 【兜底】色：放了 phone/drop_slot.png 就用贴图，见 PhoneSkin.Element.HOME_DROP_SLOT。
-     * 比按下色更淡，因为它表达的是"这里空着等你放"，而不是"你正按着这个"。
-     */
+    /** 拖动排序的空槽提示色，比按下色更淡。兜底色，贴图见 PhoneSkin.Element.HOME_DROP_SLOT */
     public static final int COLOR_APP_DROP_SLOT = 0x33FFFFFF;
 
     /** 页码点：不是当前这一页的那些。兜底色，见 PhoneSkin.Element.HOME_PAGE_DOT */
@@ -102,32 +49,14 @@ public final class PhoneTheme {
     /** 页码点：当前这一页。兜底色，见 PhoneSkin.Element.HOME_PAGE_DOT_ACTIVE */
     public static final int COLOR_PAGE_DOT_ACTIVE = 0xFFFFFFFF;
 
-    /**
-     * 拖着图标停在屏幕边上时，那条"再等一下就翻页"的提示条。
-     *
-     * 兜底色，见 PhoneSkin.Element.HOME_PAGE_EDGE。透明度由停留时长决定，
-     * 这里写的是停满时的样子。
-     */
+    /** 拖图标停在屏幕边上的翻页提示条，停满时的透明度。兜底色，贴图见 PhoneSkin.Element.HOME_PAGE_EDGE */
     public static final int COLOR_PAGE_EDGE = 0x77FFFFFF;
 
-    /** 底部导航栏背景色 */
+    /** 底部导航栏背景色，贴图见 PhoneSkin.Element.NAV_BAR */
     public static final int COLOR_NAV_BAR = 0xFF16213E;
 
-    // ==================== 画在【构件】上的字 ====================
-    //
-    // 手机上的字分两类，分界线是「底是什么」：
-    //
-    //   一类画在【壁纸】上——每一页都由 PhoneChassis.drawScreenBackground
-    //   铺底，不只主屏。底是玩家自己选的，可深可浅。
-    //
-    //   另一类画在【手机自带的构件】上——导航栏、通知、未读角标、聊天气泡、
-    //   输入栏、商店按钮。这些底是我们画的实心色，玩家换不了。
-    //
-    // 分开的理由：底不会变的地方，字也不能变。两者一起往同一个方向走，
-    // 字就会陷进底里——导航栏那三个按钮直接消失，而且不报错，只是"点不着了"。
-    //
-    // 所以本节这些常量是【钉死】的，不随任何配色设置改变。会随设置改变的
-    // 那一类不在这里，在 FontPalette。
+    // 以下 FONT_COLOR_* 画在手机自带构件（导航栏、通知、气泡等）的实心底上，
+    // 底不变字也不能变——钉死，不随设置走；随「字体颜色」设置变的在 FontPalette。
 
     /** 状态栏时间/信号。底是 COLOR_SCRIM 压暗层 */
     public static final int FONT_COLOR_STATUS = 0xFFFFFFFF;
@@ -156,40 +85,21 @@ public final class PhoneTheme {
     /** 输入框空着，「发送」点了也不发 */
     public static final int FONT_COLOR_CHAT_SEND_OFF = 0xFF555555;
 
-    // -- 应用商店与详情页 --
-    // 这几项都是【兜底】色：放了对应贴图时由 PhoneSkin 覆盖，见
-    // PhoneSkin.Element 里的 STORE_BUTTON / STORE_BUTTON_DISABLED。
+    // 兜底色，贴图见 PhoneSkin.Element.STORE_BUTTON / STORE_BUTTON_DISABLED
 
-    /** 可点按钮的底色 */
     public static final int COLOR_BUTTON = 0xFF2E7D32;
 
-    /** 鼠标悬停时的按钮底色 */
     public static final int COLOR_BUTTON_HOVER = 0xFF43A047;
 
     /** 点不动的按钮底色（已安装、买不起） */
     public static final int COLOR_BUTTON_DISABLED = 0xFF3A3A3A;
 
-    /** 按钮上的文字 */
     public static final int FONT_COLOR_BUTTON = 0xFFFFFFFF;
 
-    /** 点不动的按钮上的文字 */
     public static final int FONT_COLOR_BUTTON_DISABLED = 0xFF888888;
 
-    // ==================== 各界面共用的角色色 ====================
-    //
-    // 下面这些此前是各界面自己写的字面量：分割线 0x44FFFFFF 在【十个】文件里
-    // 各写一遍，行悬停底 0x33FFFFFF 五遍，"确认"绿 0xFF66FF88 分散在发送、
-    // 保存、添加、打印四处。改一次配色要翻遍全项目，而且必漏。
-    //
-    // 【几个名字共用一个值是有意的】
-    //
-    // COLOR_DIVIDER、COLOR_CELL_HOVER 与上面的 COLOR_APP_PRESSED 眼下都是
-    // 0x44FFFFFF，但它们是三件不同的东西。合并成一个名字的话，日后想把
-    // 分割线调淡，主屏图标的按下反馈会跟着一起淡掉——而那不是任何人的本意。
-    //
-    // 名字按【角色】起，不按颜色起：值可以重合，角色不能混。
-
-    // -- 覆盖层与填充 --
+    // 各界面共用的角色色。名字按【角色】起、不按颜色起：几个名字共用一个值是有意的，
+    // 它们是不同的东西，日后要能各自调整，不能合并成一个名字。
 
     /** 一像素分割线。标题与内容之间、列表分组之间 */
     public static final int COLOR_DIVIDER = 0x44FFFFFF;
@@ -200,12 +110,7 @@ public final class PhoneTheme {
     /** 列表行悬停时垫在下面的那层 */
     public static final int COLOR_ROW_HOVER = 0x33FFFFFF;
 
-    /**
-     * 悬停反馈里【重】的那一档：网格格子、独立按钮。
-     *
-     * 整行的列表项用淡一档的 {@link #COLOR_ROW_HOVER}——列表一行铺满整个
-     * 宽度，同样的透明度盖上去比一个小格子显眼得多。
-     */
+    /** 悬停反馈里重的那一档：网格格子、独立按钮。整行的列表项用淡一档的 {@link #COLOR_ROW_HOVER} */
     public static final int COLOR_HOVER_STRONG = 0x44FFFFFF;
 
     /** 悬停在"会删掉东西"的那一行上（App 管理器的卸载行） */
@@ -226,23 +131,11 @@ public final class PhoneTheme {
     /** 容器界面里空槽位的底 */
     public static final int COLOR_SLOT_BG = 0x88000000;
 
-    // -- 文字 --
-    //
-    // 画在【壁纸】上的那些字色不在这里，在 FontPalette —— 它们随玩家在
-    // 「设置 → 字体颜色」里选的预设变，而 static final int 是编译期常量、
-    // 运行时改不动。搬走的是这十七个角色：
-    //
-    //   标题 正文 App名 预览 次要 时间戳 更暗一档 点不动
-    //   链接 确认 就绪 危险 危险就绪 卸载 提示 价格 问候
-    //
-    // 通知正文与对方气泡里的字看着也像"文字"，却留在本文件里：它们画在
-    // 通知底与气泡底上，那两块底不会变。判据始终是「底是什么」，不是
-    // 「这是不是一段字」。
+    // 画在【壁纸】上的字色不在这里，在 FontPalette——它们随设置变，编译期常量改不动。
+    // 通知正文与对方气泡的字留在本文件：它们的底不变。判据是「底是什么」。
 
     /** 通知里的正文。底是 COLOR_TOAST_BG */
     public static final int FONT_COLOR_TOAST = 0xFFBBBBBB;
-
-    // -- 在线状态 --
 
     /** 在线的小圆点 */
     public static final int COLOR_ONLINE = 0xFF55DD55;
@@ -250,9 +143,7 @@ public final class PhoneTheme {
     /** 离线的小圆点 */
     public static final int COLOR_OFFLINE = 0xFF777777;
 
-    // -- 聊天 --
-    // 气泡底与输入栏底是【兜底】色，见 PhoneSkin.Element 的
-    // CHAT_BUBBLE_SELF / CHAT_BUBBLE_PEER / CHAT_INPUT_BAR
+    // 气泡底与输入栏底是兜底色，贴图见 PhoneSkin.Element 的 CHAT_BUBBLE_SELF / CHAT_BUBBLE_PEER / CHAT_INPUT_BAR
 
     /** 自己发的气泡底 */
     public static final int COLOR_CHAT_BUBBLE_SELF = 0xFF2E6FDB;
@@ -269,33 +160,23 @@ public final class PhoneTheme {
     /** 未读条数角标的底。兜底色，见 PhoneSkin.Element.UNREAD_BADGE */
     public static final int COLOR_UNREAD_BADGE = 0xFFDD3333;
 
-
-    // -- 音乐 --
-
     /** 进度条已播过的那一段 */
     public static final int COLOR_MUSIC_PROGRESS = 0xFF55DD88;
 
     /** 进度条没播到的那一段。比已播的暗一档，两段要能一眼分开 */
     public static final int COLOR_MUSIC_PROGRESS_BG = 0x44FFFFFF;
 
-    // -- 通知 --
-    // 兜底色，见 PhoneSkin.Element.TOAST_BG
-
-    /** 通知底 */
+    /** 通知底。兜底色，贴图见 PhoneSkin.Element.TOAST_BG */
     public static final int COLOR_TOAST_BG = 0xFF1A1A2E;
 
     /** 通知边框 */
     public static final int COLOR_TOAST_BORDER = 0xFF0F3460;
-
-    // -- 相机取景 --
 
     /** 取景框四角那四个折角 */
     public static final int COLOR_VIEWFINDER = 0xCCFFFFFF;
 
     /** 正中的准星 */
     public static final int COLOR_RETICLE = 0x99FFFFFF;
-
-    // ==================== 布局参数 ====================
 
     /** 状态栏高度 */
     public static final int STATUS_BAR_HEIGHT = 10;
@@ -321,19 +202,11 @@ public final class PhoneTheme {
     /** 每行 App 数量 */
     public static final int APP_COLUMNS = 4;
 
-    /**
-     * 每页最多几行 App。
-     *
-     * 这是【上限】不是定值：实际行数还要看扣掉状态栏、导航栏、页码点之后剩多少
-     * 高度，由 HomeLayout.rowsThatFit 算。写死成定值的话，谁把字体换大一号，
-     * 最后一行就会压到页码点上，而那种错位没人会往"行数"上想。
-     */
+    /** 每页最多几行 App，是上限不是定值：实际行数由 HomeLayout.rowsThatFit 按剩余高度算 */
     public static final int APP_ROWS = 5;
 
     /** App 名称字体缩放，1.0=原大小 */
     public static final float APP_NAME_SCALE = 0.6f;
-
-    // -- 主屏页码点 --
 
     /** 页码点那一条的高度，夹在图标区与导航栏之间 */
     public static final int PAGE_DOTS_HEIGHT = 8;
@@ -344,12 +217,7 @@ public final class PhoneTheme {
     /** 页码点之间的间隔 */
     public static final int PAGE_DOT_SPACING = 4;
 
-    /**
-     * 在空白处横着拖多远算一次翻页。
-     *
-     * 手机宽 120，取五分之一：再小的话，想拖个图标却按空了、手一抖就翻页；
-     * 再大就得从屏幕这头划到那头，一页一页翻很累。
-     */
+    /** 在空白处横着拖多远（像素）算一次翻页 */
     public static final int PAGE_SWIPE_THRESHOLD = 24;
 
     /** 翻页滑动动画时长（毫秒），0 表示直接切 */
@@ -358,27 +226,11 @@ public final class PhoneTheme {
     /** 拖着图标停在左右这么宽的边条里，就会自动翻页 */
     public static final int PAGE_EDGE_WIDTH = 10;
 
-    /**
-     * 拖着图标在边条里停多久才翻页（毫秒）。
-     *
-     * 不能是"碰到就翻"：拖去最右那一列的路上必然会扫过右边条，一碰就翻的话
-     * 玩家永远放不到最后一格。停顿是他表达"我真要去下一页"的方式。
-     */
+    /** 拖着图标在边条里停多久（毫秒）才翻页。不能碰到就翻：拖去最右一列的路上必然扫过边条 */
     public static final int PAGE_EDGE_DWELL_MS = 400;
 
-    /**
-     * 按住图标要移动多少像素才算"在拖动"，小于它松手仍然是一次点击。
-     *
-     * 没有这个阈值的话，按下时手稍微抖一下就变成了排序——玩家想开个 App，
-     * 结果 App 换了位置还没打开。3 像素在 GUI 比例 2 下约等于 6 个物理像素，
-     * 抖不到，有意拖的人也不会觉得"推不动"。
-     */
+    /** 按住图标移动超过这么多像素才算拖动，小于它松手仍是一次点击 */
     public static final int APP_DRAG_THRESHOLD = 3;
-
-    // 贴图路径不在这里声明：可换肤元素统一由 PhoneSkin.Element 管理，
-    // 一处定义文件名、尺寸建议与兜底行为，不会出现"声明了却没人用"的空头承诺。
-
-    // ==================== 动画参数 ====================
 
     /** GUI 打开时的缩放动画时长（毫秒），0 表示无动画 */
     public static final int OPEN_ANIMATION_MS = 150;

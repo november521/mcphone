@@ -12,52 +12,22 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * 手机界面换肤 —— 贴图优先，纯色兜底
- *
- * 界面上的每个视觉元素都可以用贴图替换。放了贴图就用贴图，没放就用
- * {@link PhoneTheme} 里的纯色画，功能完全不受影响。
- *
- * 贴图放置目录：
- *   src/main/resources/assets/mcphone/textures/   （模组内置，按功能分子目录）
- *   资源包中的同一路径                                   （玩家覆盖）
- *
- * 尺寸【不必】精确匹配：贴图会被拉伸到目标区域。想要不变形，按注释里
- * 标注的建议尺寸或其等比放大画即可。
- *
- * 为什么要主动探测贴图存不存在
- *
- * Minecraft 找不到贴图时不会报错，而是画一张紫黑格子的占位图。若不主动
- * 探测，"没放贴图"与"贴图放错了"都会变成满屏紫黑格子，而不是优雅地
- * 退回纯色。所以每个元素在首次绘制时查一次 ResourceManager。
- *
- * 查询结果必须缓存——ResourceManager 的查找不是免费的，而绘制是每帧的。
- * 缓存又必须能被清空，否则玩家按 F3+T 重载资源包后，界面还是旧的。
- * 清空由 {@link #clearCache()} 负责，挂在客户端资源重载事件上。
+ * 手机界面换肤 —— 贴图优先，纯色兜底（{@link PhoneTheme}）。
+ * 贴图放 assets/mcphone/textures/（资源包同路径可覆盖），尺寸不必精确匹配，会被拉伸到目标区域。
+ * 探测结果有缓存，资源重载时由 {@link #clearCache()} 清空。
  */
 public final class PhoneSkin {
 
     private PhoneSkin() {}
 
     /**
-     * 可换肤的界面元素。
-     *
-     * 每一项对应 textures/ 下的一个 PNG，括号里第一个值是路径（不含
-     * textures/ 前缀与 .png 后缀），第二个是 1.2.7 之前那条平铺在
-     * textures/gui/ 下的老路径——新的找不到时回退到它，好让老资源包继续能用
-     * 加 .png。注释中的尺寸是建议值，不是硬性要求。
+     * 可换肤的界面元素。构造器第一个参数是 textures/ 下的路径（不含前缀与 .png），
+     * 第二个是 1.2.7 之前 textures/gui/ 下的老路径，新的找不到时回退。注释里的尺寸是建议值。
      */
     public enum Element {
         /**
-         * 手机外壳边框。建议 136×216（含边框的整机尺寸）。
-         *
-         * <b>中间那块 120×200 必须画成透明</b>。外壳是最后画的、盖在所有
-         * 内容之上（这样内圆角才显示得出来），中间不透明会把整个屏幕糊掉。
-         *
-         * 反过来说，你在中间画的东西【会】显示 —— 内圆角、刘海、听筒都行，
-         * 只要留够透明的部分让内容透出来。
-         *
-         * 可见的那一圈是外侧 8 像素。圆角半径建议不超过 11 像素，
-         * 再大边角会明显变细。
+         * 手机外壳边框。建议 136×216（含边框整机）；中间 120×200 必须透明——外壳最后画、盖在所有内容之上，
+         * 中间画的东西（内圆角、刘海）会显示。可见的一圈是外侧 8px，圆角半径建议不超过 11px。
          */
         FRAME("phone/frame", "phone_frame"),
 
@@ -76,47 +46,19 @@ public final class PhoneSkin {
         /** 导航栏"多任务"键图标。建议 40×14；没有贴图时画 □ 字符 */
         NAV_TASKS("phone/nav_tasks", "nav_tasks"),
 
-        /**
-         * 主屏拖动排序时，"松手就落这儿"的空槽提示。建议 20×20，与 App 图标同尺寸。
-         *
-         * 没有贴图时用 {@link PhoneTheme#COLOR_APP_DROP_SLOT} 填。
-         *
-         * 这一项是 1.3.9 才有的，1.2.7 那套老路径下从来不存在
-         * home_drop_slot.png——那个参数只是构造器的形式要求，查一次查不到就
-         * 落回兜底色，不影响任何老资源包。
-         */
+        /** 主屏拖动时"松手落这儿"的空槽。建议 20×20；兜底色 {@link PhoneTheme#COLOR_APP_DROP_SLOT} */
         HOME_DROP_SLOT("phone/drop_slot", "home_drop_slot"),
 
-        /**
-         * 主屏底部的页码点 —— 不是当前这一页的那些。建议 3×3。
-         *
-         * 没有贴图时用 {@link PhoneTheme#COLOR_PAGE_DOT} 填。
-         */
+        /** 主屏底部页码点（非当前页）。建议 3×3；兜底色 {@link PhoneTheme#COLOR_PAGE_DOT} */
         HOME_PAGE_DOT("phone/page_dot", "home_page_dot"),
 
-        /**
-         * 页码点 —— 当前这一页。建议 3×3。
-         *
-         * 单独一张而不是把上面那张调亮，理由与 {@link #STORE_BUTTON_DISABLED} 一样：
-         * 调亮是我们替美术做的决定，"你在这一页"该长什么样应该由画贴图的人说了算。
-         * 没有贴图时用 {@link PhoneTheme#COLOR_PAGE_DOT_ACTIVE} 填。
-         */
+        /** 页码点（当前页）。建议 3×3；兜底色 {@link PhoneTheme#COLOR_PAGE_DOT_ACTIVE} */
         HOME_PAGE_DOT_ACTIVE("phone/page_dot_active", "home_page_dot_active"),
 
-        /**
-         * 拖着图标停在屏幕边上时，那条"再等一下就翻页"的提示条。建议 10×176（竖条）。
-         *
-         * 会随停留时长由浅到深淡入——贴图整张按透明度调制，所以画成实心竖条即可，
-         * 不必自己做渐变。没有贴图时用 {@link PhoneTheme#COLOR_PAGE_EDGE} 填。
-         */
+        /** 拖图标停在屏幕边上时的翻页提示条。建议 10×176（竖条），整张按透明度淡入，画实心即可；兜底色 {@link PhoneTheme#COLOR_PAGE_EDGE} */
         HOME_PAGE_EDGE("phone/page_edge", "home_page_edge"),
 
-        /**
-         * 自己发出的聊天气泡底。
-         *
-         * 气泡大小随文字长短变化，贴图会被整张拉伸过去，所以纯色或纵向
-         * 渐变最稳妥；带圆角的图会被拉扁，本类没有九宫格拉伸。
-         */
+        /** 自己发出的聊天气泡底。整张拉伸（无九宫格），纯色或纵向渐变最稳妥 */
         CHAT_BUBBLE_SELF("chat/bubble_self", "chat_bubble_self"),
 
         /** 对方发来的聊天气泡底。拉伸方式同 {@link #CHAT_BUBBLE_SELF} */
@@ -125,78 +67,28 @@ public final class PhoneSkin {
         /** 会话界面底部输入栏的底。建议 90×14 */
         CHAT_INPUT_BAR("chat/input_bar", "chat_input_bar"),
 
-        /**
-         * 会话列表里每个在线好友那一行右下角的"传送到他身边"小图标。建议 7×7。
-         *
-         * 7 是与旁边的字目测等高的尺寸：原版字体行高 9、字形格 8，而大写字母
-         * 的实际笔画高度就是 7。贴图请按【实际绘制尺寸】画：这里不做平滑缩放，
-         * 16×16 画进 7×7 的框会被抽掉一多半像素。
-         *
-         * 没有贴图时画一个 → 字符，与导航栏三个键缺图时画 ◁ ○ □ 同一套做法：
-         * 兜底也要能看懂是什么，不能只剩一个色块。
-         *
-         * 这一项 1.4.10 才有，老路径下从来不存在 chat_teleport.png——那个参数
-         * 只是构造器的形式要求，与 HOME_DROP_SLOT 同理。
-         */
+        /** 会话列表在线好友行的"传送"小图标。建议 7×7，按实际绘制尺寸画（不做平滑缩放）；缺图时画 → 字符 */
         CHAT_TELEPORT("chat/teleport", "chat_teleport"),
 
-        /**
-         * 收到消息时右上角弹出的通知底。建议 160×32。
-         *
-         * 160×32 是原版通知的槽位尺寸，照这个画才不会与其他模组的通知
-         * 挤在一起错位。
-         */
+        /** 收到消息的通知底。建议 160×32（原版通知槽位尺寸） */
         TOAST_BG("phone/toast", "toast_bg"),
 
-        /**
-         * 未读条数的角标底。建议 12×9。
-         *
-         * 会话列表与消息通知共用同一张：两处都是"这里有几条没看"，
-         * 分成两张贴图的话，换肤时容易只换一处，看着像两个模组。
-         */
+        /** 未读条数角标底。建议 12×9；会话列表与通知共用 */
         UNREAD_BADGE("phone/unread_badge", "unread_badge"),
 
-        /**
-         * 应用详情页上那个可点的按钮底（购买 / 下载）。建议 100×16。
-         *
-         * 与聊天气泡同理，整张拉伸，没有九宫格，所以纯色或纵向渐变最稳妥。
-         * 没有贴图时用 {@link PhoneTheme#COLOR_BUTTON} 填。
-         */
+        /** 应用详情页可点按钮底（购买/下载）。建议 100×16，整张拉伸；兜底色 {@link PhoneTheme#COLOR_BUTTON} */
         STORE_BUTTON("store/button", "store_button"),
 
-        /**
-         * 点不动时的按钮底（已安装、买不起）。建议 100×16。
-         *
-         * 单独一张而不是把可点的那张调暗：调暗是我们替美术做的决定，而
-         * "不可点"该长什么样应该由画贴图的人说了算。没有贴图时用
-         * {@link PhoneTheme#COLOR_BUTTON_DISABLED} 填。
-         */
+        /** 不可点的按钮底（已安装、买不起）。建议 100×16；兜底色 {@link PhoneTheme#COLOR_BUTTON_DISABLED} */
         STORE_BUTTON_DISABLED("store/button_disabled", "store_button_disabled"),
 
-        /**
-         * 应用商店里「联动 App」那个入口格子的图标。建议 20×20，与 App 图标同尺寸。
-         *
-         * 没有贴图时画一个纯色底加三个小方块，不画字符。理由与"已装/未装"用文字
-         * 而不用 ✓✗ 一样：好看的符号（❖ ⚭ 之类）在部分字体下会掉成方框，而这是
-         * 玩家进商店第一眼看到的格子。没有贴图时用
-         * {@link PhoneTheme#COLOR_STATUS_BAR} 填。
-         */
+        /** 商店「联动 App」入口格图标。建议 20×20；缺图时画纯色底加三个小方块，兜底色 {@link PhoneTheme#COLOR_STATUS_BAR} */
         STORE_COMPANION("store/companion", "store_companion"),
 
-        /**
-         * 音乐播放器底部那一条上的「上一首」。建议 9×9，与行内文字等高。
-         *
-         * 缺图时画 ⏮ 字符，与导航栏三个键、传送图标同一套做法：兜底也要
-         * 能看懂是什么，不能只剩一个色块。
-         */
+        /** 音乐播放器「上一首」。建议 9×9，与行内文字等高；缺图时画 ⏮ 字符 */
         MUSIC_PREV("music/prev", "music_prev"),
 
-        /**
-         * 「播放」键。建议 9×9。缺图时画 ▶ 字符。
-         *
-         * 与暂停分成两张而不是一张调色：那个键在两种状态下画什么，该由
-         * 画贴图的人决定，与商店的"点不动"按钮同一个理由。
-         */
+        /** 「播放」键。建议 9×9；缺图时画 ▶ 字符 */
         MUSIC_PLAY("music/play", "music_play"),
 
         /** 「暂停」键。建议 9×9。缺图时画 ⏸ 字符。与 {@link #MUSIC_PLAY} 成对 */
@@ -205,28 +97,13 @@ public final class PhoneSkin {
         /** 「下一首」。建议 9×9。缺图时画 ⏭ 字符 */
         MUSIC_NEXT("music/next", "music_next"),
 
-        /**
-         * 唱片仓的「取出」。建议 9×9，缺图时画 ⏏ 字符。
-         *
-         * 与播放键并排画在唱片仓那一条上，所以尺寸得与它们一致。
-         */
+        /** 唱片仓「取出」。建议 9×9；缺图时画 ⏏ 字符 */
         MUSIC_EJECT("music/eject", "music_eject"),
 
-        /**
-         * 唱片仓的「从背包放」。建议 9×9，缺图时画 ▤ 字符。
-         *
-         * 只在仓是空的时候画，与「取出」不会同时出现 —— 那一条只有 112px
-         * 宽，塞三个键会把提示文字挤没。两者的尺寸仍要一致：它们出现在
-         * 同一个位置上，大小不一玩家会觉得界面在跳。
-         */
+        /** 唱片仓「从背包放」。建议 9×9；缺图时画 ▤ 字符。只在仓空时画，与「取出」不同时出现 */
         MUSIC_BACKPACK("music/backpack", "music_backpack"),
 
-        /**
-         * 循环模式键 —— 列表循环。建议 9×9，缺图时画 ↻ 字符。
-         *
-         * 三种模式各一张，而不是一张图配三个角标：它们在任何播放器里都是
-         * 完全不同的图形（↻ ① ⇄），拼不出来。
-         */
+        /** 循环模式键 —— 列表循环。建议 9×9；缺图时画 ↻ 字符 */
         MUSIC_MODE_LIST_LOOP("music/mode_list_loop", "music_mode_list_loop"),
 
         /** 循环模式键 —— 单曲循环。建议 9×9，缺图时画 ① 字符 */
@@ -236,42 +113,21 @@ public final class PhoneSkin {
         MUSIC_MODE_SHUFFLE("music/mode_shuffle", "music_mode_shuffle"),
 
         /**
-         * 相册单张查看里的「删除」键。建议 9×9，与音乐页那几个键同尺寸。
-         *
-         * 缺图时画「删除」两个字，不画字符：字体里没有垃圾桶这个字形，而两个
-         * 字本来就是 1.7.16 之前这个键的样子。
-         *
-         * 只管"还没上膛"的那一态。点过一次之后这个键变成「再点一次确认」——
-         * 那句话本身就是信息，换成一个红图标反而说不清，所以上膛之后一律是
-         * 文字，不走贴图。
+         * 相册单张查看的「删除」键。建议 9×9；缺图时画「删除」两个字。
+         * 只管"还没上膛"的那一态；点过一次后的「再点一次确认」一律是文字，不走贴图。
          */
         GALLERY_DELETE("gallery/delete", "gallery_delete"),
 
-        /**
-         * 浏览器那块大面板的底。建议 320×200，会被整张拉伸到面板大小。
-         *
-         * 绝大部分会被网页盖住，真正看得见的只有地址栏那一条和加载中的空白期，
-         * 所以纯色即可。没有贴图时用 {@link PhoneTheme#COLOR_SCREEN_BG} 填。
-         */
+        /** 浏览器面板底。建议 320×200，整张拉伸；兜底色 {@link PhoneTheme#COLOR_SCREEN_BG} */
         BROWSER_PANEL("browser/panel", "browser_panel"),
 
-        /**
-         * 浏览器工具条那一条的底（后退/前进/刷新 + 地址栏）。建议 320×22。
-         *
-         * 它在面板【外面】，浮在面板上方的留白里，不占网页的高度。
-         */
+        /** 浏览器工具条底（后退/前进/刷新 + 地址栏）。建议 320×22；在面板外面，浮在上方留白里 */
         BROWSER_BAR("browser/bar", "browser_bar");
 
         /** 现在的路径，按功能分目录 */
         private final ResourceLocation texture;
 
-        /**
-         * 1.2.7 之前那条平铺在 textures/gui/ 下的老路径。
-         *
-         * 留着不是为了好看，是为了不弄坏玩家已经做好的资源包：这些路径在
-         * README 里作为换肤契约公开过两个版本，说改就改等于把别人的资源包
-         * 单方面作废。新路径优先，找不到才回退到这条，并在日志里提一句。
-         */
+        /** 1.2.7 之前 textures/gui/ 下的老路径，为兼容已发布的资源包保留；新路径找不到才回退 */
         private final ResourceLocation legacyTexture;
 
         Element(String path, String legacyFileName) {
@@ -293,10 +149,7 @@ public final class PhoneSkin {
     /** 一张已确认存在的贴图及其真实尺寸 */
     private record SkinTexture(ResourceLocation location, int width, int height) {}
 
-    /**
-     * 探测结果缓存。值为 empty 表示"查过了，没有这张贴图"——
-     * 必须把"没有"也缓存下来，否则缺贴图的元素每帧都要查一次资源管理器。
-     */
+    /** 探测结果缓存；empty（没有这张贴图）也要缓存，否则缺贴图的元素每帧都要查一次资源管理器 */
     private static final Map<Element, Optional<SkinTexture>> CACHE = new HashMap<>();
 
     /** resolveWithLegacy 的结果缓存。键是"想要的路径"，值是"实际用的路径" */
@@ -308,35 +161,20 @@ public final class PhoneSkin {
         PATH_CACHE.clear();
     }
 
-    //  绘制
-
-    /**
-     * 画贴图，拉伸到目标区域。
-     *
-     * @return 真的画了贴图才返回 true；没有贴图返回 false，
-     *         调用方据此自行兜底（比如画文字符号）
-     */
+    /** 画贴图，拉伸到目标区域。真的画了才 true；没有贴图返回 false，调用方自行兜底 */
     public static boolean draw(GuiGraphics g, Element element, int x, int y, int w, int h) {
         if (w <= 0 || h <= 0) return false;
 
         SkinTexture tex = resolve(element).orElse(null);
         if (tex == null) return false;
 
-        // 11 参重载：(贴图, x, y, 目标宽, 目标高, u, v, 源区宽, 源区高, 纹理宽, 纹理高)
-        // 取整张贴图拉伸到目标区域，故 u/v 为 0、源区尺寸＝纹理尺寸
+        // 11 参重载：整张贴图拉伸到目标区域，u/v 为 0、源区尺寸＝纹理尺寸
         g.blit(tex.location(), x, y, w, h, 0, 0,
                 tex.width(), tex.height(), tex.width(), tex.height());
         return true;
     }
 
-    /**
-     * 这个元素有没有贴图。
-     *
-     * 给"贴图与兜底的【形状】不一样"的地方用：相册的删除键有图是 9×9 的
-     * 图标，没图是两个字 —— 命中区的宽度不同，得在画之前就知道走哪一支。
-     * 大多数元素不需要它：图与兜底占同一块地方，直接看 {@link #draw} 的
-     * 返回值就够了。
-     */
+    /** 这个元素有没有贴图。给贴图与兜底形状不一样的地方用（如相册删除键），画之前就要知道走哪一支 */
     public static boolean has(Element element) {
         return resolve(element).isPresent();
     }
@@ -349,8 +187,6 @@ public final class PhoneSkin {
         }
     }
 
-    //  探测
-
     private static Optional<SkinTexture> resolve(Element element) {
         return CACHE.computeIfAbsent(element, PhoneSkin::probe);
     }
@@ -360,8 +196,6 @@ public final class PhoneSkin {
         Minecraft mc = Minecraft.getInstance();
         if (mc == null) return Optional.empty();
 
-        // 新路径优先。找不到再试老路径——1.2.7 之前的资源包按那套路径做的，
-        // 直接作废别人的劳动成果不合适
         Optional<SkinTexture> found = read(mc, element.texture());
         if (found.isPresent()) return found;
 
@@ -394,11 +228,8 @@ public final class PhoneSkin {
     }
 
     /**
-     * 在"新路径"和"老路径"之间挑一个真实存在的，给不走 Element 那套的调用方用
-     * （目前是内建 App 的图标）。
-     *
-     * 两个都不存在时返回新路径：让原版画出紫黑格，比悄悄什么都不画好——
-     * 至少美术一眼能看出是哪张图没放对。
+     * 在新老路径之间挑一个真实存在的，给不走 Element 那套的调用方（内建 App 图标）用。
+     * 两个都不存在时返回新路径：让原版画紫黑格，比悄悄什么都不画好排查。
      */
     public static ResourceLocation resolveWithLegacy(ResourceLocation preferred,
                                                      ResourceLocation legacy) {
@@ -416,17 +247,7 @@ public final class PhoneSkin {
         });
     }
 
-    /**
-     * 从 PNG 头部读出宽高。
-     *
-     * 只读前 24 字节而不是解码整张图：这里只要尺寸，把图整个解码进内存
-     * 纯属浪费——尤其是玩家可能放进来一张很大的贴图。
-     *
-     * PNG 的固定结构：8 字节签名 + 4 字节块长度 + 4 字节 "IHDR"
-     * + 4 字节宽 + 4 字节高，全部大端序。
-     *
-     * @return {宽, 高}；不是合法 PNG 时返回 null
-     */
+    /** 从 PNG 头部（前 24 字节）读出 {宽, 高}，不解码整张图；不是合法 PNG 返回 null */
     private static int[] readPngSize(InputStream in) throws Exception {
         byte[] head = in.readNBytes(24);
         if (head.length < 24) return null;
