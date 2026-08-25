@@ -170,9 +170,8 @@ public final class PhoneSkin {
         SkinTexture tex = resolve(element).orElse(null);
         if (tex == null) return false;
 
-        // 11 参重载：整张贴图拉伸到目标区域，u/v 为 0、源区尺寸＝纹理尺寸
-        g.blit(tex.location(), x, y, w, h, 0, 0,
-                tex.width(), tex.height(), tex.width(), tex.height());
+        // 走 GuiUtil 而不是 g.blit：原版那条 blit 不开混合，半透明贴图会被当成不透明画
+        GuiUtil.drawTexture(g, tex.location(), x, y, w, h, tex.width(), tex.height());
         return true;
     }
 

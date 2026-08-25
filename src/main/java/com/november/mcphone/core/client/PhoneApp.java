@@ -86,7 +86,7 @@ public abstract class PhoneApp implements IPhoneApp {
     public void renderIcon(GuiGraphics g, int x, int y, int size, float partialTick) {
         ResourceLocation tex = getIconTexture();
         if (tex != null) {
-            g.blit(tex, x, y, 0, 0, size, size, size, size);
+            GuiUtil.drawTexture(g, tex, x, y, size, size, size, size);
         }
     }
 

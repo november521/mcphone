@@ -1,6 +1,7 @@
 package com.november.mcphone.api.client.app;
 
 import com.november.mcphone.api.client.ui.IPhonePage;
+import com.november.mcphone.core.client.GuiUtil;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
@@ -29,11 +30,11 @@ public interface IPhoneApp {
     /** 用户点击 App 图标时触发。在此打开 GUI、执行业务逻辑。 */
     void onPress();
 
-    /** 绘制图标。默认 blit 整个纹理。 */
+    /** 绘制图标。默认整张纹理拉伸到 size×size，带抗锯齿的图请照此走——直接调 g.blit 会丢掉半透明。 */
     default void renderIcon(GuiGraphics g, int x, int y, int size, float partialTick) {
         ResourceLocation tex = getIconTexture();
         if (tex != null) {
-            g.blit(tex, x, y, 0, 0, size, size, size, size);
+            GuiUtil.drawTexture(g, tex, x, y, size, size, size, size);
         }
     }
 

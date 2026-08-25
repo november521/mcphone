@@ -152,7 +152,7 @@ public final class CompanionApps {
     /** 一行：图标 + 名字 + 「需要 XXX」；前置没齐的整行压暗 */
     private void drawRow(GuiGraphics g, Font font, Row row, int x, int y, int w) {
         if (row.icon() != null) {
-            g.blit(row.icon(), x, y, 0, 0, ICON, ICON, ICON, ICON);
+            GuiUtil.drawTexture(g, row.icon(), x, y, ICON, ICON, ICON, ICON);
         } else {
             g.fill(x, y, x + ICON, y + ICON, PhoneTheme.COLOR_BUTTON_DISABLED);
         }

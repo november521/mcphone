@@ -5,6 +5,7 @@ import com.november.mcphone.core.client.FontPalette;
 import com.november.mcphone.core.client.PhoneTheme;
 import com.november.mcphone.feature.clock.WorldClock;
 import com.november.mcphone.feature.weather.Weather;
+import com.november.mcphone.core.client.GuiUtil;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
@@ -81,9 +82,9 @@ public final class WeatherPage {
 
         // ---- 天气图标，居中 ----
         int iconX = phoneLeft + (screenW - ICON_SIZE) / 2;
-        g.blit(ResourceLocation.fromNamespaceAndPath(
+        GuiUtil.drawTexture(g, ResourceLocation.fromNamespaceAndPath(
                         MCphone.MODID, "textures/" + kind.iconPath() + ".png"),
-                iconX, y, 0, 0, ICON_SIZE, ICON_SIZE, ICON_SIZE, ICON_SIZE);
+                iconX, y, ICON_SIZE, ICON_SIZE, ICON_SIZE, ICON_SIZE);
         y += ICON_SIZE + 4;
 
         // ---- 天气名，大字居中 ----

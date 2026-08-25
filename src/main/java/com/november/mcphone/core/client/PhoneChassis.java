@@ -108,7 +108,7 @@ public final class PhoneChassis {
         //   (贴图, x, y, 目标宽, 目标高, u, v, 源区宽, 源区高, 纹理宽, 纹理高)
         // 目标宽高在前、UV 在后，写反会导致目标矩形取到 srcX/srcY，
         // 而居中裁剪下二者必有一个为 0，壁纸就整个画不出来
-        g.blit(wp.texture(),
+        GuiUtil.drawTexture(g, wp.texture(),
                 phoneLeft, phoneTop,
                 screenW, screenH,
                 (texW - srcW) / 2, (texH - srcH) / 2,

@@ -1,7 +1,9 @@
 package com.november.mcphone.core.client;
 
+import com.mojang.blaze3d.systems.RenderSystem;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.resources.ResourceLocation;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -44,6 +46,48 @@ import java.time.format.DateTimeFormatter;
 public final class GuiUtil {
 
     private GuiUtil() {}
+
+    //  贴图
+
+    /**
+     * 画一张贴图，整张拉伸到目标区域。<b>所有贴图都该走这里，别直接调 g.blit</b>。
+     *
+     * 为什么要包一层：原版那条 blit 不开混合
+     *
+     * GuiGraphics 有两个 innerBlit。走精灵图集、带颜色的那个会 enableBlend；
+     * 而 {@code blit(ResourceLocation, ...)} 这条——也就是所有换肤贴图走的这条——
+     * 从头到尾没碰过混合状态。
+     *
+     * 于是能不能混合，取决于轮到它时 GL 恰好是什么状态。而 GUI 里每画完一次
+     * fill 或一行字，RenderType 收尾都会 disableBlend。结果就是：贴图画出来时
+     * 混合基本是关的，alpha 被直接忽略，【半透明像素当成不透明画】。
+     *
+     * 症状有两种，都不像"没开混合"：
+     *   抗锯齿的边缘变成硬边、发脏（App 图标十二张里有七张带抗锯齿）
+     *   整块半透明的贴图变成实心（导航栏底那张 alpha 64 的，画出来是实心深灰）
+     *
+     * alpha 低于 0.1 的像素不受影响——position_tex 着色器把它们 discard 了。
+     * 所以"全透明背景 + 不透明图案"的图看着一切正常，问题只在中间那档，
+     * 这正是它一直没被发现的原因。
+     *
+     * 收尾关掉而不是恢复原状：原版自己那条带色的 blit 就是 enable → 画 → disable，
+     * GUI 代码普遍假定画完是关着的。
+     */
+    public static void drawTexture(GuiGraphics g, ResourceLocation tex,
+                                   int x, int y, int w, int h, int texW, int texH) {
+        drawTexture(g, tex, x, y, w, h, 0, 0, texW, texH, texW, texH);
+    }
+
+    /** 只画贴图的一块（裁剪用），参数顺序同 GuiGraphics 的 11 参重载：目标宽高在前、UV 在后 */
+    public static void drawTexture(GuiGraphics g, ResourceLocation tex,
+                                   int x, int y, int w, int h,
+                                   float u, float v, int srcW, int srcH,
+                                   int texW, int texH) {
+        RenderSystem.enableBlend();
+        RenderSystem.defaultBlendFunc();
+        g.blit(tex, x, y, w, h, u, v, srcW, srcH, texW, texH);
+        RenderSystem.disableBlend();
+    }
 
     //  命中判定
 

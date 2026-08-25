@@ -3,6 +3,7 @@ package com.november.mcphone.feature.gallery.client;
 import com.november.mcphone.core.client.FontPalette;
 import com.november.mcphone.core.client.PhoneSkin;
 import com.november.mcphone.core.client.PhoneTheme;
+import com.november.mcphone.core.client.GuiUtil;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
@@ -229,8 +230,8 @@ public final class Gallery {
             int dy = cy + (CELL_H - dh) / 2;
 
             // 11 参重载：目标宽高在前、UV 在后，源区取满整张纹理
-            g.blit(thumb.texture(), dx, dy, dw, dh, 0, 0,
-                    thumb.width(), thumb.height(), thumb.width(), thumb.height());
+            GuiUtil.drawTexture(g, thumb.texture(), dx, dy, dw, dh,
+                    thumb.width(), thumb.height());
         }
 
         if (hovered) {
@@ -399,8 +400,8 @@ public final class Gallery {
         int dx = areaX + (areaW - dw) / 2;
         int dy = areaY + (areaH - dh) / 2;
 
-        g.blit(img.texture(), dx, dy, dw, dh, 0, 0,
-                img.width(), img.height(), img.width(), img.height());
+        GuiUtil.drawTexture(g, img.texture(), dx, dy, dw, dh,
+                img.width(), img.height());
     }
 
     /** 切换到相邻照片。到头就停住。 */

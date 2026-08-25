@@ -81,11 +81,8 @@ public abstract class AppEntry {
 
         @Override
         public void renderIcon(GuiGraphics guiGraphics, int x, int y, int size, float partialTick) {
-            guiGraphics.blit(
-                    // 使用 blit 绘制 PNG 图标
-                    iconTexture,
+            GuiUtil.drawTexture(guiGraphics, iconTexture,
                     x, y,          // 屏幕坐标
-                    0, 0,          // 纹理 UV 起点
                     size, size,    // 绘制宽高
                     size, size     // 纹理总宽高 (1:1 方形纹理)
             );

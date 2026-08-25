@@ -275,7 +275,7 @@ public final class AppStore {
      */
     private void drawIcon(GuiGraphics g, AppInfo info, int x, int y, int size) {
         if (info.iconTexture() != null) {
-            g.blit(info.iconTexture(), x, y, 0, 0, size, size, size, size);
+            GuiUtil.drawTexture(g, info.iconTexture(), x, y, size, size, size, size);
         } else {
             g.fill(x, y, x + size, y + size, PhoneTheme.COLOR_BUTTON_DISABLED);
         }

@@ -114,7 +114,7 @@ public final class AppDetail {
         lastState = s;
 
         if (info.iconTexture() != null) {
-            g.blit(info.iconTexture(), x, y, 0, 0, BIG_ICON, BIG_ICON, BIG_ICON, BIG_ICON);
+            GuiUtil.drawTexture(g, info.iconTexture(), x, y, BIG_ICON, BIG_ICON, BIG_ICON, BIG_ICON);
         } else {
             g.fill(x, y, x + BIG_ICON, y + BIG_ICON, PhoneTheme.COLOR_BUTTON_DISABLED);
         }
