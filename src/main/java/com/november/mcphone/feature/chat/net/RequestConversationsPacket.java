@@ -6,13 +6,7 @@ import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
 
-/**
- * 网络包：客户端 → 服务端，请求刷新会话列表。
- *
- * 打开聊天 App 时发一次。包体无字段——要的是发包这名玩家自己的会话，
- * 服务端从连接上下文就拿得到玩家；带上玩家 ID 反而是给伪造客户端
- * 开后门，让人能窥探别人的会话列表。
- */
+/** C2S：打开聊天 App 时请求会话列表。故意无字段：玩家取自连接上下文，带玩家 ID 等于给伪造客户端开窥探别人会话的后门。 */
 public record RequestConversationsPacket() implements CustomPacketPayload {
 
     public static final CustomPacketPayload.Type<RequestConversationsPacket> TYPE =

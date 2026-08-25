@@ -11,15 +11,7 @@ import net.minecraft.resources.ResourceLocation;
 
 import java.util.UUID;
 
-/**
- * 网络包：客户端 → 服务端，发一条消息给某人。
- *
- * 只带收件人与正文。发件人【不】带——那是发包这名玩家自己，服务端从
- * 连接上下文就拿得到；让客户端指定发件人等于允许冒充别人发消息。
- *
- * 时间戳也不带：客户端的钟不可信，早一点晚一点会打乱会话排序，
- * 极端情况下能把自己的消息永远顶在列表最前。一律以服务端收到的时刻为准。
- */
+/** C2S：发一条消息。发件人与时间戳都不带：让客户端指定发件人等于允许冒充，时间戳一律以服务端为准。 */
 public record SendChatMessagePacket(UUID target, String text) implements CustomPacketPayload {
 
     public static final CustomPacketPayload.Type<SendChatMessagePacket> TYPE =

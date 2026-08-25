@@ -13,13 +13,7 @@ import net.minecraft.resources.ResourceLocation;
 import java.util.List;
 import java.util.UUID;
 
-/**
- * 网络包：服务端 → 客户端，某个会话的历史消息。
- *
- * 条数上限直接取存储侧的上限：服务端每对会话最多就保留那么多条，
- * 传输上限比它大没有意义，比它小则会截断真实数据。两处用同一个常量，
- * 日后改存储上限不会忘了改这里。
- */
+/** S2C：某个会话的历史消息。条数上限与存储侧共用同一个常量，改存储上限不会忘了改这里。 */
 public record SyncMessagesPacket(UUID peer, List<ChatMessage> messages)
         implements CustomPacketPayload {
 
