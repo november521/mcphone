@@ -7,13 +7,7 @@ import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
 
-/**
- * Greeting 的断言测试 —— 用 javac 单独编，不需要 Minecraft。
- *
- * 优先级判断写错了不会崩：它只会在错误的时刻说错误的话——凌晨三点跟你说
- * "下午好"。这种错误要在那个时刻恰好有人在看才发现得了，靠试玩根本试不出来。
- * 所以这里把一天 24 小时乘各种状态全部走一遍。
- */
+/** Greeting 的断言测试，用 javac 单独编，不需要 Minecraft。 */
 public class GreetingTest {
 
     static int checks = 0;
@@ -31,7 +25,6 @@ public class GreetingTest {
         if (!cond) failures.add(what);
     }
 
-    // 几个常用的场景参数，省得每次写一长串
     static final long SETTLED = 30 * 60 * 1000L;   // 坐了半小时，过了欢迎窗口
     static final long UNKNOWN_TOTAL = -1;
     static final int NOON_SUNSET = 12000;          // 离天黑还早
@@ -62,9 +55,6 @@ public class GreetingTest {
         }
     }
 
-    // ============================================================
-
-    /** 24 个钟点，每一个都得说出点什么，不能有洞 */
     static void everyHourSaysSomething() {
         for (int h = 0; h < 24; h++) {
             Choice c = Greeting.choose(h, SETTLED, UNKNOWN_TOTAL, false, NOON_SUNSET, false);
@@ -80,12 +70,7 @@ public class GreetingTest {
         eq(at(22), Kind.EVENING,   "晚上十点");
     }
 
-    /**
-     * 深夜跨零点。
-     *
-     * 写成 hour >= 23 && hour < 5 的话它永远为假，而且不报错——凌晨三点
-     * 什么都不会发生，只是那句最该说的话从来没出现过。
-     */
+    /** 坑：写成 hour >= 23 && hour < 5 永远为假且不报错 */
     static void lateNightWrapsMidnight() {
         check(Greeting.isLateNight(23), "23 点算深夜");
         check(Greeting.isLateNight(0),  "零点算深夜");
@@ -98,13 +83,11 @@ public class GreetingTest {
         for (int h : new int[]{23, 0, 1, 2, 3, 4}) {
             eq(at(h), Kind.LATE_NIGHT, h + " 点该说夜深了");
         }
-        // 写成 && 的话下面这条会红：一个深夜钟点都不会命中
         int lateHits = 0;
         for (int h = 0; h < 24; h++) if (Greeting.isLateNight(h)) lateHits++;
         eq(lateHits, 6, "一天里该有 6 个钟点算深夜（23,0,1,2,3,4）");
     }
 
-    /** 哪怕凌晨一点坐下，头三分钟也先说欢迎回来 */
     static void welcomeBeatsEverything() {
         eq(Greeting.choose(1, 0, UNKNOWN_TOTAL, false, NOON_SUNSET, false).kind(),
                 Kind.WELCOME_BACK, "刚坐下那一瞬");
@@ -113,7 +96,6 @@ public class GreetingTest {
         eq(Greeting.choose(1, Greeting.WELCOME_WINDOW_MS + 1, UNKNOWN_TOTAL, false, NOON_SUNSET, false).kind(),
                 Kind.LATE_NIGHT, "过了窗口才轮到深夜");
 
-        // 凌晨坐下 + 存档正好整百 + 天要黑了，欢迎仍然优先
         eq(Greeting.choose(2, 1000, 100 * 72000L, false, 100, false).kind(),
                 Kind.WELCOME_BACK, "三件事撞一起时欢迎仍然最优先");
     }
@@ -131,7 +113,6 @@ public class GreetingTest {
         eq(Greeting.choose(14, 7 * 3_600_000L, UNKNOWN_TOTAL, false, NOON_SUNSET, false).arg(),
                 7L, "坐了七小时就说七小时");
 
-        // 深夜排在它前面：凌晨坐了五小时，先说夜深了
         eq(Greeting.choose(2, 5 * 3_600_000L, UNKNOWN_TOTAL, false, NOON_SUNSET, false).kind(),
                 Kind.LATE_NIGHT, "深夜优先于'坐得久'");
     }
@@ -149,7 +130,6 @@ public class GreetingTest {
         eq(Greeting.choose(14, SETTLED, 101 * 72000L, false, NOON_SUNSET, false).kind(),
                 Kind.AFTERNOON, "101 小时已经过去了");
 
-        // 0 小时不能当成"里程碑"——新存档一进来就说"陪了你 0 小时"太荒唐
         eq(Greeting.choose(14, SETTLED, 0, false, NOON_SUNSET, false).kind(),
                 Kind.AFTERNOON, "0 小时不是里程碑");
         eq(Greeting.choose(14, SETTLED, UNKNOWN_TOTAL, false, NOON_SUNSET, false).kind(),
@@ -163,12 +143,10 @@ public class GreetingTest {
         eq(Greeting.choose(14, SETTLED, UNKNOWN_TOTAL, false, twoMinutes + 20, false).kind(),
                 Kind.AFTERNOON, "还剩两分零一秒就先不提");
 
-        // 已经是夜里了就别再说"天要黑了"
         eq(Greeting.choose(14, SETTLED, UNKNOWN_TOTAL, true, 100, false).kind(),
                 Kind.AFTERNOON, "夜里不该说天要黑了");
     }
 
-    /** 时间停了就没有"快天黑了"这回事——它永远不会黑 */
     static void frozenTimeNeverWarnsAboutDark() {
         eq(Greeting.choose(14, SETTLED, UNKNOWN_TOTAL, false, 10, true).kind(),
                 Kind.AFTERNOON, "doDaylightCycle 关掉时不报天黑");
@@ -178,7 +156,6 @@ public class GreetingTest {
         }
     }
 
-    /** 键名拼错不会报错，只会把 mcphone.clock.greet.moring 原样画在手机上 */
     static void keysAreWellFormed() {
         EnumSet<Kind> seen = EnumSet.noneOf(Kind.class);
         for (Kind k : Kind.values()) {
@@ -188,12 +165,10 @@ public class GreetingTest {
             check(key.equals(key.toLowerCase()), k + " 的键里有大写: " + key);
             check(seen.add(k), k + " 重复");
         }
-        // 键必须两两不同，否则两种情境会显示同一句而没人发现
         long distinct = java.util.Arrays.stream(Kind.values()).map(Kind::key).distinct().count();
         eq(distinct, (long) Kind.values().length, "有两个 Kind 用了同一个键");
     }
 
-    /** 优先级顺序固定：同样的输入永远给同样的答案 */
     static void priorityOrderIsStable() {
         for (int i = 0; i < 100; i++) {
             eq(Greeting.choose(2, 5 * 3_600_000L, 100 * 72000L, false, 100, false).kind(),
@@ -201,12 +176,6 @@ public class GreetingTest {
         }
     }
 
-    /**
-     * 全量扫一遍：24 钟点 × 若干时长 × 若干存档时长 × 昼夜 × 冻结。
-     *
-     * 只断言两件事——永远挑得出一句，且永远不为 null。分支写漏一个组合的话，
-     * 表现是某个特定时刻手机上那一行空着，而那种"偶尔空一下"最难复现。
-     */
     static void exhaustiveSweep() {
         long[] sessions = {0, 60_000L, SETTLED, 3 * 3_600_000L, 12 * 3_600_000L};
         long[] totals = {-1, 0, 50 * 72000L, 100 * 72000L, 137 * 72000L};

@@ -3,12 +3,7 @@ package com.november.mcphone.feature.clock;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * WorldClock 的断言测试 —— 用 javac 单独编，不需要 Minecraft。
- *
- * 时间换算错了不会崩也不会报错，只会让所有人的时钟差 6 小时。
- * 所以每一个"人尽皆知"的时刻都在这里钉死一遍。
- */
+/** WorldClock 的断言测试，用 javac 单独编，不需要 Minecraft。 */
 public class WorldClockTest {
 
     static int checks = 0;
@@ -52,9 +47,6 @@ public class WorldClockTest {
         }
     }
 
-    // ============================================================
-
-    /** 人尽皆知的几个时刻，一个一个钉死 */
     static void knownMoments() {
         eq(hhmm(0),     "06:00", "dayTime 0 是清晨六点，不是午夜");
         eq(hhmm(6000),  "12:00", "6000 是正午");
@@ -65,12 +57,7 @@ public class WorldClockTest {
         eq(hhmm(24000), "06:00", "24000 绕回清晨六点");
     }
 
-    /**
-     * 最容易犯的那个错：忘掉 6 小时偏移。
-     *
-     * 写成 dayTime * 24 / 24000 的话，下面每一条都会差 6 小时，
-     * 而且代码看着完全合理。
-     */
+    /** 坑：写成 dayTime * 24 / 24000 会整体差 6 小时，且代码看着完全合理 */
     static void theSixHourTrap() {
         eq(WorldClock.hour(0), 6, "忘掉偏移的话这里会是 0");
         eq(WorldClock.hour(18000), 0, "忘掉偏移的话这里会是 18");
@@ -85,7 +72,6 @@ public class WorldClockTest {
         eq(WorldClock.minuteOfDay(17999) + 1, 1440, "午夜前一 tick 是当天最后一分钟");
     }
 
-    /** 存档被手改过、或别的模组直接写 levelData 时可能出现的怪值 */
     static void negativeAndHuge() {
         check(WorldClock.timeOfDay(-1) >= 0, "负 dayTime 也要落在 0..23999");
         check(WorldClock.timeOfDay(-1) < 24000, "负 dayTime 取模后不能越界");
@@ -128,7 +114,6 @@ public class WorldClockTest {
         eq(WorldClock.toRealSeconds(12000), 600, "12000 tick 是现实十分钟");
         eq(WorldClock.ticksUntilSunset(11999), 1, "还差一 tick 天黑");
 
-        // 正好站在那个点上：要说"还有一整天"，不能说 0
         eq(WorldClock.ticksUntilSunset(12000), 24000, "恰在日落点时报的是下一次，不是 0");
         check(WorldClock.ticksUntilSunset(12000) != 0, "绝不能返回 0，否则界面会卡在'还有 0 秒'");
 
@@ -137,7 +122,6 @@ public class WorldClockTest {
         eq(WorldClock.toRealSeconds(6000), 300, "6000 tick 是现实五分钟");
         eq(WorldClock.ticksUntilSunrise(0), 24000, "天刚亮时到下次天亮是一整天");
 
-        // 返回值必须永远落在 1..24000
         for (int t = 0; t < 24000; t += 7) {
             int u = WorldClock.ticksUntilSunset(t);
             check(u >= 1 && u <= 24000, "t=" + t + " 时倒计时越界: " + u);
@@ -159,13 +143,7 @@ public class WorldClockTest {
         }
     }
 
-    /**
-     * 游玩时长。
-     *
-     * 这里的 tick 是【现实时间】的 tick（20/秒），跟上面昼夜循环的 tick
-     * （24000/天）不是一回事。两者都是 long，混用编译得过——而混用的结果是
-     * 把 106 小时显示成 3 小时半，看着还挺像个正常数字。
-     */
+    /** 坑：这里的 tick 是现实时间 tick（20/秒），不是昼夜循环的 tick（24000/天），混用编译得过 */
     static void playDuration() {
         eq(WorldClock.playHours(0), 0L, "零 tick 是零小时");
         eq(WorldClock.playMinutes(0), 0, "零 tick 是零分");
@@ -175,12 +153,10 @@ public class WorldClockTest {
         eq(WorldClock.playMinutes(1200), 1, "1200 tick 是一分钟");
         eq(WorldClock.playMinutes(1199), 0, "差一 tick 不满一分钟");
 
-        // 一个真实的老存档：106 小时 8 分
         long ticks = 106 * 72000L + 8 * 1200L;
         eq(WorldClock.playHours(ticks), 106L, "106 小时");
         eq(WorldClock.playMinutes(ticks), 8, "零 8 分");
 
-        // 混用两种 tick 的话这一条会红：按 24000/天 算，106 小时会变成别的数
         check(WorldClock.playHours(ticks) != ticks / 24000,
                 "现实 tick 与昼夜 tick 绝不能用同一个除数");
 
@@ -188,18 +164,15 @@ public class WorldClockTest {
         eq(WorldClock.playMinutes(72000 * 3 + 1200 * 60), 0, "满 60 分进位成一小时");
         eq(WorldClock.playHours(72000 * 3 + 1200 * 60), 4L, "满 60 分之后是第 4 小时");
 
-        // 毫秒那一路
         eq(WorldClock.playHoursOfMillis(3_600_000L), 1L, "一小时的毫秒");
         eq(WorldClock.playMinutesOfMillis(3_600_000L), 0, "整一小时余 0 分");
         eq(WorldClock.playMinutesOfMillis(83 * 60_000L), 23, "83 分钟 = 1 小时 23 分");
         eq(WorldClock.playHoursOfMillis(83 * 60_000L), 1L, "83 分钟的小时数");
 
-        // 统计值不该是负的，但存档被动过时不必为此崩
         eq(WorldClock.playHours(-1), 0L, "负 tick 夹到 0 小时");
         eq(WorldClock.playMinutes(-999999), 0, "负 tick 夹到 0 分");
         eq(WorldClock.playHoursOfMillis(-1), 0L, "负毫秒夹到 0");
 
-        // 两条路对同一段时长必须给出同一个答案
         for (int h = 0; h < 200; h += 7) {
             for (int m = 0; m < 60; m += 11) {
                 long t = h * 72000L + m * 1200L;
@@ -212,7 +185,6 @@ public class WorldClockTest {
         }
     }
 
-    /** 走完一整天：分钟必须单调递增、恰好绕一圈、且每一分钟都出现过 */
     static void monotonicAcrossAWholeDay() {
         boolean[] seen = new boolean[1440];
         int prev = WorldClock.minuteOfDay(0);
@@ -222,7 +194,7 @@ public class WorldClockTest {
             int m = WorldClock.minuteOfDay(t);
             check(m >= 0 && m < 1440, "t=" + t + " 分钟越界");
             seen[m] = true;
-            if (m < prev) wraps++;      // 只该在午夜绕一次
+            if (m < prev) wraps++;
             prev = m;
         }
         eq(wraps, 1, "一整天里分钟只该绕回去一次（午夜）");
