@@ -20,8 +20,8 @@ import java.util.UUID;
  *
  * 只活在这一局
  *
- * 记在内存里，不落盘，退出世界时由 MCphoneClient 清掉，与 ChatClientCache 那几个缓存同一个待遇：
- * 换个服务器还停在上一个服务器的会话上是错的，那边的好友这边未必有。
+ * 记在内存里，不落盘，进世界时由 MCphoneClient 清掉：换个服务器还停在上一个服务器的会话上是错的，
+ * 那边的好友这边未必有。清在【进】世界而不是退出世界，理由见那边的注释。
  */
 public final class PhoneSession {
 
@@ -77,7 +77,7 @@ public final class PhoneSession {
         return savedPeer;
     }
 
-    /** 退出世界时清掉，理由见类注释 */
+    /** 进世界时清掉，理由见类注释 */
     public static void clear() {
         savedMode = null;
         savedPeer = null;

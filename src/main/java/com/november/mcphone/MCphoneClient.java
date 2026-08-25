@@ -71,9 +71,6 @@ public class MCphoneClient {
                     StoreClientCache.clear();
                     PhoneScreenRegistry.unloadWorld();
 
-                    // 停在哪一页也是这个服务器的事，换一个服务器要从主屏重新开
-                    PhoneSession.clear();
-
                     PlayTime.onWorldLeave();
 
                     LocalPlayback.shutdown();
@@ -87,6 +84,12 @@ public class MCphoneClient {
                 (ClientPlayerNetworkEvent.LoggingIn event) -> {
                     PhoneScreenRegistry.loadForCurrentWorld();
                     StoreClientCache.request();
+
+                    // 手机停在哪一页是上个服务器的事，这里从主屏重新开。
+                    // 清在【进】世界而不是退出世界：断线时 LoggingOut 先到，
+                    // 之后手机界面才被顶掉，那一下 removed() 会把页面再记一笔——
+                    // 退出时清等于没清
+                    PhoneSession.clear();
 
                     PlayTime.onWorldJoin();
                 });
