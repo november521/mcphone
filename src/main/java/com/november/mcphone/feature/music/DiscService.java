@@ -29,101 +29,35 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * 唱片外放 —— 「外放」那一半：周围人都听得见，声音跟着你走。
- *
- * 为什么这一半非得在服务端
- *
- * 要让【别人】听见，只有服务端说得动别人的客户端。而它能说的只有
- * "放某个已注册的音效"——把你硬盘上那个 mp3 的字节发过去是不现实的，
- * 别人电脑上也没有那个文件。唱片正好满足这个条件：它就是一个注册过的
- * 音效，服务端一句 minecraft:music_disc.cat，全场都听得见。
- *
- * 这也是为什么本地文件只能"耳机"、唱片才能"外放"。那是物理限制，
- * 不是设计选择。
- *
- * 声音跟着人走，不是钉在地上
- *
- * 用 Level.playSound(玩家, 实体, ...) 这个重载：原版会发一个绑在实体上的
- * 音效包，客户端那头的声源就跟着这个实体移动。效果正是你说的"扛着一台
- * 音符盒到处走"。
- *
- * 钉在坐标上的话，玩家走两步就把自己的音乐甩在身后了。
- *
- * 没有 tick，"在不在放"是算出来的
- *
- * 见 {@link DiscState} 的类注释：只存开始时刻，到没到点现算。原版音效
- * 放完自己就没了，服务端不必去停它——只有玩家主动停或者取出唱片时，
- * 才需要发一个停止包把已经在放的掐掉。
- *
- * 本类会被专用服务器加载，一个客户端类都不许出现
+ * 唱片外放的服务端逻辑：周围人都听得见，声源绑在玩家实体上跟着走。
+ * 只有已注册的音效（原版唱片）或网上的歌（NetMusic CD）能外放，本地文件做不到。
+ * 本类会被专用服务器加载，不许出现客户端类。
  */
 public final class DiscService {
 
     private DiscService() {}
 
-    /**
-     * 外放音量。
-     *
-     * 4.0 是原版唱片机的音量（见 JukeboxBlockEntity），照抄它是为了"手机
-     * 外放"和"旁边摆一台唱片机"听起来一样响——玩家对后者的音量早有预期。
-     * 顺带决定了能传多远：原版音量大于 1 时会按倍数放大可听范围。
-     */
+    /** 外放音量，照抄原版唱片机（JukeboxBlockEntity）；大于 1 时可听范围按倍数放大 */
     private static final float VOLUME = 4.0F;
 
     /**
-     * 谁听见了这一份外放。key ＝ 放歌的那个人，value ＝ 收到开始的那些人。
-     *
-     * 为什么不能到停止时再按距离挑一遍
-     *
-     * 外放的整个设定是"扛着唱片机到处走"，声音绑在人身上跟着他移动。于是
-     * 开始与停止之间，他完全可能已经走出去很远，或者换了个维度：
-     *
-     *   A 与 B 站一起，A 按播放   → B 收到，声音挂在 A 身上
-     *   A 走出 100 格             → B 那一份照旧在放，只是远得听不见
-     *   A 按停止                  → 按此刻的距离挑，B 不在名单里，收不到
-     *   A 走回来                  → B 又听见了，而 A 的手机显示没在放
-     *   A 再按播放                → B 那边两份叠在一起
-     *
-     * 1.7.7 之前就是这样。半径公式两处是一致的，可位置变了照样对不上 ——
-     * 一致的是算法，不一致的是算的时候人在哪儿。
-     *
-     * 为什么不干脆全服广播
-     *
-     * 原版的停止包只能按【音效 ID】停（见 {@link #stopSound}）。广播出去会
-     * 把一千格外用唱片机放同一张唱片的人也一起停掉 —— 那是拿一个 bug 换
-     * 另一个。记名单则谁也不多停。
-     *
-     * 只记 UUID 不记玩家对象：那些人随时可能下线，攥着 ServerPlayer 会把
-     * 已经离开的玩家留在内存里。发的时候现查，查不到就是他不在了，正好
-     * 也不必发。
-     *
-     * 包处理都在服务端主线程（enqueueWork），本不必并发容器；用它是为了
-     * 不必去论证"将来也一定只有主线程碰它"——与 RequestThrottle 同一条。
+     * 谁听见了这一份外放：key 放歌的人，value 收到开始包的人（只记 UUID，发时现查）。
+     * 停止包必须发给当初听见开始的人，不能到停止时再按距离挑：放歌的人可能已走远或换了维度；
+     * 也不能全服广播：原版停止包按音效 ID 停，会把别处放同一张唱片的人一起停掉。
      */
     private static final Map<UUID, Set<UUID>> LISTENERS = new ConcurrentHashMap<>();
 
     /** 结果：这次操作成没成，以及为什么没成 */
     public enum Outcome {
-        /** 成了 */
         OK,
         /** 什么都没发生，也不必解释（正常客户端走不到：没手机、仓里没唱片） */
         NOTHING,
-        /** 手上拿的不是唱片 */
         NOT_A_DISC,
-        /** 仓里已经有一张了，得先取出来 */
         OCCUPIED,
-        /** 背包满了，唱片还不回去 */
         INVENTORY_FULL
     }
 
-    //  放入 / 取出
-
-    /**
-     * 把主手上的唱片放进手机。
-     *
-     * 只认主手：副手同时拿着别的东西时，"到底放的是哪只手"必须有个确定
-     * 答案，而玩家点界面时看着的就是主手那张。
-     */
+    /** 把主手上的唱片放进手机；只认主手 */
     public static Outcome insert(ServerPlayer player) {
         if (!PhoneItem.isCarriedBy(player)) return Outcome.NOTHING;
 
@@ -142,20 +76,8 @@ public final class DiscService {
     }
 
     /**
-     * 把唱片还给玩家。
-     *
-     * 还不进背包就【不取出】，而不是丢在地上：玩家在整理界面，脚下突然
-     * 掉个东西他多半不会注意，走两步就没了。让操作失败并说明原因，
-     * 比悄悄把他的唱片扔了好。
-     *
-     * 与 insert、toggle 一样要手机在身上
-     *
-     * 1.7.8 之前这一条漏了。走正常界面是够不到的 —— 那一页本来就得先有
-     * 手机才打得开 —— 但包是公开的接口，能发就得当成会被发：判据该与界面
-     * 的前提一致，不该看哪条路碰巧没人走。
-     *
-     * 唱片不会因此拿不回来：它存在玩家附件里，跟着人走、死了不掉，手机丢了
-     * 也一直在。再拿到一部手机，它还在仓里。
+     * 把唱片还给玩家。背包塞不下就不取出（INVENTORY_FULL），不丢地上。
+     * 与 insert、toggle 一样要求手机在身上：包是公开接口，判据要与界面前提一致。
      */
     public static Outcome eject(ServerPlayer player) {
         if (!PhoneItem.isCarriedBy(player)) return Outcome.NOTHING;
@@ -171,23 +93,9 @@ public final class DiscService {
         return Outcome.OK;
     }
 
-    //  播放 / 停止
-
     /**
      * 外放会放到哪一个游戏刻为止；没在放则是 {@link DiscState#NOT_PLAYING}。
-     *
-     * 为什么下发终点，而不是一个"在不在放"的布尔量
-     *
-     * 因为布尔量会过期，而且过期得无声无息。服务端没有任何 tick 盯着唱片
-     * 放完（见 {@link DiscState} 的类注释，那是刻意的），放完的那一刻不会
-     * 有人通知客户端；而状态包只在玩家【主动操作】时才回一份。
-     *
-     * 于是唱片自然放完之后，界面上那个键一直停在"停止"的样子。玩家点它，
-     * 服务端一算根本没在放，就【又从头放了一遍】—— 按停止反而重头响，
-     * 而且可以一直这样。1.5.14 之前就是这个样子。
-     *
-     * 给终点则不会：客户端拿同一个时间基准（游戏刻是服务端权威的，客户端
-     * 那一份跟着同步）做同一道算术，到点了自己就知道。
+     * 下发终点而不是布尔量：服务端没有 tick 盯着唱片放完，布尔量会无声过期，客户端拿终点自己算。
      */
     public static long playingUntil(ServerPlayer player) {
         return playingUntil(player, player.getData(ModAttachments.DISC.get()));
@@ -202,8 +110,7 @@ public final class DiscService {
         long now = player.level().getGameTime();
         long ends = state.startedTick() + length;
 
-        // now < startedTick 只在游戏刻倒流时出现（存档回滚之类）。当作没在放，
-        // 否则会算出一个遥远的终点，那张唱片就再也停不下来了
+        // now < startedTick 只在游戏刻倒流（存档回滚）时出现，当作没在放，否则那张唱片再也停不下来
         if (now < state.startedTick() || now >= ends) return DiscState.NOT_PLAYING;
         return ends;
     }
@@ -212,12 +119,7 @@ public final class DiscService {
         return playingUntil(player, state) != DiscState.NOT_PLAYING;
     }
 
-    /**
-     * 仓里那张东西有多长（游戏刻）。不认识就返回 -1。
-     *
-     * 原版唱片自带 lengthInTicks，NetMusic 的 CD 上刻的是秒数 —— 两者换算到
-     * 同一个单位，上面那道"放到哪一刻为止"的算术才对两种唱片都成立。
-     */
+    /** 仓里那张东西有多长（游戏刻）；NetMusic CD 的秒数也换算到刻。不认识返回 -1 */
     private static long lengthInTicks(ServerPlayer player, ItemStack disc) {
         Optional<Holder<JukeboxSong>> vanilla = songOf(player, disc);
         if (vanilla.isPresent()) return vanilla.get().value().lengthInTicks();
@@ -225,13 +127,7 @@ public final class DiscService {
         return NetMusicCompat.songOf(disc).map(NetSong::lengthInTicks).orElse(-1L);
     }
 
-    /**
-     * 播放键：没在放就放，在放就停。
-     *
-     * 没有"暂停继续"：原版音效系统只有开始和停止，没有从中间接着放这回事。
-     * 界面上因此也只画播放和停止两态——给一个按下去会从头开始的"继续"，
-     * 比不给更糟。
-     */
+    /** 播放键：没在放就放，在放就停。没有暂停：原版音效系统只有开始和停止 */
     public static Outcome toggle(ServerPlayer player) {
         if (!PhoneItem.isCarriedBy(player)) return Outcome.NOTHING;
 
@@ -252,28 +148,16 @@ public final class DiscService {
     }
 
     /**
-     * 开始外放仓里那张东西。
-     *
-     * 两支走法，因为两种"唱片"能被听见的方式根本不同：
-     *
-     *   原版唱片    它是一个注册过的音效，服务端一句话全场就都听得见
-     *   NetMusic CD 歌在网上。服务端只广播一个地址，每个客户端自己去拉
-     *
-     * 后者正是 Track.Kind 里那条"本地文件不能外放"想不通的地方 —— 硬盘上
-     * 那个 mp3 别人没有，而网上那首歌人人都拿得到。
-     *
-     * @return 这张东西放不了（不是唱片、CD 上没刻东西、NetMusic 没装）
-     *         返回 false
+     * 开始外放仓里那张东西：原版唱片由服务端直接放音效，NetMusic CD 只广播地址让各客户端自己拉。
+     * 放不了（不是唱片、CD 没刻东西、NetMusic 没装）返回 false。
      */
     private static boolean startSound(ServerPlayer player, ItemStack disc) {
         Optional<Holder<JukeboxSong>> vanilla = songOf(player, disc);
         if (vanilla.isPresent()) {
-            // 名单要在发声之前记：原版 playSound 自己按同一个半径挑收件人，
-            // 我们照它的公式再算一遍，两边得到的是同一批人
+            // 名单要在发声之前记；半径公式与原版 playSound 挑收件人的一致，两边是同一批人
             rememberAudience(player);
 
-            // 绑在玩家身上，声音就跟着他走。第一个参数传 null ＝ 包括他自己
-            // 在内所有听得见的人都收到
+            // 绑在玩家实体上声音才跟着走；第一个参数传 null ＝ 他自己也收到
             player.level().playSound(null, player,
                     vanilla.get().value().soundEvent().value(),
                     SoundSource.RECORDS, VOLUME, 1.0F);
@@ -289,11 +173,7 @@ public final class DiscService {
                 .orElse(false);
     }
 
-    /**
-     * 算出此刻听得见的人，记进名单，并把他们交回来。
-     *
-     * 每次开始都整份换掉，不累加 —— 上一首的听众与这一首无关。
-     */
+    /** 算出此刻听得见的人，记进名单并返回。每次整份换掉，不累加 */
     private static List<ServerPlayer> rememberAudience(ServerPlayer player) {
         List<ServerPlayer> audience = nearbyPlayers(player);
 
@@ -304,13 +184,7 @@ public final class DiscService {
         return audience;
     }
 
-    /**
-     * 当初听见开始的那些人，还在线的。
-     *
-     * 名单不在时退回按此刻的距离挑。这种情况只有一种来路：服务端重启过，
-     * 而"正在外放"是从存档里读回来的（唱片状态是持久化的，名单不是）。
-     * 那时按距离挑不完美，但比一个都不发强。
-     */
+    /** 当初听见开始且还在线的人。名单不在（服务端重启后从存档读回的"正在外放"）就退回按距离挑 */
     private static List<ServerPlayer> audienceOf(ServerPlayer player) {
         Set<UUID> ids = LISTENERS.get(player.getUUID());
         if (ids == null) return nearbyPlayers(player);
@@ -326,14 +200,7 @@ public final class DiscService {
         return out;
     }
 
-    /**
-     * 这个物品能不能放进唱片仓。
-     *
-     * 唱片仓那一格与主手放入两处都用它，两处必须是同一个判据 —— 不一致就会
-     * 出现"拖得进去却按不响"或者反过来。
-     *
-     * @param registries 世界的注册表。原版唱片是数据驱动的，判定要查它
-     */
+    /** 这个物品能不能放进唱片仓。唱片格与主手放入两处共用这一个判据，不许各写各的 */
     public static boolean isPlayableDisc(RegistryAccess registries, ItemStack stack) {
         if (stack.isEmpty()) return false;
         return JukeboxSong.fromStack(registries, stack).isPresent()
@@ -355,38 +222,19 @@ public final class DiscService {
         for (ServerPlayer p : audience) PacketDistributor.sendToPlayer(p, packet);
     }
 
-    /**
-     * 玩家下线时把他那份听众名单丢掉。
-     *
-     * 由 MCphone 的构造函数显式挂到游戏总线上，与 RequestThrottle 那条同一个
-     * 做法、同一个理由：漏了不会有任何症状，只是这张表再也不缩小了。
-     *
-     * 丢掉是安全的：人都走了，外放当然也停了；他再上线时按播放会重记一份。
-     */
+    /** 玩家下线时丢掉他的听众名单。由 MCphone 构造函数显式挂到游戏总线上；漏挂没有症状，只是这张表再也不缩小 */
     public static void onPlayerLoggedOut(PlayerEvent.PlayerLoggedOutEvent event) {
         LISTENERS.remove(event.getEntity().getUUID());
     }
 
-    /**
-     * 外放能传多远。
-     *
-     * 原版音量大于 1 时按倍数放大可听范围，16 是基准距离 —— 这与
-     * Level.playSound 内部挑收件人的算法是同一条，抄它是为了两种唱片
-     * 传得一样远。
-     */
+    /** 外放能传多远：16 是基准距离，音量大于 1 按倍数放大，与 Level.playSound 挑收件人的算法一致 */
     private static double audibleRadius() {
         return 16.0D * VOLUME;
     }
 
     /**
-     * 掐掉正在外放的那一份，并把状态记成"没在放"。
-     *
-     * 换碟与取出唱片都要走这里。原版音效一旦发出去就会自己放到完，服务端
-     * 并不盯着它（见 {@link DiscState} 的类注释：在不在放是算出来的，没有
-     * tick）—— 所以把唱片拿走的那一刻必须主动发停止包，否则玩家手里已经
-     * 没有唱片了，音乐还在他身上响到底。
-     *
-     * 必须趁【旧唱片还在仓里】时调：停止包是按那张唱片的音效 ID 发的。
+     * 掐掉正在外放的那一份并记成"没在放"。换碟与取出唱片都要走这里。
+     * 必须趁旧唱片还在仓里时调：停止包是按那张唱片的音效 ID 发的。
      */
     public static void stopPlayback(ServerPlayer player) {
         DiscState state = player.getData(ModAttachments.DISC.get());
@@ -396,15 +244,7 @@ public final class DiscService {
         player.setData(ModAttachments.DISC.get(), state.stopped());
     }
 
-    /**
-     * 把已经在放的那一份掐掉。
-     *
-     * 停止包是按音效 ID 停的，也就是说：如果旁边正好有台唱片机在放【同一张】
-     * 唱片，那台也会被这个包停掉——对收到包的那些客户端而言。这是原版
-     * ClientboundStopSoundPacket 的粒度，没有"只停这一个声源"的选项。
-     *
-     * 只发给听得见的人：全服广播的话，一千格外的人也要处理一个与他无关的包。
-     */
+    /** 把已经在放的那一份掐掉。原版停止包按音效 ID 停，旁边放同一张唱片的唱片机也会被停，原版粒度如此 */
     private static void stopSound(ServerPlayer player, DiscState state) {
         if (state.startedTick() < 0) return;
 
@@ -422,21 +262,13 @@ public final class DiscService {
             return;
         }
 
-        // NetMusic 的 CD：停的是我们自己那个声源，按实体停得准 —— 不像
-        // 原版那个包只能按音效 ID 停，会把旁边放同一张唱片的人一起停掉
+        // NetMusic 的 CD 停的是我们自己的声源，按实体停，停得准
         if (NetMusicCompat.songOf(state.disc()).isPresent()) {
             sendTo(audience, new StopNetSongPacket(player.getId()));
         }
     }
 
-    //  内部
-
-    /**
-     * 这个物品是唱片吗；是的话给出它的曲子定义。
-     *
-     * 不按物品类型判断，而是查 JUKEBOX_PLAYABLE 组件——1.21 起"能不能塞进
-     * 唱片机"是数据驱动的，别的模组的唱片、数据包自定义的唱片都认得。
-     */
+    /** 这个物品是唱片吗；是的话给出曲子定义。查 JUKEBOX_PLAYABLE 组件而不是物品类型，别的模组/数据包的唱片也认得 */
     private static Optional<Holder<JukeboxSong>> songOf(ServerPlayer player, ItemStack stack) {
         if (stack.isEmpty()) return Optional.empty();
         return JukeboxSong.fromStack(player.level().registryAccess(), stack);
