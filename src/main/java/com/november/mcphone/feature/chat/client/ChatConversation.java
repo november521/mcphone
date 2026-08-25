@@ -29,58 +29,25 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * 单个会话界面 —— 和某一位好友的聊天记录。
- *
- * 数据全部来自 {@link ChatClientCache}，本类不持有真值。历史消息在进入
- * 时拉一次，之后靠服务端推送追加，不轮询。
- *
- * 为什么要自己排版而不是一条一行
- *
- * 手机屏幕只有 120 像素宽，一条 256 字的消息不折行的话，绝大部分内容
- * 会被截断成省略号。所以每条消息先按气泡宽度 split 成多行，再整块画。
- *
- * 排版结果缓存起来，只在消息列表换了实例时重算：{@link ChatClientCache}
- * 每次收包都产出新的不可变列表，用身份比较就能判断变没变，不必逐条比对。
- * 不缓存的话，100 条消息每帧都要 split 一遍。
- *
- * 滚动以像素计，不以条数计
- *
- * 每条消息高度不等（一行到二十行都可能），按条滚动的话，最后一条如果
- * 很长就永远看不到它的结尾——而那恰恰是最该看到的部分。
- *
- * 输入框与中文
- *
- * 用原版 EditBox，和设备命名界面同一套路数（那边有详细说明）。中文能不能
- * 打，与原版按 T 的聊天框完全一致——用的就是同一个类、同一条字符通道。
- *
- * 但有一条必须由 PhoneScreen 配合：本界面下所有按键都得被吞掉，否则打
- * 拼音按到 e 就命中背包键，手机当场关掉。命名界面早踩过这个坑。
- *
- * 还有一条自己扛：EditBox 会把可见文字裁进框里，但【光标不受那道裁剪】，
- * 所以输入框的宽度要额外让出一个光标的位置，见 cursorRoom。
- *
- * ESC 例外，它被 PhoneScreen 抢走当关机键（1.4.2 起，此前是退回会话列表）
- * ——原版聊天框按 ESC 也是直接关掉，就算它同时是输入法取消候选的键。让
- * ESC 只取消候选的话，玩家就没有任何一个键能从会话里出去了，两害相权取其轻。
+ * 单个会话界面：与某位好友的聊天记录。数据全来自 ChatClientCache，历史进入时拉一次，
+ * 之后靠服务端推送。消息按气泡宽度折行后整块缓存，只在消息列表换了实例时重排；
+ * 滚动以像素计，不以条数计。
+ * 输入用原版 EditBox。本界面下所有按键都得被 PhoneScreen 吞掉（打拼音按到 e 会命中
+ * 背包键，手机当场关掉），ESC 除外——它是关机键。
  */
 public final class ChatConversation {
 
-    /** 左右内边距 */
     private static final int PAD = 4;
 
-    /** 刷新间隔，与会话列表同步 */
     private static final long REFRESH_INTERVAL_MS = 3000L;
 
-    /** 气泡最多占屏幕宽度的比例。留出对侧空白，一眼能看出谁说的 */
     private static final float BUBBLE_MAX_RATIO = 0.72f;
 
     private static final int BUBBLE_PAD_X = 3;
     private static final int BUBBLE_PAD_Y = 2;
 
-    /** 相邻两块之间的竖直间距 */
     private static final int BLOCK_GAP = 3;
 
-    /** 时间戳行上下各留的空隙，让它与前后气泡分开 */
     private static final int STAMP_PAD_Y = 2;
 
     /** 相邻两条消息间隔超过这么久，中间才插一行时间 */
@@ -89,24 +56,13 @@ public final class ChatConversation {
     /** 滚轮一格滚多少像素 */
     private static final int SCROLL_STEP = 18;
 
-    /** 底部输入栏高度 */
     private static final int INPUT_H = 14;
 
-    /** 输入栏与消息区、导航栏之间的空隙 */
     private static final int INPUT_GAP = 2;
 
-    /** 文字距输入栏左右边缘的距离 */
     private static final int INPUT_TEXT_PAD = 3;
 
-    /**
-     * 右端为光标额外留出的宽度。
-     *
-     * 原版 EditBox 把可见文字裁到 getInnerWidth() 是对的，但**光标不受这道
-     * 裁剪**：光标在末尾时它画的是一个 "_"，起笔位置正是文字末端，于是整个
-     * 字宽都溢在框外。打长消息时输入栏一满，这个 "_" 就戳进右边的发送键。
-     *
-     * 按 "_" 的实际字宽留，不写死像素：中文字体下它比英文宽。
-     */
+    /** 光标不受 EditBox 的文字裁剪，右端要额外留出一个 "_" 的宽度，否则会戳进发送键 */
     private static int cursorRoom(Font font) {
         return font.width("_");
     }
@@ -114,13 +70,10 @@ public final class ChatConversation {
     private static final DateTimeFormatter TIME_FORMAT = DateTimeFormatter.ofPattern("HH:mm");
     private static final DateTimeFormatter DATE_TIME_FORMAT = DateTimeFormatter.ofPattern("MM-dd HH:mm");
 
-    /** 标题头像边长，与会话列表一致 */
     private static final int AVATAR_SIZE = 16;
 
-    /** 头像与名字之间的空隙 */
     private static final int AVATAR_GAP = 3;
 
-    // ---- 颜色（贴图缺失时的兜底） ----
     private static final int COLOR_BUBBLE_SELF = PhoneTheme.COLOR_CHAT_BUBBLE_SELF;
     private static final int COLOR_BUBBLE_PEER = PhoneTheme.COLOR_CHAT_BUBBLE_PEER;
     private static final int COLOR_TEXT_SELF = PhoneTheme.FONT_COLOR_CHAT_SELF;
@@ -131,7 +84,6 @@ public final class ChatConversation {
     private static final int COLOR_SEND = PhoneTheme.FONT_COLOR_CHAT_SEND;
     private static final int COLOR_SEND_HOVER = PhoneTheme.FONT_COLOR_CHAT_SEND_HOVER;
 
-    /** 输入框空着时发送键置灰：点了也不会发，颜色要说明这一点 */
     private static final int COLOR_SEND_OFF = PhoneTheme.FONT_COLOR_CHAT_SEND_OFF;
 
     /** 当前会话的对端；null 表示不在会话界面 */
@@ -142,85 +94,56 @@ public final class ChatConversation {
     /** 从最新一条往回翻了多少像素。0 ＝ 贴着最新一条 */
     private int scrollPx;
 
-    /** 上一帧算出的可翻动上限，滚轮据此夹紧 */
     private int maxScroll;
 
-    /**
-     * 底部输入框。
-     *
-     * 首次 render 时才创建：那时才知道机身坐标。之后每帧同步位置，
-     * 手机居中位置会随窗口大小变化。
-     */
+    /** 首次 render 时才创建（那时才知道机身坐标），之后每帧同步位置 */
     private EditBox box;
 
-    /** 本帧鼠标是否停在发送键上 */
     private boolean sendHovered;
 
     /** 上次上报过已读的那份消息列表，用来发现"又来新消息了" */
     private List<ChatMessage> markedFrom;
 
-    // ---- 排版缓存 ----
     private List<Block> blocks = List.of();
     private int contentH;
     private List<ChatMessage> laidOutFrom;
     private int laidOutWidth = -1;
 
-    /**
-     * 排版后的一块。
-     *
-     * @param stamp true 表示这是一行居中的时间戳，不画气泡
-     * @param self  是不是自己发的 —— 决定左右对齐与气泡配色
-     * @param lines 折行后的文字
-     * @param w     块宽（气泡含内边距；时间戳即文字宽）
-     * @param h     块高
-     */
+    /** 排版后的一块：stamp 为 true 是居中的时间戳行，不画气泡；w/h 含内边距 */
     private record Block(boolean stamp, boolean self, List<FormattedCharSequence> lines,
                          int w, int h) {}
 
-    //  生命周期
-
     /**
-     * 进入某个会话。
-     *
-     * 先把对端记进缓存，再发请求——顺序不能颠倒：新消息推送可能抢在历史
-     * 消息之前到达，那时缓存若还不知道打开的是谁，这条消息会被直接丢掉。
-     *
-     * 服务端收到这个请求会顺带把会话标为已读，未读红点随之清零。
+     * 进入会话。必须先 openConversation 再发请求，顺序不能颠倒：
+     * 新消息推送可能抢在历史之前到达，缓存不知道对端会直接把它丢掉。
      */
     public void open(UUID peer) {
         this.peer = peer;
         this.scrollPx = 0;
         this.maxScroll = 0;
-        // 不置零：会话列表那边刚拉过摘要，标题的名字与在线状态现成可用，
-        // 一进来就再拉一次纯属重复。等下一轮定时刷新即可
+        // 不置零：会话列表刚拉过摘要，等下一轮定时刷新即可
         this.lastRequestMs = System.currentTimeMillis();
 
-        // 强制重排：上一个会话的排版结果还在，不清的话会闪出别人的聊天记录
+        // 清掉上一个会话的排版，否则会闪出别人的记录
         this.laidOutFrom = null;
         this.blocks = List.of();
         this.contentH = 0;
 
-        // 进来就能直接打字，不必先点一下输入框。
-        // 代价是 EditBox 的 hint 不会显示（原版只在失焦时画提示），
-        // 空输入框旁边就是发送键，不至于看不懂
         if (box != null) {
             box.setValue("");
             box.setFocused(true);
         }
 
         ChatClientCache.openConversation(peer);
-        // 刚清空，记下这份空列表作为比对基准
         this.markedFrom = ChatClientCache.getMessages();
 
         PacketDistributor.sendToServer(new RequestMessagesPacket(peer));
     }
 
-    /** 打开的正是与这个人的会话吗 —— 收到消息时据此决定要不要弹通知 */
     public boolean isViewing(UUID other) {
         return peer != null && peer.equals(other);
     }
 
-    /** 离开会话：缓存里的消息一并释放，下次进来重新拉 */
     public void close() {
         peer = null;
         laidOutFrom = null;
@@ -232,8 +155,6 @@ public final class ChatConversation {
         ChatClientCache.closeConversation();
     }
 
-    //  渲染
-
     public void render(GuiGraphics g, int phoneLeft, int phoneTop,
                        int screenW, int screenH, int statusH, int navH,
                        int mouseX, int mouseY, float partialTick, Font font) {
@@ -244,7 +165,6 @@ public final class ChatConversation {
         final int x = phoneLeft + PAD;
         final int w = screenW - PAD * 2;
 
-        // 输入栏钉在导航栏正上方，消息区用剩下的地方
         final int inputTop = phoneTop + screenH - navH - INPUT_H - INPUT_GAP;
         final int bottom = inputTop - INPUT_GAP;
 
@@ -256,12 +176,11 @@ public final class ChatConversation {
         renderInputBar(g, font, x, inputTop, w, mouseX, mouseY, partialTick);
     }
 
-    /** 标题行：头像（角上带在线状态点）+ 对方名字 */
     private int renderHeader(GuiGraphics g, Font font, int x, int y, int w) {
         ConversationSummary s = summary();
         boolean online = s != null && s.online();
 
-        // peer 为空只可能出现在刚 close 完的那一帧，画不出头像也不该崩
+        // 刚 close 完的那一帧 peer 为空
         if (peer != null) {
             PlayerAvatar.drawWithStatus(g, peer, x, y, AVATAR_SIZE, online);
         }
@@ -271,7 +190,6 @@ public final class ChatConversation {
                 nameX, y + (AVATAR_SIZE - font.lineHeight) / 2,
                 FontPalette.title(), true);
 
-        // 标题行由头像撑高，比原先高 7 像素，消息区相应少一点
         y += AVATAR_SIZE + 4;
         g.fill(x, y, x + w, y + 1, PhoneTheme.COLOR_DIVIDER);
         return y + 4;
@@ -292,16 +210,12 @@ public final class ChatConversation {
         maxScroll = Math.max(0, contentH - viewH);
         scrollPx = Math.clamp(scrollPx, 0, maxScroll);
 
-        // 内容不足一屏就从顶往下排；超出时贴着底部显示最新，
-        // scrollPx 把整块内容往下推，推多少就露出多少更早的消息
+        // 不足一屏从顶往下排；超出时贴底，scrollPx 把内容往下推露出更早的消息
         int y = contentH <= viewH ? top : bottom - contentH + scrollPx;
 
-        // 裁掉溢出到标题栏与导航栏的部分。
-        // 原版 enableScissor 收的是屏幕坐标、不跟随 pose 变换，这里不必为
-        // 开机缩放动画补偿：那 150 毫秒里必定还停在主屏，到不了会话界面。
+        // enableScissor 收屏幕坐标、不跟随 pose；开机缩放动画期间到不了这里，不必补偿
         g.enableScissor(x, top, x + w, bottom);
         for (Block b : blocks) {
-            // 完全在视口外的块直接跳过，省掉一次 drawString
             if (y + b.h() > top && y < bottom) renderBlock(g, font, b, x, y, w);
             y += b.h() + BLOCK_GAP;
         }
@@ -315,7 +229,6 @@ public final class ChatConversation {
             return;
         }
 
-        // 自己的靠右、对方的靠左——不看头像也知道谁在说话
         int bx = b.self() ? x + w - b.w() : x;
         PhoneSkin.drawOrFill(g,
                 b.self() ? PhoneSkin.Element.CHAT_BUBBLE_SELF : PhoneSkin.Element.CHAT_BUBBLE_PEER,
@@ -330,7 +243,6 @@ public final class ChatConversation {
         }
     }
 
-    /** 底部输入栏：输入框 + 发送键 */
     private void renderInputBar(GuiGraphics g, Font font, int x, int y, int w,
                                 int mouseX, int mouseY, float partialTick) {
 
@@ -341,11 +253,8 @@ public final class ChatConversation {
         PhoneSkin.drawOrFill(g, PhoneSkin.Element.CHAT_INPUT_BAR,
                 x, y, boxW, INPUT_H, COLOR_INPUT_BG);
 
-        // 无边框：底由上面那句负责，换肤才有意义。
-        // 代价是 EditBox 不再自己垂直居中（原版只在有边框时居中），
-        // 所以这里手动把它摆到栏中间
+        // 无边框的 EditBox 不会自己垂直居中，手动摆到栏中间
         int textY = y + (INPUT_H - font.lineHeight) / 2 + 1;
-        // 可见文字的宽度还要再减去光标那一格，理由见 cursorRoom
         int textW = boxW - INPUT_TEXT_PAD * 2 - cursorRoom(font);
 
         if (box == null) {
@@ -371,14 +280,7 @@ public final class ChatConversation {
                 empty ? COLOR_SEND_OFF : (sendHovered ? COLOR_SEND_HOVER : COLOR_SEND), false);
     }
 
-    //  排版
-
-    /**
-     * 把消息列表排成一块块可画的内容。
-     *
-     * 消息列表没换实例就直接返回：{@link ChatClientCache} 每次收包都产出
-     * 一份新的不可变列表，身份没变就说明内容一个字都没变。
-     */
+    /** 消息列表没换实例就不重排：ChatClientCache 每次收包都产出新的不可变列表，身份没变即内容没变 */
     private void relayout(Font font, int maxW) {
         List<ChatMessage> src = ChatClientCache.getMessages();
         if (src == laidOutFrom && maxW == laidOutWidth) return;
@@ -391,8 +293,6 @@ public final class ChatConversation {
         long prevTime = 0L;
 
         for (ChatMessage m : src) {
-            // 隔了很久才说的下一句，中间插一行时间；连着说的不插，
-            // 否则每条都顶一个时间戳，屏幕一半都是灰字
             if (m.time() - prevTime > STAMP_GAP_MS) {
                 FormattedCharSequence stamp =
                         Component.literal(formatStamp(m.time())).getVisualOrderText();
@@ -405,8 +305,6 @@ public final class ChatConversation {
             int textW = 0;
             for (var line : lines) textW = Math.max(textW, font.width(line));
 
-            // 气泡宽度取最宽的一行，每行都画进同一个矩形里，
-            // 逐行贴合的话右边缘会参差不齐
             out.add(new Block(false, selfId != null && selfId.equals(m.sender()), lines,
                     textW + BUBBLE_PAD_X * 2,
                     lines.size() * font.lineHeight + BUBBLE_PAD_Y * 2));
@@ -415,9 +313,7 @@ public final class ChatConversation {
         int total = 0;
         for (Block b : out) total += b.h() + BLOCK_GAP;
 
-        // 正翻着历史时来了新消息：内容变高会把视图整体顶上去，
-        // 把新增的高度补进滚动量，眼下看的这几条才不会跳走。
-        // 贴底时（scrollPx 为 0）不补，新消息就该自然顶上来。
+        // 翻着历史时来了新消息，把新增高度补进滚动量，视图才不会跳；贴底时不补
         if (scrollPx > 0 && total > contentH) scrollPx += total - contentH;
 
         blocks = List.copyOf(out);
@@ -426,22 +322,16 @@ public final class ChatConversation {
         laidOutWidth = maxW;
     }
 
-    //  输入
-
     public boolean mouseClicked(double mx, double my, int button) {
         if (button == 0 && sendHovered) {
             send();
             return true;
         }
-        // 其余点击交给输入框，用来挪光标 / 选中
         if (box != null) box.mouseClicked(mx, my, button);
         return false;
     }
 
-    /**
-     * @return true 表示按键已被消费。
-     *         调用方无论如何都该吃掉按键，别让 e 漏到背包键那边去
-     */
+    /** 不管返回什么，调用方都该吃掉按键，别让 e 漏到背包键 */
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
         if (keyCode == 257 || keyCode == 335) {   // Enter / 小键盘 Enter
             send();
@@ -454,15 +344,7 @@ public final class ChatConversation {
         return box != null && box.charTyped(c, modifiers);
     }
 
-    /**
-     * 发一条消息。
-     *
-     * 只发包、不本地插入：服务端校验没过（比如刚被对方解除好友）时会静默
-     * 丢弃，本地抢先插入的话，界面上就留下一条根本不存在的消息。自己发的
-     * 那条会由服务端回声送回来，见 ChatNetworking 的 handleSendMessage。
-     *
-     * 空白内容直接不发：服务端清洗后也是空的，白跑一趟。
-     */
+    /** 只发包、不本地插入：服务端校验没过会静默丢弃，自己那条由服务端回声送回 */
     private void send() {
         if (box == null || peer == null) return;
 
@@ -472,31 +354,18 @@ public final class ChatConversation {
         PacketDistributor.sendToServer(new SendChatMessagePacket(peer, text));
         box.setValue("");
 
-        // 回到底部：自己刚发的那条得看得见。
-        // 正翻着历史时发消息也一样——发完还盯着旧记录看很奇怪
+        // 回到底部，自己刚发的那条得看得见
         scrollPx = 0;
     }
-
-    //  鼠标
 
     public boolean mouseScrolled(double scrollY) {
         if (maxScroll <= 0) return false;
 
-        // 向上滚 ＝ 想看更早的 ＝ 把内容往下推
         scrollPx = Math.clamp(scrollPx + (int) (scrollY * SCROLL_STEP), 0, maxScroll);
         return true;
     }
 
-    //  内部
-
-    /**
-     * 定时拉一次会话摘要。
-     *
-     * 消息本身不必轮询——服务端会主动推送。这里要的是标题上的在线圆点：
-     * 它没有推送，不刷新的话对方早下线了这边还亮着绿点。
-     *
-     * 顺带让退出会话时的列表已经是新的，不必等列表自己那一轮刷新。
-     */
+    /** 定时拉会话摘要：消息靠推送，但标题上的在线状态没有推送 */
     private void maybeRefresh() {
         long now = System.currentTimeMillis();
         if (now - lastRequestMs < REFRESH_INTERVAL_MS) return;
@@ -505,18 +374,7 @@ public final class ChatConversation {
         PacketDistributor.sendToServer(new RequestConversationsPacket());
     }
 
-    /**
-     * 会话开着的时候来了新消息，补一次已读上报。
-     *
-     * 服务端只在拉历史时把会话标为已读。玩家就盯着界面看，对方发来的消息
-     * 明明看见了，退出去却还顶着未读红点——这个包就为了堵这个。
-     *
-     * 消息列表换了实例即说明有新消息：{@link ChatClientCache} 每次收包都
-     * 产出新的不可变列表，与排版缓存用的是同一个判据。
-     *
-     * 进会话后历史到达那一下会多报一次（拉历史时服务端已经标过了）。
-     * 一个 UUID 的包而已，不值得为省掉它多养一个"历史到没到"的状态位。
-     */
+    /** 会话开着时来了新消息，补一次已读上报：服务端只在拉历史时标已读 */
     private void maybeMarkRead() {
         List<ChatMessage> src = ChatClientCache.getMessages();
         if (src == markedFrom || peer == null) return;
@@ -525,7 +383,6 @@ public final class ChatConversation {
         PacketDistributor.sendToServer(new MarkReadPacket(peer));
     }
 
-    /** 从会话列表快照里找当前对端那一行，找不到返回 null */
     private ConversationSummary summary() {
         if (peer == null) return null;
         for (ConversationSummary c : ChatClientCache.getConversations()) {
@@ -534,7 +391,6 @@ public final class ChatConversation {
         return null;
     }
 
-    /** 摘要里有名字就用它；还没拉到时退回 UUID 前 8 位，总比一片空白强 */
     private String peerName(ConversationSummary s) {
         if (s != null) return s.name();
         return peer == null ? "" : peer.toString().substring(0, 8);
@@ -545,7 +401,6 @@ public final class ChatConversation {
         return player == null ? null : player.getUUID();
     }
 
-    /** 今天的只显示时刻，更早的带上日期——和会话列表同一个取舍 */
     private static String formatStamp(long time) {
         var zone = ZoneId.systemDefault();
         var dateTime = Instant.ofEpochMilli(time).atZone(zone);

@@ -19,45 +19,18 @@ import net.neoforged.neoforge.network.PacketDistributor;
 import java.util.List;
 
 /**
- * 加联系人界面 —— 列出当前在线的玩家，点一下加为联系人。
- *
- * 为什么从在线玩家里选而不是打名字：Minecraft 里输入法的候选框看不见
- * （理由详见 DeviceNameEditor 类注释），打中文基本是盲打，玩家名又
- * 一个字都错不得。点选完全绕开了这件事，也不会打错字。
- *
- * 好友是双向的，所以同一行要表达四种状态：
- *   陌生人      → "+ 添加"，点了发出申请
- *   已发出申请  → "已申请"，灰色不可点，等对方处理
- *   收到对方申请 → "✔ 同意"，点了直接成为好友
- *   已是好友    → "✕ 解除"
- *
- * 一个布尔量表达不了这四种，故服务端下发的是 {@link Relation}。
- *
- * 所有操作都只发包、不改本地状态：服务端处理完会回发新的在线列表，
- * 按钮状态以那份为准。本地抢先改的话，一旦服务端因为超上限拒绝了，
- * 界面就会显示成功的假象。
- *
- * 悬停记的是【那一行的内容】，不是【第几行】
- *
- * 这份在线列表每 3 秒被服务端整份换掉，有人上线下线顺序就变。把"停在
- * 第几行"记成下标、点击时再去索引那一刻的列表，中间插进一次替换就会
- * 点到另一个人——而这一列的动作是加好友和【解除好友】。
- *
- * 记下整条 OnlinePlayer（它是不可变记录，自带 id 与关系）还多解决一件事：
- * 按钮上写的动作与真正发出去的动作必定一致。按下标重查的话，玩家看到的
- * 是「+ 添加」、发出去的可能已经是「✕ 解除」。
+ * 加联系人界面：列出在线玩家，点一下加为联系人。
+ * 所有操作只发包、不改本地状态，按钮以服务端回发的列表为准。
+ * 悬停记的是整条 OnlinePlayer 而不是行号：列表每 3 秒被整份换掉，按下标重查会点到别人。
  */
 public final class ChatAddContact {
 
     private static final int PAD = 4;
 
-    /** 刷新间隔：玩家会上下线，列表得跟着变 */
     private static final long REFRESH_INTERVAL_MS = 3000L;
 
-    /** 头像边长，与会话列表一致 */
     private static final int AVATAR_SIZE = 16;
 
-    /** 头像与名字之间的空隙 */
     private static final int AVATAR_GAP = 3;
 
     private static int colorName() { return FontPalette.title(); }
@@ -83,8 +56,6 @@ public final class ChatAddContact {
         hovered = null;
     }
 
-    //  渲染
-
     public void render(GuiGraphics g, int phoneLeft, int phoneTop,
                        int screenW, int screenH, int statusH, int navH,
                        int mouseX, int mouseY, Font font) {
@@ -104,7 +75,6 @@ public final class ChatAddContact {
 
         List<OnlinePlayer> players = ChatClientCache.getOnlinePlayers();
 
-        // 被截断时必须说出来，否则玩家以为服务器就这么些人
         if (ChatClientCache.isOnlineListTruncated()) {
             for (var line : font.split(Component.translatable("mcphone.chat.truncated",
                     players.size(), ChatClientCache.getTotalOnline()), w)) {
@@ -145,14 +115,13 @@ public final class ChatAddContact {
             String action = Component.translatable(actionKey(p.relation())).getString();
             int actionW = font.width(action);
 
-            // 本界面列的全是在线玩家，状态点画了也全是绿的，纯属占地方
+            // 全是在线玩家，不画状态点
             int avatarY = y + (rowH - AVATAR_SIZE) / 2;
             PlayerAvatar.draw(g, p.id(), x, avatarY, AVATAR_SIZE);
 
             int nameX = x + AVATAR_SIZE + AVATAR_GAP;
             int textY = y + (rowH - font.lineHeight) / 2;
 
-            // 名字按剩余宽度截断，否则长名字会盖住右侧的动作文字
             String name = GuiUtil.truncate(font, p.name(), w - (nameX - x) - actionW - 6);
             g.drawString(font, name, nameX, textY, colorName(), false);
             g.drawString(font, action, x + w - actionW - 2, textY,
@@ -162,30 +131,23 @@ public final class ChatAddContact {
         }
     }
 
-    //  鼠标
-
     public boolean mouseClicked(double mx, double my, int button) {
         if (button != 0) return false;
 
         OnlinePlayer p = hovered;
         if (p == null) return false;
 
-        // 只发包，不改本地状态：服务端会回发新列表，按钮以那份为准。
-        // 用的是【画那一行时手里的那条记录】，所以按钮上写的动作与真正
-        // 发出去的动作必定一致
         switch (p.relation()) {
             case NONE -> PacketDistributor.sendToServer(new FriendRequestPacket(p.id()));
             case REQUEST_RECEIVED ->
                     PacketDistributor.sendToServer(new RespondFriendRequestPacket(p.id(), true));
             case FRIEND -> PacketDistributor.sendToServer(new RemoveFriendPacket(p.id()));
-            // 已发出的申请只能等对方处理，点了不做任何事——
-            // 重复发包既没用，又会让服务端白跑一遍校验
+            // 已发出的申请只能等对方处理，重复发包没用
             case REQUEST_SENT -> { }
         }
         return true;
     }
 
-    /** 每种关系对应的按钮文案 */
     private static String actionKey(Relation relation) {
         return switch (relation) {
             case NONE -> "mcphone.chat.add_action";
@@ -195,7 +157,6 @@ public final class ChatAddContact {
         };
     }
 
-    /** 待处理的申请用灰色：它不可点，颜色要说明这一点 */
     private static int actionColor(Relation relation) {
         return switch (relation) {
             case NONE -> colorAdd();
@@ -217,8 +178,6 @@ public final class ChatAddContact {
         return false;
     }
 
-    //  内部
-
     private void maybeRefresh() {
         long now = System.currentTimeMillis();
         if (now - lastRequestMs < REFRESH_INTERVAL_MS) return;
@@ -227,17 +186,10 @@ public final class ChatAddContact {
         PacketDistributor.sendToServer(new RequestOnlinePlayersPacket());
     }
 
-    /**
-     * 行高由头像决定，不再由文字决定。
-     *
-     * 16 的头像塞不进原先 14 像素的行，故加到 18，一屏从 10 行减到 8 行。
-     * 宁可少两行也不用 12×12 的头像：那是 1.5 倍放大，像素会毛糙。
-     */
     private static int rowHeight() {
         return AVATAR_SIZE + 2;
     }
 
-    /** 有人下线导致列表变短时必须夹紧，否则会滚到空白处 */
     private void clampScroll(int total, int availableHeight) {
         int visible = Math.max(1, availableHeight / rowHeight());
         int maxOffset = Math.max(0, total - visible);
