@@ -5,6 +5,7 @@ import com.november.mcphone.core.client.MCphoneKeyBindings;
 import com.november.mcphone.core.client.PhoneContainerScreen;
 import com.november.mcphone.core.client.PhoneKeyHandler;
 import com.november.mcphone.core.client.PhoneScreenRegistry;
+import com.november.mcphone.core.client.PhoneSession;
 import com.november.mcphone.core.client.PhoneSkin;
 import com.november.mcphone.core.menu.ModMenus;
 import com.november.mcphone.feature.camera.client.CameraHandler;
@@ -69,6 +70,9 @@ public class MCphoneClient {
                     NotesClientCache.clear();
                     StoreClientCache.clear();
                     PhoneScreenRegistry.unloadWorld();
+
+                    // 停在哪一页也是这个服务器的事，换一个服务器要从主屏重新开
+                    PhoneSession.clear();
 
                     PlayTime.onWorldLeave();
 

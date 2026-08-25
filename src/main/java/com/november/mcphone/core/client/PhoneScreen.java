@@ -86,6 +86,9 @@ public final class PhoneScreen extends Screen {
     private boolean layoutDirty = true;
     private long nowMs;
 
+    /** 续开只做一次：init 还会因为改窗口大小再来一遍，那时不该把玩家挪回去 */
+    private boolean sessionResumed;
+
     public PhoneScreen(PhoneLocation location) {
         super(Component.translatable("mcphone.gui.home"));
         this.location = location;
@@ -312,7 +315,25 @@ public final class PhoneScreen extends Screen {
 
     private void invalidateLayout() { layoutDirty = true; }
 
-    @Override protected void init() { super.init(); invalidateLayout(); }
+    @Override
+    protected void init() {
+        super.init();
+        invalidateLayout();
+
+        if (!sessionResumed) {
+            sessionResumed = true;
+            resumeSession();
+        }
+    }
+
+    /** 续开上次关机时停的那一页，白名单与有效性由 {@link PhoneSession} 把关 */
+    private void resumeSession() {
+        Mode target = PhoneSession.resumeMode();
+        if (target == null || target == Mode.MAIN) return;
+
+        pendingConversationPeer = PhoneSession.resumePeer();
+        navigateTo(target);
+    }
 
     @Override
     public void resize(Minecraft mc, int w, int h) { super.resize(mc, w, h); invalidateLayout(); }
@@ -746,6 +767,9 @@ public final class PhoneScreen extends Screen {
     /** 用 removed() 而不是 onClose()：被别的界面顶掉时 onClose 不触发 */
     @Override
     public void removed() {
+        // 先记再关：下面这几个 close() 会把页面状态清掉
+        PhoneSession.save(mode, pendingConversationPeer);
+
         if (mode == Mode.GALLERY) gallery.close();
         if (mode == Mode.CHAT_CONVERSATION) chatConversation.close();
         if (mode == Mode.NOTE_EDIT) noteEditor.close();
