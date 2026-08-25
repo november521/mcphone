@@ -396,3 +396,46 @@ tasks.register('verifyDistIsolation') {
 }
 
 tasks.named('check').configure { dependsOn tasks.named('verifyDistIsolation') }
+
+// ============================================================
+//  build/libs 只留最新三个 jar
+// ============================================================
+//
+// 每个改动都会把补丁号 +1，而 jar 任务从不清理旧产物：一天下来 build/libs 里
+// 躺着十几个只差一个补丁号的 jar。往服务器传的时候要在里面认哪个是最新的，
+// 认错一次就是把旧版本发上去，而那种事在服务器上表现成"改的东西没生效"，
+// 没人会想到是传错了文件。
+//
+// 留三个而不是一个：最新的那个是要传的，前两个是出事时立刻退回去的退路。
+//
+// 按文件时间排，不按版本号——版本号在这里是字符串，1.7.9 会排到 1.7.36 后面去。
+// 挂在 jar 的 finalizedBy 上：不管是 jar、assemble 还是 build，只要真打出了包就顺手清一次。
+tasks.register('pruneOldJars') {
+    description = 'build/libs 里只留最新的三个 jar'
+    group = 'build'
+
+    // 这两个要在配置期取好：doLast 里碰 project 会让配置缓存失效
+    def libsDir = layout.buildDirectory.dir('libs')
+    def prefix = "${mod_id}-"
+    def keep = 3
+
+    doLast {
+        def dir = libsDir.get().asFile
+        if (!dir.exists()) return
+
+        def jars = dir.listFiles({ File f ->
+            f.isFile() && f.name.startsWith(prefix) && f.name.endsWith('.jar')
+        } as FileFilter)
+        if (jars == null || jars.length <= keep) return
+
+        jars.toList()
+                .sort { a, b -> b.lastModified() <=> a.lastModified() }
+                .drop(keep)
+                .each {
+                    logger.lifecycle("删掉旧 jar：${it.name}")
+                    it.delete()
+                }
+    }
+}
+
+tasks.named('jar').configure { finalizedBy tasks.named('pruneOldJars') }
