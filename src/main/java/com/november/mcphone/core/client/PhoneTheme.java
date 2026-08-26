@@ -182,6 +182,14 @@ public final class PhoneTheme {
     /** 书架上那本没有图标的书。皮革棕，与「阅读」App 图标同一个底色 */
     public static final int COLOR_BOOK_SPINE = 0xFF8A5A2B;
 
+    /**
+     * 书架顶上那条搜索栏的底。
+     *
+     * 与会话页输入栏 {@link #COLOR_CHAT_INPUT_BG} 眼下是同一个值，但单列一条：
+     * 它们是两个界面里的两样东西，将来谁要调都不该顺手把另一个也改了。
+     */
+    public static final int COLOR_SEARCH_BAR = 0xFF26263A;
+
     public static final int COLOR_VIEWFINDER = 0xCCFFFFFF;
 
     /** 正中的准星 */

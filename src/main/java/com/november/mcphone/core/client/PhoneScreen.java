@@ -439,7 +439,8 @@ public final class PhoneScreen extends Screen {
                     PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT, font);
             case READER            -> bookList.render(g, phoneLeft, phoneTop,
                     PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
-                    PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT, mouseX, mouseY, font);
+                    PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT,
+                    mouseX, mouseY, partialTick, font);
             case NOTE_EDIT         -> noteEditor.render(g, phoneLeft, phoneTop,
                     PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
                     PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT,
@@ -752,6 +753,11 @@ public final class PhoneScreen extends Screen {
             noteEditor.keyPressed(keyCode, scanCode, modifiers);
             return true;
         }
+        // 书架顶上那条搜索栏一直握着焦点，这一页同样要整个吃掉按键
+        if (mode == Mode.READER) {
+            bookList.keyPressed(keyCode, scanCode, modifiers);
+            return true;
+        }
         // 附属页面自称有输入框时同样要抢在背包键之前
         if (mode == Mode.ADDON_PAGE && pageCapturesKeyboard()) {
             callPage(p -> p.keyPressed(keyCode, scanCode, modifiers));
@@ -779,6 +785,7 @@ public final class PhoneScreen extends Screen {
         if (mode == Mode.DEVICE_NAME && deviceNameEditor.charTyped(c, modifiers)) return true;
         if (mode == Mode.CHAT_CONVERSATION && chatConversation.charTyped(c, modifiers)) return true;
         if (mode == Mode.NOTE_EDIT && noteEditor.charTyped(c, modifiers)) return true;
+        if (mode == Mode.READER && bookList.charTyped(c, modifiers)) return true;
         return super.charTyped(c, modifiers);
     }
 

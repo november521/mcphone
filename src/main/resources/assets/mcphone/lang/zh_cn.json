@@ -203,5 +203,9 @@
   "mcphone.reader.count": "%s 本",
   "mcphone.reader.empty": "书架是空的",
   "mcphone.reader.empty_hint": "带教程手册的模组会自己出现在这里。一本都没有，多半是这个整合包没有用手册的模组。",
-  "mcphone.compat.patchouli": "Patchouli（教程手册）"
+  "mcphone.compat.patchouli": "Patchouli（教程手册）",
+  "mcphone.reader.search": "搜书名或模组",
+  "mcphone.reader.count_filtered": "%s/%s",
+  "mcphone.reader.no_match": "没有匹配的书",
+  "mcphone.reader.no_match_hint": "换个词试试：书名、模组名、模组 id 都能搜。中文客户端里书名多半是中文，模组名多半是英文。"
 }

@@ -131,7 +131,10 @@ public final class PhoneSkin {
          * 兜底色 {@link PhoneTheme#COLOR_BOOK_SPINE}。
          * 只在书源画不出那本书自己的图标时才用得上——多数书画出来是它的物品。
          */
-        READER_BOOK("reader/book", "reader_book");
+        READER_BOOK("reader/book", "reader_book"),
+
+        /** 书架顶上那条搜索栏的底。建议 112×12，整张拉伸；兜底色 {@link PhoneTheme#COLOR_SEARCH_BAR} */
+        READER_SEARCH_BAR("reader/search_bar", "reader_search_bar");
 
         /** 现在的路径，按功能分目录 */
         private final ResourceLocation texture;
