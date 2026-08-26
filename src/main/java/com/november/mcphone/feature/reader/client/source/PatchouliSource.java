@@ -1,10 +1,10 @@
 package com.november.mcphone.feature.reader.client.source;
 
 import com.november.mcphone.MCphone;
+import com.november.mcphone.core.client.GuiUtil;
 import com.november.mcphone.feature.reader.BookRef;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
-import net.minecraft.world.item.ItemStack;
 import net.neoforged.fml.ModList;
 import vazkii.patchouli.api.PatchouliAPI;
 import vazkii.patchouli.client.book.BookIcon;
@@ -148,21 +148,28 @@ public final class PatchouliSource implements BookSource {
      * 绝大多数书画出来就是玩家熟悉的那本书的样子，比我们自己画一个统一的
      * 书本图标有用得多。
      *
-     * noBook 的书没有物品也多半没配图标，那种情况返回 false 交回界面兜底：
-     * 硬画会得到一个空的 ItemStack，也就是什么都不画，界面还以为画上了。
+     * 两种情况交回界面兜底：
+     *
+     *   空物品。noBook 的书没有对应物品也多半没配图标，硬画会画出一个空的
+     *   ItemStack——也就是什么都不画，而界面还以为画上了。
+     *
+     *   带自定义渲染器的物品。那等于把别人的一段渲染代码请进手机界面里跑，
+     *   理由与后果见 {@link GuiUtil#canDrawItemIcon}——最坏的一种是整块屏幕
+     *   什么都不显示，而根因只是列表里某一行的一张小图标。
      */
     private static boolean drawBookIcon(GuiGraphics g, BookRef book, int x, int y, int size) {
         Book found = BookRegistry.INSTANCE.books.get(book.bookId());
         if (found == null) return false;
 
-        boolean hasCustomIcon = found.indexIconRaw != null && !found.indexIconRaw.isEmpty();
-        if (!hasCustomIcon) {
-            ItemStack stack = found.getBookItem();
-            if (stack == null || stack.isEmpty()) return false;
-        }
-
         BookIcon icon = found.getIcon();
         if (icon == null) return false;
+
+        // 物品图标必须过这道检查。检查的是 BookIcon 里真正要画的那一个物品，
+        // 而不是 getBookItem()：书里配了 index_icon 时两者可以是不同的物品
+        if (icon instanceof BookIcon.StackIcon stackIcon
+                && !GuiUtil.canDrawItemIcon(stackIcon.stack())) {
+            return false;
+        }
 
         // 它固定按 16×16 画。缩放交给矩阵，别去改它的实现
         g.pose().pushPose();

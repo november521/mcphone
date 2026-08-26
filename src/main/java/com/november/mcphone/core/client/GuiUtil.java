@@ -1,9 +1,12 @@
 package com.november.mcphone.core.client;
 
 import com.mojang.blaze3d.systems.RenderSystem;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.resources.model.BakedModel;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.item.ItemStack;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -87,6 +90,51 @@ public final class GuiUtil {
         RenderSystem.defaultBlendFunc();
         g.blit(tex, x, y, w, h, u, v, srcW, srcH, texW, texH);
         RenderSystem.disableBlend();
+    }
+
+    //  物品图标
+
+    /**
+     * 这个物品能不能安全地当成小图标画在手机界面里。
+     *
+     * 为什么要问这一句
+     *
+     * {@code GuiGraphics.renderItem} 画的不一定是一张平面贴图。物品模型的
+     * parent 写成 {@code builtin/entity} 时，画它的是【那个模组自己的渲染器】
+     * （BlockEntityWithoutLevelRenderer），我们等于把一段别人的渲染代码
+     * 请进手机界面里跑。
+     *
+     * 现实里这类渲染器有几种常见的做法会伤到后面画的东西：
+     *
+     *   把共享缓冲 endBatch 掉，打乱这一帧的绘制顺序；
+     *   改了全局状态（深度测试、光照）不还原；
+     *   用会写深度的 RenderType 画一个 3D 模型 —— 物品在 GUI 里画在 z=150，
+     *     而后面画的行、导航栏、外壳都在 z≈0，GUI 的深度测试是 LEQUAL，
+     *     于是它们被判定在这个模型【后面】，直接不画。
+     *
+     * 最后一条的症状是"手机开着，屏幕上什么都没有"——看起来像整个界面坏了，
+     * 而真凶只是列表里某一行的一张小图标。新生魔艺那本 GeckoLib 做的书就是
+     * 这样一个物品。
+     *
+     * 所以规矩是：带自定义渲染器的物品不画，交回调用方兜底。代价只是那一行
+     * 换成一张通用图；而在书架这种地方，会长成 3D 模型的物品本来就是极少数。
+     *
+     * @return true 表示可以直接交给 {@code g.renderItem}
+     */
+    public static boolean canDrawItemIcon(ItemStack stack) {
+        if (stack == null || stack.isEmpty()) return false;
+
+        Minecraft mc = Minecraft.getInstance();
+        if (mc == null) return false;
+
+        try {
+            BakedModel model = mc.getItemRenderer().getModel(stack, mc.level, mc.player, 0);
+            return model != null && !model.isCustomRenderer();
+        } catch (Throwable t) {
+            // 取模型这一步就抛了的物品，更不该让它去画。兜 Throwable 不是 Exception：
+            // 模组的模型代码抛 NoClassDefFoundError / AbstractMethodError 都见过
+            return false;
+        }
     }
 
     //  命中判定
