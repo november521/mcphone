@@ -121,7 +121,7 @@ public final class PatchouliSource implements BookSource {
             try {
                 out.add(new BookRef(SOURCE_ID, book.id,
                         Component.translatable(book.name),
-                        subtitleOf(book),
+                        subtitleOf(book.subtitle),
                         book.getOwnerName()));
             } catch (Throwable t) {
                 // 一本书读不出来不该拖掉整架书。常见于书 json 写坏了，
@@ -142,11 +142,15 @@ public final class PatchouliSource implements BookSource {
     /**
      * 副标题。
      *
-     * 用 book.subtitle 而不是它的 getSubtitle()：后者会把 version 字段拼成
-     * "第 N 版"，那是它书封面上的花字，列表里显示"第 3 版"没有任何信息量。
+     * 收 String 而不是收一个 Book：这样方法签名里就没有 vazkii 的类型，
+     * 与类注释里那条"字段与方法签名一个都不许出现"对得上。实际不收也不会炸
+     * （方法描述符是调用时才解析的），但注释与代码不一致比两者都错更危险——
+     * 后来的人会照着注释信任这条规矩。
+     *
+     * 传进来的是 book.subtitle 而不是它的 getSubtitle()：后者会把 version
+     * 字段拼成"第 N 版"，那是它书封面上的花字，列表里显示"第 3 版"没有信息量。
      */
-    private static Component subtitleOf(Book book) {
-        String subtitle = book.subtitle;
+    private static Component subtitleOf(String subtitle) {
         return subtitle == null || subtitle.isEmpty() ? null : Component.translatable(subtitle);
     }
 
