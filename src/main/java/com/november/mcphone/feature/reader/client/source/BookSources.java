@@ -37,6 +37,7 @@ public final class BookSources {
 
     /** 全部书源。加新的就往这里加一行 */
     private static final List<BookSource> SOURCES = List.of(
+            new PatchouliSource()
     );
 
     /**
