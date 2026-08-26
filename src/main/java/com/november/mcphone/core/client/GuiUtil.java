@@ -137,6 +137,24 @@ public final class GuiUtil {
         }
     }
 
+    /**
+     * 把一个物品当小图标画出来，先过 {@link #canDrawItemIcon} 那道检查。
+     *
+     * 物品图标固定按 16×16 画，别的尺寸靠矩阵缩放——别去改物品渲染那一套。
+     *
+     * @return 真的画了才 true；false 表示这个物品不适合当图标，调用方自行兜底
+     */
+    public static boolean drawItemIcon(GuiGraphics g, ItemStack stack, int x, int y, int size) {
+        if (!canDrawItemIcon(stack)) return false;
+
+        g.pose().pushPose();
+        g.pose().translate(x, y, 0);
+        if (size != 16) g.pose().scale(size / 16f, size / 16f, 1f);
+        g.renderItem(stack, 0, 0);
+        g.pose().popPose();
+        return true;
+    }
+
     //  命中判定
 
     /**

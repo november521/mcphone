@@ -2,6 +2,7 @@ package com.november.mcphone.feature.reader.client.source;
 
 import com.november.mcphone.feature.reader.BookRef;
 import net.minecraft.client.gui.GuiGraphics;
+import net.neoforged.fml.ModList;
 
 import java.util.List;
 
@@ -72,5 +73,17 @@ public interface BookSource {
      */
     default boolean renderIcon(GuiGraphics g, BookRef book, int x, int y, int size) {
         return false;
+    }
+
+    /**
+     * 一个模组的显示名，列表第二行写的就是它。
+     *
+     * 从 ModList 现拿而不是写死：这种名字对方自己会改，有的模组还会本地化它。
+     * 查不到就退回 modid——总比空着强，至少玩家还认得出是哪一个。
+     */
+    static String modName(String modId) {
+        return ModList.get().getModContainerById(modId)
+                .map(container -> container.getModInfo().getDisplayName())
+                .orElse(modId);
     }
 }

@@ -10,7 +10,6 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
-import net.neoforged.fml.ModList;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -78,7 +77,7 @@ public final class ExternalBookSource implements BookSource {
             if (!available(book)) continue;
             try {
                 out.add(new BookRef(SOURCE_ID, book.bookId(), book.title(), null,
-                        modName(book.modId())));
+                        BookSource.modName(book.modId())));
             } catch (Throwable t) {
                 MCphone.LOGGER.error("[MCphone] 读外部手册 {} 的信息失败，跳过", book.bookId(), t);
             }
@@ -117,16 +116,7 @@ public final class ExternalBookSource implements BookSource {
         Item item = BuiltInRegistries.ITEM.get(entry.item());
         if (item == Items.AIR) return false;
 
-        ItemStack stack = new ItemStack(item);
-        if (!GuiUtil.canDrawItemIcon(stack)) return false;
-
-        // 物品固定按 16×16 画，缩放交给矩阵
-        g.pose().pushPose();
-        g.pose().translate(x, y, 0);
-        if (size != 16) g.pose().scale(size / 16f, size / 16f, 1f);
-        g.renderItem(stack, 0, 0);
-        g.pose().popPose();
-        return true;
+        return GuiUtil.drawItemIcon(g, new ItemStack(item), x, y, size);
     }
 
     private static ExternalBook find(BookRef book) {
@@ -147,15 +137,4 @@ public final class ExternalBookSource implements BookSource {
         }
     }
 
-    /**
-     * 模组的显示名，列表第二行写的就是它。
-     *
-     * 从 ModList 现拿而不是写死："Immersive Engineering" 这种名字对方自己会改，
-     * 而且有的模组会本地化它。查不到就退回 modid——总比空着强。
-     */
-    private static String modName(String modId) {
-        return ModList.get().getModContainerById(modId)
-                .map(container -> container.getModInfo().getDisplayName())
-                .orElse(modId);
-    }
 }
