@@ -22,7 +22,6 @@ ART = [
     " oooooooooooooooooo ",
     " oooooooooooooooooo ",
     "oooooooooooooooooooo",
-    "oooooooooooooooooooo",
     "ooooooooo||ooooooooo",
     "ooooooo##||##ooooooo",
     "ooooo####||####ooooo",
@@ -34,9 +33,10 @@ ART = [
     "oo#######||#######oo",
     "oo#-----#||#-----#oo",
     "oo#######||#######oo",
-    "ooo######||######ooo",
-    " ooo#####||#####ooo ",
-    " oooooooo||oooooooo ",
+    "oo#-----#||#-----#oo",
+    "oo#######||#######oo",
+    " oeeeeeee||eeeeeeeo ",
+    " oooooooooooooooooo ",
     "   oooooooooooooo   ",
 ]
 
@@ -45,8 +45,9 @@ TILE  = (0x8A, 0x5A, 0x2B, 255)   # 皮革棕。主屏上十二个图标的底�
 PAGE  = (0xF6, 0xEC, 0xD4, 255)   # 纸
 SPINE = (0x4A, 0x2C, 0x12, 255)   # 书脊，比底色深两档才压得住
 TEXT  = (0xC2, 0xA5, 0x7A, 255)   # 纸上的字：只是暗示有字，不必真的可读
+EDGE  = (0xD1, 0xBE, 0x94, 255)   # 最底下那一行纸：暗一档，书才有厚度而不是一张纸
 
-COLORS = {' ': CLEAR, 'o': TILE, '#': PAGE, '|': SPINE, '-': TEXT}
+COLORS = {' ': CLEAR, 'o': TILE, '#': PAGE, '|': SPINE, '-': TEXT, 'e': EDGE}
 
 
 def png(path, pixels, size):
@@ -81,7 +82,7 @@ def shelf_icon():
     第 2～17 列，正好 16 列宽、14 行高，上下各留一行空就是 16×16。
     """
     out = []
-    for row in ART[4:20]:
+    for row in ART[3:19]:
         out.append([CLEAR if c == 'o' else COLORS[c] for c in row[2:18]])
     return out
 
