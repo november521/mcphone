@@ -2,6 +2,7 @@ package com.november.mcphone.feature.reader.client.source;
 
 import com.november.mcphone.MCphone;
 import com.november.mcphone.feature.reader.BookRef;
+import com.november.mcphone.feature.reader.client.compat.BookQuirks;
 import net.minecraft.client.gui.GuiGraphics;
 
 import java.util.ArrayList;
@@ -82,7 +83,14 @@ public final class BookSources {
             }
         }
 
-        cached = List.copyOf(out);
+        // 特例最后过一遍：有的书要改名，有的书压根不该出现在架子上
+        List<BookRef> shelved = new ArrayList<>(out.size());
+        for (BookRef book : out) {
+            BookRef fixed = BookQuirks.rewrite(book);
+            if (fixed != null) shelved.add(fixed);
+        }
+
+        cached = List.copyOf(shelved);
         return cached;
     }
 
@@ -95,8 +103,10 @@ public final class BookSources {
     }
 
     /**
-     * 打开一本书。找不到书源、或书源自己抛了，都只记日志——玩家点了没反应
-     * 已经够糟，再崩一次界面更糟。
+     * 打开一本书：特例优先，没人接管才走书源。
+     *
+     * 找不到书源、或书源自己抛了，都只记日志——玩家点了没反应已经够糟，
+     * 再崩一次界面更糟。
      */
     public static void open(BookRef book) {
         BookSource source = of(book);
@@ -105,6 +115,9 @@ public final class BookSources {
                     book.bookId(), book.sourceId());
             return;
         }
+        // 先问特例：有的模组早就不用这本 Patchouli 书了，真正的手册在它自己的界面里
+        if (BookQuirks.open(book)) return;
+
         try {
             source.open(book);
         } catch (Throwable t) {
