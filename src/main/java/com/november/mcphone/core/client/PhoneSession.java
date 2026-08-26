@@ -15,8 +15,9 @@ import java.util.UUID;
  * 下次开机多半是想看看有没有新消息，停在壁纸页上还得先按一次返回，比回主屏多一步。
  * 所以默认一律回主屏，值得续开的一个一个列进 {@link #RESUMABLE}。
  *
- * 目前只有美西螈：它是唯一一个一天要开几十次的 App。要给别的 App 开这个待遇，
- * 两处一起改——id 加进 {@link #RESUMABLE}，并在 {@link #appOf} 里把它的页面映射到这个 id。
+ * 目前是美西螈与阅读：一个一天要开几十次，一个是"翻开书之后手机必然被顶掉"——
+ * 那一下不是玩家想关手机，是他正在看书。要给别的 App 开这个待遇，两处一起改——
+ * id 加进 {@link #RESUMABLE}，并在 {@link #appOf} 里把它的页面映射到这个 id。
  *
  * 只活在这一局
  *
@@ -28,8 +29,11 @@ public final class PhoneSession {
     private static final ResourceLocation CHAT_APP =
             ResourceLocation.fromNamespaceAndPath(MCphone.MODID, "chat");
 
+    private static final ResourceLocation READER_APP =
+            ResourceLocation.fromNamespaceAndPath(MCphone.MODID, "reader");
+
     /** 允许续开的 App。加成员见类注释 */
-    private static final Set<ResourceLocation> RESUMABLE = Set.of(CHAT_APP);
+    private static final Set<ResourceLocation> RESUMABLE = Set.of(CHAT_APP, READER_APP);
 
     private static PhoneScreen.Mode savedMode;
 
@@ -87,6 +91,7 @@ public final class PhoneSession {
     private static ResourceLocation appOf(PhoneScreen.Mode mode) {
         return switch (mode) {
             case CHAT, CHAT_ADD_CONTACT, CHAT_CONVERSATION -> CHAT_APP;
+            case READER -> READER_APP;
             default -> null;
         };
     }
