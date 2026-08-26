@@ -204,6 +204,7 @@
   "mcphone.reader.empty": "书城里一本书都没有",
   "mcphone.reader.empty_hint": "带教程手册的模组会自己出现在这里。一本都没有，多半是这个整合包没有用手册的模组。",
   "mcphone.compat.patchouli": "Patchouli（教程手册）",
+  "mcphone.compat.immersiveengineering": "Immersive Engineering（沉浸工程）",
   "mcphone.reader.search": "搜书名或模组",
   "mcphone.reader.count_filtered": "%s/%s",
   "mcphone.reader.no_match": "没有匹配的书",

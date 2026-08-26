@@ -122,9 +122,15 @@ public final class AboutPage {
     private static List<RequiredMod> companionMods() {
         Map<String, RequiredMod> byId = new LinkedHashMap<>();
 
-        // 硬前置：声明了它的 App 缺了对方就整个不可用
+        // 硬前置：声明了它的 App 缺了对方就整个不可用。
+        // 这份名单还捎带着"当前不可用"的那些 App，所以顺手把它们的软联动也读了——
+        // 不然一个因为书源全没装而不可用的 App，它声明的联动模组反倒一个都不显示，
+        // 而那正是玩家最需要这一页的时候
         for (IPhoneApp app : PhoneScreenRegistry.getCompanionApps()) {
             for (RequiredMod mod : PhoneScreenRegistry.requiredModsOf(app)) {
+                byId.putIfAbsent(mod.modId(), mod);
+            }
+            for (RequiredMod mod : PhoneScreenRegistry.companionModsOf(app)) {
                 byId.putIfAbsent(mod.modId(), mod);
             }
         }

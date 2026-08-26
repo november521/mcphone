@@ -4,6 +4,7 @@ import com.november.mcphone.api.client.app.RequiredMod;
 import com.november.mcphone.core.client.PhoneApp;
 import com.november.mcphone.core.client.PhoneScreen;
 import com.november.mcphone.feature.reader.client.source.BookSources;
+import com.november.mcphone.feature.reader.client.source.ImmersiveEngineeringManual;
 import com.november.mcphone.feature.reader.client.source.PatchouliSource;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
@@ -39,28 +40,32 @@ public final class ReaderApp extends PhoneApp {
     }
 
     /**
-     * 声明的前置仍然只有 Patchouli —— 那是这个 App 的主力书源，也是「设置 → 关于」
-     * 和商店「联动 App」页要告诉玩家的那一个。
+     * 两个书源模组都是【联动】，不是前置。
      *
-     * 但可用性【不】按它算，见 {@link #isAvailable()}。
+     * 1.8.5 之前这里声明的是 requiredMods（硬前置），那在只有 Patchouli 一个
+     * 书源时还算贴切；接了沉浸工程之后就成了假话——两者互不依赖，缺一个另一个
+     * 照样有书可看，把 Patchouli 说成"缺了这个 App 就不可用"既不准确，也会让
+     * 商店的联动页对一个根本没被它卡住的 App 写上"需要 Patchouli"。
+     *
+     * 声明成联动之后：「设置 → 关于」照常列出这两个模组、告诉玩家各自装没装
+     * （那一页存在的理由就是回答"我怎么没有这个"），而商店的「联动 App」页
+     * 不再收这个 App——它没有被任何一个模组卡住。
      */
     @Override
-    public List<RequiredMod> requiredMods() {
-        return List.of(new RequiredMod(
-                PatchouliSource.PATCHOULI_MODID,
-                Component.translatable("mcphone.compat.patchouli").getString()));
+    public List<RequiredMod> companionMods() {
+        return List.of(
+                new RequiredMod(PatchouliSource.PATCHOULI_MODID,
+                        Component.translatable("mcphone.compat.patchouli").getString()),
+                new RequiredMod(ImmersiveEngineeringManual.MODID,
+                        Component.translatable("mcphone.compat.immersiveengineering").getString()));
     }
 
     /**
      * 有任何一个书源能出书，这个 App 就该在。
      *
-     * 默认实现是"前置全装了才可用"，那在只有一个书源时是对的。现在书源不止一个：
-     * 一个只装了沉浸工程、没装 Patchouli 的整合包里，书城照样有一本工程师手册可看，
-     * 这时候把 App 藏起来是错的。
-     *
-     * 代价是这种包里「关于」页会显示"Patchouli 未装"——那句话本身没说错（它确实
-     * 没装），只是不再等于"这个 App 用不了"。要把商店那句「需要 %s」改成"任一"
-     * 的说法，得动商店那一支的代码，那是另一个 App 的事，不在这次的范围里。
+     * 默认实现是"前置全装了才可用"，而这个 App 现在一条前置都不声明——照默认走
+     * 就成了"永远可用"，于是两个书源模组都没装的整合包里，主屏上会多一个点开
+     * 只有空书城的 App。所以自己判：书源都出不了书，就别出现。
      */
     @Override
     public boolean isAvailable() {
