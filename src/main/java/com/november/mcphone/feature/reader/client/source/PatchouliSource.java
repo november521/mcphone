@@ -63,6 +63,15 @@ public final class PatchouliSource implements BookSource {
     /** 扫出来的书，扫描前是空表。类型必须是中性的，理由见类注释 */
     private List<BookRef> books = List.of();
 
+    /**
+     * 上一次记进日志的本数，-1 表示还没记过。
+     *
+     * 书架每打开一次就重扫一次，每次都记一行日志等于刷屏；而"扫到几本"这个数
+     * 恰恰是出问题时第一个要知道的——书架空着，是它一本都没扫到，还是扫到了
+     * 没画出来？两者的排查方向完全相反。所以只在数目【变了】的时候记。
+     */
+    private int loggedCount = -1;
+
     @Override
     public String id() {
         return SOURCE_ID;
@@ -82,6 +91,11 @@ public final class PatchouliSource implements BookSource {
     @Override
     public void refresh() {
         books = scan();
+
+        if (books.size() != loggedCount) {
+            loggedCount = books.size();
+            MCphone.LOGGER.info("[MCphone] 书架扫到 {} 本 Patchouli 手册", loggedCount);
+        }
     }
 
     @Override
