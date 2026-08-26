@@ -197,5 +197,11 @@
   "mcphone.font_preset.amber": "琥珀",
   "mcphone.font_preset.cyan": "天青",
   "mcphone.font_preset.mint": "薄荷",
-  "mcphone.font_preset.pink": "樱粉"
+  "mcphone.font_preset.pink": "樱粉",
+  "mcphone.app.reader": "阅读",
+  "mcphone.app.reader.desc": "整合包里的教程书全在这儿，点一本就翻开。书还在原处，只是不用再随身带着它们。需要装有 Patchouli。",
+  "mcphone.reader.count": "%s 本",
+  "mcphone.reader.empty": "书架是空的",
+  "mcphone.reader.empty_hint": "带教程手册的模组会自己出现在这里。一本都没有，多半是这个整合包没有用手册的模组。",
+  "mcphone.compat.patchouli": "Patchouli（教程手册）"
 }

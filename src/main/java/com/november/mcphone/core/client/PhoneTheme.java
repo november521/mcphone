@@ -179,6 +179,9 @@ public final class PhoneTheme {
     public static final int COLOR_TOAST_BORDER = 0xFF0F3460;
 
     /** 取景框四角那四个折角 */
+    /** 书架上那本没有图标的书。皮革棕，与「阅读」App 图标同一个底色 */
+    public static final int COLOR_BOOK_SPINE = 0xFF8A5A2B;
+
     public static final int COLOR_VIEWFINDER = 0xCCFFFFFF;
 
     /** 正中的准星 */

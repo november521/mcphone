@@ -124,7 +124,14 @@ public final class PhoneSkin {
         BROWSER_PANEL("browser/panel", "browser_panel"),
 
         /** 浏览器工具条底（后退/前进/刷新 + 地址栏）。建议 320×22；在面板外面，浮在上方留白里 */
-        BROWSER_BAR("browser/bar", "browser_bar");
+        BROWSER_BAR("browser/bar", "browser_bar"),
+
+        /**
+         * 书架列表里那本兜底的书。建议 16×16，按实际绘制尺寸画（不做平滑缩放）；
+         * 兜底色 {@link PhoneTheme#COLOR_BOOK_SPINE}。
+         * 只在书源画不出那本书自己的图标时才用得上——多数书画出来是它的物品。
+         */
+        READER_BOOK("reader/book", "reader_book");
 
         /** 现在的路径，按功能分目录 */
         private final ResourceLocation texture;

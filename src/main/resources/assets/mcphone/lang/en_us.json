@@ -197,5 +197,11 @@
   "mcphone.font_preset.amber": "Amber",
   "mcphone.font_preset.cyan": "Cyan",
   "mcphone.font_preset.mint": "Mint",
-  "mcphone.font_preset.pink": "Pink"
+  "mcphone.font_preset.pink": "Pink",
+  "mcphone.app.reader": "Reading",
+  "mcphone.app.reader.desc": "Every guide book in the pack, in one shelf. Tap one to open it. The books stay where they are - you just stop carrying them. Requires Patchouli.",
+  "mcphone.reader.count": "%s",
+  "mcphone.reader.empty": "The shelf is empty",
+  "mcphone.reader.empty_hint": "Mods that ship a guide book show up here on their own. None at all usually means this pack has no mod using them.",
+  "mcphone.compat.patchouli": "Patchouli (guide books)"
 }

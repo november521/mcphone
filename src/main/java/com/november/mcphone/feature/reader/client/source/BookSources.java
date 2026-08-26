@@ -2,6 +2,7 @@ package com.november.mcphone.feature.reader.client.source;
 
 import com.november.mcphone.MCphone;
 import com.november.mcphone.feature.reader.BookRef;
+import net.minecraft.client.gui.GuiGraphics;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -108,6 +109,23 @@ public final class BookSources {
             source.open(book);
         } catch (Throwable t) {
             MCphone.LOGGER.error("[MCphone] 打开书 {} 失败", book.bookId(), t);
+        }
+    }
+
+    /**
+     * 画一本书的图标，由它的书源来画。
+     *
+     * @return 真的画了才 true；返回 false 时由界面兜底（换肤贴图，再不行纯色）
+     */
+    public static boolean renderIcon(GuiGraphics g, BookRef book, int x, int y, int size) {
+        BookSource source = of(book);
+        if (source == null) return false;
+        try {
+            return source.renderIcon(g, book, x, y, size);
+        } catch (Throwable t) {
+            // 这里【不】记日志：绘制是每帧一次的，一本坏书能在一分钟里刷出上千行。
+            // 画不出来的后果只是退回兜底图，玩家看得见、也不影响他翻书
+            return false;
         }
     }
 

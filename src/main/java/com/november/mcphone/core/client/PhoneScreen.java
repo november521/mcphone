@@ -13,6 +13,9 @@ import com.november.mcphone.feature.gallery.client.Gallery;
 import com.november.mcphone.feature.music.client.MusicPage;
 import com.november.mcphone.feature.notes.client.NoteEditor;
 import com.november.mcphone.feature.notes.client.NotesList;
+import com.november.mcphone.feature.reader.BookRef;
+import com.november.mcphone.feature.reader.client.BookList;
+import com.november.mcphone.feature.reader.client.source.BookSources;
 import com.november.mcphone.feature.settings.client.AboutPage;
 import com.november.mcphone.feature.settings.client.AppManagerPage;
 import com.november.mcphone.feature.settings.client.SettingsList;
@@ -37,7 +40,7 @@ import java.util.UUID;
 /** 手机主屏幕 GUI：管理各页面之间的导航（{@link Mode}）、分发输入、兜住附属页面的异常 */
 public final class PhoneScreen extends Screen {
 
-    public enum Mode { MAIN, SETTINGS, WALLPAPER_PICKER, FONT_COLOR_PICKER, APP_MANAGER, MUSIC_PLAYER, APP_STORE, APP_DETAIL, COMPANION_APPS, ADDON_PAGE, ABOUT, GALLERY, DEVICE_NAME, CHAT, CHAT_ADD_CONTACT, CHAT_CONVERSATION, NOTES, NOTE_EDIT, CLOCK, WEATHER }
+    public enum Mode { MAIN, SETTINGS, WALLPAPER_PICKER, FONT_COLOR_PICKER, APP_MANAGER, MUSIC_PLAYER, APP_STORE, APP_DETAIL, COMPANION_APPS, ADDON_PAGE, ABOUT, GALLERY, DEVICE_NAME, CHAT, CHAT_ADD_CONTACT, CHAT_CONVERSATION, NOTES, NOTE_EDIT, CLOCK, WEATHER, READER }
 
     private final long openTimeMs;
     private boolean animationDone;
@@ -73,6 +76,8 @@ public final class PhoneScreen extends Screen {
 
     private final NotesList notesList = new NotesList();
     private final NoteEditor noteEditor = new NoteEditor();
+
+    private final BookList bookList = new BookList();
 
     /** 待打开的会话对端：navigateTo 不带参数，进会话前先存这里 */
     private UUID pendingConversationPeer;
@@ -131,6 +136,10 @@ public final class PhoneScreen extends Screen {
 
         if (this.mode == Mode.NOTES) notesList.close();
         if (target == Mode.NOTES) notesList.open();
+
+        // 每次进书架都重扫一遍书源，理由见 BookList.open()
+        if (this.mode == Mode.READER) bookList.close();
+        if (target == Mode.READER) bookList.open();
         if (target == Mode.APP_MANAGER) appManagerPage.open();
 
         // 离开音乐页不停音乐，close 只收界面
@@ -428,6 +437,9 @@ public final class PhoneScreen extends Screen {
             case WEATHER           -> WeatherPage.render(g, phoneLeft, phoneTop,
                     PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
                     PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT, font);
+            case READER            -> bookList.render(g, phoneLeft, phoneTop,
+                    PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
+                    PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT, mouseX, mouseY, font);
             case NOTE_EDIT         -> noteEditor.render(g, phoneLeft, phoneTop,
                     PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
                     PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT,
@@ -612,6 +624,13 @@ public final class PhoneScreen extends Screen {
             case ABOUT, CLOCK, WEATHER -> {
                 yield true;
             }
+            case READER -> {
+                bookList.mouseClicked(mx, my, button);
+                BookRef book = bookList.consumeOpenRequest();
+                // 打开之后接管屏幕的是那本书自己的界面，这一部手机就退下去了
+                if (book != null) BookSources.open(book);
+                yield true;
+            }
             case APP_DETAIL -> {
                 appDetail.mouseClicked(mx, my, button);
                 // 顺序不能反：先 navigateTo 的话 reset 会把刷新请求清掉
@@ -704,6 +723,7 @@ public final class PhoneScreen extends Screen {
         if (mode == Mode.CHAT_ADD_CONTACT && chatAddContact.mouseScrolled(scrollY)) return true;
         if (mode == Mode.CHAT_CONVERSATION && chatConversation.mouseScrolled(scrollY)) return true;
         if (mode == Mode.NOTES && notesList.mouseScrolled(scrollY)) return true;
+        if (mode == Mode.READER && bookList.mouseScrolled(scrollY)) return true;
         if (mode == Mode.MUSIC_PLAYER && musicPage.mouseScrolled(scrollY, my)) return true;
         if (mode == Mode.NOTE_EDIT && noteEditor.mouseScrolled(mx, my, scrollX, scrollY)) return true;
         if (mode == Mode.ADDON_PAGE
