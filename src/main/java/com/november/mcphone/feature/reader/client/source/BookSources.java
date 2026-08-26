@@ -109,14 +109,17 @@ public final class BookSources {
      * 再崩一次界面更糟。
      */
     public static void open(BookRef book) {
+        // 先问特例：有的模组早就不用这本 Patchouli 书了，真正的手册在它自己的界面里。
+        // 这一句必须在找书源【之前】——特例接管的前提是"这本书归它管"，与书源在不在
+        // 名单里无关。放在后面的话，将来哪本书的书源没了，本来能靠特例打开的也打不开了
+        if (BookQuirks.open(book)) return;
+
         BookSource source = of(book);
         if (source == null) {
             MCphone.LOGGER.error("[MCphone] 书 {} 的书源 {} 不在名单里，打不开",
                     book.bookId(), book.sourceId());
             return;
         }
-        // 先问特例：有的模组早就不用这本 Patchouli 书了，真正的手册在它自己的界面里
-        if (BookQuirks.open(book)) return;
 
         try {
             source.open(book);
