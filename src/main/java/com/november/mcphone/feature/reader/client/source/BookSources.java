@@ -15,16 +15,20 @@ import java.util.List;
  *
  * 写一个 {@link BookSource} 实现，在下面 SOURCES 里加一行。完。
  *
+ * 但多数时候不必写新书源：某个模组的手册不是 Patchouli 书时，往
+ * {@link ExternalBookSource} 的白名单里加一条就够了，那正是它存在的理由。
+ * 真正需要新书源的是"一整类书"——比如将来玩家自己传进来的书。
+ *
  * 走一份看得见的名单而不是 SPI，与音乐那边的 MusicSources 是同一个取舍：
  * App 与商店来源走 SPI 是因为那是开给别的模组用的；书源眼下只有我们自己会加，
  * 名单比注册表好排查。真有第三方要接，换成 SpiLoader 是十几行的事，
  * {@link BookSource} 本身不用动。
  *
- * 顺序就是书架上的顺序
+ * 顺序就是书城里的顺序
  *
  * 拼表时不重新排——各书源自己排好自己的（Patchouli 那边按模组名再按书名）。
- * 跨书源则按名单顺序，"帕秋莉手册在前、别的在后"是可预期的，
- * 总比每次进来顺序都不一样强。
+ * 跨书源则按名单顺序，"帕秋莉手册在前、白名单里的外部手册在后"是可预期的，
+ * 总比每次进来顺序都不一样强；真要找某一本，顶上就是搜索框。
  *
  * 每个书源都单独兜住 Throwable
  *
@@ -39,7 +43,8 @@ public final class BookSources {
 
     /** 全部书源。加新的就往这里加一行 */
     private static final List<BookSource> SOURCES = List.of(
-            new PatchouliSource()
+            new PatchouliSource(),
+            new ExternalBookSource()
     );
 
     /**
@@ -48,6 +53,21 @@ public final class BookSources {
      * 只在客户端线程上读写（界面绘制与点击都在那条线程），不加锁也不用 volatile。
      */
     private static List<BookRef> cached;
+
+    /**
+     * 有没有任何一个书源能出书。
+     *
+     * 「阅读」App 靠它决定自己在不在（见 ReaderApp.isAvailable）：一个只装了
+     * 沉浸工程、没装 Patchouli 的整合包里，书城照样有东西可看，App 就不该藏起来。
+     *
+     * 只问各书源的 isAvailable()，那几个方法只碰 ModList，不会把别人的类拖进来。
+     */
+    public static boolean anyAvailable() {
+        for (BookSource source : SOURCES) {
+            if (isAvailable(source)) return true;
+        }
+        return false;
+    }
 
     /** 重扫所有书源。打开书架页时调 */
     public static void refreshAll() {

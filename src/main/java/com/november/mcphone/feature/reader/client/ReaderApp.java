@@ -3,6 +3,7 @@ package com.november.mcphone.feature.reader.client;
 import com.november.mcphone.api.client.app.RequiredMod;
 import com.november.mcphone.core.client.PhoneApp;
 import com.november.mcphone.core.client.PhoneScreen;
+import com.november.mcphone.feature.reader.client.source.BookSources;
 import com.november.mcphone.feature.reader.client.source.PatchouliSource;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
@@ -38,18 +39,32 @@ public final class ReaderApp extends PhoneApp {
     }
 
     /**
-     * 声明前置而不是覆盖 isAvailable()："可用性"与"缺什么"必须是同一个来源，
-     * 「设置 → 关于」那一页就是靠这个汇总出来的。
+     * 声明的前置仍然只有 Patchouli —— 那是这个 App 的主力书源，也是「设置 → 关于」
+     * 和商店「联动 App」页要告诉玩家的那一个。
      *
-     * 将来接第二种书源（别的手册模组、玩家自己传的书）时，这里要跟着改成
-     * "有任何一个书源可用"——那时候只装了另一个手册模组的玩家不该看不见这个 App。
-     * 眼下只有一个书源，写死它最诚实。
+     * 但可用性【不】按它算，见 {@link #isAvailable()}。
      */
     @Override
     public List<RequiredMod> requiredMods() {
         return List.of(new RequiredMod(
                 PatchouliSource.PATCHOULI_MODID,
                 Component.translatable("mcphone.compat.patchouli").getString()));
+    }
+
+    /**
+     * 有任何一个书源能出书，这个 App 就该在。
+     *
+     * 默认实现是"前置全装了才可用"，那在只有一个书源时是对的。现在书源不止一个：
+     * 一个只装了沉浸工程、没装 Patchouli 的整合包里，书城照样有一本工程师手册可看，
+     * 这时候把 App 藏起来是错的。
+     *
+     * 代价是这种包里「关于」页会显示"Patchouli 未装"——那句话本身没说错（它确实
+     * 没装），只是不再等于"这个 App 用不了"。要把商店那句「需要 %s」改成"任一"
+     * 的说法，得动商店那一支的代码，那是另一个 App 的事，不在这次的范围里。
+     */
+    @Override
+    public boolean isAvailable() {
+        return BookSources.anyAvailable();
     }
 
     /** 与时钟、记事本一致：书架是手机内的一个模式，不另开 Screen */
