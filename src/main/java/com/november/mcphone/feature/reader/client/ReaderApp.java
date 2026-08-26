@@ -4,6 +4,7 @@ import com.november.mcphone.api.client.app.RequiredMod;
 import com.november.mcphone.core.client.PhoneApp;
 import com.november.mcphone.core.client.PhoneScreen;
 import com.november.mcphone.feature.reader.client.source.BookSources;
+import com.november.mcphone.feature.reader.client.source.GuideMeSource;
 import com.november.mcphone.feature.reader.client.source.ImmersiveEngineeringManual;
 import com.november.mcphone.feature.reader.client.source.PatchouliSource;
 import net.minecraft.client.Minecraft;
@@ -56,6 +57,8 @@ public final class ReaderApp extends PhoneApp {
         return List.of(
                 new RequiredMod(PatchouliSource.PATCHOULI_MODID,
                         Component.translatable("mcphone.compat.patchouli").getString()),
+                new RequiredMod(GuideMeSource.GUIDEME_MODID,
+                        Component.translatable("mcphone.compat.guideme").getString()),
                 new RequiredMod(ImmersiveEngineeringManual.MODID,
                         Component.translatable("mcphone.compat.immersiveengineering").getString()));
     }

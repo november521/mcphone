@@ -204,6 +204,7 @@
   "mcphone.reader.empty": "No books found",
   "mcphone.reader.empty_hint": "Mods that ship a guide book show up here on their own. None at all usually means this pack has no mod using them.",
   "mcphone.compat.patchouli": "Patchouli (guide books)",
+  "mcphone.compat.guideme": "GuideME (AE2 & MI guidebooks)",
   "mcphone.compat.immersiveengineering": "Immersive Engineering",
   "mcphone.reader.search": "Book or mod",
   "mcphone.reader.count_filtered": "%s/%s",
