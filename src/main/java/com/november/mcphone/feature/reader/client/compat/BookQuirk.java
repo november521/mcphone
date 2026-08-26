@@ -1,6 +1,7 @@
 package com.november.mcphone.feature.reader.client.compat;
 
 import com.november.mcphone.feature.reader.BookRef;
+import net.minecraft.client.gui.GuiGraphics;
 import net.neoforged.fml.ModList;
 
 /**
@@ -19,10 +20,16 @@ import net.neoforged.fml.ModList;
  * 这三件事都不是"书源"该操心的——它们与书从哪儿来无关，只与【这一本书】有关。
  * 混进书源里会让通用逻辑长满 if (是某某模组)，而那正是这一层要避免的。
  *
- * 它能做三件事
+ * 它能做四件事
  *
  * 隐藏（{@link #rewrite} 返回 null）、改写显示（返回一个新的 BookRef）、
- * 接管打开（{@link #open} 返回 true）。够用了：目前遇到的所有"魔改"都落在这三样里。
+ * 接管打开（{@link #open} 返回 true）、自己画图标（{@link #renderIcon} 返回 true）。
+ * 够用了：目前遇到的所有"魔改"都落在这四样里。
+ *
+ * 这是【客户端】接口
+ *
+ * {@link #renderIcon} 的签名里有 GuiGraphics，实现类只能在客户端加载。整包都在
+ * client 包下就是这个意思，别从网络包或物品里引用它。
  *
  * 不能做的是【凭空多出一本书】——那种情况说明对方根本没在 Patchouli 里注册，
  * 该给它写一个自己的 {@code BookSource}，而不是在这里硬造一条。
@@ -76,6 +83,22 @@ public interface BookQuirk {
      *         回到没有这条特例时的行为，而不是一个点了没反应的死按钮
      */
     default boolean open(BookRef book) {
+        return false;
+    }
+
+    /**
+     * 自己画这本书在列表里的图标。
+     *
+     * 通用那条路（书源画那本书自己的物品）有时走不通——比如物品换成了 3D 模型，
+     * 那种在 GUI 里画会伤到整个界面，被 {@code GuiUtil.canDrawItemIcon} 挡掉。
+     * 挡掉之后退回的是一张通用书图，认不出是哪本书。这个口子就是给那种情况留的：
+     * 模组多半还留着老版本那张平面小图，直接画它，玩家反而更认得。
+     *
+     * 每帧每行都会问一次，所以这里只能画，别在里头查资源、算路径。
+     *
+     * @return 真的画了才 true；false 则继续往下退（书源 → 换肤贴图 → 纯色）
+     */
+    default boolean renderIcon(GuiGraphics g, BookRef book, int x, int y, int size) {
         return false;
     }
 }

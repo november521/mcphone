@@ -2,6 +2,7 @@ package com.november.mcphone.feature.reader.client.compat;
 
 import com.november.mcphone.MCphone;
 import com.november.mcphone.feature.reader.BookRef;
+import net.minecraft.client.gui.GuiGraphics;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -75,6 +76,25 @@ public final class BookQuirks {
                 // 不 return true：特例翻车时该退回默认那条路，玩家至少能打开点什么
                 MCphone.LOGGER.error("[MCphone] 书籍特例 {} 打开 {} 时出错，改走默认方式",
                         quirk.targetModId(), book.bookId(), t);
+            }
+        }
+        return false;
+    }
+
+    /**
+     * 有没有哪条特例自己画了这本书的图标。
+     *
+     * 不记日志：这是每帧每行都要走一次的路，一本坏书能在一分钟里刷出上千行。
+     * 画不出来的后果只是退回下一层兜底，玩家看得见，也不影响他翻书。
+     *
+     * @return true 表示画好了，调用方别再往下兜
+     */
+    public static boolean renderIcon(GuiGraphics g, BookRef book, int x, int y, int size) {
+        for (BookQuirk quirk : active()) {
+            try {
+                if (quirk.matches(book) && quirk.renderIcon(g, book, x, y, size)) return true;
+            } catch (Throwable t) {
+                return false;
             }
         }
         return false;

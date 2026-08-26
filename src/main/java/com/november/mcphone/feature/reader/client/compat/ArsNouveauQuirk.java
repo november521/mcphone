@@ -1,7 +1,10 @@
 package com.november.mcphone.feature.reader.client.compat;
 
 import com.november.mcphone.MCphone;
+import com.november.mcphone.core.client.GuiUtil;
 import com.november.mcphone.feature.reader.BookRef;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.resources.ResourceLocation;
 
 import java.lang.reflect.Method;
@@ -35,9 +38,15 @@ import java.lang.reflect.Modifier;
  * 也【不】把它从架子上拿掉——拿掉等于手机里查不到新生魔艺的文档，而这个 App
  * 存在的意义正相反。
  *
- * 顺带一提，它的笔记本物品是 GeckoLib 的 3D 模型（parent 是 builtin/entity），
- * 在列表里画它的图标会伤到整个界面，那件事由 {@code GuiUtil.canDrawItemIcon}
- * 统一挡掉，与本条特例无关——那不是新生魔艺一家的毛病。
+ * 图标用回它老版本那张
+ *
+ * 它的笔记本物品现在是 GeckoLib 的 3D 模型（parent 是 builtin/entity），在列表里
+ * 画它会伤到整个界面，那件事由 {@code GuiUtil.canDrawItemIcon} 统一挡掉——那不是
+ * 新生魔艺一家的毛病，所以不在这条特例里管。
+ *
+ * 但挡掉之后退回的是一张通用书图，一排书里认不出哪本是它。好在换 3D 模型之前的
+ * 那张 16×16 平面小图还在它 jar 里（{@code textures/item/worn_notebook.png}），
+ * 直接画那张——玩家认得的正是这张图。
  *
  * 为什么走反射而不是加一条编译依赖
  *
@@ -68,11 +77,27 @@ public final class ArsNouveauQuirk implements BookQuirk {
 
     private static final String OPEN_BOOK = "openBook";
 
+    /**
+     * 它换 3D 模型之前那张平面小图，至今还在 jar 里。
+     *
+     * 不是从物品模型推出来的，是写死的一条路径——所以对方哪天真删了这张图，
+     * 我们得能发现：{@link #hasLegacyIcon} 查不到就退回通用书图，不会画成紫黑格子。
+     */
+    private static final ResourceLocation LEGACY_ICON =
+            ResourceLocation.fromNamespaceAndPath(ARS_NOUVEAU_MODID, "textures/item/worn_notebook.png");
+
+    /** 图标尺寸，与文件一致。写成常量是为了让"这张图多大"只有一处说法 */
+    private static final int LEGACY_ICON_SIZE = 16;
+
     /** 解析过了吗。解析只做一次，无论成没成 */
     private boolean resolved;
 
     /** 解析出来的那个方法，null 表示这条路走不通，一律退回默认 */
     private Method openBook;
+
+    /** 老图标查过了吗，以及查到没有。每帧每行都要问，不能每次都去翻资源管理器 */
+    private boolean iconProbed;
+    private boolean iconFound;
 
     @Override
     public String targetModId() {
@@ -103,6 +128,38 @@ public final class ArsNouveauQuirk implements BookQuirk {
             openBook = null;
             return false;
         }
+    }
+
+    @Override
+    public boolean renderIcon(GuiGraphics g, BookRef book, int x, int y, int size) {
+        if (!hasLegacyIcon()) return false;
+
+        GuiUtil.drawTexture(g, LEGACY_ICON, x, y, size, size,
+                LEGACY_ICON_SIZE, LEGACY_ICON_SIZE);
+        return true;
+    }
+
+    /**
+     * 那张老图还在不在。查一次存着——这是每帧每行都会问到的路。
+     *
+     * 代价是资源包中途换了不会重查。可以接受：这张图来自模组自己的 jar，
+     * 而不是我们公开出去的换肤位，没人有理由在运行中把它换掉。
+     */
+    private boolean hasLegacyIcon() {
+        if (iconProbed) return iconFound;
+        iconProbed = true;
+
+        try {
+            Minecraft mc = Minecraft.getInstance();
+            iconFound = mc != null && mc.getResourceManager().getResource(LEGACY_ICON).isPresent();
+            if (!iconFound) {
+                MCphone.LOGGER.info("[MCphone] 新生魔艺的老图标 {} 不在了，书架上这一本画通用书图",
+                        LEGACY_ICON);
+            }
+        } catch (Throwable t) {
+            iconFound = false;
+        }
+        return iconFound;
     }
 
     /** 解析对方的开书方法。找不到不是错误，只是这个版本没有——记一行，退回默认 */

@@ -5,6 +5,7 @@ import com.november.mcphone.core.client.GuiUtil;
 import com.november.mcphone.core.client.PhoneSkin;
 import com.november.mcphone.core.client.PhoneTheme;
 import com.november.mcphone.feature.reader.BookRef;
+import com.november.mcphone.feature.reader.client.compat.BookQuirks;
 import com.november.mcphone.feature.reader.client.source.BookSources;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
@@ -142,8 +143,12 @@ public final class BookList {
         }
     }
 
-    /** 书源的图标画不出来时兜两层：我们自己那张书图，再不行纯色 */
+    /**
+     * 图标一共四层，从最认得出的往最通用的退：
+     * 特例（某个模组指定的那张图）→ 书源（那本书自己的物品）→ 换肤贴图 → 纯色。
+     */
     private static void renderIcon(GuiGraphics g, BookRef book, int x, int y) {
+        if (BookQuirks.renderIcon(g, book, x, y, ICON)) return;
         if (BookSources.renderIcon(g, book, x, y, ICON)) return;
         PhoneSkin.drawOrFill(g, PhoneSkin.Element.READER_BOOK, x, y, ICON, ICON,
                 PhoneTheme.COLOR_BOOK_SPINE);
