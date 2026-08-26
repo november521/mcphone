@@ -35,6 +35,7 @@ public final class BookQuirks {
 
     /** 全部特例。加新的就往这里加一行 */
     private static final List<BookQuirk> QUIRKS = List.of(
+            new ArsNouveauQuirk()
     );
 
     /** 当前该启用的那些，算一次存着。null 表示还没算过 */
