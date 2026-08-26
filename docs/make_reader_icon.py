@@ -1,7 +1,13 @@
-"""「阅读」App 的图标，以及书架上那本兜底的书。20×20 与 16×16，RGBA。
+"""书架上那本兜底的书。16×16 RGBA。
 
-这些是【占位图】：形状对、含义清楚、不难看，但等着被手绘的替换。
+它是【占位图】：形状对、含义清楚、不难看，但等着被手绘的替换。
 路径与尺寸就是最终契约，替换时覆盖同名文件即可。
+
+主屏那张 20×20 的 App 图标【已经是手绘的了】，本脚本不再生成它
+    v1.8.0 换上了手绘版（棕色合本 + 蓝书签，压在羊皮纸底上）。下面的 ART
+    还留着，因为 16×16 那张就是从它裁出来的；但 app_icon() 已经不再写文件。
+    真要回到占位图，自己取消 __main__ 里那一行的注释——别顺手改成默认执行，
+    那等于一跑脚本就把手绘图覆盖掉，而且不报错。
 
 为什么用一张手写的点阵而不是几何函数
     别的图标（天气那六张）是用圆和多边形拼的，因为它们是圆的。书不是：
@@ -69,7 +75,7 @@ def png(path, pixels, size):
 
 
 def app_icon():
-    """主屏那一格：整张 20×20，带圆角底。"""
+    """主屏那一格：整张 20×20，带圆角底。【已被手绘图取代，默认不再写文件】"""
     return [[COLORS[c] for c in row] for row in ART]
 
 
@@ -90,6 +96,6 @@ def shelf_icon():
 ASSETS = '/root/projects/mcphone/src/main/resources/assets/mcphone/textures/'
 
 if __name__ == '__main__':
-    n1 = png(ASSETS + 'app/reader.png', app_icon(), 20)
-    n2 = png(ASSETS + 'reader/book.png', shelf_icon(), 16)
-    print(f'app/reader.png {n1} B, reader/book.png {n2} B')
+    # 手绘的 App 图标不许被覆盖，理由见文件头。要回占位图就放开这一行：
+    # print('app/reader.png', png(ASSETS + 'app/reader.png', app_icon(), 20), 'B')
+    print('reader/book.png', png(ASSETS + 'reader/book.png', shelf_icon(), 16), 'B')
