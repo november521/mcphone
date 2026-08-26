@@ -191,6 +191,24 @@ public final class PhoneScreenRegistry {
         }
     }
 
+    /**
+     * 读一个 App 声明的【联动】模组（软的：装了更好用，没装照样能用），读不出来就当没有。
+     *
+     * 与 {@link #requiredModsOf} 同样兜 Throwable，理由一样：UNAVAILABLE 里的 App
+     * 引用着没装的模组，读它任何一样东西都可能抛 NoClassDefFoundError。
+     */
+    public static List<RequiredMod> companionModsOf(IPhoneApp app) {
+        if (app == null) return List.of();
+        try {
+            List<RequiredMod> mods = app.companionMods();
+            return mods == null ? List.of() : mods;
+        } catch (Throwable t) {
+            MCphone.LOGGER.warn("[MCphone] 读取 {} 的联动声明失败，当作没有声明",
+                    app.getClass().getName(), t);
+            return List.of();
+        }
+    }
+
     /** 按 id 查找目录中的 App（不论是否已安装） */
     public static IPhoneApp getApp(ResourceLocation id) {
         ensureLoaded();

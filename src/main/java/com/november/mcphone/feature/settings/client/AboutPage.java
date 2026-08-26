@@ -121,11 +121,27 @@ public final class AboutPage {
      */
     private static List<RequiredMod> companionMods() {
         Map<String, RequiredMod> byId = new LinkedHashMap<>();
+
+        // 硬前置：声明了它的 App 缺了对方就整个不可用
         for (IPhoneApp app : PhoneScreenRegistry.getCompanionApps()) {
             for (RequiredMod mod : PhoneScreenRegistry.requiredModsOf(app)) {
                 byId.putIfAbsent(mod.modId(), mod);
             }
         }
+
+        // 软联动：装了多一块内容，没装 App 照常在。这一类【不】出现在
+        // getCompanionApps() 里（那份名单按前置筛），所以要走整个目录
+        for (IPhoneApp app : PhoneScreenRegistry.getApps()) {
+            for (RequiredMod mod : PhoneScreenRegistry.companionModsOf(app)) {
+                byId.putIfAbsent(mod.modId(), mod);
+            }
+        }
+        for (IPhoneApp app : PhoneScreenRegistry.getAvailable()) {
+            for (RequiredMod mod : PhoneScreenRegistry.companionModsOf(app)) {
+                byId.putIfAbsent(mod.modId(), mod);
+            }
+        }
+
         return List.copyOf(byId.values());
     }
 

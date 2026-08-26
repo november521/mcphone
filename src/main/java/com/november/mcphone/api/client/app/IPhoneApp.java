@@ -71,6 +71,27 @@ public interface IPhoneApp {
     default List<RequiredMod> requiredMods() { return List.of(); }
 
     /**
+     * 这个 App 的【联动】模组 —— 装了更好用，没装照样能用。
+     *
+     * 与 {@link #requiredMods()} 的分别，是"缺了会怎样"
+     *
+     *   前置缺了：App 整个不可用，不进目录，主屏与商店里都不出现。
+     *   联动缺了：App 照常在，只是少一块内容。
+     *
+     * 声明它只影响一处：「设置 → 关于」的联动模组列表会把它列出来，告诉玩家装没装。
+     * 商店的「联动 App」页【不】收它——那一页回答的是"这个 App 为什么用不了"，
+     * 而联动模组缺了并不会让 App 用不了。
+     *
+     * 内建的「阅读」就是这么用的：装了 Patchouli 多几十本手册，装了沉浸工程多一本
+     * 工程师手册，两者互不依赖，缺一个另一个照样有书可看。它一个都没装时确实没用，
+     * 但那是它自己在 {@link #isAvailable()} 里判的，不是靠声明前置换来的。
+     *
+     * displayName 与前置那边同一条规矩：写死，别在运行时查——要显示它的时候
+     * 那个模组多半没装。
+     */
+    default List<RequiredMod> companionMods() { return List.of(); }
+
+    /**
      * 这个 App 在当前环境下存不存在。返回 false 则主屏与商店里都不出现。
      * 默认按 {@link #requiredMods()} 回答，绝大多数情况声明前置就够了。
      *
