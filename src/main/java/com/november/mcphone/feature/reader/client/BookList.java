@@ -160,9 +160,14 @@ public final class BookList {
         }
 
         // 占位提示走 suggestion 而不是 hint：hint 只在【没有焦点】时画，
-        // 而这个框一直握着焦点（进来就能打字），用 hint 等于永远看不见提示
+        // 而这个框一直握着焦点（进来就能打字），用 hint 等于永远看不见提示。
+        //
+        // 必须自己截断：EditBox 画 suggestion 那一句没有任何裁剪（正文有
+        // plainSubstrByWidth，suggestion 没有），放不下就直接画出框外，糊到
+        // 右边的本数上。中文那句只有 54 像素看不出来，英文的一百多像素一眼就露
         search.setSuggestion(search.getValue().isEmpty()
-                ? Component.translatable("mcphone.reader.search").getString()
+                ? GuiUtil.truncate(font, Component.translatable("mcphone.reader.search").getString(),
+                        textW - 2)
                 : null);
         search.render(g, mouseX, mouseY, partialTick);
 

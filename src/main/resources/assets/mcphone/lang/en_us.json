@@ -204,7 +204,7 @@
   "mcphone.reader.empty": "The shelf is empty",
   "mcphone.reader.empty_hint": "Mods that ship a guide book show up here on their own. None at all usually means this pack has no mod using them.",
   "mcphone.compat.patchouli": "Patchouli (guide books)",
-  "mcphone.reader.search": "Search books or mods",
+  "mcphone.reader.search": "Book or mod",
   "mcphone.reader.count_filtered": "%s/%s",
   "mcphone.reader.no_match": "No books matched",
   "mcphone.reader.no_match_hint": "Try another word - book name, mod name and mod id all match."
