@@ -201,11 +201,15 @@
   "mcphone.app.reader": "阅读",
   "mcphone.app.reader.desc": "整合包里的教程书全在这儿，点一本就翻开。书还在原处，只是不用再随身带着它们。需要装有 Patchouli。",
   "mcphone.reader.count": "%s 本",
-  "mcphone.reader.empty": "书架是空的",
+  "mcphone.reader.empty": "书城里一本书都没有",
   "mcphone.reader.empty_hint": "带教程手册的模组会自己出现在这里。一本都没有，多半是这个整合包没有用手册的模组。",
   "mcphone.compat.patchouli": "Patchouli（教程手册）",
   "mcphone.reader.search": "搜书名或模组",
   "mcphone.reader.count_filtered": "%s/%s",
   "mcphone.reader.no_match": "没有匹配的书",
-  "mcphone.reader.no_match_hint": "换个词试试：书名、模组名、模组 id 都能搜。中文客户端里书名多半是中文，模组名多半是英文。"
+  "mcphone.reader.no_match_hint": "换个词试试：书名、模组名、模组 id 都能搜。中文客户端里书名多半是中文，模组名多半是英文。",
+  "mcphone.reader.tab_shelf": "书架",
+  "mcphone.reader.tab_store": "书城",
+  "mcphone.reader.shelf_empty": "书架还是空的",
+  "mcphone.reader.shelf_empty_hint": "去「书城」点书右边的 ☆，它就放到这儿了。常翻的那几本收进来，以后不用每次从几十本里翻。"
 }

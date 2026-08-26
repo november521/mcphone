@@ -190,6 +190,14 @@ public final class PhoneTheme {
      */
     public static final int COLOR_SEARCH_BAR = 0xFF26263A;
 
+    /**
+     * 阅读 App 底部「书架 / 书城」当前那一页的底。
+     *
+     * 比搜索栏亮一档：它要从壁纸上"浮"出来说明自己是当前页，而搜索栏只是个
+     * 输入框的底，沉下去更合适。
+     */
+    public static final int COLOR_READER_TAB = 0xFF3A3A52;
+
     public static final int COLOR_VIEWFINDER = 0xCCFFFFFF;
 
     /** 正中的准星 */

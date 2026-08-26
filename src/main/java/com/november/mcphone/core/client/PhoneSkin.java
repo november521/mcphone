@@ -134,7 +134,16 @@ public final class PhoneSkin {
         READER_BOOK("reader/book", "reader_book"),
 
         /** 书架顶上那条搜索栏的底。建议 112×12，整张拉伸；兜底色 {@link PhoneTheme#COLOR_SEARCH_BAR} */
-        READER_SEARCH_BAR("reader/search_bar", "reader_search_bar");
+        READER_SEARCH_BAR("reader/search_bar", "reader_search_bar"),
+
+        /** 书已收进书架时行右端那颗星。建议 9×9，按实际绘制尺寸画；缺图时画 ★ 字符 */
+        READER_SHELVED("reader/shelved", "reader_shelved"),
+
+        /** 书还没收进书架时那颗星。建议 9×9；缺图时画 ☆ 字符。与 {@link #READER_SHELVED} 成对，要换就两张一起换 */
+        READER_UNSHELVED("reader/unshelved", "reader_unshelved"),
+
+        /** 底部「书架 / 书城」当前那一页的底。建议 54×12，整张拉伸；兜底色 {@link PhoneTheme#COLOR_READER_TAB}。另一页不画底 */
+        READER_TAB("reader/tab", "reader_tab");
 
         /** 现在的路径，按功能分目录 */
         private final ResourceLocation texture;

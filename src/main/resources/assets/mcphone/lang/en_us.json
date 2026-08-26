@@ -201,11 +201,15 @@
   "mcphone.app.reader": "Reading",
   "mcphone.app.reader.desc": "Every guide book in the pack, in one shelf. Tap one to open it. The books stay where they are - you just stop carrying them. Requires Patchouli.",
   "mcphone.reader.count": "%s",
-  "mcphone.reader.empty": "The shelf is empty",
+  "mcphone.reader.empty": "No books found",
   "mcphone.reader.empty_hint": "Mods that ship a guide book show up here on their own. None at all usually means this pack has no mod using them.",
   "mcphone.compat.patchouli": "Patchouli (guide books)",
   "mcphone.reader.search": "Book or mod",
   "mcphone.reader.count_filtered": "%s/%s",
   "mcphone.reader.no_match": "No books matched",
-  "mcphone.reader.no_match_hint": "Try another word - book name, mod name and mod id all match."
+  "mcphone.reader.no_match_hint": "Try another word - book name, mod name and mod id all match.",
+  "mcphone.reader.tab_shelf": "Shelf",
+  "mcphone.reader.tab_store": "All books",
+  "mcphone.reader.shelf_empty": "Your shelf is empty",
+  "mcphone.reader.shelf_empty_hint": "Tap the star on a row under \"All books\" to put it here. Keep the few you actually read on the shelf."
 }
