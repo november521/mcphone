@@ -178,6 +178,21 @@ dependencies {
     compileOnly "maven.modrinth:net-music:${netmusic_version}"
     localRuntime "maven.modrinth:net-music:${netmusic_version}"
 
+    // Patchouli（教程手册）—— 可选依赖：装了就多一个「阅读」App，把整合包里
+    // 所有教程书收进手机，没装则该 App 不出现。
+    //
+    // 同样是 compileOnly：所有引用都关在 feature/reader/client 下，运行期由
+    // ModList 判断在不在场。
+    //
+    // 接触面刻意只有四样：BookRegistry.INSTANCE.books（有哪些书）、
+    // Book 上的几个公开字段与 getOwnerName/getIcon（书名、出处、图标）、
+    // PatchouliAPI.openBookGUI（翻书）。其中只有最后一个属于它的 api 包，
+    // 前面几个是内部类——所以版本挑的是【最老】的那个，理由见 gradle.properties。
+    //
+    // 不写 localRuntime：开发环境里没有任何模组带书，装上它只会多加载一个模组，
+    // 那条路径要真跑，把整合包里的 jar 丢进 run/mods 更接近现场。
+    compileOnly "maven.modrinth:patchouli:${patchouli_version}"
+
     // JavaMP3 —— MP3 解码。这是【必需】依赖，不是可选联动：玩家往音乐
     // 目录里丢一个 mp3，不该要求他再去装别的模组。
     //
