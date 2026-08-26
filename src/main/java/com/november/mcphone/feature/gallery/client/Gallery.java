@@ -280,7 +280,21 @@ public final class Gallery {
     //  单张查看
 
     /**
-     * 单张查看：顶部返回与序号，中间大图，底部文件名与「◁ 删除 ▷」。
+     * 单张查看：顶部「◁ 返回 … 删除」，中间大图，底部「◁ 3/47 ▷」。
+     *
+     * 删除为什么在右上角，序号为什么在正中
+     *
+     * 1.7.56 之前正好反过来：序号占着右上角，删除夹在底部两个翻页箭头【中间】。
+     * 那是两个错。
+     *
+     * 翻照片是要连点箭头的，而删除是这一页唯一一个不可撤销的动作——把它放在
+     * 两个连点目标的正中间，等于专挑最容易点错的位置摆最不该点错的键。虽然
+     * 有"再点一次确认"兜底，但兜底是给手滑准备的，不是给布局的错误开脱的。
+     *
+     * 序号则相反：它只是个读数，点不点它都没事，占着最好按的那个角是浪费。
+     * 挪到底部正中之后，这一行就成了 {@code ◁ 3/47 ▷}，与网格页的翻页条
+     * （见 {@link #renderPager}）一模一样——同一个位置在两页里含义相同，
+     * 不再是"网格里是页码、单张里是删除"。
      *
      * 大图未加载完时先拿缩略图放大顶着——虽然糊，但翻看时不会闪空白，
      * 大图就绪的那一帧自然换上。
@@ -311,10 +325,7 @@ public final class Gallery {
 
         g.drawString(font, back, x, headerY, onBack ? colorCellBorder() : colorPager(), false);
 
-        String idx = (viewing + 1) + "/" + photos.size();
-        g.drawString(font, idx, x + w - font.width(idx), headerY, colorHint(), false);
-
-        // ---- 底部两行：文件名 / ◁ 删除 ▷ ----
+        // ---- 底部两行：文件名 / ◁ 序号 ▷ ----
         int btnRowY = phoneTop + screenH - navH - rowH - 2;
         int nameRowY = btnRowY - rowH;
 
@@ -332,10 +343,19 @@ public final class Gallery {
         boolean delIcon = !deleteArmed && PhoneSkin.has(PhoneSkin.Element.GALLERY_DELETE);
         String del = Component.translatable(
                 deleteArmed ? "mcphone.gallery.delete_confirm" : "mcphone.gallery.delete").getString();
+
+        // 上膛之后那句话比「删除」长得多，而它与左边的返回同在一行。留 6 像素缝
+        // 之后放不下就截断：宁可显示成「再点一次确认…」，也不能糊到返回上面去
+        // ——那两个键一个是退出、一个是删除，叠在一起点错的代价太大
+        int delMaxW = w - font.width(back) - 6;
+        if (!delIcon) del = GuiUtil.truncate(font, del, delMaxW);
+
         int delW = delIcon ? BTN : font.width(del);
-        int delX = x + (w - delW) / 2;
+        int delX = x + w - delW;
+        int delY = delIcon ? headerY + (font.lineHeight - BTN) / 2 : headerY;
         boolean onDelete = mouseX >= delX - HIT_PAD && mouseX < delX + delW + HIT_PAD
-                        && mouseY >= btnRowY && mouseY < btnRowY + rowH;
+                        && mouseY >= headerY - HIT_PAD
+                        && mouseY < headerY + font.lineHeight + HIT_PAD;
 
         hoveredBtn = onBack ? ViewBtn.BACK
                 : (onPrev && canPrev) ? ViewBtn.PREV
@@ -358,17 +378,22 @@ public final class Gallery {
                 canPrev ? (onPrev ? colorCellBorder() : colorPager()) : colorPagerOff(), false);
         g.drawString(font, ARROW_NEXT, x + w - font.width(ARROW_NEXT), btnRowY,
                 canNext ? (onNext ? colorCellBorder() : colorPager()) : colorPagerOff(), false);
+
+        // 序号摆在两个箭头正中，与网格页的翻页条同一个形状
+        String idx = (viewing + 1) + "/" + photos.size();
+        g.drawString(font, idx, x + (w - font.width(idx)) / 2, btnRowY, colorPager(), false);
+
+        // ---- 右上角：删除 ----
         if (delIcon) {
-            // 图标在 11 像素的行里居中；悬停铺一层"危险"色的底，与 App 管理器
-            // 里卸载那一行同一块色 —— 文字那一支是变红，图标不能变色，就让底变
-            int delY = btnRowY + (rowH - BTN) / 2;
+            // 悬停铺一层"危险"色的底，与 App 管理器里卸载那一行同一块色
+            // —— 文字那一支是变红，图标不能变色，就让底变
             if (onDelete) {
                 g.fill(delX - HIT_PAD, delY - HIT_PAD, delX + BTN + HIT_PAD, delY + BTN + HIT_PAD,
                         PhoneTheme.COLOR_ROW_HOVER_DANGER);
             }
             PhoneSkin.draw(g, PhoneSkin.Element.GALLERY_DELETE, delX, delY, BTN, BTN);
         } else {
-            g.drawString(font, del, delX, btnRowY,
+            g.drawString(font, del, delX, delY,
                     deleteArmed ? FontPalette.dangerArmed()
                             : (onDelete ? FontPalette.danger() : colorPager()), false);
         }
