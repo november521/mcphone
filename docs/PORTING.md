@@ -227,10 +227,26 @@ grep -rl 'net\.neoforged\.fml\.ModList' src/main/java \
 | `ScreenEvent` / `RenderGuiEvent` | 同名，包不同 |
 | `IConfigScreenFactory` / `ConfigurationScreen` | Forge 没有内置配置界面，要么自己写要么去掉 |
 
-**绘制代码要逐个核签名**，这一条影响的是那 111 个"干净文件"里的绘制部分：
-1.20.1 也有 `GuiGraphics`，但 `blit` 的重载、`drawString` 的返回值、
-`fill` 的 z 参数在两个版本上不完全一致。编译器会告诉你，但**不会告诉你画错了位置**——
-移植完每一页都要肉眼看一遍。
+~~**绘制代码要逐个核签名**~~ —— **第四刀实测：这条担心基本落空了。**
+
+原文预计 `blit` 的重载、`drawString` 的返回值、`fill` 的 z 参数都不一致。
+实际把 140 多个界面/页面文件一次性挂着真实类路径编下来，**`GuiGraphics`
+本身一处没改**。真正对不上的只有下面四个，而且都不在 `GuiGraphics` 上：
+
+| 1.21.1 | 1.20.1 | 危险度 |
+| --- | --- | --- |
+| `Screen.renderBackground(g, mx, my, tick)` | `renderBackground(g)` | 低，编译报错 |
+| `mouseScrolled(mx, my, scrollX, scrollY)` | `mouseScrolled(mx, my, delta)` | **高，见下** |
+| `EditBox.moveCursorToEnd(boolean)` | `moveCursorToEnd()` | 低，编译报错 |
+| `PlayerFaceRenderer.draw(g, PlayerSkin, ...)` | `draw(g, ResourceLocation, ...)` | 低，编译报错 |
+
+**`mouseScrolled` 那一行是这批里唯一会静默出事的。** 它是覆盖父类方法：
+签名从四参改成三参之后，如果只改调用点而忘了改自己的定义，**编译不会报错**，
+那个方法只是【永远不会被调到】—— 症状是"滚不动"，而日志里什么都没有。
+唯一的守卫是 `@Override`，所以覆盖原版方法时那个注解**一个都不能省**。
+
+至于"编译器不会告诉你画错了位置"这句仍然成立，移植完每一页还是要肉眼看
+一遍。只是要看的不再是签名差异，而是布局。
 
 ### 8. 配置 —— 2 个文件
 
@@ -276,6 +292,25 @@ else { throw new IllegalStateException(...); }   // 这句不能省，见下
 `sealed` / `permits` 不受影响，那是 17 就转正的。文本块、`instanceof` 模式
 也都安全。扫的时候顺带确认了没有 `case ... when` 守卫子句和字符串模板。
 
+### 不只是语法 —— Java 21 新增的【标准库方法】同样过不去
+
+第四刀撞出来的，前两版这条都漏了。语法能靠 grep 扫，库 API 不能：
+
+```
+java.lang.Math.clamp(...)   Java 21 新增   全仓 6 处 / 4 个文件
+```
+
+`Math.clamp` 在 17 上根本不存在，报的是 `cannot find symbol`，看着像打错字，
+跟"Java 版本"四个字毫无关联。换成 `net.minecraft.util.Mth.clamp` 即可，
+int/long/float/double 四个重载都在，行为一致。
+
+顺带扫过、**确认没有命中**的其它 21 新增 API：`SequencedCollection` 那一组
+（`getFirst`/`getLast`/`addFirst`/`removeLast`）、`Character.isEmoji`、
+`String.splitWithDelimiters`、字符串模板。
+
+⚠️ 全仓 5 处 `.reversed()` 全都是 `Comparator` 上的（Java 8 就有），
+**不是** `SequencedCollection.reversed()`。扫这一组时别只看方法名。
+
 **移植新文件时请复扫一遍**（比原来那句多抓 `case <Type> <ident>` 这一形）：
 
 ```bash
@@ -290,18 +325,24 @@ grep -rnE "case +[A-Z][A-Za-z0-9_.]*(\(|[[:space:]]+[a-z][A-Za-z0-9_]*[[:space:]
 **别假设 1.20.1 上有同名同版的对方。** 逐条确认，确认不了的就先不接——
 接一个断的联动比不接更糟。
 
-| 模组 | 1.20.1 上的状况 | 备注 |
-| --- | --- | --- |
-| Curios | 有，但坐标与 API 版本不同 | 饰品栏槽位那套 json 格式也变了 |
-| Waystones + Balm | 有，API 差异较大 | `WaystoneSelectionListBuilder` 那条路要重查 |
-| MCEF | 有 1.20.1 版 | 原生库下载那条路不变 |
-| NetMusic | **要先确认存不存在** | 它本来就是小众模组 |
-| Patchouli | 有 | `BookRegistry` 内部结构要重查 |
-| **GuideME** | **基本可以确定没有** | AE2 是在 1.21 才把它拆成独立模组的 |
-| FTB Quests | 有（2001.x） | `FTBQuestsClient.openGui()` 要在 2001.x 上重新核实 |
+**第四刀把这张表逐条实测过了**，下面是结果而不是预期：
 
-`ExternalBookSource` 的白名单（沉浸工程手册）、`BookQuirks`（新生魔艺）
-同理，各自的 1.20.1 版 API 都要重查。
+| 模组 | 结论 | 实测到的东西 |
+| --- | --- | --- |
+| **Curios** | ✅ 已接 | `5.14.1+1.20.1`。**API 有一处真差异**：`CuriosApi.getCuriosInventory` 在 5.x 返回 Forge 的 `LazyOptional`，不是 `java.util.Optional`，**没有 `flatMap`**，得先 `.resolve()`。9.x 那边已经改成返回 `Optional` 了 |
+| **NetMusic** | ✅ 已接 | `1.5.1-forge+mc1.20.1`，确实存在（清单原先写的是"要先确认存不存在"）。接触面照旧只有 `ItemMusicCD` |
+| **Patchouli** | ✅ 已接 | `1.20.1-80-forge`。仍然刻意挑**最老**的那个，理由与那一支相同 |
+| **JavaMP3** | ✅ 已接 | 非联动，是必需依赖。jarJar 已配好，见下面"构建侧" |
+| **Waystones + Balm** | ❌ **没接** | 1.20.1 版 API 差得多：`WaystoneSelectionListBuilder` 这个类**不存在**、`Balm.networking()` 也没有、`ModMenus` 里没有 `warpStoneSelection`。整条"打开选点界面"的路要照着 Waystones 14.x 重写，不是换包名的事 |
+| **MCEF** | ❌ **没接** | 模组本身有 1.20.1 版（`2.1.6-1.20.1`），**卡在渲染管线**：`BrowserScreen` 用的 `Tesselator.begin(Mode, VertexFormat)` 与 `BufferBuilder.addVertex(...)` 是 1.21 才长成那样的，1.20.1 上那套 API 完全不同 |
+| **GuideME** | ❌ 没接 | 与预判一致，1.20.1 上基本可以确定没有 |
+| **FTB Quests** | ⬜ 未验 | `QuestsApp` 搬过来了但没登记进 SPI 清单，2001.x 的 `FTBQuestsClient.openGui()` 还没核实 |
+
+没接的那两个连同它们的 compat 类、App、网络包一起**没有搬进工程**——
+接一个断的联动比不接更糟，编译期依赖也一并去掉了，免得白拖慢构建。
+
+`ExternalBookSource` 的白名单（沉浸工程手册）、`BookQuirks`（新生魔艺）同理，
+各自的 1.20.1 版 API 都要重查。
 
 ## 构建侧已经做完的
 
@@ -315,12 +356,34 @@ grep -rnE "case +[A-Z][A-Za-z0-9_.]*(\(|[[:space:]]+[a-z][A-Za-z0-9_]*[[:space:]
 
 ## 还没做的构建侧
 
-- **jarJar**：javamp3（MP3 解码）是必需依赖，要嵌进 jar。ForgeGradle 的 jarJar
-  配置与 ModDevGradle 不一样，等音乐那一支移植时再弄
+- ~~**jarJar**~~ ✅ **第四刀做完了**。`fr.delthas:javamp3` 走 `jarJar(implementation(...))`
+  嵌进 jar，区间写法 `[1.0.1,2.0)` 是 jarJar 的要求（多个模组都嵌同一个库时好挑一个共用）。
+
+  ⚠️ **开了 jarJar 会多出一个 jar，这件事差点出事故。** `build/libs` 下同时有
+  `jar` 任务出的（不含内嵌依赖）和 `jarJar` 出的（含）。两条 CI 都是
+  `find build/libs -name "*.jar" | head -1` 取件的 —— **那个 `head -1` 挑到谁
+  完全看文件系统顺序**，挑错就发出一个放 mp3 必崩的包，而构建全绿、测试全绿，
+  没有任何东西会告诉你。
+
+  现在的做法：`jar` 改名带 `-slim`，`jarJar` 占住默认名字，两份 workflow 的
+  `find` 也加了 `! -name "*-slim.jar"`。**双保险，缺一不可** —— 只改 classifier
+  的话，将来谁把它改回去就又静默出事了。
+
 - **dist 隔离校验**：NeoForge 那支有个 `verifyDistIsolation` 任务，扫非 client 类
   有没有引用客户端类型（专用服务器启动即崩的那种坑）。这一支**必须也加上**，
-  而且要早加——等代码堆起来再加就有一堆存量要清
+  而且要早加——等代码堆起来再加就有一堆存量要清。
+
+  第四刀已经做过一次**非正式**的验证：`./gradlew runServer` 真把专用服务端拉起来
+  （`Done (6.770s)!`、零 ERROR），而且日志里**没有**客户端那一半的加载行 ——
+  说明 `DistExecutor` 那道隔离是生效的。但这只是一次抽查，不是任务。
+
 - **Parchment 映射**：现在用的是官方混淆表（没有参数名）。要加就得挂 librarian 插件
+
+- **`BuiltInRegistries.ITEM` 的废弃告警**：`BuiltinAppPrices`、`ExternalBook`、
+  `ExternalBookSource` 三处。Forge 在 1.20.1 上把它标了废弃（推荐走
+  `ForgeRegistries`），NeoForge 那边没标，所以那三个文件与 `main` 逐字相同时
+  这边会多三条告警。`./gradlew build` 默认不开 `-Xlint:deprecation` 所以看不见，
+  这里记一笔免得下次有人当成新问题查。
 
 ## 进度
 
@@ -445,7 +508,59 @@ A 编不过，引用 A 的 B 这一轮才暴露出来。一轮就收工会漏掉
 直接解析失败。另外它会在**工程根**下生成 `logs/`（不是 `run/logs/`），
 已补进 `.gitignore`。
 
+### ✅ 第四刀：界面壳与 App 页面（+91 个文件，共 174 个）
+
+**手机能开机了。** 目标是把第三刀验不到的那半截补上 —— 有客户端才能真按下按钮。
+
+界面壳没法单独搬：`PhoneScreen` 直接 import 了 27 个页面类（导航是写死在它
+里面的），所以"壳"与 App 是一整块。闭包 71 个文件，加上同包引用与 SPI 类，
+这一刀实际搬了 91 个。
+
+**做完之后能用的**：开机（右键手机 / 快捷键）、主屏、时钟、天气、相册、
+设置（换壁纸、改设备名、字体配色、关于）。壁纸与设备名走的是真网络往返 ——
+第三刀那条链路现在有界面按得动了。
+
+**做不了的**：聊天、记事本、音乐、应用商店、末影箱 —— 它们的**客户端那一半
+已经搬过来并编过**，缺的是服务端处理包。所以这几个 App 暂时不写进 SPI 清单
+（`resources/META-INF/services/` 下那份 IPhoneApp 名单），登记了点进去只会
+发出一个没人接的包。每搬完一个功能的服务端，在 `NetworkHandler` 加注册、
+在那份清单里加一行即可，**不需要改任何界面代码**。
+
+相机缺 `CameraHandler`；浏览器与传送石整个联动没接，理由见上面的联动表。
+
+### 三处 1.20.1 特有的入口形状
+
+1. **`@Mod` 没有 `dist` 参数。** 那边客户端入口是带
+   `dist = Dist.CLIENT` 的第二个 mod 类，由加载器保证专用服务端读都不读它。
+   1.20.1 上没这个参数，改成 `MCphone` 里用
+   `DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> () -> MCphoneClient.init(context))`。
+
+   **那个双层 Supplier 不是啰嗦。** 写成一句直接调用，专用服务端在加载
+   `MCphone` 时就会连带解析 `MCphoneClient`，而它引用着 `Minecraft`、`Screen`，
+   当场 `NoClassDefFoundError` —— 光是写着就会崩，那句根本不需要被执行到。
+
+2. **`ModLoadingContext.get()` 已标 `forRemoval`。** 注册配置要用注入进来的
+   `FMLJavaModLoadingContext` **实例上**的 `registerConfig`。这与 `MCphone`
+   类注释里说的是同一件事 —— 网上绝大多数 1.20.1 教程都还是那个静态写法。
+
+3. **`TickEvent.ClientTickEvent` 要判 `phase`。** 那边事件本身分 `Pre`/`Post`
+   两个类，订阅 `ClientTickEvent.Post` 就只收结束那一次。1.20.1 上只有一个类，
+   两个阶段都从这儿进来，**不判 `event.phase != Phase.END` 就会一 tick 触发两次**。
+
+### 验收
+
+1. `./gradlew build` → `BUILD SUCCESSFUL`，**零 error、零 removal 告警**
+2. 6 个断言测试仍是 **122,201 条全绿**
+3. `./gradlew runServer` → `Done (6.770s)!`，零 ERROR，且日志里没有客户端那半边
+4. 产物 `mcphone-0.1.0.jar` 内含 `META-INF/jarjar/javamp3-1.0.1.jar`、
+   227 个类、40 张贴图、218 条语言条目
+
+**验不到的**：界面本身。这台机器上没有显示环境（无 `DISPLAY`、无 `Xvfb`），
+`runClient` 跑不起来。**布局、配色、点击响应都要在本机 `./gradlew runClient`
+肉眼过一遍** —— 编译器管得了签名，管不了画得对不对。
+
 ### ⬜ 下一刀
+
 
 第一刀剔掉的那 6 个，**回来了 3 个**：`util/SpiLoader`、`api/client/ui/IPhonePage`、
 `feature/reader/client/ShelfStore`。剩下 3 个（`ChatClientCache`、`NotesClientCache`、
@@ -463,13 +578,16 @@ A 编不过，引用 A 的 B 这一轮才暴露出来。一轮就收工会漏掉
    **剩下 32 个包照着搬**，往 `NetworkHandler.register()` 末尾追加即可，
    序号自然递增、不用动 `PROTOCOL_VERSION`。`PhoneLocation` 的 Java 17
    语法改动（第 9 条）跟着这批一起做，它卡在 `ByteBufCodecs` 上
-4. 注册表与物品（第 6、4 条）—— 到这里手机能拿在手里且带数据
-5. **加 `verifyDistIsolation`**，趁代码还少
-6. 界面壳与主屏（`PhoneScreen`、`HomeGrid`、`PhoneChassis`）—— 第二大的闸，
-   光它一个就挡着 12 个文件。到这里能开机了
-7. 玩家数据 Capability（第 3 条）—— 聊天、好友、商店都压在它上面
-8. App 逐个搬，从不依赖网络的开始（时钟、天气、相册）
-9. 联动模组，逐个确认后再接（那 6 个 compat 文件等这一步）
+4. ~~注册表与物品~~ ✅ 物品数据已退回 NBT（`PhoneItemData`），设备名能存能同步
+5. ~~界面壳与主屏~~ ✅ 第四刀做完，手机能开机
+6. ~~玩家数据 Capability~~ ✅ 骨架已成（`ModCapabilities` / `PhonePlayerData`），
+   壁纸与笔记两个字段已就位。**再加字段时必须回去补 `onPlayerClone`**
+7. **服务端处理函数，逐个功能补**（第 1 条剩下的 31 个包）—— 现在的瓶颈就在这儿。
+   客户端那一半全都编过了，缺的是服务端。建议顺序：记事本（`NoteService` 已经
+   搬过来了，最近）→ 应用商店 → 聊天 → 音乐 → 末影箱。每补完一个，
+   在 `NetworkHandler` 加注册、在 SPI 清单里加一行
+8. **加 `verifyDistIsolation`** —— 代码已经不少了，越拖存量越多
+9. 联动模组：Waystones 与 MCEF 两条要照 1.20.1 的 API 重写，见上面的联动表
 
 每一步都能编译、能进游戏再走下一步。24k 行一次性搬过来然后调编译错误，
 是这种移植最常见的翻车方式。

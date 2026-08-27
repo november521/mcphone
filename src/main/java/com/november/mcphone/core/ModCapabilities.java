@@ -80,18 +80,21 @@ public final class ModCapabilities {
      * 不先 reviveCaps() 就读，拿到的是空的 LazyOptional，症状是"拷贝静默失败"。
      */
     public static void onPlayerClone(PlayerEvent.Clone event) {
-        if (event.isWasDeath()) {
-            // 目前所有字段（只有壁纸）在那边都没标 copyOnDeath，死亡即重置。
-            // 加了标了 copyOnDeath 的字段之后，这里要改成逐字段拷贝
-            return;
-        }
+        boolean wasDeath = event.isWasDeath();
 
         Player original = event.getOriginal();
         original.reviveCaps();
         try {
             original.getCapability(PHONE_DATA).ifPresent(from ->
-                    event.getEntity().getCapability(PHONE_DATA).ifPresent(to ->
-                            to.copyFrom(from)));
+                    event.getEntity().getCapability(PHONE_DATA).ifPresent(to -> {
+                        if (wasDeath) {
+                            // 死亡：只保留那边标了 copyOnDeath 的字段
+                            to.copyDeathPersistentFrom(from);
+                        } else {
+                            // 末地返回：那边一律保留，不分标没标
+                            to.copyFrom(from);
+                        }
+                    }));
         } finally {
             original.invalidateCaps();
         }

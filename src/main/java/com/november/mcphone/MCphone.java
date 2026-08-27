@@ -48,6 +48,9 @@ public final class MCphone {
 
     public static final Logger LOGGER = LogUtils.getLogger();
 
+    /** 本模组版本号，构造期填进来 */
+    private static String version = "";
+
     public MCphone(FMLJavaModLoadingContext context) {
         IEventBus modBus = context.getModEventBus();
 
@@ -67,6 +70,26 @@ public final class MCphone {
                 ModCapabilities::onAttachCapabilities);
         MinecraftForge.EVENT_BUS.addListener(ModCapabilities::onPlayerClone);
 
-        LOGGER.info("[MCphone] Forge 1.20.1 骨架已加载。界面与多数 App 尚未移植，见 docs/PORTING.md");
+        // 1.21.1 那边由构造函数注入的 ModContainer 直接给出；1.20.1 上
+        // FMLJavaModLoadingContext 没有 getModInfo，得回头去 ModList 里查自己
+        version = net.minecraftforge.fml.ModList.get()
+                .getModContainerById(MODID)
+                .map(c -> c.getModInfo().getVersion().toString())
+                .orElse("");
+
+        // 客户端那一半。【必须走 DistExecutor】，不能直接写 MCphoneClient.init(modBus)：
+        // 那句会让专用服务端在加载本类时连带解析 MCphoneClient，而它引用着
+        // Minecraft、Screen 这些客户端类型，当场 NoClassDefFoundError。
+        // 收 Supplier 的 Supplier 正是为了把那次引用推迟到确认在客户端之后。
+        net.minecraftforge.fml.DistExecutor.unsafeRunWhenOn(
+                net.minecraftforge.api.distmarker.Dist.CLIENT,
+                () -> () -> MCphoneClient.init(context));
+
+        LOGGER.info("[MCphone] Forge 1.20.1 已加载 v{}，见 docs/PORTING.md", version);
+    }
+
+    /** 本模组版本号，如 "0.1.0"。模组构造前调用会得到空串。 */
+    public static String getVersion() {
+        return version;
     }
 }

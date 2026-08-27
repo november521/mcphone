@@ -18,6 +18,22 @@ java {
     toolchain.languageVersion = JavaLanguageVersion.of(17)
 }
 
+repositories {
+    // Curios 与 NetMusic 都发在 Modrinth 上，官方 maven 与发布同源。
+    // 用 content 把它限定在 maven.modrinth 这一个 group：不限定的话，
+    // 每解析一个依赖都要先来问它一次，构建平白慢一截。
+    // javamp3 在中央仓库
+    mavenCentral()
+
+    maven {
+        name = "Modrinth"
+        url = "https://api.modrinth.com/maven"
+        content {
+            includeGroup "maven.modrinth"
+        }
+    }
+}
+
 minecraft {
     // 官方混淆表。NeoForge 那一支用的是 Parchment（带参数名，读反编译代码舒服得多），
     // 这里先不上：Parchment 在 ForgeGradle 上要额外挂 librarian 插件，
@@ -59,7 +75,79 @@ repositories {
     mavenCentral()
 }
 
+// jarJar 的产物必须是【默认那一个】，否则会出事
+//
+// 开了 jarJar 之后 build/libs 下会有两个 jar：jar 任务出的那个不含内嵌依赖，
+// jarJar 出的那个才含。两条 CI 都是 `find build/libs -name "*.jar" | head -1`
+// 取件的 —— 那个 head -1 挑到谁完全看文件系统顺序，挑错就发出一个
+// 放 mp3 必崩的包，而构建全绿、测试也全绿，没有任何东西会告诉你。
+//
+// 所以把没嵌依赖的那个改名带上 -slim，让它落在 CI 的排除名单里，
+// 内嵌那个占住默认名字。两份 workflow 的 find 也一并加了 -slim 排除。
+tasks.named('jar') {
+    archiveClassifier = 'slim'
+}
+tasks.named('jarJar') {
+    archiveClassifier = ''
+}
+
+
 dependencies {
+
+    // Curios（饰品栏）—— 可选联动：装了就能把手机挂腰上，没装则一切照旧。
+    //
+    // compileOnly 而不是 implementation：只在运行时【如果】Curios 在场才去调它，
+    // 编译期有类型就够了。写成 implementation 会把它变成必需品，没装的玩家
+    // 直接加载失败。所有真调用都关在 CuriosCompat 的 *Internal 方法里，
+    // 由 ModList 在外层判在不在场——那套隔离与 NeoForge 那一支逐字相同。
+    //
+    // fg.deobf 是 ForgeGradle 的规矩：Modrinth 上的是生产 jar，里面对 Minecraft
+    // 的引用是 SRG 名，不过一遍 deobf 就与开发环境的官方混淆表对不上。
+    // 【这一条与 NeoForge 那一支不同】，那边的 ModDevGradle 不需要。
+    //
+    // 不写运行期依赖：ForgeGradle 6 没有 localRuntime 这个配置（那是
+    // ModDevGradle/NeoGradle 的东西）。真要跑饰品栏那条路，把 jar 手动丢进
+    // run/mods 即可。
+    compileOnly fg.deobf("maven.modrinth:curios:${curios_version}")
+
+    // NetMusic（网络音乐机）—— 可选联动：装了就能把它刻出来的 CD 塞进唱片仓。
+    //
+    // 要当心的是它【没有对外的 API 包】：用到的 ItemMusicCD 在它的内部包里。
+    // 所以接触面必须小，别顺手用它别的东西。它改版时断的地方越少越好，而断了
+    // 会是 NoSuchMethodError 这类 Error —— 兼容层里兜的是 Throwable 不是
+    // Exception，正是为了这个。
+    compileOnly fg.deobf("maven.modrinth:net-music:${netmusic_version}")
+
+    // 【Waystones 与 MCEF 这一刀没接】，两条都是实测撞墙后退回来的，不是漏了：
+    //
+    //   Waystones  1.20.1 版的 API 与 1.21 差得多：WaystoneSelectionListBuilder
+    //              这个类不存在、Balm.networking() 也没有、ModMenus 里没有
+    //              warpStoneSelection。整条打开选点界面的路要照着 Waystones 14.x
+    //              重写，不是换个包名的事
+    //   MCEF       它本身有 1.20.1 版，但 BrowserScreen 用的是 1.21 的渲染管线
+    //              （Tesselator.begin(Mode, VertexFormat)、BufferBuilder.addVertex），
+    //              1.20.1 上那套 API 还没长成这样，同样要重写
+    //
+    // 两个都是可选联动，不接不影响手机本身。接一个断的联动比不接更糟，
+    // 所以连同 compat 类一起先不搬，详见 docs/PORTING.md。
+
+    // Patchouli（教程手册）—— 可选联动：装了就多一个「阅读」App。
+    //
+    // 接触面里有三样是它的【内部】类，所以版本挑的是 1.20.1 上最老的那个，
+    // 理由写在 gradle.properties 里。
+    compileOnly fg.deobf("maven.modrinth:patchouli:${patchouli_version}")
+
+    // JavaMP3 —— MP3 解码。【必需】依赖，不是可选联动。
+    //
+    // jarJar 而不是 implementation：模组 jar 不会自动带上第三方库，只写
+    // implementation 的话开发环境跑得起来、发出去的 jar 一放 mp3 就
+    // NoClassDefFoundError。这一条 PORTING.md 里原先列在"还没做的构建侧"。
+    //
+    // 区间写法是 jarJar 的要求：它要知道可接受的版本范围，好在多个模组都
+    // 嵌了同一个库时挑一个共用，而不是各带各的。
+    jarJar(implementation("fr.delthas:javamp3:[${javamp3_version},2.0)")) {
+        jarJar.ranged(it, "[${javamp3_version},2.0)")
+    }
     minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
 
     // 可选联动（Curios、Waystones、MCEF、Patchouli、FTB Quests…）都还没接。

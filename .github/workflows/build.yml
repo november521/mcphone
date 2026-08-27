@@ -38,7 +38,7 @@ jobs:
       - name: Find built JAR
         id: find-jar
         run: |
-          JAR_PATH=$(find build/libs -name "*.jar" ! -name "*-sources.jar" ! -name "*-dev.jar" | head -1)
+          JAR_PATH=$(find build/libs -name "*.jar" ! -name "*-sources.jar" ! -name "*-dev.jar" ! -name "*-slim.jar" | head -1)
           if [ -z "$JAR_PATH" ]; then
             echo "::error::build/libs 下没找到可上传的 jar"
             exit 1

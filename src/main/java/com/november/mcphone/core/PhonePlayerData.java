@@ -1,6 +1,7 @@
 package com.november.mcphone.core;
 
 import com.november.mcphone.MCphone;
+import com.november.mcphone.feature.notes.NoteList;
 import com.november.mcphone.feature.settings.WallpaperData;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtOps;
@@ -27,8 +28,10 @@ public final class PhonePlayerData implements INBTSerializable<CompoundTag> {
 
     /** 存档里的键名，与那边 AttachmentType 的注册名对齐，方便两支对照排查 */
     private static final String KEY_WALLPAPER = "wallpaper_data";
+    private static final String KEY_NOTES = "personal_notes";
 
     private WallpaperData wallpaper = WallpaperData.DEFAULT;
+    private NoteList notes = NoteList.EMPTY;
 
     public WallpaperData wallpaper() {
         return wallpaper;
@@ -38,9 +41,32 @@ public final class PhonePlayerData implements INBTSerializable<CompoundTag> {
         this.wallpaper = value;
     }
 
+    public NoteList notes() {
+        return notes;
+    }
+
+    public void setNotes(NoteList value) {
+        this.notes = value;
+    }
+
     /** 把 other 的内容整个拷过来。玩家重生/换维度时由 ModCapabilities 调用 */
     public void copyFrom(PhonePlayerData other) {
         this.wallpaper = other.wallpaper;
+        this.notes = other.notes;
+    }
+
+    /**
+     * 只拷那边标了 copyOnDeath 的字段。死亡重生时由 ModCapabilities 调用。
+     *
+     * 【加字段时必须回来看这里】：那边每份数据的死亡保留策略是各自注册时定的，
+     * 合成一个 Capability 之后只能在这儿逐字段表达。漏一个的症状是
+     * "死一次笔记就没了"，而且只在玩家真死过一次之后才显形。
+     *
+     *   wallpaper  那边没标 copyOnDeath  → 不拷（死亡即重置，原样复现）
+     *   notes      那边标了 copyOnDeath  → 拷
+     */
+    public void copyDeathPersistentFrom(PhonePlayerData other) {
+        this.notes = other.notes;
     }
 
     @Override
@@ -49,6 +75,9 @@ public final class PhonePlayerData implements INBTSerializable<CompoundTag> {
         WallpaperData.CODEC.encodeStart(NbtOps.INSTANCE, wallpaper)
                 .resultOrPartial(err -> MCphone.LOGGER.error("壁纸数据写入存档失败: {}", err))
                 .ifPresent(encoded -> tag.put(KEY_WALLPAPER, encoded));
+        NoteList.CODEC.encodeStart(NbtOps.INSTANCE, notes)
+                .resultOrPartial(err -> MCphone.LOGGER.error("笔记写入存档失败: {}", err))
+                .ifPresent(encoded -> tag.put(KEY_NOTES, encoded));
         return tag;
     }
 
@@ -58,12 +87,20 @@ public final class PhonePlayerData implements INBTSerializable<CompoundTag> {
         // 也可能这一格根本还没写过（第一次装上这个 mod）。解析不出来就用默认，
         // 而不是让一个坏字段把整个玩家数据带崩
         wallpaper = WallpaperData.DEFAULT;
+        notes = NoteList.EMPTY;
 
-        Tag encoded = tag.get(KEY_WALLPAPER);
-        if (encoded == null) return;
+        Tag wp = tag.get(KEY_WALLPAPER);
+        if (wp != null) {
+            WallpaperData.CODEC.parse(NbtOps.INSTANCE, wp)
+                    .resultOrPartial(err -> MCphone.LOGGER.warn("壁纸数据读取失败，已退回默认: {}", err))
+                    .ifPresent(value -> wallpaper = value);
+        }
 
-        WallpaperData.CODEC.parse(NbtOps.INSTANCE, encoded)
-                .resultOrPartial(err -> MCphone.LOGGER.warn("壁纸数据读取失败，已退回默认: {}", err))
-                .ifPresent(value -> wallpaper = value);
+        Tag nt = tag.get(KEY_NOTES);
+        if (nt != null) {
+            NoteList.CODEC.parse(NbtOps.INSTANCE, nt)
+                    .resultOrPartial(err -> MCphone.LOGGER.warn("笔记读取失败，已退回空列表: {}", err))
+                    .ifPresent(value -> notes = value);
+        }
     }
 }
