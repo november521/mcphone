@@ -52,6 +52,34 @@ CHANNEL.sendToServer(new FooPacket(1));
 > 建议先移植**一条**最简单的包（比如设置同步），把 `SimpleChannel` 的骨架跑通，
 > 再批量搬其余 33 个。别 34 个一起改，编译错误会糊成一片。
 
+**第三刀已按这条走完，下面是实测补充。**
+
+通道本身这么建（`ChannelBuilder` **在 47.4.23 上不存在**，那是 Forge 48+/1.20.2
+才有的东西，网上按 1.20.2 写的教程照抄会找不到类）：
+
+```java
+NetworkRegistry.newSimpleChannel(id, () -> VERSION, VERSION::equals, VERSION::equals)
+```
+
+**三个必须每个包都记得、因而不该每个包都手写的东西**，已经收进
+`core/net/MCphoneNetwork` 的两个注册函数里，上层只写"收到之后做什么"：
+
+| 坑 | 漏了会怎样 |
+| --- | --- |
+| `ctx.setPacketHandled(true)` | Forge 每收一个包就在日志里报一次"未处理" |
+| `ctx.enqueueWork(...)` | 默认在**网络线程**上跑，碰世界/玩家/物品即并发访问，偶发且不可复现 |
+| `ctx.getSender()` 可能为 null | 客户端方向必然为 null；照 `IPayloadContext.player()` 直译过来就是空指针 |
+
+所以 C2S 的处理函数签名是 `(包, ServerPlayer)` —— 玩家已确认非空、已在主线程；
+S2C 的是 `(包)` —— **故意不给玩家参数**，那个方向不存在有意义的玩家，
+给一个永远为 null 的参数只会诱人去用。客户端玩家自己从 `Minecraft` 取。
+
+**序号那条不是提醒，是真会静默出错。** `SimpleChannel` 认整数序号，由注册顺序
+发放。在中间插入或删除一个包，它后面所有包的序号平移，旧客户端会把 A 包当成
+B 包解码 —— 症状是字段值乱七八糟，**不是干脆的报错**。唯一护栏是通道的
+`PROTOCOL_VERSION`（两端不一致直接拒绝连接），所以**动了顺序就必须把它 +1**，
+往末尾追加则不用。
+
 ### 2. ~~ResourceLocation 构造 —— 46 个文件~~ —— **这一条作废，一个字都不用改**
 
 > 原文说"**53 处** `ResourceLocation.fromNamespaceAndPath(ns, path)`，1.20.1 上要写成
@@ -101,6 +129,41 @@ Forge 47.4.x **把 1.21 的静态工厂方法回移进 1.20.1 了**，同时把�
 **最后一行是最容易漏的**：Forge 的 capability 在玩家死亡重生时默认**不保留**，
 要自己在 `PlayerEvent.Clone` 里从 `event.getOriginal()` 拷过来，而且得先调
 `reviveCaps()`。漏了的症状是"死一次好友列表就空了"。
+
+**但上面这句只说对了一半**，第三刀查 NeoForge 源码时才发现。`AttachmentType`
+的类注释原文：
+
+> Serializable entity attachments are **not copied on death by default**
+> (but they **are copied when returning from the end**).
+
+也就是说 `.copyOnDeath()` 只管**死亡**这一种情况，**从末地返回时一律保留**，
+不管标没标。而 Forge 的 `PlayerEvent.Clone` **两种情况都会触发**。所以：
+
+| 那边 | 这边 `PlayerEvent.Clone` 里要怎么写 |
+| --- | --- |
+| 标了 `.copyOnDeath()` | 两种情况都拷 |
+| **没标**（如 `WALLPAPER`） | **`!isWasDeath()` 时仍要拷**，只在死亡时不拷 |
+
+把"没标 copyOnDeath"读成"不用监听 Clone"，玩家打完末影龙走传送门回主世界
+就会发现壁纸没了——那边不会。这是一处**只在特定路径上才发作**的分叉。
+
+顺带记两条第三刀实测的 API 形状：
+
+- `INBTSerializable<T>` 在 1.20.1 上是 `T serializeNBT()` / `void deserializeNBT(T)`，
+  **不带** `HolderLookup.Provider` 参数（NeoForge 1.21 那边带）
+- `AttachCapabilitiesEvent` 是**泛型事件**，监听器必须用
+  `MinecraftForge.EVENT_BUS.addGenericListener(Entity.class, ...)` 注册。
+  用普通的 `addListener` 不报错，只是**永远收不到事件** —— capability 静默不附加
+
+### 一个 Attachment 一个 Capability？第三刀选了不
+
+那边有 5 份玩家附着数据，直译过来是 5 个 capability，每个都要一套
+token + provider + 附加监听。这边合成了**一个** `PhonePlayerData`
+（`core/ModCapabilities`），格子里装什么自己定。
+
+代价必须说清楚：**那 5 份数据的死亡保留策略互不相同**，合成一个之后不能再靠
+注册时的一个开关表达，只能在 `onPlayerClone` 里逐字段写。**往
+`PhonePlayerData` 加字段时必须回去补那一处**，漏了就是"死一次笔记没了"。
 
 ### 4. 物品数据 —— 8 个文件
 
@@ -339,6 +402,49 @@ A 编不过，引用 A 的 B 这一轮才暴露出来。一轮就收工会漏掉
 
 第 3 条是这一刀最值得留意的结果：原以为要改 44 个文件（第 2 条），实测**一个都不用改**。
 
+### ✅ 第三刀：网络层通了一条路（+6 个文件，共 83 个）
+
+按上面重排后的顺序，先开总闸。**只通一条路**：壁纸的设置（C2S）与同步（S2C）。
+挑它是因为它同时覆盖两个方向，正好撞上方向不对称那个坑；而它的服务端依赖
+只有一份小数据，不会把整个子系统拖进来（对比：`RequestOnlinePlayers` 那一对
+看着简单，实际要拖进好友关系、限流、`ChatService` 一整套）。
+
+| 新增 | 干什么 |
+| --- | --- |
+| `core/net/MCphoneNetwork` | `SimpleChannel` 通道、序号分配、把三个坑收进注册函数 |
+| `core/net/NetworkHandler` | 注册与处理，与那边同名同职责 |
+| `core/ModCapabilities` | capability 注册、附加、重生拷贝 |
+| `core/PhonePlayerData` | 玩家数据本体与存档读写 |
+| `feature/settings/net/SetWallpaperPacket` | C2S，Forge 形状 |
+| `feature/settings/net/SyncWallpaperPacket` | S2C，Forge 形状 |
+
+**先查 API 再动手，没照网上的教程写。** 逐条 `javap` 过 Forge 47.4.23 的实际
+签名，捞出两处与常见教程不一致的地方：`ChannelBuilder` 在这个版本上**不存在**；
+`NetworkEvent.Context` 的 `getSender()` 在客户端方向**必然为 null**。
+
+**验收：**
+
+1. `./gradlew build` → `BUILD SUCCESSFUL`
+2. **新增 `docs/WallpaperPacketTest.java`，27 条断言全绿。**测的是线格式往返
+   （空串、含空格、非 ASCII、控制字符、路径样式的串）、读写字节数必须相等、
+   长度上限确实存在（32767 过、32768 拒）、存档往返、坏存档退回默认、
+   `copyFrom` 拷贝后互不影响
+3. 原有 5 个测试仍是 122,174 条全绿，合计 **122,201 条**
+4. **`./gradlew runServer` 真把专用服务端拉起来了** —— `Done (35.888s)!`，
+   日志里有 `[MCphone] Forge 1.20.1 骨架已加载`，**全程零 ERROR、零异常**。
+   这一条比编译过管用：它证明构造期的通道注册没炸、capability 的两个监听器
+   挂上去了，而且**这套代码在没有客户端类的环境里能加载** —— 是一次非正式的
+   dist 隔离检查（正式的 `verifyDistIsolation` 任务还没加，见第 4 步）
+
+**这一刀验到哪儿为止，说清楚：**线格式、存档往返、服务端加载是**真跑过**的；
+"包在实际连接上流动"验不了 —— 那需要一个客户端去点那颗按钮，而界面壳还没搬
+（第 6 步）。所以序号分配、`PROTOCOL_VERSION` 握手这两件事目前只是**看着对**，
+等第 6 步进游戏点一下才算数。
+
+⚠️ 跑 `runServer` 别加 `--offline`：`srgutils` 这个依赖没在缓存里，离线模式
+直接解析失败。另外它会在**工程根**下生成 `logs/`（不是 `run/logs/`），
+已补进 `.gitignore`。
+
 ### ⬜ 下一刀
 
 第一刀剔掉的那 6 个，**回来了 3 个**：`util/SpiLoader`、`api/client/ui/IPhonePage`、
@@ -353,10 +459,10 @@ A 编不过，引用 A 的 B 这一轮才暴露出来。一轮就收工会漏掉
 1. ~~那 111 个干净文件搬过来~~ ✅ 已完成（第一、二刀，77 个）
 2. ~~`ModList` 与 `ResourceLocation` 两轮批量替换~~ ✅ `ModList` 已做；
    `ResourceLocation` **查实为无需改动**（第 2 条）
-3. **网络层骨架，先通一条包**（第 1 条）—— **提到这里，因为它是总闸**。
-   先用 `SimpleChannel` 通一条最简单的（`SetWallpaperPacket` 之类），
-   骨架跑通再批量搬其余的。`PhoneLocation` 的 Java 17 语法改动（第 9 条）
-   跟着这一步一起做，它卡在 `ByteBufCodecs` 上
+3. ~~**网络层骨架，先通一条包**~~ ✅ 骨架已通（第三刀，壁纸那一对）。
+   **剩下 32 个包照着搬**，往 `NetworkHandler.register()` 末尾追加即可，
+   序号自然递增、不用动 `PROTOCOL_VERSION`。`PhoneLocation` 的 Java 17
+   语法改动（第 9 条）跟着这批一起做，它卡在 `ByteBufCodecs` 上
 4. 注册表与物品（第 6、4 条）—— 到这里手机能拿在手里且带数据
 5. **加 `verifyDistIsolation`**，趁代码还少
 6. 界面壳与主屏（`PhoneScreen`、`HomeGrid`、`PhoneChassis`）—— 第二大的闸，

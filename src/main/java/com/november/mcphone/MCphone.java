@@ -1,8 +1,12 @@
 package com.november.mcphone;
 
 import com.mojang.logging.LogUtils;
+import com.november.mcphone.core.ModCapabilities;
 import com.november.mcphone.core.ModCreativeTabs;
 import com.november.mcphone.core.ModItems;
+import com.november.mcphone.core.net.NetworkHandler;
+import net.minecraft.world.entity.Entity;
+import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.eventbus.api.IEventBus;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
@@ -13,9 +17,10 @@ import org.slf4j.Logger;
  *
  * 这个工程现在是什么
  *
- * 一副能编过、能装进游戏、能从创造栏里拿到手机物品的骨架。手机的界面、App、
- * 网络层、联动一样都还没有——不是漏了，是还没移植。要移植什么、每一样卡在
- * 哪儿，逐条写在 docs/PORTING.md 里。
+ * 一副能编过、能装进游戏、能从创造栏里拿到手机物品的骨架，外加一条已经跑通的
+ * 网络链路（壁纸的设置与同步）。手机的界面、其余 App、大部分网络包、联动都还
+ * 没有——不是漏了，是还没移植。要移植什么、每一样卡在哪儿，逐条写在
+ * docs/PORTING.md 里。
  *
  * 与 NeoForge 1.21.1 那一支的关系
  *
@@ -48,7 +53,20 @@ public final class MCphone {
 
         ModItems.ITEMS.register(modBus);
         ModCreativeTabs.TABS.register(modBus);
+        modBus.addListener(ModCapabilities::register);
 
-        LOGGER.info("[MCphone] Forge 1.20.1 骨架已加载。界面与 App 尚未移植，见 docs/PORTING.md");
+        // 网络包的注册【必须在构造期完成】。SimpleChannel 是按注册顺序发放
+        // 整数序号的，等到 FMLCommonSetupEvent 之类再注册，两端的注册时机
+        // 只要有一处不同，序号就对不上——而那不会报错，只会解出乱码字段
+        NetworkHandler.register();
+
+        // 玩家数据的附加与重生拷贝走 Forge 总线，不是 mod 总线。
+        // AttachCapabilitiesEvent 是泛型事件，得用 addGenericListener 并把
+        // 实体类型交出去，否则监听器收不到
+        MinecraftForge.EVENT_BUS.addGenericListener(Entity.class,
+                ModCapabilities::onAttachCapabilities);
+        MinecraftForge.EVENT_BUS.addListener(ModCapabilities::onPlayerClone);
+
+        LOGGER.info("[MCphone] Forge 1.20.1 骨架已加载。界面与多数 App 尚未移植，见 docs/PORTING.md");
     }
 }

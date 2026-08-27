@@ -52,3 +52,11 @@ repo/
 # 「MCphone <加载器> <版本>/」这样的子目录下。写成 docs/wallpapers/ 的话，
 # 这条规则一个也匹配不上，上面那次事故会原样重演一遍
 **/docs/wallpapers/
+
+# ForgeGradle 的 runClient / runServer 会在工程根下生成 logs/。run/ 上面已经
+# 忽略了，logs/ 却是【另一个目录】，落在根上，两边都要忽略才干净。
+#
+# 这一条是第三刀起服务端验证时发现的：那次 git status 里冒出
+# logs/latest.log 与 logs/debug.log 两个文件，差一点被 git add -A 收进去。
+# NeoForge 那一支还没踩到（那边跑 run 更少），但同样该加。
+logs/
