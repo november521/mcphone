@@ -1,36 +1,16 @@
 name: Build & Upload
 
+# 这个分支是 Forge 1.20.1 那一支。仓库里每个版本各占一个分支，
+# 每个分支里就是一个普通的单工程仓库，根目录直接是 gradlew。
 on:
   push:
-    branches: [master, main]
+    branches: [1.20.1-forge]
   pull_request:
-    branches: [master, main]
+    branches: [1.20.1-forge]
 
 jobs:
   build:
     runs-on: ubuntu-latest
-
-    strategy:
-      # 一支挂了另一支照常跑完。两个工程互不依赖，让 NeoForge 那支陪着还在
-      # 移植中的 Forge 那支一起变红，红灯就不再说明任何事情了。
-      fail-fast: false
-      matrix:
-        include:
-          # JDK 版本【不能】共用：Minecraft 1.20.1 跑在 Java 17 上，1.21.1 才是 21。
-          # 用 21 编 1.20.1 会编出低版本客户端加载不了的 class 文件版本。
-          - name: neoforge-1.21.1
-            dir: MCphone Neoforge 1.21.1
-            java: '21'
-          - name: forge-1.20.1
-            dir: MCphone Forge 1.20.1
-            java: '17'
-
-    name: ${{ matrix.name }}
-
-    defaults:
-      run:
-        working-directory: ${{ matrix.dir }}
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -38,10 +18,12 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
 
-      - name: Setup JDK ${{ matrix.java }}
+      # 17，不是 21。Minecraft 1.20.1 跑在 Java 17 上，用 21 编出来的
+      # class 文件版本低版本客户端加载不了，而报的错不会提到 Java 版本。
+      - name: Setup JDK 17
         uses: actions/setup-java@v4
         with:
-          java-version: ${{ matrix.java }}
+          java-version: '17'
           distribution: 'temurin'
 
       - name: Setup Gradle
@@ -58,13 +40,11 @@ jobs:
         run: |
           JAR_PATH=$(find build/libs -name "*.jar" ! -name "*-sources.jar" ! -name "*-dev.jar" | head -1)
           if [ -z "$JAR_PATH" ]; then
-            echo "::error::${{ matrix.dir }}/build/libs 下没找到可上传的 jar"
+            echo "::error::build/libs 下没找到可上传的 jar"
             exit 1
           fi
+          echo "jar_path=$JAR_PATH" >> "$GITHUB_OUTPUT"
           echo "jar_name=$(basename "$JAR_PATH")" >> "$GITHUB_OUTPUT"
-          # upload-artifact 的 path 相对【仓库根】而不是 working-directory，
-          # 所以要把工程目录名接回去，不然它找不到文件
-          echo "jar_path=${{ matrix.dir }}/$JAR_PATH" >> "$GITHUB_OUTPUT"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4

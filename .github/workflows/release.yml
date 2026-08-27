@@ -1,17 +1,17 @@
 name: Release
 
-# 只在推带前缀的 v tag 时触发。build.yml 触发于 push 分支，两者不重叠、不会重复跑。
+# 只在推 forge-v* tag 时触发。
 #
-# 前缀是必须的：一个仓库里放着两个工程，光看 v1.2.3 说不出该发哪一支。
-# 分工程之前的老 tag（v1.8.18 这类不带前缀的）全部属于 NeoForge 1.21.1，
-# 留在历史里不动，但新的发版一律带前缀。
+# 为什么带前缀：tag 在 git 里是【仓库级】的，不属于任何分支，所以两个版本
+# 分支要是都用 v1.0.0 就撞了。前缀让它一眼看得出是哪一支。
+#
+# 至于该跑哪份 workflow —— 不用自己分派：推 tag 时 GitHub 用的是【tag 所指向
+# 那个 commit 里的】workflow 文件。tag 打在这个分支上，跑的自然就是这一份。
 on:
   push:
     tags:
-      - 'neoforge-v*'
       - 'forge-v*'
 
-# 默认的 GITHUB_TOKEN 是只读的，不显式提权就创建不了 Release。
 permissions:
   contents: write
 
@@ -25,87 +25,54 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
 
-      # tag 前缀决定这一次发的是哪个工程、用哪个 JDK、Release 标题怎么写。
-      # 认不出前缀就直接失败，别去猜——猜错的后果是把 Forge 的包当成 NeoForge 的发出去。
-      - name: Resolve project from tag
-        id: proj
-        run: |
-          case "$GITHUB_REF_NAME" in
-            neoforge-v*)
-              echo 'dir=MCphone Neoforge 1.21.1'          >> "$GITHUB_OUTPUT"
-              echo "version=${GITHUB_REF_NAME#neoforge-v}" >> "$GITHUB_OUTPUT"
-              echo 'java=21'                               >> "$GITHUB_OUTPUT"
-              echo 'label=NeoForge 1.21.1'                 >> "$GITHUB_OUTPUT"
-              ;;
-            forge-v*)
-              echo 'dir=MCphone Forge 1.20.1'           >> "$GITHUB_OUTPUT"
-              echo "version=${GITHUB_REF_NAME#forge-v}" >> "$GITHUB_OUTPUT"
-              echo 'java=17'                            >> "$GITHUB_OUTPUT"
-              echo 'label=Forge 1.20.1'                 >> "$GITHUB_OUTPUT"
-              ;;
-            *)
-              echo "::error::tag $GITHUB_REF_NAME 没有可识别的前缀。发版 tag 必须写成 neoforge-v<版本> 或 forge-v<版本>"
-              exit 1
-              ;;
-          esac
-
-      - name: Setup JDK ${{ steps.proj.outputs.java }}
+      - name: Setup JDK 17
         uses: actions/setup-java@v4
         with:
-          java-version: ${{ steps.proj.outputs.java }}
+          java-version: '17'
           distribution: 'temurin'
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
       - name: Make Gradle wrapper executable
-        working-directory: ${{ steps.proj.outputs.dir }}
         run: chmod +x ./gradlew
 
-      # 打了 neoforge-v1.0.1 而 gradle.properties 还写着 1.0.0，是发版事故的常见来源：
+      # 打了 forge-v0.1.1 而 gradle.properties 还写着 0.1.0，是发版事故的常见来源：
       # jar 文件名、模组列表里的版本号会与 Release 标题对不上。宁可在这里失败。
       - name: Verify tag matches mod_version
-        working-directory: ${{ steps.proj.outputs.dir }}
         run: |
-          TAG_VERSION="${{ steps.proj.outputs.version }}"
+          TAG_VERSION="${GITHUB_REF_NAME#forge-v}"
           MOD_VERSION=$(grep -E '^mod_version=' gradle.properties | cut -d= -f2- | tr -d '[:space:]')
           echo "tag=$GITHUB_REF_NAME  版本段=$TAG_VERSION  mod_version=$MOD_VERSION"
           if [ "$TAG_VERSION" != "$MOD_VERSION" ]; then
-            echo "::error::tag $GITHUB_REF_NAME 与 ${{ steps.proj.outputs.dir }}/gradle.properties 的 mod_version=$MOD_VERSION 不一致，请先对齐再发版"
+            echo "::error::tag $GITHUB_REF_NAME 与 gradle.properties 的 mod_version=$MOD_VERSION 不一致，请先对齐再发版"
             exit 1
           fi
 
       - name: Build with Gradle
-        working-directory: ${{ steps.proj.outputs.dir }}
         run: ./gradlew build
 
-      # 声称支持 neo_version_range 的下限，就得证明代码没用上更新的 API，
+      # 声称支持 forge_version_range 的下限，就得证明代码没用上更新的 API，
       # 否则低版本玩家会在运行时撞上 NoSuchMethodError 而不是加载失败提示。
-      # 只对 NeoForge 那一支做：Forge 那边的版本范围属性名不一样。
-      - name: Verify minimum NeoForge version still compiles
-        if: startsWith(github.ref_name, 'neoforge-v')
-        working-directory: ${{ steps.proj.outputs.dir }}
+      - name: Verify minimum Forge version still compiles
         run: |
-          MIN_NEO=$(grep -E '^neo_version_range=' gradle.properties \
-            | sed -E 's/^neo_version_range=\[?([0-9]+\.[0-9]+\.[0-9]+).*/\1/')
-          echo "declared minimum NeoForge: $MIN_NEO"
-          ./gradlew compileJava -Pneo_version="$MIN_NEO"
+          MIN_FORGE=$(grep -E '^forge_version_range=' gradle.properties \
+            | sed -E 's/^forge_version_range=\[?([0-9]+\.[0-9]+\.[0-9]+).*/\1/')
+          echo "declared minimum Forge: $MIN_FORGE"
+          ./gradlew compileJava -Pforge_version="$MIN_FORGE"
 
       - name: Find built JAR
         id: find-jar
-        working-directory: ${{ steps.proj.outputs.dir }}
         run: |
           JAR_PATH=$(find build/libs -name "*.jar" ! -name "*-sources.jar" ! -name "*-dev.jar" | head -1)
           if [ -z "$JAR_PATH" ]; then
-            echo "::error::${{ steps.proj.outputs.dir }}/build/libs 下没找到可发布的 jar"
+            echo "::error::build/libs 下没找到可发布的 jar"
             exit 1
           fi
-          # gh release create 在仓库根跑，所以这里给的是相对仓库根的路径
-          echo "jar_path=${{ steps.proj.outputs.dir }}/$JAR_PATH" >> "$GITHUB_OUTPUT"
+          echo "jar_path=$JAR_PATH" >> "$GITHUB_OUTPUT"
 
-      # 同名 tag 已有 Release 时先删掉，否则下面的 gh release create 会直接失败。
-      # 语义是"重推 tag ＝ 重新出这个版本"：强推同名 tag 本身已是明确的破坏性
-      # 动作，不会误触。只删与本次 tag 同名的那一个，不碰其他版本。
+      # 同名 tag 已有 Release 时先删掉，否则 gh release create 会直接失败。
+      # 语义是"重推 tag ＝ 重新出这个版本"。只删与本次 tag 同名的那一个。
       - name: Remove pre-existing release for this tag
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -117,23 +84,15 @@ jobs:
             echo "$GITHUB_REF_NAME 尚无 Release，直接创建"
           fi
 
-      # 正文取自该工程内与 tag 同名的说明文件，让 Release 描述也进版本控制；
-      # 没有对应文件时退回 GitHub 依据提交记录自动生成，不至于发出一个空描述。
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           JAR_PATH: ${{ steps.find-jar.outputs.jar_path }}
         run: |
-          NOTES_FILE="${{ steps.proj.outputs.dir }}/docs/release-notes/${GITHUB_REF_NAME}.md"
-          TITLE="MCphone ${{ steps.proj.outputs.label }} v${{ steps.proj.outputs.version }}"
+          NOTES_FILE="docs/release-notes/${GITHUB_REF_NAME}.md"
+          TITLE="MCphone Forge 1.20.1 v${GITHUB_REF_NAME#forge-v}"
           if [ -f "$NOTES_FILE" ]; then
-            echo "使用 $NOTES_FILE 作为 Release 正文"
-            gh release create "$GITHUB_REF_NAME" "$JAR_PATH" \
-              --title "$TITLE" \
-              --notes-file "$NOTES_FILE"
+            gh release create "$GITHUB_REF_NAME" "$JAR_PATH" --title "$TITLE" --notes-file "$NOTES_FILE"
           else
-            echo "未找到 $NOTES_FILE，退回自动生成正文"
-            gh release create "$GITHUB_REF_NAME" "$JAR_PATH" \
-              --title "$TITLE" \
-              --generate-notes
+            gh release create "$GITHUB_REF_NAME" "$JAR_PATH" --title "$TITLE" --generate-notes
           fi
