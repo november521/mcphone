@@ -11,3 +11,4 @@ com.november.mcphone.feature.browser.client.BrowserApp
 com.november.mcphone.feature.clock.client.ClockApp
 com.november.mcphone.feature.weather.client.WeatherApp
 com.november.mcphone.feature.reader.client.ReaderApp
+com.november.mcphone.feature.quests.client.QuestsApp
