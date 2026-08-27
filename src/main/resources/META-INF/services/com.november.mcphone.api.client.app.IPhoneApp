@@ -1,12 +1,17 @@
-# 这一刀能登记的 App，比 NeoForge 那一支少。
+# 内建 App。顺序无所谓，登记时按 id 去重。
 #
-# 少的不是"漏了"，是它们的【服务端那一半还没移植】：聊天、记事本、音乐、
-# 应用商店、末影箱都要服务端处理包才能工作，登记了点进去只会发出一个没人接
-# 的包。相机缺 CameraHandler，浏览器与传送石整个联动这一刀没接。
-#
-# 每搬完一个功能的服务端，把对应的一行加回来即可，顺序无所谓。
+# 不在这份名单里的：
+#   BrowserApp   浏览器，MCEF 联动没接（1.21 渲染管线，见 docs/PORTING.md）
+#   WaystoneApp  传送石，Waystones 1.20.1 的 API 差太多，同上
+#   QuestsApp    FTB Quests 2001.x 的 openGui 还没核实，没接就先不登记
 com.november.mcphone.feature.settings.client.SettingsApp
+com.november.mcphone.feature.store.client.AppStoreApp
+com.november.mcphone.feature.chat.client.ChatApp
+com.november.mcphone.feature.camera.client.CameraApp
+com.november.mcphone.feature.gallery.client.GalleryApp
+com.november.mcphone.feature.music.client.MusicApp
+com.november.mcphone.feature.enderchest.client.EnderChestApp
+com.november.mcphone.feature.notes.client.NotesApp
 com.november.mcphone.feature.clock.client.ClockApp
 com.november.mcphone.feature.weather.client.WeatherApp
-com.november.mcphone.feature.gallery.client.GalleryApp
 com.november.mcphone.feature.reader.client.ReaderApp

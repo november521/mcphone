@@ -39,7 +39,7 @@ public record PurchasedApps(Set<ResourceLocation> ids) {
      * 1.20.1 上 FriendlyByteBuf.readList 【没有上限参数】，所以这道闸必须
      * 自己补——照搬 readList 会让伪造客户端塞进任意长的列表。
      */
-    public static void encode(FriendlyByteBuf buf, PurchasedApps value) {
+    public static void encode(PurchasedApps value, FriendlyByteBuf buf) {
         buf.writeCollection(value.ids(), FriendlyByteBuf::writeResourceLocation);
     }
 

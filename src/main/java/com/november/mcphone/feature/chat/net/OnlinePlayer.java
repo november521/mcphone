@@ -10,7 +10,7 @@ public record OnlinePlayer(UUID id, String name, Relation relation) {
     public static void encode(OnlinePlayer msg, FriendlyByteBuf buf) {
         buf.writeUUID(msg.id());
         buf.writeUtf(msg.name(), ConversationSummary.MAX_NAME_LENGTH);
-        Relation.encode(buf, msg.relation());
+        Relation.encode(msg.relation(), buf);
     }
 
     public static OnlinePlayer decode(FriendlyByteBuf buf) {

@@ -4,6 +4,8 @@ import com.mojang.logging.LogUtils;
 import com.november.mcphone.core.ModCapabilities;
 import com.november.mcphone.core.ModCreativeTabs;
 import com.november.mcphone.core.ModItems;
+import com.november.mcphone.core.ModSounds;
+import com.november.mcphone.core.menu.ModMenus;
 import com.november.mcphone.core.net.NetworkHandler;
 import net.minecraft.world.entity.Entity;
 import net.minecraftforge.common.MinecraftForge;
@@ -17,10 +19,10 @@ import org.slf4j.Logger;
  *
  * 这个工程现在是什么
  *
- * 一副能编过、能装进游戏、能从创造栏里拿到手机物品的骨架，外加一条已经跑通的
- * 网络链路（壁纸的设置与同步）。手机的界面、其余 App、大部分网络包、联动都还
- * 没有——不是漏了，是还没移植。要移植什么、每一样卡在哪儿，逐条写在
- * docs/PORTING.md 里。
+ * 基本功能已经从 NeoForge 1.21.1 那一支移植过来：开机、主屏、聊天、记事本、
+ * 音乐、相册、相机、应用商店、末影箱、设置。还没接的是浏览器（MCEF）与
+ * 传送石（Waystones）两个联动——不是漏了，是它们 1.20.1 版的 API 与 1.21
+ * 差得多，接一个断的联动比不接更糟。逐条写在 docs/PORTING.md 里。
  *
  * 与 NeoForge 1.21.1 那一支的关系
  *
@@ -56,7 +58,15 @@ public final class MCphone {
 
         ModItems.ITEMS.register(modBus);
         ModCreativeTabs.TABS.register(modBus);
+        ModMenus.MENUS.register(modBus);
+        ModSounds.SOUND_EVENTS.register(modBus);
         modBus.addListener(ModCapabilities::register);
+
+        // SERVER 而非 COMMON：必须由服主一份说了算。
+        // 1.21.1 那边是 modContainer.registerConfig(...)，这边走 context 实例——
+        // 静态的 ModLoadingContext.get() 在 47.4 上已标 forRemoval
+        context.registerConfig(net.minecraftforge.fml.config.ModConfig.Type.SERVER,
+                com.november.mcphone.core.ServerConfig.SPEC, "mcphone-server.toml");
 
         // 网络包的注册【必须在构造期完成】。SimpleChannel 是按注册顺序发放
         // 整数序号的，等到 FMLCommonSetupEvent 之类再注册，两端的注册时机
@@ -69,6 +79,15 @@ public final class MCphone {
         MinecraftForge.EVENT_BUS.addGenericListener(Entity.class,
                 ModCapabilities::onAttachCapabilities);
         MinecraftForge.EVENT_BUS.addListener(ModCapabilities::onPlayerClone);
+
+        // 游戏总线，显式挂载：这两条漏了没有任何症状，只是下线玩家的表再也不缩小
+        MinecraftForge.EVENT_BUS.addListener(
+                com.november.mcphone.core.net.RequestThrottle::onPlayerLoggedOut);
+        MinecraftForge.EVENT_BUS.addListener(
+                com.november.mcphone.feature.music.DiscService::onPlayerLoggedOut);
+
+        // 放在自家注册之后：兼容模块可能要看我们已经注册了什么
+        com.november.mcphone.compat.CompatModules.init(modBus);
 
         // 1.21.1 那边由构造函数注入的 ModContainer 直接给出；1.20.1 上
         // FMLJavaModLoadingContext 没有 getModInfo，得回头去 ModList 里查自己

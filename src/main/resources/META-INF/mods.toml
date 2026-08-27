@@ -13,8 +13,8 @@ description='''
 把一部能用的智能手机塞进 Minecraft —— 拍照、翻相册、换壁纸、听歌、装 App，
 还能给自己那一部手机起个名。
 
-【这一支是 Forge 1.20.1 的移植骨架，功能尚未补齐。】能用的版本请用
-Minecraft 1.21.1 + NeoForge 那一支。
+【这一支是从 Minecraft 1.21.1 + NeoForge 移植过来的，基本功能已就位；
+传送石与浏览器两个联动尚未接入。】
 '''
 
 # 版本范围从 gradle.properties 来，不写死在这儿：两处各写一份必然会漂，
@@ -31,4 +31,29 @@ Minecraft 1.21.1 + NeoForge 那一支。
     mandatory=true
     versionRange="[${minecraft_version}]"
     ordering="NONE"
+    side="BOTH"
+
+# 可选联动。mandatory=false 表示"装了就用，没装照跑"，
+# ordering=AFTER 是【必须的】：我们在自己的构造期就要问 ModList 它在不在，
+# 装载顺序若排在它前面，那一问会得到假。漏了这几段不报错，
+# 症状是"明明装了 Curios，手机却挂不上饰品栏"。
+[[dependencies.${mod_id}]]
+    modId="curios"
+    mandatory=false
+    versionRange="[5.14.0,)"
+    ordering="AFTER"
+    side="BOTH"
+
+[[dependencies.${mod_id}]]
+    modId="netmusic"
+    mandatory=false
+    versionRange="*"
+    ordering="AFTER"
+    side="BOTH"
+
+[[dependencies.${mod_id}]]
+    modId="patchouli"
+    mandatory=false
+    versionRange="*"
+    ordering="AFTER"
     side="BOTH"

@@ -16,7 +16,7 @@ public enum Relation {
     private static final Relation[] VALUES = values();
 
     /** 按序号传输；越界退回 NONE，宁可显示成陌生人也不抛异常断线 */
-    public static void encode(FriendlyByteBuf buf, Relation value) {
+    public static void encode(Relation value, FriendlyByteBuf buf) {
         buf.writeVarInt(value.ordinal());
     }
 

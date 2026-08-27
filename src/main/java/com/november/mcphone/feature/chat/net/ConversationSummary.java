@@ -25,7 +25,7 @@ public record ConversationSummary(UUID id, String name, boolean online,
         return name.length() <= MAX_NAME_LENGTH ? name : name.substring(0, MAX_NAME_LENGTH);
     }
 
-    public static void encode(FriendlyByteBuf buf, ConversationSummary value) {
+    public static void encode(ConversationSummary value, FriendlyByteBuf buf) {
         buf.writeUUID(value.id());
         buf.writeUtf(value.name(), MAX_NAME_LENGTH);
         buf.writeBoolean(value.online());

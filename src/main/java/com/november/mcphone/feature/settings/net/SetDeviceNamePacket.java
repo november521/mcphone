@@ -32,7 +32,7 @@ public record SetDeviceNamePacket(String name, PhoneLocation location) {
         // utf8MaxBytes 内部换算；FriendlyByteBuf.writeUtf(s, n) 的第二个参数
         // 同样是字符数上限，语义一致，不必乘 3
         buf.writeUtf(msg.name(), MAX_NAME_LENGTH);
-        PhoneLocation.encode(buf, msg.location());
+        PhoneLocation.encode(msg.location(), buf);
     }
 
     public static SetDeviceNamePacket decode(FriendlyByteBuf buf) {

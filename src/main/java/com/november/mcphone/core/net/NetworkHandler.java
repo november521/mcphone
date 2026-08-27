@@ -1,8 +1,18 @@
 package com.november.mcphone.core.net;
 
 import com.november.mcphone.MCphone;
+import com.november.mcphone.MCphone;
 import com.november.mcphone.core.ModCapabilities;
 import com.november.mcphone.core.PhoneItem;
+import com.november.mcphone.core.menu.ModMenus;
+import com.november.mcphone.core.menu.PhoneContainerMenu;
+import com.november.mcphone.feature.enderchest.net.OpenEnderChestPacket;
+import com.november.mcphone.feature.store.AppAccess;
+import net.minecraft.ChatFormatting;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.SimpleMenuProvider;
+import net.minecraft.world.inventory.PlayerEnderChestContainer;
 import com.november.mcphone.core.PhoneItemData;
 import com.november.mcphone.feature.settings.WallpaperData;
 import com.november.mcphone.feature.settings.net.SetDeviceNamePacket;
@@ -14,20 +24,35 @@ import net.minecraft.world.item.ItemStack;
 /**
  * 网络包注册与处理 —— 与 NeoForge 那一支同名同职责的类。
  *
- * 那边这里有 5 个包加 4 组转发，一共 34 个。这边现在有三个：壁纸那一对
- * （C2S + S2C）与设备名。它们正好是「设置」App 用到的全部，也就是说这一支
- * 眼下能跑通的那条链路是完整的，不是半截。
+ * 与那一支同名同职责：本类只做"注册总入口"，各功能的包在自己的
+ * XxxNetworking 里注册与处理。
  *
- * 其余 31 个包的【客户端】那一半已经跟着界面搬过来了，服务端这一半还没有，
- * 所以对应的 App 暂时不登记进 SPI 清单（见 resources/META-INF/services）——
- * 登记了点进去只会发出一个没人接的包。每搬完一个功能的服务端，
- * 在这里加注册、在那份清单里加一行。
+ * 唯一的差别是注册方式：那边把 TYPE + STREAM_CODEC + 处理函数交给
+ * PayloadRegistrar；这边交给 MCphoneNetwork，由它统一兜住 setPacketHandled、
+ * enqueueWork 与 getSender 判空三件事，见那个类的注释。
  *
  * 注册顺序就是包的线上身份，不能随便动，理由见 MCphoneNetwork 的类注释。
  */
 public final class NetworkHandler {
 
     private NetworkHandler() {}
+
+    // 要服务端干活、且已定价的内建 App。id 写在这里而不是每处现拼：
+    // 拼错了不会报错，只会变成"未定价"从而静默放行——那正好是这道闸要防的事
+    private static final ResourceLocation APP_ENDER_CHEST =
+            ResourceLocation.fromNamespaceAndPath(MCphone.MODID, "ender_chest");
+
+    /**
+     * 告诉玩家这个 App 还没买。
+     *
+     * 正常客户端走不到这里——没买过的付费 App 会被客户端从主屏摘掉，点都点不着。
+     * 能走到这里说明客户端状态没对上，或者有人在伪造包，两种情况都值得回一句话。
+     */
+    private static void notPurchased(ServerPlayer player) {
+        player.displayClientMessage(
+                Component.translatable("mcphone.store.not_purchased")
+                        .withStyle(ChatFormatting.RED), true);
+    }
 
     /** 由 MCphone 构造函数调用。对应那边挂在 RegisterPayloadHandlersEvent 上的注册 */
     public static void register() {
@@ -54,6 +79,55 @@ public final class NetworkHandler {
                 SetDeviceNamePacket::decode,
                 NetworkHandler::handleSetDeviceName
         );
+
+        // C2S: 玩家在手机里点了末影箱
+        MCphoneNetwork.registerToServer(
+                OpenEnderChestPacket.class,
+                OpenEnderChestPacket::encode,
+                OpenEnderChestPacket::decode,
+                NetworkHandler::handleOpenEnderChest
+        );
+
+        // 各功能的包各自成组，注册与处理都在自己的类里：
+        // 本类只保留"注册总入口"这一个职责，不做杂物间。
+        //
+        // 【顺序即身份】：SimpleChannel 按注册顺序发放整数序号，往末尾追加
+        // 安全，中间插入或调换必须把 MCphoneNetwork.PROTOCOL_VERSION 加一
+        com.november.mcphone.feature.chat.net.ChatNetworking.register();
+        com.november.mcphone.feature.notes.net.NotesNetworking.register();
+        com.november.mcphone.feature.store.net.StoreNetworking.register();
+        com.november.mcphone.feature.music.net.MusicNetworking.register();
+    }
+
+    /**
+     * 服务端收到：给玩家打开他自己的末影箱，界面装在手机机身里。
+     *
+     * 校验玩家身上确实带着手机——包是客户端发的，不能信。没有这道检查，
+     * 任何人改个客户端就能凭空开末影箱，手机这个前提条件形同虚设。
+     *
+     * 容器直接用 player.getEnderChestInventory()，就是原版那一个：与方块末影箱、
+     * 跨维度完全互通，不另存一份数据，也就不存在两边不同步的问题。
+     */
+    private static void handleOpenEnderChest(OpenEnderChestPacket packet, ServerPlayer player) {
+        if (!PhoneItem.isCarriedBy(player)) {
+            MCphone.LOGGER.debug("玩家 {} 请求开末影箱但身上没有手机，已忽略",
+                    player.getName().getString());
+            return;
+        }
+
+        // 买过了吗。安装是纯客户端动作，改个客户端就能把 App 塞进主屏，
+        // 购买那一步完全绕开——所以服务端必须自己问一句
+        if (!AppAccess.canUse(player, APP_ENDER_CHEST)) {
+            notPurchased(player);
+            return;
+        }
+
+        PlayerEnderChestContainer enderChest = player.getEnderChestInventory();
+        player.openMenu(new SimpleMenuProvider(
+                (containerId, inventory, p) -> new PhoneContainerMenu(
+                        ModMenus.ENDER_CHEST.get(), containerId, inventory,
+                        enderChest, ModMenus.ENDER_CHEST_SIZE),
+                Component.translatable("mcphone.container.ender_chest")));
     }
 
     //  处理函数

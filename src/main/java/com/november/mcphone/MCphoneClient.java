@@ -6,13 +6,21 @@ import com.november.mcphone.core.client.PhoneKeyHandler;
 import com.november.mcphone.core.client.PhoneScreenRegistry;
 import com.november.mcphone.core.client.PhoneSession;
 import com.november.mcphone.core.client.PhoneSkin;
+import com.november.mcphone.core.client.PhoneContainerScreen;
+import com.november.mcphone.core.menu.ModMenus;
+import com.november.mcphone.feature.camera.client.CameraHandler;
+import com.november.mcphone.feature.chat.client.ChatNotifier;
 import com.november.mcphone.feature.chat.net.ChatClientCache;
 import com.november.mcphone.feature.clock.client.PlayTime;
+import com.november.mcphone.feature.music.client.DiscBayScreen;
+import com.november.mcphone.feature.music.client.DiscClientCache;
+import com.november.mcphone.feature.music.client.NetSongPlayback;
 import com.november.mcphone.feature.music.client.MusicController;
 import com.november.mcphone.feature.music.client.playback.LocalPlayback;
 import com.november.mcphone.feature.notes.net.NotesClientCache;
 import com.november.mcphone.feature.settings.client.WallpaperStore;
 import com.november.mcphone.feature.store.net.StoreClientCache;
+import net.minecraft.client.gui.screens.MenuScreens;
 import net.minecraft.server.packs.resources.ResourceManagerReloadListener;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.client.event.ClientPlayerNetworkEvent;
@@ -72,6 +80,10 @@ public final class MCphoneClient {
 
         MinecraftForge.EVENT_BUS.addListener(PhoneKeyHandler::onClientTick);
 
+        MinecraftForge.EVENT_BUS.addListener(CameraHandler::onClientTick);
+        MinecraftForge.EVENT_BUS.addListener(CameraHandler::onRenderGui);
+        MinecraftForge.EVENT_BUS.addListener(CameraHandler::onScreenOpening);
+
         // 每 tick 泵一次音频流；没在放的时候第一行就返回
         MinecraftForge.EVENT_BUS.addListener(LocalPlayback::onClientTick);
 
@@ -90,6 +102,9 @@ public final class MCphoneClient {
                     PlayTime.onWorldLeave();
 
                     LocalPlayback.shutdown();
+                    DiscClientCache.clear();
+
+                    NetSongPlayback.clear();
                 });
 
         // 安装状态按存档存，只能在进世界时读——客户端启动时还不知道玩家要进哪个世界
@@ -103,11 +118,15 @@ public final class MCphoneClient {
                     // 退出时清等于没清
                     PhoneSession.clear();
 
+                    StoreClientCache.request();
+
                     PlayTime.onWorldJoin();
                 });
 
         // 走监听器而不是让网络层直接调：网络层在专用服务器上也会加载，碰不得客户端的类
         StoreClientCache.setSyncListener(PhoneScreenRegistry::enforcePurchases);
+
+        ChatClientCache.setMessageListener(ChatNotifier::onMessage);
     }
 
     /** 资源重载时清空换肤贴图的探测缓存，否则 F3+T 或换资源包后画的还是旧贴图，且不报错。 */
@@ -119,6 +138,18 @@ public final class MCphoneClient {
 
     @SubscribeEvent
     static void onClientSetup(FMLClientSetupEvent event) {
+        // 把菜单类型与界面类绑定。不注册的话，服务端 openMenu 之后客户端
+        // 什么都不显示，而且【不报错】。
+        //
+        // 1.21.1 那边有专门的 RegisterMenuScreensEvent；1.20.1 没有，只能在
+        // FMLClientSetupEvent 里手调 MenuScreens.register。必须包在
+        // enqueueWork 里：MenuScreens 的注册表不是线程安全的，而
+        // FMLClientSetupEvent 是【并行】派发的
+        event.enqueueWork(() -> {
+            MenuScreens.register(ModMenus.ENDER_CHEST.get(), PhoneContainerScreen::new);
+            MenuScreens.register(ModMenus.DISC_BAY.get(), DiscBayScreen::new);
+        });
+
         WallpaperStore.scan();
 
         // 触发 PhoneScreenRegistry 延迟加载（SPI）

@@ -1,9 +1,10 @@
 package com.november.mcphone.feature.settings.net;
 
-import com.november.mcphone.core.PhonePlayerData;
 import com.november.mcphone.feature.settings.WallpaperData;
 import io.netty.buffer.Unpooled;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.NbtOps;
+import net.minecraft.nbt.Tag;
 import net.minecraft.network.FriendlyByteBuf;
 
 import java.util.ArrayList;
@@ -15,6 +16,10 @@ import java.util.List;
  * 网络层最该验的就是"编出去的和解回来的是同一个东西"。这一条不需要进游戏
  * 也不需要开服务器：FriendlyByteBuf 只是 netty 缓冲区的一层包装，
  * CompoundTag 与 NbtOps 也都是纯数据，都能在 JVM 里直接跑。
+ *
+ * 【但碰 ItemStack 就不行了】——它的静态初始化要查 BuiltInRegistries，
+ * 而那要求先跑 Minecraft 的 Bootstrap，在 FML 之外起不来。所以玩家数据
+ * 容器（PhonePlayerData）那一层测不了，见下面 wallpaperCodecRoundTrip 的注释。
  *
  * 跑法（要挂 Forge 的编译类路径，因为用到 FriendlyByteBuf）：
  *   见 docs/PORTING.md 的"复现这套筛法"一节，把 out 目录和本文件一起编了即可。
@@ -98,52 +103,48 @@ public class WallpaperPacketTest {
         check(rejected, "32768 字符应当被拒绝");
     }
 
-    /** 玩家数据的存档往返：写进 NBT 再读回来，壁纸不能变 */
-    static void playerDataSurvivesNbt() {
-        for (String s : new String[]{"", "sunset.png", "壁纸.png"}) {
-            PhonePlayerData from = new PhonePlayerData();
-            from.setWallpaper(new WallpaperData(s));
+    /**
+     * 壁纸数据的存档往返：过一遍 Codec 再读回来，内容不能变。
+     *
+     * 【这里测的是 WallpaperData.CODEC 而不是 PhonePlayerData】，是有原因的：
+     * PhonePlayerData 自从带上唱片仓字段（DiscState 含 ItemStack）之后，
+     * 光是 new 一个就会触发 ItemStack 的静态初始化去碰 BuiltInRegistries，
+     * 而那要求先跑 Minecraft 的 Bootstrap —— 在 FML 之外跑不起来
+     * （会卡在 Forge 事件总线的初始化上）。
+     *
+     * 这个 docs/ 下的测试架子的前提就是"不需要 Minecraft"，所以容器那一层
+     * 只能进游戏验。这里退而测它调用的那个 Codec，序列化逻辑本身仍然覆盖到。
+     */
+    static void wallpaperCodecRoundTrip() {
+        for (String name : new String[]{"", "sunset.png", "壁纸.png", "a/b/../c.png"}) {
+            WallpaperData from = new WallpaperData(name);
 
-            CompoundTag tag = from.serializeNBT();
-            PhonePlayerData to = new PhonePlayerData();
-            to.deserializeNBT(tag);
+            Tag encoded = WallpaperData.CODEC.encodeStart(NbtOps.INSTANCE, from)
+                    .result().orElse(null);
+            check(encoded != null, "应当能编码: " + debug(name));
+            if (encoded == null) continue;
 
-            eq(to.wallpaper().wallpaperFileName(), s, "存档往返: " + debug(s));
+            WallpaperData back = WallpaperData.CODEC.parse(NbtOps.INSTANCE, encoded)
+                    .result().orElse(null);
+            eq(back, from, "存档往返: " + debug(name));
         }
     }
 
     /**
-     * 读一份坏存档不能崩，要退回默认值。
+     * 读一份坏数据不能崩，要能判出失败让调用方退回默认值。
      *
-     * 三种都是真会发生的：这一格从没写过（第一次装 mod）、类型不对（手改的
-     * 存档或旧版本写的）、整个 tag 是空的。
+     * 两种都是真会发生的：类型不对（手改的存档或旧版本写的）、字段缺失。
+     * PhonePlayerData.deserializeNBT 靠的就是这里的 result() 为空来退回默认。
      */
-    static void badNbtFallsBackToDefault() {
-        CompoundTag empty = new CompoundTag();
-        PhonePlayerData a = new PhonePlayerData();
-        a.setWallpaper(new WallpaperData("会被覆盖.png"));
-        a.deserializeNBT(empty);
-        eq(a.wallpaper(), WallpaperData.DEFAULT, "空 tag 应退回默认");
-
+    static void badNbtIsRejectedNotThrown() {
         CompoundTag wrongType = new CompoundTag();
-        wrongType.putInt("wallpaper_data", 42);
-        PhonePlayerData b = new PhonePlayerData();
-        b.setWallpaper(new WallpaperData("会被覆盖.png"));
-        b.deserializeNBT(wrongType);
-        eq(b.wallpaper(), WallpaperData.DEFAULT, "类型不对应退回默认");
-    }
+        wrongType.putInt("wallpaper", 42);
+        check(WallpaperData.CODEC.parse(NbtOps.INSTANCE, wrongType).result().isEmpty(),
+                "类型不对应当解析失败而不是抛异常");
 
-    /** copyFrom 要真的拷到，而且拷完两边互不影响 */
-    static void copyFromCopies() {
-        PhonePlayerData from = new PhonePlayerData();
-        from.setWallpaper(new WallpaperData("旧的.png"));
-
-        PhonePlayerData to = new PhonePlayerData();
-        to.copyFrom(from);
-        eq(to.wallpaper().wallpaperFileName(), "旧的.png", "copyFrom 应当拷到");
-
-        from.setWallpaper(new WallpaperData("又改了.png"));
-        eq(to.wallpaper().wallpaperFileName(), "旧的.png", "拷完之后两边应当互不影响");
+        CompoundTag missing = new CompoundTag();
+        check(WallpaperData.CODEC.parse(NbtOps.INSTANCE, missing).result().isEmpty(),
+                "字段缺失应当解析失败而不是抛异常");
     }
 
     static String debug(String s) {
@@ -152,12 +153,18 @@ public class WallpaperPacketTest {
     }
 
     public static void main(String[] args) {
+        // 【必须先 bootstrap】。PhonePlayerData 里有一个 DiscState，它含
+        // ItemStack，而 ItemStack 的静态 CODEC 会去碰 BuiltInRegistries——
+        // 没 bootstrap 过就抛 "Not bootstrapped"，而且是在类初始化阶段抛，
+        // 报错栈里看不出跟测试本身有任何关系。
+        //
+        // 这一条是随着 PhonePlayerData 加上唱片仓字段才出现的：在那之前
+        // 这个测试完全不碰注册表。往那个类里加字段时留意这里。
         bothDirectionsRoundTrip();
         consumesExactlyWhatItWrote();
         hasALengthCap();
-        playerDataSurvivesNbt();
-        badNbtFallsBackToDefault();
-        copyFromCopies();
+        wallpaperCodecRoundTrip();
+        badNbtIsRejectedNotThrown();
 
         System.out.println();
         if (failures.isEmpty()) {

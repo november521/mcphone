@@ -559,7 +559,101 @@ A 编不过，引用 A 的 B 这一轮才暴露出来。一轮就收工会漏掉
 `runClient` 跑不起来。**布局、配色、点击响应都要在本机 `./gradlew runClient`
 肉眼过一遍** —— 编译器管得了签名，管不了画得对不对。
 
+### ✅ 第五刀：服务端补齐，基本功能全部就位（+37 个文件，共 211 个）
+
+**211 / 215。** 缺的 4 个是浏览器那一支，连同传送石一起是【故意没接】的
+（见上面的联动表）；`ModAttachments` 与 `ModDataComponents` 则是被
+`PhonePlayerData` 与 `PhoneItemData` 取代了，不会再出现。
+
+聊天、记事本、音乐、应用商店、末影箱、相机的服务端全部补齐，SPI 清单从
+5 个 App 放开到 **11 个**。三十多个网络包的注册与处理都接上了。
+
+### 又一批只在这个版本上成立的差异
+
+**SavedData 的 API 变了三处**（`ChatData`、`FriendData`）：
+
+| 1.21.1 | 1.20.1 |
+| --- | --- |
+| `computeIfAbsent(new SavedData.Factory<>(ctor, loader, null), name)` | `computeIfAbsent(loader, ctor, name)` |
+| `save(CompoundTag, HolderLookup.Provider)` | `save(CompoundTag)` |
+| `load(CompoundTag, HolderLookup.Provider)` | `load(CompoundTag)` |
+
+没有 `Factory` 这个类，而且**参数顺序是 loader 在前** —— 写反了编译不过，
+但很容易看花眼。
+
+**注册表的入口不是同一个东西**（第 6 条的补充）：`Registries.SOUND_EVENT`
+（原版 `ResourceKey`）→ `ForgeRegistries.SOUND_EVENTS`（Forge 的包装）；
+`Registries.MENU` → `ForgeRegistries.MENU_TYPES`。名字像，类型不同。
+
+**其它逐个撞出来的：**
+
+| 位置 | 1.21.1 | 1.20.1 |
+| --- | --- | --- |
+| `Slot.setByPlayer` | `(新栈, 旧栈)` | `(新栈)` |
+| `IEventBus.addListener` | `(优先级, 类, 消费者)` | **没有这个三参重载**，要用四参那个（中间多一个 `receiveCancelled`） |
+| 菜单界面注册 | `RegisterMenuScreensEvent` | `FMLClientSetupEvent` 里手调 `MenuScreens.register`，**且必须包在 `enqueueWork` 里** —— 那个注册表不是线程安全的，而该事件是并行派发的 |
+| 唱片判定 | `JukeboxSong.fromStack(...)` | `stack.getItem() instanceof RecordItem` |
+
+### 唱片判定这一处是【功能上的降级】，不是等价替换
+
+那边查的是 `JUKEBOX_PLAYABLE` 数据组件（1.21 才有），所以别的模组、甚至只靠
+json 定义的唱片它都认得。1.20.1 上没有那个组件，曲长与音效直接挂在
+`RecordItem` 这个**类**上，只能按类型判 —— **别的模组若没继承 `RecordItem`
+而是自己实现一套，这边就认不出来，那边能。**
+
+这是 1.20.1 的天花板，不是偷懒。真要覆盖到那种唱片，得另开一个按 item tag
+判的口子。记在这里免得日后当成 bug 查。
+
+### 数据包目录：两处是复数/单数之差，改错了不报错只是不生效
+
+| | 1.21.1 | 1.20.1 |
+| --- | --- | --- |
+| 物品标签 | `data/<ns>/tags/item/` | `data/<ns>/tags/items/` |
+| 进度 | `data/<ns>/advancement/` | `data/<ns>/advancements/` |
+| 配方 | `data/<ns>/recipe/` | `data/<ns>/recipes/` |
+
+物品谓词的写法也不同：1.21 是 `"items": "minecraft:redstone"`（字符串），
+1.20.1 是 `"items": ["minecraft:redstone"]`（数组）。
+
+**Curios 的槽位定义反而没变**：`data/<ns>/curios/slots/<name>.json`
+与 `curios/entities/<name>.json` 两边同构，字段也一样（实测对着
+Curios 5.14.1 jar 里自带的 `belt.json` 核过）。清单原先写的
+"饰品栏槽位那套 json 格式也变了"——**只变在标签目录那一处**。
+
+### 编解码方法的参数顺序，统一过一次
+
+自动转换出来的是 `encode(值, buf)`，早期手写的四个是 `encode(buf, 值)`。
+两种混着放在一个编解码层里迟早出事，已全部统一成 **`encode(值, buf)`** ——
+与 `MCphoneNetwork.registerToServer` 要的 `BiConsumer<T, FriendlyByteBuf>`
+方向一致，包类的 `encode` 可以直接当方法引用传进去。全仓 42 处。
+
+### 测试架子够不到的地方，说清楚
+
+`docs/` 下这套断言测试的前提是"不需要 Minecraft"。`PhonePlayerData` 自从
+带上唱片仓字段（`DiscState` 含 `ItemStack`）之后，**光是 new 一个就会触发
+`ItemStack` 的静态初始化去查 `BuiltInRegistries`**，抛 "Not bootstrapped"，
+而且是在类初始化阶段抛，栈里看不出跟测试有任何关系。
+
+补 `Bootstrap.bootStrap()` 也救不回来——它会连带初始化 Forge 的事件总线，
+在 FML 之外起不来。所以玩家数据**容器**那一层只能进游戏验，测试退而直接测
+它调用的 `WallpaperData.CODEC`，序列化逻辑本身仍然覆盖。
+
+**往 `PhonePlayerData` 加字段时留意这条。**
+
+### 验收
+
+1. `./gradlew build` → `BUILD SUCCESSFUL`，零 error
+2. 6 个断言测试 **122,204 条全绿**
+3. `./gradlew runServer` → `Done (5.497s)!`，**零 ERROR**；`Loaded 7 recipes`、
+   `Loaded 1272 advancements`（新加的数据包文件都被吃下了），
+   服务端配置 `mcphone-server.toml` 正常生成
+4. 产物 270 个类、内嵌 javamp3、3 份 SPI 名单、5 个 data json
+
+**验不到的还是界面与实际收发。** 三十多个包这一刀第一次挂上通道，
+序号分配、两端握手、每个处理函数的实际行为都只能进游戏点一遍。
+
 ### ⬜ 下一刀
+
 
 
 第一刀剔掉的那 6 个，**回来了 3 个**：`util/SpiLoader`、`api/client/ui/IPhonePage`、
@@ -582,12 +676,13 @@ A 编不过，引用 A 的 B 这一轮才暴露出来。一轮就收工会漏掉
 5. ~~界面壳与主屏~~ ✅ 第四刀做完，手机能开机
 6. ~~玩家数据 Capability~~ ✅ 骨架已成（`ModCapabilities` / `PhonePlayerData`），
    壁纸与笔记两个字段已就位。**再加字段时必须回去补 `onPlayerClone`**
-7. **服务端处理函数，逐个功能补**（第 1 条剩下的 31 个包）—— 现在的瓶颈就在这儿。
-   客户端那一半全都编过了，缺的是服务端。建议顺序：记事本（`NoteService` 已经
-   搬过来了，最近）→ 应用商店 → 聊天 → 音乐 → 末影箱。每补完一个，
-   在 `NetworkHandler` 加注册、在 SPI 清单里加一行
-8. **加 `verifyDistIsolation`** —— 代码已经不少了，越拖存量越多
-9. 联动模组：Waystones 与 MCEF 两条要照 1.20.1 的 API 重写，见上面的联动表
+7. ~~服务端处理函数~~ ✅ 第五刀补齐，基本功能全部就位
+8. **进游戏逐个 App 点一遍** —— 现在最要紧的一步。三十多个包第一次挂上通道，
+   编译器管不了它们发出去之后对不对
+9. **加 `verifyDistIsolation`** —— 代码已经不少了，越拖存量越多
+10. 联动模组：Waystones 与 MCEF 两条要照 1.20.1 的 API 重写，见上面的联动表
+11. 版本号对齐：功能补齐后 `mod_version` 可以从 0.1.0 往 1.8.x 靠，
+    理由见 gradle.properties 里那段
 
 每一步都能编译、能进游戏再走下一步。24k 行一次性搬过来然后调编译错误，
 是这种移植最常见的翻车方式。

@@ -132,7 +132,7 @@ public sealed interface PhoneLocation {
      *
      * 长度上限 N 必须原样带过来。它不是装饰，是挡超长字符串的那道闸。
      */
-    static void encode(FriendlyByteBuf buf, PhoneLocation value) {
+    static void encode(PhoneLocation value, FriendlyByteBuf buf) {
         // 这里本来是 switch + record pattern，由编译器按 sealed 接口查穷尽性。
         // 那套语法 Java 21 才转正 —— 连退一步的 case InHand h 在 17 上也只是
         // 预览特性，所以整个 switch 都得换成 instanceof 链。
