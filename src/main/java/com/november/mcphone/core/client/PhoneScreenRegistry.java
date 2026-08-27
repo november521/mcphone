@@ -167,15 +167,39 @@ public final class PhoneScreenRegistry {
         return List.copyOf(out);
     }
 
-    /** 全部联动 App（声明了外部前置的），可用的在前、不可用的在后。读前置要走 {@link #requiredModsOf} */
+    /**
+     * 全部靠别的模组撑着的 App，可用的在前、不可用的在后。
+     *
+     * 两种声明都算：{@link #requiredModsOf} 与 {@link #companionModsOf}。只认前者
+     * 是不行的——内建的 App 现在一个都不用前置了（MCphone 自己没有前置，缺了谁都
+     * 照常开机），只认前置的话这份名单里就只剩"当前不可用"的那一批，模组都装齐的
+     * 玩家进商店的「联动App」页会看到一张空页。
+     */
     public static List<IPhoneApp> getCompanionApps() {
         ensureLoaded();
         List<IPhoneApp> out = new ArrayList<>();
         for (IPhoneApp app : CATALOG.values()) {
-            if (!requiredModsOf(app).isEmpty()) out.add(app);
+            if (!requiredModsOf(app).isEmpty() || !companionModsOf(app).isEmpty()) out.add(app);
         }
-        out.addAll(UNAVAILABLE.values());   // 不可用的必定声明了前置，不必再筛
+        out.addAll(UNAVAILABLE.values());   // 不可用的必定是靠谁撑着才不可用，不必再筛
         return List.copyOf(out);
+    }
+
+    /**
+     * 这个 App 现在可不可用 —— 在目录里就是可用，{@link #register} 把不可用的挡在
+     * 门外并记进 UNAVAILABLE，两边互斥。
+     *
+     * 兜 Throwable 的理由与 {@link #requiredModsOf} 一样：UNAVAILABLE 里的 App
+     * 引用着没装的模组，读它任何一样东西都可能抛 NoClassDefFoundError。
+     */
+    public static boolean isRegistered(IPhoneApp app) {
+        if (app == null) return false;
+        ensureLoaded();
+        try {
+            return CATALOG.containsKey(app.getId());
+        } catch (Throwable t) {
+            return false;
+        }
     }
 
     /** 读一个 App 声明的前置，读不出来就当没有。必须兜 Throwable：UNAVAILABLE 里的 App 会抛 NoClassDefFoundError */

@@ -74,12 +74,23 @@ public final class CompanionApps {
                 if (!ModList.get().isLoaded(mod.modId())) satisfied = false;
             }
 
-            rows.add(new Row(
-                    readName(app),
-                    readIcon(app),
-                    Component.translatable("mcphone.store.companion.requires",
-                            names.toString()).getString(),
-                    satisfied));
+            // 已经可用、却不是每个都装齐的，不画。
+            //
+            // 这是「阅读」那种"装了任一个就有内容"的 App：只装了 Patchouli 时它好好地
+            // 待在主屏上，而这一页会把它画成一行压暗的"未装"，因为 GuideME 与沉浸工程
+            // 没装。那一行是句假话——玩家看着自己正在用的 App 被标成用不了。
+            //
+            // 反过来"不可用"的一律要画，无论满足了几个：那正是这一页存在的理由。
+            // 单模组撑着的 App（浏览器、传送石、任务书）可用与满足是同一件事，
+            // 这一句碰不到它们
+            if (satisfied || !PhoneScreenRegistry.isRegistered(app)) {
+                rows.add(new Row(
+                        readName(app),
+                        readIcon(app),
+                        Component.translatable("mcphone.store.companion.requires",
+                                names.toString()).getString(),
+                        satisfied));
+            }
         }
 
         clampPage();
