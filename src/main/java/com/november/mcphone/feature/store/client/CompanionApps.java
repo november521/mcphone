@@ -52,6 +52,18 @@ public final class CompanionApps {
 
         for (IPhoneApp app : PhoneScreenRegistry.getCompanionApps()) {
             List<RequiredMod> required = PhoneScreenRegistry.requiredModsOf(app);
+
+            // 只声明了【联动】的，也要在这一页说得出自己缺什么。
+            //
+            // 走到这一句时 required 是空的，说明这个 App 必定来自 UNAVAILABLE——
+            // getCompanionApps() 的另一支是按"前置非空"筛的，筛得出来就不会空。
+            // 也就是说这条回退只会碰到【当前不可用】的 App，不会把一个正常能用的
+            // App 拉进这一页。
+            //
+            // 不回退的话，一个"靠某个模组撑着、但声明成联动"的 App 在对方没装时
+            // 会从玩家眼前彻底消失：主屏没有、商店没有、这一页也没有。而这一页
+            // 存在的全部理由就是回答"我怎么没有这个"
+            if (required.isEmpty()) required = PhoneScreenRegistry.companionModsOf(app);
             if (required.isEmpty()) continue;
 
             boolean satisfied = true;
