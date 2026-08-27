@@ -27,15 +27,21 @@ import java.util.List;
  * 点开之后接管屏幕的是它自己的界面，章节、进度、领奖、编辑权限全对得上，和在
  * 背包里右键那本书一模一样。我们只提供入口，细节见 {@link FtbQuestsBook}。
  *
- * 声明成硬前置，不是联动
+ * FTB Quests 是【联动】，不是前置
  *
- * 与「阅读」不同 —— 那个 App 有三个书源，缺一个还有别的书可看，所以它声明的是
- * companionMods。这一格只通往一个地方，FTB Quests 没装它就是彻底不可用，那正是
- * requiredMods 的定义。声明一次，三件事自动发生：对方没装时这一格不进目录、
- * 商店的「联动App」页会列出它缺什么、「设置 → 关于」的联动模组清单也会带上它。
+ * MCphone 本身不需要任何前置就能跑，装不装别的模组只是功能多少的分别 —— 这一格
+ * 也一样：没有 FTB Quests，少的是这一个 App，不是手机开不了机。所以这里声明的是
+ * companionMods，与「阅读」那边同一个说法。
  *
- * 不覆盖 isAvailable()：默认实现就是按 requiredMods() 回答的，覆盖了反而可能
- * 与「联动App」页对不上。
+ * 但这一格与「阅读」有一处不同：它只通往一个地方。「阅读」缺一个书源还有别的书
+ * 可看，这一格缺了 FTB Quests 就没有内容可给。所以必须自己覆盖 isAvailable() ——
+ * companionMods 不参与默认的可用性判断（那个默认实现只看 requiredMods），照默认
+ * 走就成了"永远可用"，于是没装 FTB Quests 的整合包里，主屏上会多一个点了没反应
+ * 的图标。
+ *
+ * 声明成联动之后玩家仍然找得到它：商店的「联动App」页对当前不可用的 App 会回退
+ * 去读 companionMods（见 CompanionApps.refresh），所以没装 FTB Quests 时那一页
+ * 照样列着「任务书 …… 需要 FTB Quests」；「设置 → 关于」的联动模组清单也会带上。
  *
  * 预装且免费
  *
@@ -53,10 +59,25 @@ public final class QuestsApp extends PhoneApp {
 
     /** modid 取兼容层的常量："可用性"与"缺什么"必须是同一个来源 */
     @Override
-    public List<RequiredMod> requiredMods() {
+    public List<RequiredMod> companionMods() {
         return List.of(new RequiredMod(
                 FtbQuestsBook.FTBQUESTS_MODID,
                 Component.translatable("mcphone.compat.ftbquests").getString()));
+    }
+
+    /**
+     * 没有 FTB Quests 就没有内容可给，这一格不该出现。
+     *
+     * 必须自己判：默认实现只看 requiredMods()，而这个 App 一条都不声明 —— 照默认
+     * 走就是"永远可用"，主屏上会多一个点了没反应的图标。
+     *
+     * 这里问的是 ModList，不是"任务档案同步了没"。档案没同步是【一时】的状态，
+     * 拿它当可用性会让这一格在进服的头几秒里闪一下才出现；而那种情形 FTB 自己
+     * 会在玩家点下去时把话说清楚，见 {@link FtbQuestsBook} 的类注释。
+     */
+    @Override
+    public boolean isAvailable() {
+        return FtbQuestsBook.isLoaded();
     }
 
     /**
