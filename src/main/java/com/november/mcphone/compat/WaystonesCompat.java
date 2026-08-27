@@ -96,9 +96,13 @@ public final class WaystonesCompat {
     /**
      * 传送石碑的 modid。
      *
-     * 公开的：传送石 App 要拿它声明前置（{@code IPhoneApp.requiredMods()}），
+     * 公开的：传送石 App 要拿它声明联动（{@code IPhoneApp.companionMods()}），
      * 而这个字符串只该有一处权威来源。各写一份的话，改动时漏一处就会出现
      * "商店里有、点了没反应"这种最难查的状态。
+     *
+     * 注意它是编译期常量，引用它【不会】加载本类。要判断在不在场请调
+     * {@link #isLoaded()}——那才是会加载本类的那一个，而本类没有静态初始化块、
+     * 唯一的静态字段就是这个字符串，所以加载它是安全的。
      */
     public static final String WAYSTONES_MODID = "waystones";
 
