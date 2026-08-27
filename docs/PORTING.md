@@ -138,6 +138,29 @@ stack.getOrCreateTag().putString("DeviceName", name);
 `ModConfigSpec` → `ForgeConfigSpec`。builder API 几乎一样，注册方式不同
 （`ModLoadingContext.get().registerConfig(...)`）。
 
+### 9. Java 语言版本 —— 21 → 17，只有 1 个文件
+
+这一条原来漏了，是移植开始后才扫出来的。两边的 JDK 不同（那边 21，这边 17），
+所以**源码里不能出现 21 才有的语法**。实测全仓只有一处：
+
+```
+core/PhoneLocation.java:150,153,157   case InHand(InteractionHand hand) ->
+                                      case InInventory(int slot) -> {
+                                      case InCurio(String slotId, int index) -> {
+```
+
+这是 **record pattern**（记录模式解构），Java 21 才转正。17 上编译直接失败。
+改法是退回老写法：`case InHand h -> ... h.hand()`，多一次取值，语义不变。
+
+`sealed` / `permits` 不受影响，那是 17 就转正的。文本块、`instanceof` 模式
+也都安全。扫的时候顺带确认了没有 `case ... when` 守卫子句和字符串模板。
+
+**移植新文件时请复扫一遍**：
+
+```bash
+grep -rnE "case [A-Z][A-Za-z0-9]*\([a-zA-Z]|case .+ when |STR\.\"" src/main/java
+```
+
 ## 联动模组：六个，每一个都要单独查
 
 **别假设 1.20.1 上有同名同版的对方。** 逐条确认，确认不了的就先不接——
@@ -174,6 +197,41 @@ stack.getOrCreateTag().putString("DeviceName", name);
   有没有引用客户端类型（专用服务器启动即崩的那种坑）。这一支**必须也加上**，
   而且要早加——等代码堆起来再加就有一堆存量要清
 - **Parchment 映射**：现在用的是官方混淆表（没有参数名）。要加就得挂 librarian 插件
+
+## 进度
+
+### ✅ 第一刀：纯逻辑层（22 个文件）
+
+不 import 任何 Minecraft / NeoForge / Mojang 类型、且不引用本工程其它未移植
+类的那一批，**原样搬过来，一个字没改**。
+
+筛法不是靠肉眼，是靠编译器：先按 import 筛出 28 个候选，再用
+`javac --release 17` 实编一遍，编不过的剔掉。剔掉了 6 个——它们表面上不碰
+Minecraft，实际引用着本工程里还没搬的东西：
+
+| 剔掉的 | 卡在哪 |
+| --- | --- |
+| `util/SpiLoader` | 要 `MCphone.LOGGER` |
+| `api/client/ui/IPhonePage` | 要 `PhoneCanvas` |
+| `feature/reader/client/ShelfStore` | 要 gson、`MCphone`、`BookRef` |
+| `feature/chat/net/ChatClientCache` | 要本工程其它未移植类 |
+| `feature/notes/net/NotesClientCache` | 同上 |
+| `feature/music/client/source/MusicSources` | 要 `MusicSource` |
+
+**5 个断言测试也一并搬了**，它们测的正好是这一层，而且不需要 Minecraft：
+
+```bash
+javac --release 17 -encoding UTF-8 -d /tmp/t $(find src/main/java -name '*.java' | grep -vE 'MCphone.java|core/Mod|core/PhoneItem')
+javac --release 17 -encoding UTF-8 -cp /tmp/t -d /tmp/t docs/*.java
+java -cp /tmp/t com.november.mcphone.feature.reader.BookSearchTest
+```
+
+在 Java 17 上跑出来 **122,174 条断言全绿**（28 + 80007 + 12301 + 91 + 29747）。
+这一层的行为与 1.21.1 那支逐字相同，不是"看着差不多"。
+
+### ⬜ 下一刀
+
+按下面的顺序往下走。第一刀剔掉的那 6 个会随着它们的依赖被移植而自然回来。
 
 ## 建议的推进顺序
 
