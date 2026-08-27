@@ -201,16 +201,36 @@ tasks.named('jar', Jar).configure {
     finalizedBy 'reobfJar'
 }
 
-// 与 NeoForge 那一支同一条：打包后只留最新三个 jar，别让 build/libs 越堆越多
+// 打包后只留最新三个【版本】的 jar，别让 build/libs 越堆越多。
+//
+// 与 NeoForge 那一支的差别：那边一次构建只出一个 jar，"留最新三个文件"
+// 就等于"留三个版本"。这边开了 jarJar 之后一次出两个（本体 + -slim），
+// 照抄那条规则只够留一轮半 —— 上一个版本的 jar 会被留下来，
+// 而 CI 若还按 find | head -1 取件就可能发出旧版本。
+//
+// 所以这里按【版本】分组再数。CI 那边也一并改成按确切文件名取，
+// 两道各自独立，缺一道都还站得住。
 tasks.register('pruneOldJars') {
     doLast {
         var dir = layout.buildDirectory.dir('libs').get().asFile
         if (!dir.isDirectory()) return
-        var jars = dir.listFiles({ f -> f.name.endsWith('.jar') } as FileFilter)
-                      ?.sort { a, b -> b.lastModified() <=> a.lastModified() } ?: []
-        jars.drop(3).each {
-            println "删掉旧 jar：${it.name}"
-            it.delete()
+        var jars = dir.listFiles({ f -> f.name.endsWith('.jar') } as FileFilter) ?: []
+        // mcphone-0.9.0.jar 与 mcphone-0.9.0-slim.jar 归到同一版本
+        var byVersion = jars.groupBy { f ->
+            var m = f.name =~ /^mcphone-(\d[^-]*)/
+            m ? m[0][1] : f.name
+        }
+        var keep = byVersion.keySet().sort { a, b ->
+            byVersion[b].max { it.lastModified() }.lastModified() <=>
+            byVersion[a].max { it.lastModified() }.lastModified()
+        }.take(3)
+        byVersion.each { version, files ->
+            if (!keep.contains(version)) {
+                files.each {
+                    println "删掉旧版本 jar：${it.name}"
+                    it.delete()
+                }
+            }
         }
     }
 }
