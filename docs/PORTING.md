@@ -52,12 +52,39 @@ CHANNEL.sendToServer(new FooPacket(1));
 > 建议先移植**一条**最简单的包（比如设置同步），把 `SimpleChannel` 的骨架跑通，
 > 再批量搬其余 33 个。别 34 个一起改，编译错误会糊成一片。
 
-### 2. ResourceLocation 构造 —— 46 个文件，最机械的一块
+### 2. ~~ResourceLocation 构造 —— 46 个文件~~ —— **这一条作废，一个字都不用改**
 
-**53 处** `ResourceLocation.fromNamespaceAndPath(ns, path)`，1.20.1 上要写成
-`new ResourceLocation(ns, path)`。还有 `ResourceLocation.parse(s)` → `new ResourceLocation(s)`。
+> 原文说"**53 处** `ResourceLocation.fromNamespaceAndPath(ns, path)`，1.20.1 上要写成
+> `new ResourceLocation(ns, path)`"，并说这是唯一能放心 sed 的一件事。
+> **这是错的，而且方向是反的。** 第二刀真去编的时候撞出来了。
 
-这是**唯一一件可以放心用 sed 批量替换**的。做完立刻编译，剩下的报错就都是别的问题了。
+Forge 47.4.x **把 1.21 的静态工厂方法回移进 1.20.1 了**，同时把两个公开构造函数
+标成了废弃待删。实测（`javac -Xlint:removal`，Forge 47.4.23 mapped jar）：
+
+| 写法 | 结果 |
+| --- | --- |
+| `ResourceLocation.fromNamespaceAndPath(ns, path)` | ✅ 干净，无警告 |
+| `ResourceLocation.parse(s)` | ✅ 干净，无警告 |
+| `new ResourceLocation(ns, path)` | ⚠️ `deprecated and marked for removal` |
+| `new ResourceLocation(s)` | ⚠️ 同上 |
+
+所以**照搬 1.21.1 的写法就是对的**，而且是唯一不触警告的写法。按原文那样 sed 一遍，
+反而会让 44 个文件平白与 main 分叉、外加 13 条 removal 警告。
+
+**这条依赖的 Forge 下限已经查实**，不是猜的：
+
+- 回移发生在 MinecraftForge `0b1eefc6`（2025-02-18，PR #10405，
+  "Backport even more future ResourceLocation methods"）。同一个补丁里给构造函数
+  打上了 `@Deprecated(forRemoval = true, since = "1.20.6")`
+- Forge **47.4.0 发布于 2025-03-05**，在该提交之后 → 含这个回移
+- 本工程 `forge_version_range=[47.4.0,)`，**下限正好站得住**
+
+⚠️ 如果哪天要把 `forge_version_range` 的下限往 47.4.0 以下调，**这 45 个文件会当场
+报 `cannot find symbol`**。真要调就得先按 gradle.properties 里写的那样
+`-Pforge_version=<新下限>` 重编一遍验证。
+
+**推论：凡是 1.21 的 vanilla API，先去 Forge 1.20.x 的 patches 里查一眼有没有被回移，
+再动手改。** 别照着版本号想当然。
 
 ### 3. 玩家数据 —— 11 个文件
 
@@ -98,7 +125,16 @@ stack.getOrCreateTag().putString("DeviceName", name);
 
 `net.neoforged.fml.ModList` → `net.minecraftforge.fml.ModList`。
 **方法名与语义完全一样**（`isLoaded`、`getModContainerById`、`getModInfo().getDisplayName()`），
-只换包名。这一条和第 2 条一样可以批量替换。
+只换包名。
+
+第 2 条作废之后，**这是全清单里唯一一件真能放心 sed 的事**，实测确认：
+
+```bash
+grep -rl 'net\.neoforged\.fml\.ModList' src/main/java \
+  | xargs -r sed -i 's/net\.neoforged\.fml\.ModList/net.minecraftforge.fml.ModList/g'
+```
+
+第二刀里对搬过去的文件跑了这一条，命中 6 个，编译一次通过，无警告。
 
 所有联动判断（`WaystonesCompat.isLoaded()` 那一层）都靠它，所以这条先做，
 后面接联动模组时才不用回头。
@@ -138,7 +174,7 @@ stack.getOrCreateTag().putString("DeviceName", name);
 `ModConfigSpec` → `ForgeConfigSpec`。builder API 几乎一样，注册方式不同
 （`ModLoadingContext.get().registerConfig(...)`）。
 
-### 9. Java 语言版本 —— 21 → 17，只有 1 个文件
+### 9. Java 语言版本 —— 21 → 17，只有 1 个文件（但比原先记的严重）
 
 这一条原来漏了，是移植开始后才扫出来的。两边的 JDK 不同（那边 21，这边 17），
 所以**源码里不能出现 21 才有的语法**。实测全仓只有一处：
@@ -149,17 +185,42 @@ core/PhoneLocation.java:150,153,157   case InHand(InteractionHand hand) ->
                                       case InCurio(String slotId, int index) -> {
 ```
 
-这是 **record pattern**（记录模式解构），Java 21 才转正。17 上编译直接失败。
-改法是退回老写法：`case InHand h -> ... h.hand()`，多一次取值，语义不变。
+**第一版这条只写了"record pattern 要退回 `case InHand h ->`"，那个改法本身也编不过。**
+第二刀实编时报的是：
+
+```
+patterns in switch statements are a preview feature and are disabled by default.
+```
+
+也就是说，问题不止于**记录模式解构**（JEP 440），而是 **switch 里的类型模式整体**
+（JEP 441）——两者都是 Java 21 才转正的，17 上只有预览版。所以
+`case InHand h ->` 同样不成立，**整个 switch 都得拆掉**，换成 `instanceof` 链
+（那是 16 就转正的，17 上安全）：
+
+```java
+if (value instanceof InHand h) { ... h.hand() ... }
+else if (value instanceof InInventory inv) { ... inv.slot() ... }
+else if (value instanceof InCurio c) { ... c.slotId(), c.index() ... }
+else { throw new IllegalStateException(...); }   // 这句不能省，见下
+```
+
+**代价是穷尽性检查没了，这是真正要留意的地方。** 原来 switch 在 sealed 接口上
+是由编译器保证穷尽的：以后给 `PhoneLocation` 加第四种实现，1.21.1 那支会编译失败。
+换成 `instanceof` 链之后编译器不再管，会静悄悄走到最后的 `else`。**所以那个
+`else` 必须抛异常** —— 它是这里唯一还剩的守卫，把一个编译期保证降级成了运行期保证。
+1.21.1 那支不需要这句，两边这一处的代码**注定不能逐字相同**。
 
 `sealed` / `permits` 不受影响，那是 17 就转正的。文本块、`instanceof` 模式
 也都安全。扫的时候顺带确认了没有 `case ... when` 守卫子句和字符串模板。
 
-**移植新文件时请复扫一遍**：
+**移植新文件时请复扫一遍**（比原来那句多抓 `case <Type> <ident>` 这一形）：
 
 ```bash
-grep -rnE "case [A-Z][A-Za-z0-9]*\([a-zA-Z]|case .+ when |STR\.\"" src/main/java
+grep -rnE "case +[A-Z][A-Za-z0-9_.]*(\(|[[:space:]]+[a-z][A-Za-z0-9_]*[[:space:]]*(->|:))|case .+ when |STR\.\"" src/main/java
 ```
+
+全仓跑下来只有 `PhoneLocation.java` 一个文件命中。而它眼下卡在网络层
+（`ByteBufCodecs`），所以这一处的改动要等第 1 条一起做。
 
 ## 联动模组：六个，每一个都要单独查
 
@@ -229,21 +290,110 @@ java -cp /tmp/t com.november.mcphone.feature.reader.BookSearchTest
 在 Java 17 上跑出来 **122,174 条断言全绿**（28 + 80007 + 12301 + 91 + 29747）。
 这一层的行为与 1.21.1 那支逐字相同，不是"看着差不多"。
 
+### ✅ 第二刀：真实类路径下的批量筛选（+51 个文件，共 77 个）
+
+这一刀第一次**挂着真正的 Forge 1.20.1 类路径**编译，而不是只用 JDK。做法是把
+gradle 的 `compileClasspath` 导出来（100 条，含 mapped forge jar），之后全程用
+`javac --release 17` 直接迭代，绕开 gradle 的启动开销。
+
+**筛法：候选 → 实编 → 剪枝到收敛。**
+
+| 阶段 | 数量 |
+| --- | ---: |
+| 未移植 | 189 |
+| 不碰 neoforge（或只碰 `ModList`） | 157 |
+| 依赖闭包也干净 | 142 |
+| 连同基底 26 个一起送编译 | 168 |
+| **编译收敛后保留** | **77** |
+| 净新增 | **51** |
+
+剪枝跑了 6 轮才收敛（168 → 97 → 93 → 83 → 79 → 77），因为**级联要一层层剥**：
+A 编不过，引用 A 的 B 这一轮才暴露出来。一轮就收工会漏掉后面几层。
+
+**剔掉的 91 个，按根因：**
+
+| 根因 | 个数 |
+| --- | ---: |
+| 网络层：`StreamCodec` / `CustomPacketPayload`（1.20.5+ vanilla，1.20.1 没有） | 43 |
+| 级联：引用了本轮被剔掉的本工程类 | 41 |
+| 联动模组依赖还没加进 `build.gradle` | 6 |
+| 物品数据 `DataComponent`（第 4 条） | 1 |
+
+**这张表把优先级问的很清楚：网络层不是"第 6 步"，它是总闸。** 43 个直接卡在它上面，
+另外 41 个级联文件的根也大半在那儿。级联根按被引用次数排：
+
+```
+12 次  core/client/PhoneScreen.java          ← 界面壳，第二大的闸
+ 4 次  core/client/PhoneScreenRegistry.java
+ 3 次  feature/chat/ChatMessage.java          ← 网络层
+ 2 次  feature/browser/client/BrowserBackends.java
+ 2 次  feature/reader/client/source/BookSources.java
+```
+
+**验收（三道，都是实测）：**
+
+1. `./gradlew build` → `BUILD SUCCESSFUL`，产出 `mcphone-0.1.0.jar`，**0 条警告**
+2. 5 个断言测试在 Java 17 上跑出 **122,174 条全绿**（28 + 80007 + 12301 + 91 + 29747），
+   与第一刀逐条一致，纯逻辑层没有回归
+3. **51 个新文件里 45 个与 `main` 逐字相同**，另 6 个只差 `ModList` 一个包名
+
+第 3 条是这一刀最值得留意的结果：原以为要改 44 个文件（第 2 条），实测**一个都不用改**。
+
 ### ⬜ 下一刀
 
-按下面的顺序往下走。第一刀剔掉的那 6 个会随着它们的依赖被移植而自然回来。
+第一刀剔掉的那 6 个，**回来了 3 个**：`util/SpiLoader`、`api/client/ui/IPhonePage`、
+`feature/reader/client/ShelfStore`。剩下 3 个（`ChatClientCache`、`NotesClientCache`、
+`MusicSources`）全都卡在网络层 —— 又一条指向第 1 条的证据。
 
 ## 建议的推进顺序
 
-1. 那 111 个干净文件搬过来，编译，把绘制 API 的差异清掉
-2. `ModList` 与 `ResourceLocation` 两轮批量替换（第 2、5 条）
-3. 注册表与物品（第 6、4 条）—— 到这里手机应该能拿在手里了
-4. **加 `verifyDistIsolation`**，趁代码还少
-5. 界面壳与主屏（`PhoneScreen`、`HomeGrid`、`PhoneChassis`）—— 到这里能开机了
-6. 网络层骨架，先通一条包（第 1 条）
+**这个顺序按第二刀的实测数据重排过。** 原来把网络层排在第 6 步，但归因表显示
+它卡着 43 + 大半级联 —— 界面和 App 再怎么搬也绕不过去。
+
+1. ~~那 111 个干净文件搬过来~~ ✅ 已完成（第一、二刀，77 个）
+2. ~~`ModList` 与 `ResourceLocation` 两轮批量替换~~ ✅ `ModList` 已做；
+   `ResourceLocation` **查实为无需改动**（第 2 条）
+3. **网络层骨架，先通一条包**（第 1 条）—— **提到这里，因为它是总闸**。
+   先用 `SimpleChannel` 通一条最简单的（`SetWallpaperPacket` 之类），
+   骨架跑通再批量搬其余的。`PhoneLocation` 的 Java 17 语法改动（第 9 条）
+   跟着这一步一起做，它卡在 `ByteBufCodecs` 上
+4. 注册表与物品（第 6、4 条）—— 到这里手机能拿在手里且带数据
+5. **加 `verifyDistIsolation`**，趁代码还少
+6. 界面壳与主屏（`PhoneScreen`、`HomeGrid`、`PhoneChassis`）—— 第二大的闸，
+   光它一个就挡着 12 个文件。到这里能开机了
 7. 玩家数据 Capability（第 3 条）—— 聊天、好友、商店都压在它上面
 8. App 逐个搬，从不依赖网络的开始（时钟、天气、相册）
-9. 联动模组，逐个确认后再接
+9. 联动模组，逐个确认后再接（那 6 个 compat 文件等这一步）
 
 每一步都能编译、能进游戏再走下一步。24k 行一次性搬过来然后调编译错误，
 是这种移植最常见的翻车方式。
+
+## 复现这套筛法
+
+第二刀用的工具链，下一刀直接照用（gradle 只用来导类路径，之后全走 javac）：
+
+```bash
+# 1. 导出 Forge 1.20.1 编译类路径（gradle 必须用 JDK 21 跑，8.8 不认 JDK 25）
+cat > /tmp/dumpcp.gradle <<'EOF'
+allprojects { afterEvaluate { p -> p.tasks.register('dumpCp') { doLast {
+    new File(System.getProperty('cpOut')).text =
+        p.sourceSets.main.compileClasspath.files.collect{it.absolutePath}.join(':') } } } }
+EOF
+JAVA_HOME=/usr/lib/jvm/java-21-openjdk-arm64 \
+  ./gradlew -q --offline -I /tmp/dumpcp.gradle -DcpOut=/tmp/cp.txt dumpCp
+
+# 2. 实编（-Xmaxerrs 必须放大，默认 100 条会截断，看不到全貌）
+J17=~/.gradle/jdks/eclipse_adoptium-17-aarch64-linux/jdk-17.0.20.1+1
+$J17/bin/javac -Xmaxerrs 100000 -nowarn -encoding UTF-8 \
+  -cp "$(cat /tmp/cp.txt)" -d /tmp/out @filelist.txt 2> /tmp/err.txt
+
+# 3. 剪枝一轮：把出错的文件剔出去，重编，直到 exit=0
+grep -oE '^\./[^:]+\.java' /tmp/err.txt | sort -u > /tmp/bad.txt
+```
+
+两个坑，都踩过：
+
+- **语法错误会掩盖语义错误。** javac 在 parse 阶段失败就不做属性分析了，
+  所以第一轮只报了 `PhoneLocation` 的 9 条语法错。修掉它才看到真正的 332 条
+- **zsh 默认开 `noclobber`**，剪枝循环里 `>` 重定向到已存在的文件会静默失败，
+  导致后几轮读的是上一轮的陈旧错误文件、看着像"不收敛"。循环前先 `set +o noclobber`
