@@ -10,14 +10,36 @@ import java.util.ServiceLoader;
 /**
  * 兜住异常的 SPI 扫描 —— 一个写坏的附属，不该让所有人的手机变空。
  *
+ * 【必须显式传类加载器，别用单参的 ServiceLoader.load(x)】
+ *
+ * 单参那个重载用的是【当前线程的 context classloader】。而这里的扫描是从
+ * FMLClientSetupEvent 触发的，那是个 ParallelDispatchEvent —— 跑在 FML 的
+ * modloading-worker 线程上，不是主线程。
+ *
+ * 那个线程池的 worker 是这样造出来的（Forge 的 ModList）：
+ *
+ *   thread.setContextClassLoader(Thread.currentThread().getContextClassLoader());
+ *
+ * 它把【碰巧创建这个 worker 的那个线程】的 TCCL 复制过去。而 ForkJoinPool 的
+ * worker 是按需惰性创建的，谁触发扩容就由谁创建 —— 所以那个 TCCL 每次启动
+ * 都可能不一样。赶上一个看不见 META-INF/services 的，这一轮就【一个服务都
+ * 扫不到】，而且不报错。
+ *
+ * 后果是玩家报的那个"新建世界开手机一片空白，但很难复现"：目录空了，
+ * 而调用方的 loaded 标志早已置真，整局再也不会重试。
+ *
+ * 传 SpiLoader 自己的类加载器就没有这个问题：它必然是加载本模组的那一个，
+ * 与线程无关，而 Forge/NeoForge 下所有模组共用同一个转换类加载器，
+ * 别人的 services 文件照样看得见。
+ *
  * 原来那种写法为什么是个坑
  *
  * 到处都写成这样：
  *
  *   for (IPhoneApp app : ServiceLoader.load(IPhoneApp.class)) { ... }
  *
- * 看着人畜无害，实际上 ServiceLoader 的迭代器在这几种情况下会抛
- * {@link java.util.ServiceConfigurationError}：
+ * 看着人畜无害，实际上【两处】都有问题：类加载器如上，而且 ServiceLoader 的
+ * 迭代器在这几种情况下会抛 {@link java.util.ServiceConfigurationError}：
  *
  *   - services 文件里写的类名不存在（附属改了包名忘了同步）
  *   - 那个类没有公开的无参构造
@@ -72,7 +94,8 @@ public final class SpiLoader {
 
         Iterator<ServiceLoader.Provider<T>> it;
         try {
-            it = ServiceLoader.load(service).stream().iterator();
+            it = ServiceLoader.load(service, SpiLoader.class.getClassLoader())
+                    .stream().iterator();
         } catch (Throwable t) {
             MCphone.LOGGER.error("[MCphone] {} 扫描无法开始，本次一个都不加载", what, t);
             return out;

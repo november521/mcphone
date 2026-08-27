@@ -268,10 +268,29 @@ public final class PhoneScreenRegistry {
         return INSTALLED.contains(id);
     }
 
-    /** 扫描 App 目录，一辈子一次。不在这里读安装状态：状态按存档分，由 {@link #loadForCurrentWorld()} 进世界时读 */
+    /**
+     * 扫描一次 App 目录，正常情况下一辈子一次。不在这里读安装状态：
+     * 状态按存档分，由 {@link #loadForCurrentWorld()} 进世界时读。
+     *
+     * 【扫出空目录时不落锁，留一次重试的余地】
+     *
+     * 原来是进门就 loaded = true 再开扫。那样只要有一轮扫空了，整局就再也
+     * 不会重扫 —— 玩家看到的是"新建世界开手机一片空白"，而且重进世界也
+     * 治不好，只能重启游戏。空目录本身的成因已经在 SpiLoader 里治了
+     * （类加载器），这里是第二道：万一还有别的路子让扫描落空，下次调用
+     * 还能自己救回来。
+     *
+     * 本模组自带的 services 文件里始终有内建 App，所以"扫完还是空"必然是
+     * 出了问题，重试是划算的。但仍然设了次数上限：这个方法在渲染路径上
+     * 被调，真扫不出来时不能让它每帧都扫一遍。
+     */
+    private static final int MAX_SCAN_ATTEMPTS = 3;
+    private static int scanAttempts = 0;
+
     private static void ensureLoaded() {
         if (loaded) return;
-        loaded = true;
+
+        scanAttempts++;
 
         // 走 SpiLoader 而不是直接 for-each ServiceLoader：一个附属构造失败不该中断整个扫描
         int count = 0;
@@ -284,7 +303,20 @@ public final class PhoneScreenRegistry {
                         app.getClass().getName(), t);
             }
         }
-        MCphone.LOGGER.info("[MCphone] SPI 扫描完成，目录中共 {} 个 App", count);
+
+        // 扫出东西了才落锁；一个都没有就留给下次，除非已经试到上限
+        if (!CATALOG.isEmpty() || scanAttempts >= MAX_SCAN_ATTEMPTS) {
+            loaded = true;
+        }
+
+        if (CATALOG.isEmpty()) {
+            MCphone.LOGGER.error("[MCphone] SPI 扫描一个 App 都没找到（第 {} 次）。"
+                    + "本模组自带的内建 App 也没扫到，说明扫描本身出了问题；"
+                    + "{}", scanAttempts,
+                    loaded ? "已达重试上限，本局不再重试" : "下次调用会再试一次");
+        } else {
+            MCphone.LOGGER.info("[MCphone] SPI 扫描完成，目录中共 {} 个 App", count);
+        }
     }
 
     /** installed.json 的结构 */
