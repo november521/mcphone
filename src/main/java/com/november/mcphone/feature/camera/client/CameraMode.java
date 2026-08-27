@@ -34,7 +34,25 @@ public final class CameraMode {
 
         active = true;
         savedHideGui = mc.options.hideGui;
-        mc.options.hideGui = true;   // 等效原版 F1，藏掉准星与物品栏
+
+        // 【这里与 NeoForge 1.21.1 那一支正好相反，改之前先读完这段】
+        //
+        // 那边写的是 hideGui = true（等效原版 F1，藏掉准星与物品栏），
+        // 因为 NeoForge 的 RenderGuiEvent 不受 hideGui 影响，照样派发，
+        // 取景框画得出来。
+        //
+        // Forge 1.20.1 上这条不成立。RenderGuiEvent 是 ForgeGui（Gui 的子类）
+        // 在自己的 render 里派发的，而 GameRenderer 那边是：
+        //
+        //     if (!hideGui || screen != null) { gui.render(...) }
+        //
+        // 也就是说 hideGui 一置 true，整个 gui.render 被跳过，事件根本不发，
+        // 取景框跟着 HUD 一起没了 —— 这正是玩家报的"F1 会把框也省略掉"。
+        //
+        // 所以这一支反过来：hideGui 强制为 false 让渲染链路照常走，
+        // HUD 改由 CameraHandler 逐个取消 RenderGuiOverlayEvent 来藏。
+        // 拍照那几帧另说，见 CameraHandler.onRenderTickStart。
+        mc.options.hideGui = false;
         enteredAtMs = System.currentTimeMillis();
         pendingCapture = false;
         cleanFrameReady = false;
@@ -43,7 +61,9 @@ public final class CameraMode {
     public static void exit() {
         if (!active) return;
 
-        // 还原而不是无脑置 false：玩家可能本来就自己按了 F1
+        // 还原而不是无脑置 false：玩家可能本来就自己按了 F1。
+        // 相机模式期间玩家按的 F1 会被 CameraHandler 每帧盖掉，
+        // 但他【进相机之前】的那个设置在这里原样还回去
         Minecraft.getInstance().options.hideGui = savedHideGui;
         active = false;
         pendingCapture = false;

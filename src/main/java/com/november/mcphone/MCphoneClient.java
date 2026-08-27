@@ -83,6 +83,10 @@ public final class MCphoneClient {
         MinecraftForge.EVENT_BUS.addListener(CameraHandler::onClientTick);
         MinecraftForge.EVENT_BUS.addListener(CameraHandler::onRenderGui);
         MinecraftForge.EVENT_BUS.addListener(CameraHandler::onScreenOpening);
+        // 这三个是这一支特有的，NeoForge 那边不需要，理由见 CameraHandler 类注释
+        MinecraftForge.EVENT_BUS.addListener(CameraHandler::onRenderTickStart);
+        MinecraftForge.EVENT_BUS.addListener(CameraHandler::onRenderTickEnd);
+        MinecraftForge.EVENT_BUS.addListener(CameraHandler::onRenderGuiOverlayPre);
 
         // 每 tick 泵一次音频流；没在放的时候第一行就返回
         MinecraftForge.EVENT_BUS.addListener(LocalPlayback::onClientTick);
