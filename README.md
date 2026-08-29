@@ -4,8 +4,8 @@
 
 > **分支说明**：这个仓库按 Minecraft 版本 / 加载器分分支。
 > 你现在看的 `main` 是**当前主力版本**：Minecraft 1.21.1 + NeoForge。
-> Forge 1.20.1 的移植在 [`1.20.1-forge`](../../tree/1.20.1-forge) 分支上，
-> 那一支还在搭骨架，暂时不能用。
+> Minecraft 1.20.1 + Forge 在 [`1.20.1-forge`](../../tree/1.20.1-forge) 分支上，
+> 功能已完整移植、可以下载，但还比这一支年轻得多。
 
 **Minecraft 1.21.1** · **NeoForge 21.1.200+** · 客户端与服务端都需安装
 
@@ -23,12 +23,6 @@
 | [FTB Quests](https://www.curseforge.com/minecraft/mc-mods/ftb-quests-forge) | 多一个「任务书」App，主屏一格直接开整合包的任务书 |
 
 没装对应模组时，依赖它的 App 不会出现在主屏和应用商店里——商店里躺着一个点了会报错的东西，比它不存在更糟。
-
-**还有一个不给你加东西的联动**：装了 [Integrated Dynamics](https://modrinth.com/mod/integrated-dynamics) 时，MCphone 会在方块注册的末尾把 ID 全部方块的掉落表提前解析一次。这不改变任何掉落行为，也不给你多出任何功能——它是为了让**别人**的崩溃能被正确指认。
-
-NeoForge 的注册阶段只要收到任何一个模组抛的异常，就会把整个注册表回滚成原版状态；而回滚过程本身会在 ID 的墙上火把那里踩到一个空指针，于是真正的错误被顶掉，崩溃报告上只剩一句 `Trying to access unbound value: integrateddynamics:menril_torch_stone`——看起来像是 ID 的锅，其实 ID 只是最后一个倒下的。提前解析一次就绕开了那个空指针，回滚能正常跑完，把真凶抛出来。
-
-服主要知道的是：**这不会救回服务器**，起不来还是起不来，它只让崩溃报告指认对人。细节写在 `compat/IntegratedDynamicsCompat.java` 的类注释里。没装 ID 时这段代码一行都不会执行。
 
 ---
 
@@ -246,11 +240,36 @@ NeoForge 的注册阶段只要收到任何一个模组抛的异常，就会把�
 
 ---
 
+## 服主须知
+
+**装了 [Integrated Dynamics](https://modrinth.com/mod/integrated-dynamics) 时**，MCphone 会在方块注册的末尾把 ID 全部方块的掉落表提前解析一次。这不改变任何掉落行为，也不给玩家多出任何功能——它是为了让**别人**的崩溃能被正确指认。
+
+NeoForge 的注册阶段只要收到任何一个模组抛的异常，就会把整个注册表回滚成原版状态；而回滚过程本身会在 ID 的墙上火把那里踩到一个空指针，于是真正的错误被顶掉，崩溃报告上只剩一句 `Trying to access unbound value: integrateddynamics:menril_torch_stone`——看起来像是 ID 的锅，其实 ID 只是最后一个倒下的。提前解析一次就绕开了那个空指针，回滚能正常跑完，把真凶抛出来。
+
+**这不会救回服务器**，起不来还是起不来，它只让崩溃报告指认对人。细节写在 `compat/IntegratedDynamicsCompat.java` 的类注释里。没装 ID 时这段代码一行都不会执行。
+
+**服务端配置**在存档的 `serverconfig/mcphone-server.toml` 里，目前只有一项：
+
+| 项 | 默认 | 关掉之后 |
+| --- | --- | --- |
+| `allowFriendTeleport` | `true` | 好友那一行的传送图标不再显示，服务端也拒绝传送请求。好友关系与聊天不受影响 |
+
+**数据存在哪儿**（做备份时要知道）：
+
+| 数据 | 位置 | 随什么走 |
+| --- | --- | --- |
+| 好友关系、聊天记录 | 世界存档的 `data/` | 存档 |
+| 笔记、已购 App、唱片仓、壁纸选择、未读标记 | 玩家数据（`playerdata/`） | 存档 + 玩家 |
+| App 安装状态与主屏排列 | 客户端 `config/mcphone/installed/<存档>.json` | 玩家自己的客户端 |
+| 书架收藏 | 客户端 `config/mcphone/reader/shelf.json` | 玩家自己的客户端，**全局一份**不分存档 |
+
+前两行在服务器上，删存档就没了；后两行在玩家自己电脑上，服务器备份不包含它们。
+
 ## 给附属模组作者
 
 App 系统通过 SPI 开放，你的模组不需要被 MCphone 感知也能往手机里装 App。内建 App 走的是同一套机制，没有走后门。
 
-**注册一个 App**：实现 `com.november.mcphone.api.client.IPhoneApp`，在 `META-INF/services/com.november.mcphone.api.client.IPhoneApp` 中登记实现类，App 即自动出现。
+**注册一个 App**：实现 `com.november.mcphone.api.client.app.IPhoneApp`，在 `META-INF/services/com.november.mcphone.api.client.app.IPhoneApp` 中登记实现类，App 即自动出现。
 
 **自定义商店来源**：实现 `com.november.mcphone.api.client.store.IAppSource`，用 `AppInfo` 描述可下载的 App，在 `META-INF/services/com.november.mcphone.api.client.store.IAppSource` 中登记。
 
@@ -271,7 +290,7 @@ public List<RequiredMod> requiredMods() {
 
 判断条件说不清时（比如还要看对方的版本）才去覆盖 `isAvailable()`；它的默认实现就是按 `requiredMods()` 回答的。覆盖了它而不声明前置，「联动App」页就会与真实可用性对不上。
 
-**换浏览器后端**：`com.november.mcphone.client.browser` 下的 `IBrowser` / `IBrowserBackend` 是一层不含 MCEF、JCEF 类型的抽象，画面以 GL 纹理 id 交出来。想换成别的实现，在 MCphone 装上默认后端之前调 `BrowserBackends.set()` 即可；已经有人接管时再 set 会被拒绝并告警，不静默顶掉。
+**换浏览器后端**：`com.november.mcphone.feature.browser.client` 下的 `IBrowser` / `IBrowserBackend` 是一层不含 MCEF、JCEF 类型的抽象，画面以 GL 纹理 id 交出来。想换成别的实现，在 MCphone 装上默认后端之前调 `BrowserBackends.set()` 即可；已经有人接管时再 set 会被拒绝并告警，不静默顶掉。
 
 ---
 

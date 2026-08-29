@@ -54,8 +54,13 @@ def collect():
     rows = []
 
     # App 图标：SPI 名单 → 每个类的 super("path")
-    spi = read('src/main/resources/META-INF/services/'
-               'com.november.mcphone.api.client.app.IPhoneApp').split()
+    # 【要剥注释】：这份名单允许写 # 开头的注释行（1.20.1-forge 那支就写着
+    # 一行），不剥的话下面会拿 '#' 当类名去拼路径，当场 FileNotFoundError。
+    # build.gradle 的 verifyServiceFiles 一直是剥的，这里以前漏了
+    spi = [line.split('#', 1)[0].strip()
+           for line in read('src/main/resources/META-INF/services/'
+                            'com.november.mcphone.api.client.app.IPhoneApp').splitlines()]
+    spi = [c for c in spi if c]
     for cls in spi:
         src = read('src/main/java/' + cls.replace('.', '/') + '.java')
         path = re.search(r'super\("(\w+)"\)', src).group(1)
