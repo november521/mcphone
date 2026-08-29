@@ -66,9 +66,15 @@ jobs:
       - name: Find built JAR
         id: find-jar
         run: |
-          JAR_PATH=$(find build/libs -name "*.jar" ! -name "*-sources.jar" ! -name "*-dev.jar" | head -1)
-          if [ -z "$JAR_PATH" ]; then
-            echo "::error::build/libs 下没找到可发布的 jar"
+          # 【按确切文件名取，不要 find | head -1】，理由见 build.yml 里同名步骤。
+          # 这里更要紧：挑错就是把一个旧版本挂上 Release，玩家会真的下载。
+          #
+          # mod_version 已经在上面与 tag 校验过一致，直接拿它拼名字。
+          MOD_VERSION=$(grep -E '^mod_version=' gradle.properties | cut -d= -f2- | tr -d '[:space:]')
+          JAR_PATH="build/libs/mcphone-${MOD_VERSION}.jar"
+          if [ ! -f "$JAR_PATH" ]; then
+            echo "::error::没找到 $JAR_PATH。build/libs 下现有："
+            ls -la build/libs || true
             exit 1
           fi
           echo "jar_path=$JAR_PATH" >> "$GITHUB_OUTPUT"

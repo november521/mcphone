@@ -37,9 +37,20 @@ jobs:
       - name: Find built JAR
         id: find-jar
         run: |
-          JAR_PATH=$(find build/libs -name "*.jar" ! -name "*-sources.jar" ! -name "*-dev.jar" | head -1)
-          if [ -z "$JAR_PATH" ]; then
-            echo "::error::build/libs 下没找到可上传的 jar"
+          # 【按确切文件名取，不要 find | head -1】。
+          #
+          # 眼下 CI 是全新检出、build/libs 里只有一个 jar，head -1 挑不错。
+          # 但那是"碰巧"，不是"保证"：本地 pruneOldJars 会留着前两个版本，
+          # 而 1.20.1-forge 那一支就因为 jarJar 多出一个 -slim 差点发错包 ——
+          # 挑错的后果是发出一个旧版本或残缺包，而构建全绿、测试全绿，
+          # 没有任何东西会告诉你。
+          #
+          # mod_version 是这次构建的唯一真值，直接拿它拼名字。
+          MOD_VERSION=$(grep -E '^mod_version=' gradle.properties | cut -d= -f2- | tr -d '[:space:]')
+          JAR_PATH="build/libs/mcphone-${MOD_VERSION}.jar"
+          if [ ! -f "$JAR_PATH" ]; then
+            echo "::error::没找到 $JAR_PATH。build/libs 下现有："
+            ls -la build/libs || true
             exit 1
           fi
           echo "jar_path=$JAR_PATH" >> "$GITHUB_OUTPUT"
