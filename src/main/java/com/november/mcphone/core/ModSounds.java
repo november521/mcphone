@@ -17,9 +17,11 @@ import net.minecraftforge.registries.RegistryObject;
  * 网上拉的一条流，不在任何资源包里。
  *
  * 可 Minecraft 的音效系统不接受"凭空一条流"——它只认注册过的音效事件，
- * 再顺着 sounds.json 找到一个文件。NeoForge 为此开了个口子：
- * {@code SoundInstance.getStream(...)} 可以覆写，覆写之后引擎就用你给的流，
- * 不去读那个文件（核过 SoundEngine：走的是 soundinstance.getStream 那一支）。
+ * 再顺着 sounds.json 找到一个文件。Forge 为此开了个口子：它把
+ * {@code getStream(SoundBufferLibrary, Sound, boolean)} 直接补成了
+ * {@code SoundInstance} 上的 default 方法（NeoForge 那边同源，形状一样），
+ * 覆写之后引擎就用你给的流，不去读那个文件（核过 SoundEngine：走的是
+ * soundinstance.getStream 那一支）。
  *
  * 但那一支只有在 sounds.json 里写了 {@code "stream": true} 时才会被选中，
  * 而且那条定义指向的文件必须真的存在，否则音效事件根本解析不出来。所以

@@ -118,18 +118,35 @@ dependencies {
     // Exception，正是为了这个。
     compileOnly fg.deobf("maven.modrinth:net-music:${netmusic_version}")
 
-    // 【Waystones 与 MCEF 这一刀没接】，两条都是实测撞墙后退回来的，不是漏了：
+    // Waystones（传送石碑）—— 可选联动：装了就多一个「传送石」App。
     //
-    //   Waystones  1.20.1 版的 API 与 1.21 差得多：WaystoneSelectionListBuilder
-    //              这个类不存在、Balm.networking() 也没有、ModMenus 里没有
-    //              warpStoneSelection。整条打开选点界面的路要照着 Waystones 14.x
-    //              重写，不是换个包名的事
-    //   MCEF       它本身有 1.20.1 版，但 BrowserScreen 用的是 1.21 的渲染管线
-    //              （Tesselator.begin(Mode, VertexFormat)、BufferBuilder.addVertex），
-    //              1.20.1 上那套 API 还没长成这样，同样要重写
+    // 【与 NeoForge 那一支不是同一套 API】。那边用的 WaystoneSelectionListBuilder
+    // 在 14.x 上不存在，ModMenus 里也没有 warpStoneSelection，"这次算哪种来源"
+    // 改由 WarpMode 枚举表示。整条路是照着 14.x 的字节码重写的，逐条记在
+    // WaystonesCompat 的类注释里。
     //
-    // 两个都是可选联动，不接不影响手机本身。接一个断的联动比不接更糟，
-    // 所以连同 compat 类一起先不搬，详见 docs/PORTING.md。
+    // 编译对着【最老】的 1.20.1 可用版本 14.0.0：可选联动挑版本的方向和别处
+    // 相反，往新编译、往旧运行会 NoSuchMethodError，反过来则几乎不会出事。
+    // 用到的 createWaystoneSelection、WarpMode、WaystoneTeleportEvent.Pre、
+    // IWaystoneTeleportContext.setWarpItem 从 14.0.0 到 14.1.20 签名一字未变，
+    // 两头都核过。
+    compileOnly fg.deobf("maven.modrinth:waystones:${waystones_version}")
+
+    // Balm —— Waystones 的前置库，开菜单与挂事件走的都是它。
+    //
+    // 【必须单独列】：它是独立模组，Waystones 的 jar 里没有 net.blay09.mods.balm.*，
+    // 只写 waystones 一条，编译期就找不到 Balm.getNetworking()。
+    compileOnly fg.deobf("maven.modrinth:balm:${balm_version}")
+
+    // MCEF —— 可选联动：装了就多一个「浏览器」App。它把 Chromium 渲染成一张
+    // GL 纹理交给我们，贴四边形那一步是我们自己的事，而【那一步的 API 两边
+    // 完全不同】，重写的就是它，见 BrowserScreen.drawBrowser。
+    //
+    // MCEF 自己的 API 两边一模一样，McefBackend 是逐字搬过来的。
+    //
+    // 不写运行期依赖：它首次运行要下载约 200 MB 的原生库，不该由一次
+    // ./gradlew runClient 顺带触发。真要试浏览器，把 jar 手动丢进 run/mods。
+    compileOnly fg.deobf("maven.modrinth:mcef:${mcef_version}")
 
     // Patchouli（教程手册）—— 可选联动：装了就多一个「阅读」App。
     //
@@ -150,8 +167,8 @@ dependencies {
     }
     minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
 
-    // 可选联动（Curios、Waystones、MCEF、Patchouli、FTB Quests…）都还没接。
-    // 每一个在 1.20.1 上都是另一套坐标与另一套 API，逐条见 docs/PORTING.md。
+    // 还没接的可选联动：FTB Quests。
+    // 它在 1.20.1 上是另一套坐标与另一套 API，见 docs/PORTING.md。
 }
 
 // 整个代码库的注释与 mods.toml 的 description 都是中文，编码必须钉死。
@@ -210,6 +227,143 @@ tasks.named('jar', Jar).configure {
 //
 // 所以这里按【版本】分组再数。CI 那边也一并改成按确切文件名取，
 // 两道各自独立，缺一道都还站得住。
+// ============================================================
+//  SPI 服务文件校验
+// ============================================================
+//
+// META-INF/services/ 里写的是全限定类名，纯文本，编译器一个字都不看。类改名
+// 或搬包之后忘了同步这里，构建照样成功，jar 照样能装——只是运行时 ServiceLoader
+// 一个实现都找不到，手机里空空如也，而且不报错。
+//
+// 这个失败模式没有任何现成的东西挡得住，只能自己在构建期校验一遍：文件里写的
+// 每一个类，编译产物里必须真的存在。
+//
+// 挂在 check 上而不是只在发版时跑：这种错要在本地 build 就炸出来，而不是等到
+// CI 或者玩家装上之后。
+//
+// 与 NeoForge 那一支【逐字相同】：它校验的是自家的文本文件与自家的 class 目录，
+// 两个都与加载器无关。
+tasks.register('verifyServiceFiles') {
+    description = '校验 META-INF/services 里写的类都真实存在'
+    group = 'verification'
+
+    dependsOn tasks.named('compileJava')
+
+    def servicesDir = file('src/main/resources/META-INF/services')
+    def classesDir = layout.buildDirectory.dir('classes/java/main')
+
+    inputs.dir(servicesDir).optional()
+    inputs.dir(classesDir).optional()
+
+    doLast {
+        if (!servicesDir.exists()) return
+
+        def missing = []
+        def total = 0
+        servicesDir.eachFile { f ->
+            f.eachLine('UTF-8') { line ->
+                def cls = line.replaceAll('#.*', '').trim()
+                if (cls.isEmpty()) return
+                total++
+                def classFile = classesDir.get().file(cls.replace('.', '/') + '.class').asFile
+                if (!classFile.exists()) {
+                    missing << "${f.name} -> ${cls}"
+                }
+            }
+        }
+
+        if (!missing.isEmpty()) {
+            throw new GradleException(
+                    "META-INF/services 里有 ${missing.size()} 个类不存在（多半是改名或搬包后忘了同步）:\n  "
+                            + missing.join('\n  '))
+        }
+        logger.lifecycle("SPI 服务文件校验通过：${total} 个类全部存在")
+    }
+}
+
+tasks.named('check').configure { dependsOn tasks.named('verifyServiceFiles') }
+
+// ============================================================
+//  dist 隔离校验
+// ============================================================
+//
+// 专用服务器上没有客户端类。Forge 的 RuntimeDistCleaner 在加载
+// net.minecraft.client.* 时直接抛异常——而触发它的不是"执行到了那句代码"，
+// 是"JVM 校验那个类"。一个类只要【常量池里写着】客户端类型，哪怕那段代码被
+// isClientSide() 挡得死死的、服务端永远执行不到，只要它在服务端被加载，
+// 就会当场崩服。
+//
+// 这一支尤其需要它。NeoForge 那边客户端入口是 @Mod(dist = Dist.CLIENT) 的第二个
+// mod 类，加载器保证专用服务端读都不读它；1.20.1 的 @Mod【没有 dist 参数】，
+// 这条保险不存在，靠的是 MCphone 里那句 DistExecutor 加"签名里不出现客户端类型"
+// 的自觉。自觉需要一道断言兜着。
+//
+// 规则一条：
+//
+//     路径里有 /client/ 的类才准引用客户端类型，其余一概不准。
+//
+// 校验直接在 .class 字节里搜常量池：类型名在常量池里以 modified-UTF8 存着，
+// 原样搜字符串就够，不必解析 class 结构。这比读源码可靠——import 看不出
+// 校验期会加载什么。
+tasks.register('verifyDistIsolation') {
+    description = '校验非 client 包的类没有引用客户端类型'
+    group = 'verification'
+
+    dependsOn tasks.named('compileJava')
+
+    // 客户端专属的标记：常量池里出现这些就说明这个类碰了客户端
+    def clientMarkers = [
+            'net/minecraft/client/',
+            'com/mojang/blaze3d/',
+            'com/cinemamod/mcef',
+            'org/cef/',
+    ]
+
+    // 白名单。加进来的每一条都要写清楚为什么它是安全的
+    def allowed = [
+            // 客户端入口。类名里有 Client 但路径里没有 /client/，规则扫不掉。
+            // 它由 MCphone 经 DistExecutor 在客户端侧调起，专用服务端不会加载
+            // ——见 MCphone 构造函数里那句双层 Supplier 的注释
+            'com/november/mcphone/MCphoneClient.class',
+    ]
+
+    def classesDir = layout.buildDirectory.dir('classes/java/main')
+    inputs.dir(classesDir).optional()
+
+    doLast {
+        def root = classesDir.get().asFile
+        if (!root.exists()) return
+
+        def offenders = []
+        def checked = 0
+
+        root.eachFileRecurse { f ->
+            if (!f.name.endsWith('.class')) return
+            def rel = root.toPath().relativize(f.toPath()).toString().replace('\\', '/')
+            if (rel.contains('/client/')) return          // 这些包本来就准
+            if (allowed.contains(rel)) return
+            checked++
+
+            def bytes = f.getBytes()
+            def text = new String(bytes, 'ISO-8859-1')    // 逐字节，不解码
+            def hit = clientMarkers.find { text.contains(it) }
+            if (hit != null) {
+                offenders << "${rel}  （引用了 ${hit}）"
+            }
+        }
+
+        if (!offenders.isEmpty()) {
+            throw new GradleException(
+                    "dist 隔离被破坏：${offenders.size()} 个非 client 包的类引用了客户端类型。\n"
+                            + "这些类一旦在专用服务器上被加载就会当场崩服。\n  "
+                            + offenders.join('\n  '))
+        }
+        logger.lifecycle("dist 隔离校验通过：${checked} 个非 client 类，无一引用客户端类型")
+    }
+}
+
+tasks.named('check').configure { dependsOn tasks.named('verifyDistIsolation') }
+
 tasks.register('pruneOldJars') {
     doLast {
         var dir = layout.buildDirectory.dir('libs').get().asFile

@@ -48,12 +48,13 @@ import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
  * 当场 NoClassDefFoundError。DistExecutor 收的是 Supplier 的 Supplier，
  * 正是为了把那次引用推迟到确认在客户端之后。
  *
- * 这一刀还没接进来的
+ * 还没接进来的只剩一样
  *
- * 相机（CameraHandler）、唱片仓界面（DiscBayScreen / ModMenus）、
- * 网络歌曲播放（NetSongPlayback）、聊天提醒（ChatNotifier）都还没移植，
- * 所以这里没有它们的监听器。配置界面那两行也没有：Forge 1.20.1 没有内置的
- * ConfigurationScreen，要自己写。逐条见 docs/PORTING.md。
+ * 配置界面：那边挂的是 NeoForge 自带的 ConfigurationScreen，Forge 1.20.1
+ * 【没有内置的】，要自己写一整套。见 docs/PORTING.md。
+ *
+ * 其余的监听器都在了 —— 相机、唱片仓界面、网络歌曲、聊天提醒、按键、
+ * 进出世界的清理，与那一支一一对应。
  */
 @Mod.EventBusSubscriber(modid = MCphone.MODID, value = Dist.CLIENT, bus = Mod.EventBusSubscriber.Bus.MOD)
 public final class MCphoneClient {
@@ -153,6 +154,11 @@ public final class MCphoneClient {
             MenuScreens.register(ModMenus.ENDER_CHEST.get(), PhoneContainerScreen::new);
             MenuScreens.register(ModMenus.DISC_BAY.get(), DiscBayScreen::new);
         });
+
+        // 必须在 App 目录构建之前：BrowserApp 登记时会问后端在不在。
+        // 不进 enqueueWork：它只做一次 ModList 查询与一次赋值，碰的全是自家
+        // 的静态字段，不像 MenuScreens 那样有别人也在写的注册表
+        com.november.mcphone.feature.browser.client.BrowserBackends.installDefault();
 
         WallpaperStore.scan();
 

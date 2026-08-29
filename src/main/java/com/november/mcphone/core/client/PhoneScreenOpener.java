@@ -21,8 +21,12 @@ import net.minecraft.world.entity.player.Player;
  * 注册物品时要 new 一个 PhoneItem，JVM 于是加载并【校验】PhoneItem。校验
  * 一个方法时，它得确认压进栈的类型确实能赋给方法签名要求的类型——碰上
  * Minecraft.setScreen(Screen) 这句，就要查 PhoneScreen 是不是 Screen 的
- * 子类，而这一查就必须把 Screen 加载进来。专用服务器上 NeoForge 的
+ * 子类，而这一查就必须把 Screen 加载进来。专用服务器上加载器的
  * RuntimeDistCleaner 拦下了它，直接抛异常。
+ *
+ * 上面那段栈是 NeoForge 那一支的现场（DeferredRegister$Items 是那边的 API），
+ * 但这条规矩在这一支【一字不差地成立】：Forge 1.20.1 的 fmlloader 里同样有
+ * RuntimeDistCleaner，拦的是同一件事。
  *
  * 注意崩的不是"执行到了这句"——那句被 level.isClientSide() 挡得好好的，
  * 服务端永远跑不到。光是【类里写着这句】就够了。所以"用 if 挡住"这个

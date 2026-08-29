@@ -19,10 +19,15 @@ import org.slf4j.Logger;
  *
  * 这个工程现在是什么
  *
- * 基本功能已经从 NeoForge 1.21.1 那一支移植过来：开机、主屏、聊天、记事本、
- * 音乐、相册、相机、应用商店、末影箱、设置。还没接的是浏览器（MCEF）与
- * 传送石（Waystones）两个联动——不是漏了，是它们 1.20.1 版的 API 与 1.21
- * 差得多，接一个断的联动比不接更糟。逐条写在 docs/PORTING.md 里。
+ * 功能已经从 NeoForge 1.21.1 那一支全部移植过来：开机、主屏、聊天、记事本、
+ * 音乐、相册、相机、应用商店、末影箱、设置、浏览器、传送石、任务书、阅读、
+ * 时钟、天气。215 个源文件里搬了 213 个，剩下两个是被这一支的
+ * PhonePlayerData 与 PhoneItemData 取代掉的，不会再出现。
+ *
+ * 联动七个：Curios、NetMusic、Patchouli、Waystones + Balm、MCEF、FTB Quests、
+ * GuideME。
+ * 逐条记在 docs/PORTING.md 里 —— 它们在 1.20.1 上多半是【另一套 API】，
+ * 改 bug 时别照着 main 那边的调用去对。
  *
  * 与 NeoForge 1.21.1 那一支的关系
  *

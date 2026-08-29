@@ -35,7 +35,8 @@ public final class CompatModules {
 
     /** 全部兼容模块。加新的就往这里加一行 */
     private static final List<CompatModule> MODULES = List.of(
-            new IntegratedDynamicsCompat()
+            new IntegratedDynamicsCompat(),
+            new WaystonesWarpItemModule()
     );
 
     /**

@@ -13,8 +13,7 @@ description='''
 把一部能用的智能手机塞进 Minecraft —— 拍照、翻相册、换壁纸、听歌、装 App，
 还能给自己那一部手机起个名。
 
-【这一支是从 Minecraft 1.21.1 + NeoForge 移植过来的，基本功能已就位；
-传送石与浏览器两个联动尚未接入。】
+【这一支是从 Minecraft 1.21.1 + NeoForge 移植过来的，功能已全部就位。】
 '''
 
 # 版本范围从 gradle.properties 来，不写死在这儿：两处各写一份必然会漂，
@@ -57,3 +56,36 @@ description='''
     versionRange="*"
     ordering="AFTER"
     side="BOTH"
+
+# Waystones（传送石碑）—— 装了就多一个「传送石」App，没装则该 App 连应用商店
+# 里都不会出现。
+#
+# 不写下限：兼容层里兜着 Throwable，真碰上对方改了 API，最坏结果是这一个 App
+# 用不了，不是崩服。钉死版本只会误伤用旧版的服主。
+[[dependencies.${mod_id}]]
+    modId="waystones"
+    mandatory=false
+    versionRange="*"
+    ordering="AFTER"
+    side="BOTH"
+
+# Balm —— Waystones 的前置。它自己会把 Balm 拉上，我们不必声明；这里列出来
+# 只是为了 ordering：我们在 FMLCommonSetupEvent 里往 Balm 的事件表上挂东西。
+[[dependencies.${mod_id}]]
+    modId="balm"
+    mandatory=false
+    versionRange="*"
+    ordering="AFTER"
+    side="BOTH"
+
+# MCEF —— 装了就多一个「浏览器」App。
+#
+# side="CLIENT"：它是纯客户端库，专用服务端上根本不该要求它在场。
+# 写 BOTH 的话，服主装了这个模组却没装 MCEF 也不会有事（mandatory=false），
+# 但那句声明本身就是错的 —— 服务端那一侧我们一个字节都不碰它。
+[[dependencies.${mod_id}]]
+    modId="mcef"
+    mandatory=false
+    versionRange="*"
+    ordering="AFTER"
+    side="CLIENT"

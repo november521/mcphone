@@ -1,9 +1,4 @@
 # 内建 App。顺序无所谓，登记时按 id 去重。
-#
-# 不在这份名单里的：
-#   BrowserApp   浏览器，MCEF 联动没接（1.21 渲染管线，见 docs/PORTING.md）
-#   WaystoneApp  传送石，Waystones 1.20.1 的 API 差太多，同上
-#   QuestsApp    FTB Quests 2001.x 的 openGui 还没核实，没接就先不登记
 com.november.mcphone.feature.settings.client.SettingsApp
 com.november.mcphone.feature.store.client.AppStoreApp
 com.november.mcphone.feature.chat.client.ChatApp
@@ -12,6 +7,9 @@ com.november.mcphone.feature.gallery.client.GalleryApp
 com.november.mcphone.feature.music.client.MusicApp
 com.november.mcphone.feature.enderchest.client.EnderChestApp
 com.november.mcphone.feature.notes.client.NotesApp
+com.november.mcphone.feature.waystone.client.WaystoneApp
+com.november.mcphone.feature.browser.client.BrowserApp
 com.november.mcphone.feature.clock.client.ClockApp
 com.november.mcphone.feature.weather.client.WeatherApp
 com.november.mcphone.feature.reader.client.ReaderApp
+com.november.mcphone.feature.quests.client.QuestsApp

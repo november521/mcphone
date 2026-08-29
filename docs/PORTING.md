@@ -325,7 +325,7 @@ grep -rnE "case +[A-Z][A-Za-z0-9_.]*(\(|[[:space:]]+[a-z][A-Za-z0-9_]*[[:space:]
 **别假设 1.20.1 上有同名同版的对方。** 逐条确认，确认不了的就先不接——
 接一个断的联动比不接更糟。
 
-**第四刀把这张表逐条实测过了**，下面是结果而不是预期：
+**第四刀把这张表逐条实测过了，第六刀把剩下三条也啃完了**，下面是结果而不是预期：
 
 | 模组 | 结论 | 实测到的东西 |
 | --- | --- | --- |
@@ -333,16 +333,21 @@ grep -rnE "case +[A-Z][A-Za-z0-9_.]*(\(|[[:space:]]+[a-z][A-Za-z0-9_]*[[:space:]
 | **NetMusic** | ✅ 已接 | `1.5.1-forge+mc1.20.1`，确实存在（清单原先写的是"要先确认存不存在"）。接触面照旧只有 `ItemMusicCD` |
 | **Patchouli** | ✅ 已接 | `1.20.1-80-forge`。仍然刻意挑**最老**的那个，理由与那一支相同 |
 | **JavaMP3** | ✅ 已接 | 非联动，是必需依赖。jarJar 已配好，见下面"构建侧" |
-| **Waystones + Balm** | ❌ **没接** | 1.20.1 版 API 差得多：`WaystoneSelectionListBuilder` 这个类**不存在**、`Balm.networking()` 也没有、`ModMenus` 里没有 `warpStoneSelection`。整条"打开选点界面"的路要照着 Waystones 14.x 重写，不是换包名的事 |
-| **MCEF** | ❌ **没接** | 模组本身有 1.20.1 版（`2.1.6-1.20.1`），**卡在渲染管线**：`BrowserScreen` 用的 `Tesselator.begin(Mode, VertexFormat)` 与 `BufferBuilder.addVertex(...)` 是 1.21 才长成那样的，1.20.1 上那套 API 完全不同 |
-| **GuideME** | ❌ 没接 | 与预判一致，1.20.1 上基本可以确定没有 |
-| **FTB Quests** | ⬜ 未验 | `QuestsApp` 搬过来了但没登记进 SPI 清单，2001.x 的 `FTBQuestsClient.openGui()` 还没核实 |
+| **Waystones + Balm** | ✅ **第六刀接上** | 编译对 `14.0.0+forge-1.20` / `7.0.1+forge-1.20`（都取下限）。**与 1.21 完全是另一套**：没有 `WaystoneSelectionListBuilder`、没有 `ModMenus.warpStoneSelection`、没有 `TeleportFlags`，"这次算哪种来源"改由 `WarpMode` 枚举表示；Balm 是 `getNetworking().openGui(...)` 不是 `networking().openMenu(...)`。菜单照着对方 `WarpStoneItem.containerProvider` 手写一份 `BalmMenuProvider`。**还多出一条钩子**，见下面第六刀 |
+| **MCEF** | ✅ **第六刀接上** | `2.1.6-1.20.1`（1.20.1 上唯一标了 forge 的版本；自带 `org.cef.*`，不必另加 jcef 依赖）。**MCEF 自己的 API 两边一模一样**，`McefBackend` 是逐字搬的；真要改的只有 `BrowserScreen.drawBrowser` 那十几行渲染管线，见下面第六刀 |
+| **GuideME** | ✅ **本来就接着**（第六刀核实） | **原先记的"1.20.1 上基本可以确定没有"是错的** —— 它有 `20.1.0` 到 `20.1.15` 共 16 个 1.20.1 版本。`GuideMeSource` 走反射、不带编译依赖，所以早在第二刀就作为"干净文件"搬过来了，也一直登记在 `BookSources` 里，只是没人核实过对面还在不在。实测 `20.1.0` 与 `20.1.15` 两头：`guideme.internal.GuideMEProxy` 的 `instance` / `getAvailableGuides` / `getGuideDisplayName` / `openGuide` 与 `guideme.Guides.createGuideItem` **五个签名全对得上** |
+| **FTB Quests** | ✅ **第六刀核实并登记** | `dev.ftb.mods.ftbquests.client.FTBQuestsClient.openGui()`，`public static void`、零参，在 2001.x 的**头尾两版**（`2001.1.1` 与 `2001.4.22`）上签名一字未变，字节码也仍是那三行。走反射，**不加编译依赖**，理由见 `FtbQuestsBook` 的类注释 |
 
-没接的那两个连同它们的 compat 类、App、网络包一起**没有搬进工程**——
-接一个断的联动比不接更糟，编译期依赖也一并去掉了，免得白拖慢构建。
+**这张表上没有一条是"没接"的了。**
 
-`ExternalBookSource` 的白名单（沉浸工程手册）、`BookQuirks`（新生魔艺）同理，
-各自的 1.20.1 版 API 都要重查。
+GuideME 那条是被自己的预判坑了一次：清单第一版凭印象写了"1.20.1 上基本可以确定
+没有"，第四刀实测时又照抄了这句结论 —— 而实际上它一直都在，源文件也一直在工程里
+躺着。**反射型的联动没有编译依赖，所以"搬过来了"与"能用"是两件事**，前者编译器
+会告诉你，后者必须自己去对面的 jar 里查一遍。FTB Quests 也是同一类，一起查了。
+
+`ExternalBookSource` 的白名单（沉浸工程手册）、`BookQuirks`（新生魔艺）是另一回事：
+它们走的是**按注册名查表**，不引用对方任何类型，所以搬过来就成立；要重查的是
+那些 id 在 1.20.1 版上还叫不叫这个名字，而那只能拿整合包实测。
 
 ## 构建侧已经做完的
 
@@ -369,18 +374,29 @@ grep -rnE "case +[A-Z][A-Za-z0-9_.]*(\(|[[:space:]]+[a-z][A-Za-z0-9_]*[[:space:]
   `find` 也加了 `! -name "*-slim.jar"`。**双保险，缺一不可** —— 只改 classifier
   的话，将来谁把它改回去就又静默出事了。
 
-- **dist 隔离校验**：NeoForge 那支有个 `verifyDistIsolation` 任务，扫非 client 类
-  有没有引用客户端类型（专用服务器启动即崩的那种坑）。这一支**必须也加上**，
-  而且要早加——等代码堆起来再加就有一堆存量要清。
+- ~~**dist 隔离校验**~~ ✅ **第六刀做完了**。`verifyDistIsolation` 与
+  `verifyServiceFiles` 两个任务都从 `main` 搬了过来，都挂在 `check` 上，
+  也就是每次 `./gradlew build` 都跑。两个任务的实现与那一支**逐字相同**——
+  它们扫的是自家的 class 目录与自家的文本文件，与加载器无关。
 
-  第四刀已经做过一次**非正式**的验证：`./gradlew runServer` 真把专用服务端拉起来
-  （`Done (6.770s)!`、零 ERROR），而且日志里**没有**客户端那一半的加载行 ——
-  说明 `DistExecutor` 那道隔离是生效的。但这只是一次抽查，不是任务。
+  规则一条：**路径里有 `/client/` 的类才准引用客户端类型**，其余一概不准。
+  白名单只有 `MCphoneClient.class` 一个（类名里有 Client、路径里却没有 `/client/`）。
+
+  这一支比那一支更需要它：NeoForge 的客户端入口是 `@Mod(dist = Dist.CLIENT)`
+  的第二个 mod 类，加载器保证专用服务端读都不读；1.20.1 的 `@Mod`
+  **没有 dist 参数**，这条保险不存在，靠的全是 `DistExecutor` 加"签名里不出现
+  客户端类型"的自觉——自觉需要一道断言兜着。
+
+  接上 MCEF 之后 `com/cinemamod/mcef` 与 `org/cef/` 也进了标记表，与那一支一致。
+
+  当前：**132 个非 client 类，无一引用客户端类型**；`verifyServiceFiles`
+  16 个类全部存在。
 
 - **Parchment 映射**：现在用的是官方混淆表（没有参数名）。要加就得挂 librarian 插件
 
 - **`BuiltInRegistries.ITEM` 的废弃告警**：`BuiltinAppPrices`、`ExternalBook`、
-  `ExternalBookSource` 三处。Forge 在 1.20.1 上把它标了废弃（推荐走
+  `ExternalBookSource`、`WaystonesCompat` 四处（最后一个是第六刀新增的，刻意跟着
+  前三个走同一种写法，而不是单独换成 `ForgeRegistries`）。Forge 在 1.20.1 上把它标了废弃（推荐走
   `ForgeRegistries`），NeoForge 那边没标，所以那三个文件与 `main` 逐字相同时
   这边会多三条告警。`./gradlew build` 默认不开 `-Xlint:deprecation` 所以看不见，
   这里记一笔免得下次有人当成新问题查。
@@ -652,13 +668,156 @@ Curios 5.14.1 jar 里自带的 `belt.json` 核过）。清单原先写的
 **验不到的还是界面与实际收发。** 三十多个包这一刀第一次挂上通道，
 序号分配、两端握手、每个处理函数的实际行为都只能进游戏点一遍。
 
-### ⬜ 下一刀
-
-
-
 第一刀剔掉的那 6 个，**回来了 3 个**：`util/SpiLoader`、`api/client/ui/IPhonePage`、
 `feature/reader/client/ShelfStore`。剩下 3 个（`ChatClientCache`、`NotesClientCache`、
 `MusicSources`）全都卡在网络层 —— 又一条指向第 1 条的证据。
+
+### ✅ 第六刀：三个联动接上，移植收尾（+7 个文件，共 219 个）
+
+**213 / 215 搬齐。** 没搬的两个是 `ModAttachments` 与 `ModDataComponents`，
+它们被这一支的 `PhonePlayerData` 与 `PhoneItemData` 取代了，不会再出现。
+反过来这一支多出 6 个那边没有的（`MCphoneNetwork`、`ModCapabilities`、
+`ModItems`、`PhoneItemData`、`PhonePlayerData`、`WaystonesWarpItemModule`）。
+
+SPI 清单从 11 个 App 放开到 **14 个**：浏览器、传送石、任务书三格补齐。
+
+#### 传送石：菜单能照抄，计价方式得重想
+
+菜单本身不难 —— 对方 `WarpStoneItem` 里那个 `containerProvider` 是个匿名
+`BalmMenuProvider`，三个方法照抄一遍就是：
+
+```java
+getDisplayName()          Component.translatable("container.waystones.waystone_selection")
+createMenu(id, inv, p)    WaystoneSelectionMenu.createWaystoneSelection(id, p, WARP_STONE, null)
+writeScreenOpeningData()  buf.writeByte(WarpMode.WARP_STONE.ordinal())
+```
+
+最后那一句**必须写**：客户端工厂第一行就是 `WarpMode.values[buf.readByte()]`，
+不写就是从空 buf 里读，玩家那边直接抛异常。也**只能**写这一个字节 ——
+只有 `WAYSTONE_TO_WAYSTONE` 那一支会再读一个 `BlockPos`。
+
+难的是"按哪种来源计价"。1.21 那边靠 `withTargetsForItem(warpStoneStack())`
+把 warpItem 显式塞进去，14.x 的菜单**不收这个参数**，只有两个现成的选择：
+
+| | WARP_STONE | CUSTOM |
+| --- | --- | --- |
+| 经验 | 服主配的 `warpStoneXpCostMultiplier` | **恒为 0** |
+| 冷却 | 服主配的 `warpStoneCooldown` | 无 |
+| 要有传送石 | **要**（只翻主手与副手） | 不要 |
+
+CUSTOM 省事，代价是这个 App 变成一部**无限次的免费传送器**，服主为传送石配的
+规则一条都不命中 —— 那不是取舍，是把平衡拆了。
+（INVENTORY_BUTTON 更糟：`canUseInventoryButton` 要求玩家先在配置里绑一个
+传送点，没绑就是死按钮。）
+
+所以走 WARP_STONE，缺的那一件自己补：`WaystonesWarpItemModule` 在
+`FMLCommonSetupEvent` 里往 `WaystoneTeleportEvent.Pre` 上挂一条钩子，
+在它取 warpItem 之前塞一块传送石进去。字节码里的顺序是
+
+```
+fireEvent(Pre) → isCanceled? → getWarpItem() → canUseWarpMode(...)
+```
+
+`14.0.0` 与 `14.1.20` 上都是这个顺序，**两头都核过**。
+
+钩子只在 warpItem **空着**时才动手 —— 真拿着石头的那条路它必然非空，
+所以这条钩子实际只对本 App 开出来的菜单生效。
+
+那块石头不会被消耗：`WARP_STONE.consumesItem` 是 false，而整个 Waystones 14.x
+的 jar 里**一处 `hurtAndBreak` 都没有**（这一支的传送石付的是冷却，不是耐久，
+1.21.1 那边才是耐久）。何况它本来就是临时造的一只 `ItemStack`，不在任何容器里。
+
+**为什么必须挂钩子，而不是让玩家拿着石头**：`findWarpItem` 只翻主手与副手，
+而手机可以躺在背包里、也可以挂在饰品栏里（`PhoneScreenOpener` 三处都找）。
+玩家开着手机时手上多半就是手机。照原样接上去，这个 App 在多数情况下都是
+"点了没反应"。
+
+#### 浏览器：只有十几行要改
+
+MCEF 自己的 API 两边**一模一样** —— `MCEF.isInitialized/createBrowser`、
+`MCEFBrowser` 那一串 `send*`、`MCEFRenderer.getTextureID`，连 jcef 的
+`loadURL/getURL/canGoBack/...` 都在同一个位置。所以 `McefBackend` 是逐字搬的，
+`BrowserApp` 也是，`BrowserBackends` 只换了 `ModList` 的包名。
+
+真要改的是 `BrowserScreen`，三处：
+
+| | 1.21.1 | 1.20.1 |
+| --- | --- | --- |
+| 贴纹理 | `Tesselator.begin(mode, fmt)` 直接给 BufferBuilder，`addVertex().setUv().setColor()` | `getBuilder()` 再 `begin()`，`vertex().uv().color()` **且每个顶点末尾必须 `endVertex()`** |
+| 暗化背景 | `renderBackground(g, mouseX, mouseY, partialTick)` | `renderBackground(g)` |
+| 滚轮 | `mouseScrolled(x, y, scrollX, scrollY)` | `mouseScrolled(x, y, delta)` |
+
+后两条漏了都**不报错**：`renderBackground` 是编译错误还好说，
+`mouseScrolled` 写成四参能编过，只是那个方法**永远不会被调到** ——
+网页滚不动却查不出原因。`@Override` 是这里唯一的守卫。
+
+第一条还有一个只在运行期发作的坑：属性的调用顺序必须与
+`POSITION_TEX_COLOR` 声明的顺序（Position → UV0 → Color）一致，
+调换不是编译错误，是运行时抛"顶点没填满"。
+
+#### 任务书：只是核实，代码一个字没动
+
+`FtbQuestsBook` 走的是反射，本来就不带编译依赖，所以移植时它是"干净文件"
+早就搬过来了，只差核实对面那个方法还在不在。
+
+拿 `maven.ftb.dev` 上 2001.x 的**头尾两版**（`2001.1.1` 与 `2001.4.22`）实测：
+`FTBQuestsClient.openGui()` 都是 `public static void`、零参，字节码也仍是
+"调 `ClientQuestFile.openGui()` 再把返回值丢掉"那三行。签名一字未变，
+于是 `QuestsApp` 直接登记进 SPI 清单。
+
+**没有往 `mods.toml` 里加 ftbquests 依赖** —— 与 `main` 保持一致：纯反射、
+无编译依赖，反射发生在玩家点图标那一刻而不是加载期，没有 ordering 的需要。
+
+#### GuideME：文档错了，代码一直是对的
+
+清单里写着"1.20.1 上基本可以确定没有"，**这句是错的**。它有 16 个 1.20.1 版本
+（`20.1.0` ~ `20.1.15`）。
+
+而 `GuideMeSource` 走的是反射，不带编译依赖，所以第二刀就作为"干净文件"搬进来了，
+也一直登记在 `BookSources` 里 —— 也就是说这个联动**从来就是通的**，只是没人核实过。
+拿 `20.1.0` 与 `20.1.15` 两头实测，五个反射目标全部对得上：
+
+```
+guideme.internal.GuideMEProxy   instance() / getAvailableGuides()
+                                getGuideDisplayName(ResourceLocation)
+                                openGuide(Player, ResourceLocation)
+guideme.Guides                  createGuideItem(ResourceLocation)
+```
+
+**教训写在这儿**：反射型联动"搬过来了"与"能用"是两件事。编译器只管得住前者，
+后者必须自己去对面的 jar 里查。这一刀查了三个（FTB Quests、GuideME，加上真要
+重写的 Waystones），下次加反射联动照这个来。
+
+#### 构建侧：两道校验补上
+
+`verifyDistIsolation` 与 `verifyServiceFiles` 从 `main` 搬过来，都挂在 `check` 上。
+详见上面"还没做的构建侧"那一节 —— 那条 ⚠️ 终于可以划掉了。
+
+### 验收
+
+1. `./gradlew build` → `BUILD SUCCESSFUL`，零 error
+2. 6 个断言测试 **122,204 条全绿**（28 + 80007 + 12301 + 30 + 91 + 29747）
+3. `verifyDistIsolation` → 132 个非 client 类无一引用客户端类型；
+   `verifyServiceFiles` → 16 个类全部存在
+4. `./gradlew runServer` → `Done (5.992s)!`，**零 ERROR**，
+   `Found 7 mod requirements (2 mandatory, 5 optional)`、`0 missing`
+   （新加的四条可选依赖声明都被吃下了），日志里**没有**任何客户端类的加载行
+
+**验不到的还是界面。** 这台机器上没有显示环境（无 `DISPLAY`、无 `Xvfb`），
+`runClient` 跑不起来。浏览器那块面板、取景框、传送石选点界面**都要在本机
+`./gradlew runClient` 肉眼过一遍**。MCEF 还要额外注意：它首次运行会去下载
+约 200 MB 的原生库，第一次点开浏览器多半会看到"MCEF 还没就绪"。
+
+### ⬜ 下一刀
+
+移植本身到此为止，剩下的都不是"搬代码"了：
+
+1. **进游戏逐个 App 点一遍** —— 最要紧的一步，编译器管不了画得对不对
+2. **配置界面**：那边挂的是 NeoForge 自带的 `ConfigurationScreen`，
+   Forge 1.20.1 **没有内置的**，要自己写一整套。这是唯一一处
+   `MCphoneClient` 上还缺的东西
+3. **Parchment 映射**：现在用的是官方混淆表，没有参数名
+4. ~~**GuideME**~~ ✅ 第六刀核实，本来就是通的（原先那句"1.20.1 上没有"是错的）
 
 ## 建议的推进顺序
 
@@ -677,13 +836,15 @@ Curios 5.14.1 jar 里自带的 `belt.json` 核过）。清单原先写的
 6. ~~玩家数据 Capability~~ ✅ 骨架已成（`ModCapabilities` / `PhonePlayerData`），
    壁纸与笔记两个字段已就位。**再加字段时必须回去补 `onPlayerClone`**
 7. ~~服务端处理函数~~ ✅ 第五刀补齐，基本功能全部就位
-8. **进游戏逐个 App 点一遍** —— 现在最要紧的一步。三十多个包第一次挂上通道，
-   编译器管不了它们发出去之后对不对
-9. **加 `verifyDistIsolation`** —— 代码已经不少了，越拖存量越多
-10. 联动模组：Waystones 与 MCEF 两条要照 1.20.1 的 API 重写，见上面的联动表
-11. ~~版本号~~ ✅ 第五刀后升到 **0.9.0**。刻意不追 main 的 1.8.x：
+8. **进游戏逐个 App 点一遍** —— **现在最要紧的、也是唯一挡在 1.0.0 前面的一步**。
+   三十多个包与三个新联动都只在编译器与专用服务端上验过，画得对不对、
+   点得动点不动，只能进游戏看
+9. ~~加 `verifyDistIsolation`~~ ✅ 第六刀做完，连 `verifyServiceFiles` 一起
+10. ~~联动模组：Waystones 与 MCEF 两条要照 1.20.1 的 API 重写~~ ✅ 第六刀做完，
+    FTB Quests 与 GuideME 也逐个核实过了。**联动表上不再有"没接"的条目**
+11. ~~版本号~~ ✅ 第六刀后升到 **0.10.0**。刻意不追 main 的 1.8.x：
     两支功能不等价时用同一个号等于骗人，理由写在 gradle.properties 里。
-    1.0.0 留给"两个联动接上 + 进游戏验过"之后
+    **1.0.0 留给"进游戏验过"之后** —— 联动这一条已经不欠了
 
 每一步都能编译、能进游戏再走下一步。24k 行一次性搬过来然后调编译错误，
 是这种移植最常见的翻车方式。

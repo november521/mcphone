@@ -79,6 +79,27 @@ import net.minecraftforge.registries.RegisterEvent;
  *
  * 它的价值是让崩溃报告指认真凶，而不是甩锅给 ID。原本要靠反编译
  * NeoForge 对行号才能看穿的事，之后看一眼崩溃报告就知道了。
+ *
+ * 【这一支上它是预防性的，那条 bug 链在 Forge 1.20.1 上构不成】
+ *
+ * 上面整段分析成立的前提是 NeoForge 有一个【独立于注册表之外】的
+ * addedBlocks 集合，回滚清了注册表却没清它。实测 Forge 47.4.23 的字节码，
+ * 三处都对不上：
+ *
+ *   1. GameData$BlockCallbacks 【没有 addedBlocks 这个字段】，
+ *      它的字段只有一个 INSTANCE；
+ *   2. onBake 遍历的是【注册表本身】（registry.iterator()），
+ *      回滚后里面只剩原版方块，getLootTable() 根本轮不到模组方块；
+ *   3. 于是 postRegisterEvents 末尾那句 throw aggregate 【真的会执行】，
+ *      真正的错误本来就报得出来。
+ *
+ * 也就是说：这个模块在这一支上不修任何东西。它没有害处——prebind 只是
+ * 把 getLootTable() 的结果提前缓存住，掉落行为分毫不变——但别指望它在
+ * 这里救过谁的崩溃报告。
+ *
+ * 留着的理由只有一个：万一 Forge 哪天把 onBake 改成 NeoForge 那种形状，
+ * 这道保险已经在了。真要清理，整个文件连同 CompatModules 里那一行一起删
+ * 即可，删了不会有任何行为变化。
  */
 public final class IntegratedDynamicsCompat implements CompatModule {
 

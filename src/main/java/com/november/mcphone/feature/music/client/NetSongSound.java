@@ -19,7 +19,7 @@ import java.util.concurrent.CompletionException;
 
 /**
  * 手机外放网络音乐时的声源 —— 每 tick 把坐标贴到实体身上跟着人走（NetMusic 自己的声源钉在方块坐标上）。
- * 音频流走 NeoForge 可覆写的 getStream，{@link ModSounds#DISC_STREAM} 只是个壳；
+ * 音频流走 Forge 补在 SoundInstance 上的可覆写 getStream，{@link ModSounds#DISC_STREAM} 只是个壳；
  * 本类刻意不出现任何 NetMusic 类型，那一句关在 {@link NetMusicPlayback} 里。
  */
 public final class NetSongSound extends AbstractTickableSoundInstance {

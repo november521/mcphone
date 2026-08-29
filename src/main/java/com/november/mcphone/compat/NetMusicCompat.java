@@ -43,7 +43,7 @@ import java.util.Optional;
  * 兜的是 Throwable 而不是 Exception：对方改类名或方法签名时抛出来的是
  * NoClassDefFoundError / NoSuchMethodError，都属于 Error，Exception 接不住。
  * 兜住的代价是那张 CD 放不了；不兜的代价是网络包处理函数抛异常，而那条
- * 路径上的异常会被 NeoForge 当成协议错误直接把玩家踢下线。
+ * 路径上的异常会被 Forge 当成协议错误直接把玩家踢下线。
  */
 public final class NetMusicCompat {
 

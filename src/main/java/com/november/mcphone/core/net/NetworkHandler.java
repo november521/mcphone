@@ -8,6 +8,7 @@ import com.november.mcphone.core.menu.ModMenus;
 import com.november.mcphone.core.menu.PhoneContainerMenu;
 import com.november.mcphone.feature.enderchest.net.OpenEnderChestPacket;
 import com.november.mcphone.feature.store.AppAccess;
+import com.november.mcphone.feature.waystone.net.OpenWaystoneSelectionPacket;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
@@ -41,6 +42,9 @@ public final class NetworkHandler {
     // 拼错了不会报错，只会变成"未定价"从而静默放行——那正好是这道闸要防的事
     private static final ResourceLocation APP_ENDER_CHEST =
             ResourceLocation.fromNamespaceAndPath(MCphone.MODID, "ender_chest");
+
+    private static final ResourceLocation APP_WAYSTONE =
+            ResourceLocation.fromNamespaceAndPath(MCphone.MODID, "waystone");
 
     /**
      * 告诉玩家这个 App 还没买。
@@ -97,6 +101,18 @@ public final class NetworkHandler {
         com.november.mcphone.feature.notes.net.NotesNetworking.register();
         com.november.mcphone.feature.store.net.StoreNetworking.register();
         com.november.mcphone.feature.music.net.MusicNetworking.register();
+
+        // C2S: 玩家在手机里点了传送石。
+        //
+        // 【放在最末尾】而不是跟上面那几个内建 App 排在一起：往末尾追加不会
+        // 挪动任何一个已有包的序号，也就不用动 PROTOCOL_VERSION。插在中间
+        // 是能编过的，代价是老客户端把 A 包当 B 包解码
+        MCphoneNetwork.registerToServer(
+                OpenWaystoneSelectionPacket.class,
+                OpenWaystoneSelectionPacket::encode,
+                OpenWaystoneSelectionPacket::decode,
+                NetworkHandler::handleOpenWaystoneSelection
+        );
     }
 
     /**
@@ -128,6 +144,42 @@ public final class NetworkHandler {
                         ModMenus.ENDER_CHEST.get(), containerId, inventory,
                         enderChest, ModMenus.ENDER_CHEST_SIZE),
                 Component.translatable("mcphone.container.ender_chest")));
+    }
+
+    /**
+     * 服务端收到：给玩家打开传送石碑的选点界面。
+     *
+     * 开不成时给一句 actionbar 提示。玩家点了图标、界面却没弹出来，什么都不
+     * 说是最糟的一种失败——他会以为是自己点错了，反复点，然后来报"手机坏了"。
+     * 一句话就能把他引向真正的原因：服务端没装传送石碑，或者版本对不上。
+     *
+     * 这条路在正常情况下走不到：没装 Waystones 时那个 App 压根不登记，客户端
+     * 也就发不出这个包。能走到这里，说明两端装的模组不一致、对方改了 API，
+     * 或者有人在伪造包——前两种玩家有权知道，第三种告诉他也无妨。
+     *
+     * 主线程与 player 非空由 MCphoneNetwork.registerToServer 保证，这里不必再判。
+     */
+    private static void handleOpenWaystoneSelection(OpenWaystoneSelectionPacket packet,
+                                                    ServerPlayer player) {
+        if (!PhoneItem.isCarriedBy(player)) {
+            MCphone.LOGGER.debug("玩家 {} 请求开传送石但身上没有手机，已忽略",
+                    player.getName().getString());
+            return;
+        }
+
+        // 买过了吗。安装是纯客户端动作，改个客户端就能把 App 塞进主屏，
+        // 购买那一步完全绕开——所以服务端必须自己问一句
+        if (!AppAccess.canUse(player, APP_WAYSTONE)) {
+            notPurchased(player);
+            return;
+        }
+
+        if (!com.november.mcphone.compat.WaystonesCompat.openSelection(player)) {
+            // true = 显示在物品栏上方那一行，不占聊天记录。与 Waystones
+            // 自己报传送失败时的位置一致，玩家不会觉得是两个模组在说话
+            player.displayClientMessage(
+                    Component.translatable("mcphone.waystone.unavailable"), true);
+        }
     }
 
     //  处理函数
