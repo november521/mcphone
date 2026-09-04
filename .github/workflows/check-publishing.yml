@@ -1,0 +1,65 @@
+name: Check publishing credentials
+
+# 手动触发，发版【之前】跑一次，确认两个平台的凭据还有效、我们声称的版本名
+# 在对方的表里都能对上。
+#
+# 为什么做成一个 workflow 而不是在本地跑：要验证令牌就得用它，而用它的地方
+# 应该是它已经在的地方。令牌全程留在 GitHub，不必为了一次检查把它拷来拷去。
+#
+# 这不是发版流程的一环，release.yml 不依赖它。它治的是另一件事：令牌会过期、
+# 会被吊销，而那件事只会在你推了 tag、构建跑完之后才暴露出来。
+on:
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      # 一个都不 echo 令牌本身。curl 走请求头而不是 query string —— 后者会
+      # 出现在日志、代理和对方的访问日志里。
+      - name: Modrinth
+        env:
+          MODRINTH_ID: ${{ vars.MODRINTH_ID }}
+          MODRINTH_TOKEN: ${{ secrets.MODRINTH_TOKEN }}
+        run: |
+          if [ -z "$MODRINTH_ID" ] || [ -z "$MODRINTH_TOKEN" ]; then
+            echo "::warning::Modrinth 未配置，跳过"; exit 0
+          fi
+          UA="november521/mcphone (credential check)"
+          USER=$(curl -sS --fail-with-body -H "Authorization: $MODRINTH_TOKEN" -H "User-Agent: $UA" \
+                 https://api.modrinth.com/v2/user | python3 -c 'import sys,json;print(json.load(sys.stdin)["username"])') || {
+            echo "::error::Modrinth 令牌无效或已过期"; exit 1; }
+          echo "令牌有效，账号 $USER"
+          TITLE=$(curl -sS --fail-with-body -H "Authorization: $MODRINTH_TOKEN" -H "User-Agent: $UA" \
+                  "https://api.modrinth.com/v2/project/$MODRINTH_ID" \
+                  | python3 -c 'import sys,json;d=json.load(sys.stdin);print(d["title"],"/",d["slug"],"/",d["status"])') || {
+            echo "::error::MODRINTH_ID=$MODRINTH_ID 取不到项目"; exit 1; }
+          echo "项目 $TITLE"
+
+      - name: CurseForge
+        env:
+          CURSEFORGE_ID: ${{ vars.CURSEFORGE_ID }}
+          CURSEFORGE_TOKEN: ${{ secrets.CURSEFORGE_TOKEN }}
+        run: |
+          if [ -z "$CURSEFORGE_ID" ] || [ -z "$CURSEFORGE_TOKEN" ]; then
+            echo "::warning::CurseForge 未配置，跳过"; exit 0
+          fi
+          # 这个接口本身就要令牌，取得到就说明令牌有效。
+          curl -sS --fail-with-body -H "X-Api-Token: $CURSEFORGE_TOKEN" \
+               https://minecraft.curseforge.com/api/game/versions -o versions.json || {
+            echo "::error::CurseForge 令牌无效，或没有这个项目的权限"; exit 1; }
+          echo "令牌有效，取到 $(python3 -c 'import json;print(len(json.load(open("versions.json"))))') 条版本记录"
+          # release.yml 里两支分别声称的那几样，逐个确认对方表里有。
+          # 对不上就是发版当场失败的那种错，宁可在这里先看见。
+          python3 - <<'PY'
+          import json, sys
+          vs = json.load(open("versions.json"))
+          names = {v["name"] for v in vs}
+          want = ["1.21.1", "1.20.1", "NeoForge", "Forge", "Java 21", "Java 17"]
+          missing = [w for w in want if w not in names]
+          for w in want:
+              print(f'  {"OK  " if w in names else "缺失"}  {w}')
+          if missing:
+              print(f'::error::CurseForge 版本表里没有：{", ".join(missing)}')
+              sys.exit(1)
+          PY
