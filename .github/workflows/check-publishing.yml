@@ -41,9 +41,21 @@ jobs:
           CURSEFORGE_ID: ${{ vars.CURSEFORGE_ID }}
           CURSEFORGE_TOKEN: ${{ secrets.CURSEFORGE_TOKEN }}
         run: |
-          if [ -z "$CURSEFORGE_ID" ] || [ -z "$CURSEFORGE_TOKEN" ]; then
-            echo "::warning::CurseForge 未配置，跳过"; exit 0
+          # 【令牌与 ID 分开判】。验令牌、查版本表都不需要项目 ID，把两者
+          # 绑在一起判，就会在"令牌配好了、ID 还没填"这个最需要检查的时刻
+          # 什么都不查。
+          if [ -z "$CURSEFORGE_TOKEN" ]; then
+            echo "::warning::CURSEFORGE_TOKEN 没配，跳过"; exit 0
           fi
+          if [ -z "$CURSEFORGE_ID" ]; then
+            echo "::warning::CURSEFORGE_ID 还没填，发版时 CurseForge 那步仍会跳过。下面只验令牌与版本表。"
+          else
+            echo "CURSEFORGE_ID = $CURSEFORGE_ID"
+          fi
+          # 顺带说明：上传 API 没有任何"取项目"的端点（全部端点就是
+          # game/versions、game/dependencies、upload-file、update-file 和
+          # 本地化那两个），所以 ID 填得对不对没法在这里验，只有第一次实发
+          # 才知道。填错的表现是上传返回 404。
           # 这个接口本身就要令牌，取得到就说明令牌有效。
           curl -sS --fail-with-body -H "X-Api-Token: $CURSEFORGE_TOKEN" \
                https://minecraft.curseforge.com/api/game/versions -o versions.json || {
