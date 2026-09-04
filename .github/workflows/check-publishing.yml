@@ -50,12 +50,27 @@ jobs:
           if [ -z "$CURSEFORGE_ID" ]; then
             echo "::warning::CURSEFORGE_ID 还没填，发版时 CurseForge 那步仍会跳过。下面只验令牌与版本表。"
           else
-            echo "CURSEFORGE_ID = $CURSEFORGE_ID"
+            # 用 localization/export 验项目 ID。
+            #
+            # 上传 API 没有"取项目"这种端点，但这一个是【项目作用域的 GET】，
+            # 参数全可选，返回的东西我们也不关心 —— 关心的是状态码：
+            #   200  项目在，且这个令牌对它有权限
+            #   403  项目在，但不是这个令牌能碰的（ID 填成了别人的项目）
+            #   404  没有这个项目
+            # 拿它当"这个 ID 是不是我的"来用，比等第一次实发再看 404 早得多。
+            #
+            # 它本来是给 WoW 插件做本地化导出的，Minecraft 项目上多半返回空，
+            # 那不要紧：我们要的就是那个状态码。
+            CODE=$(curl -sS -o cf-project.txt -w '%{http_code}' \
+                   -H "X-Api-Token: $CURSEFORGE_TOKEN" \
+                   "https://minecraft.curseforge.com/api/projects/$CURSEFORGE_ID/localization/export")
+            case "$CODE" in
+              200) echo "项目 $CURSEFORGE_ID 存在，且这个令牌对它有权限" ;;
+              403) echo "::error::403 —— 项目 $CURSEFORGE_ID 不是这个令牌能碰的，检查 CURSEFORGE_ID 是不是填成了别人的项目"; exit 1 ;;
+              404) echo "::error::404 —— 找不到项目 $CURSEFORGE_ID，CURSEFORGE_ID 填错了"; exit 1 ;;
+              *)   echo "::error::验项目 ID 时拿到意外的状态码 $CODE"; head -c 300 cf-project.txt; exit 1 ;;
+            esac
           fi
-          # 顺带说明：上传 API 没有任何"取项目"的端点（全部端点就是
-          # game/versions、game/dependencies、upload-file、update-file 和
-          # 本地化那两个），所以 ID 填得对不对没法在这里验，只有第一次实发
-          # 才知道。填错的表现是上传返回 404。
           # 这个接口本身就要令牌，取得到就说明令牌有效。
           curl -sS --fail-with-body -H "X-Api-Token: $CURSEFORGE_TOKEN" \
                https://minecraft.curseforge.com/api/game/versions -o versions.json || {
