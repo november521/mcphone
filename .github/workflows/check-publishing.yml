@@ -3,11 +3,12 @@ name: Check publishing credentials
 # 手动触发，发版【之前】跑一次，确认两个平台的凭据还有效、我们声称的版本名
 # 在对方的表里都能对上。
 #
-# 为什么做成一个 workflow 而不是在本地跑：要验证令牌就得用它，而用它的地方
+# 为什么做成一个 workflow 而不是本地脚本：要验证令牌就得用它，而用它的地方
 # 应该是它已经在的地方。令牌全程留在 GitHub，不必为了一次检查把它拷来拷去。
 #
 # 这不是发版流程的一环，release.yml 不依赖它。它治的是另一件事：令牌会过期、
-# 会被吊销，而那件事只会在你推了 tag、构建跑完之后才暴露出来。
+# 会被吊销、ID 会填错，而那些眼下只会在推了 tag、构建跑完之后才暴露出来 ——
+# 那时 GitHub Release 已经建好了。
 on:
   workflow_dispatch:
 
@@ -36,79 +37,50 @@ jobs:
             echo "::error::MODRINTH_ID=$MODRINTH_ID 取不到项目"; exit 1; }
           echo "项目 $TITLE"
 
-      # ↓↓↓ 临时诊断步骤，查清 403 的来源之后就删掉 ↓↓↓
-      - name: DIAG
-        env:
-          CURSEFORGE_ID: ${{ vars.CURSEFORGE_ID }}
-          CURSEFORGE_TOKEN: ${{ secrets.CURSEFORGE_TOKEN }}
-        run: |
-          probe() {
-            echo "--- $1 ---"
-            shift
-            CODE=$(curl -sS -o body.txt -w '%{http_code}' "$@" -H "X-Api-Token: $CURSEFORGE_TOKEN")
-            echo "HTTP $CODE"
-            echo "body: $(head -c 400 body.txt)"
-            echo
-          }
-          # 1) 我们的项目，本地化导出
-          probe "localization/export @ $CURSEFORGE_ID (我们的)" \
-            "https://minecraft.curseforge.com/api/projects/$CURSEFORGE_ID/localization/export"
-          # 2) 一个必然不存在的 ID —— 用来看这个端点区不区分"不存在"和"没权限"
-          probe "localization/export @ 999999999 (不存在)" \
-            "https://minecraft.curseforge.com/api/projects/999999999/localization/export"
-          # 3) JEI 的项目 ID，确实存在但绝不是我们的
-          probe "localization/export @ 238222 (JEI，别人的)" \
-            "https://minecraft.curseforge.com/api/projects/238222/localization/export"
-          # 4) 真正要紧的那个端点。上一轮不带 body 收到 411（服务器嫌没有
-          #    Content-Length，还没进应用层），这次带一个【必定不合法】的
-          #    multipart：只有 metadata={}，没有 file。
-          #    看的是失败在哪一层 —— 403 是项目层面没权限，400/422 说明
-          #    项目和权限都对、只是数据不对。拿 JEI 做对照。
-          probe "upload-file @ $CURSEFORGE_ID (metadata={} 无文件)" -X POST -F 'metadata={}' \\
-            "https://minecraft.curseforge.com/api/projects/$CURSEFORGE_ID/upload-file"
-          probe "upload-file @ 238222 (metadata={} 无文件，别人的)" -X POST -F 'metadata={}' \\
-            "https://minecraft.curseforge.com/api/projects/238222/upload-file"
-
       - name: CurseForge
         env:
           CURSEFORGE_ID: ${{ vars.CURSEFORGE_ID }}
           CURSEFORGE_TOKEN: ${{ secrets.CURSEFORGE_TOKEN }}
         run: |
-          # 【令牌与 ID 分开判】。验令牌、查版本表都不需要项目 ID，把两者
-          # 绑在一起判，就会在"令牌配好了、ID 还没填"这个最需要检查的时刻
-          # 什么都不查。
+          # 【令牌与 ID 分开判】。验令牌、查版本表都不需要项目 ID，把两者绑在
+          # 一起判，就会在"令牌配好了、ID 还没填"这个最需要检查的时刻什么都不查。
           if [ -z "$CURSEFORGE_TOKEN" ]; then
             echo "::warning::CURSEFORGE_TOKEN 没配，跳过"; exit 0
           fi
+
+          # 这个接口本身就要令牌，取得到就说明令牌有效。
+          curl -sS --fail-with-body -H "X-Api-Token: $CURSEFORGE_TOKEN" \
+               https://minecraft.curseforge.com/api/game/versions -o versions.json || {
+            echo "::error::CurseForge 令牌无效"; exit 1; }
+          echo "令牌有效，取到 $(python3 -c 'import json;print(len(json.load(open("versions.json"))))') 条版本记录"
+
           if [ -z "$CURSEFORGE_ID" ]; then
-            echo "::warning::CURSEFORGE_ID 还没填，发版时 CurseForge 那步仍会跳过。下面只验令牌与版本表。"
+            echo "::warning::CURSEFORGE_ID 还没填，发版时 CurseForge 那步会跳过"
           else
-            # 用 localization/export 验项目 ID。
+            # 拿 localization/export 当"这个 ID 存不存在"用。
             #
-            # 上传 API 没有"取项目"这种端点，但这一个是【项目作用域的 GET】，
-            # 参数全可选，返回的东西我们也不关心 —— 关心的是状态码：
-            #   200  项目在，且这个令牌对它有权限
-            #   403  项目在，但不是这个令牌能碰的（ID 填成了别人的项目）
-            #   404  没有这个项目
-            # 拿它当"这个 ID 是不是我的"来用，比等第一次实发再看 404 早得多。
+            # 【它只验存在，不验归属】—— 这一条是实测出来的，别想当然：
+            #   不存在的 ID   → 400  {"errorCode":1001,"errorMessage":"Invalid `projectID`."}
+            #   我们自己的项目 → 403  "You do not have permission to manage localization"
+            #   别人的项目     → 403  一模一样
+            # 本地化管理这个权限对 Minecraft 项目根本没开，所以谁问都是 403。
+            # 也就是说 403 什么都不能说明，能说明问题的是 400。
             #
-            # 它本来是给 WoW 插件做本地化导出的，Minecraft 项目上多半返回空，
-            # 那不要紧：我们要的就是那个状态码。
+            # 归属没法在这里验：upload-file 是唯一按归属鉴权的端点，而试它就得
+            # 真传一个文件。所以这一步能挡住的是【ID 填错、填成不存在的号】，
+            # 挡不住"填成了别人的一个真项目"——后者只有第一次实发才会暴露。
             CODE=$(curl -sS -o cf-project.txt -w '%{http_code}' \
                    -H "X-Api-Token: $CURSEFORGE_TOKEN" \
                    "https://minecraft.curseforge.com/api/projects/$CURSEFORGE_ID/localization/export")
             case "$CODE" in
-              200) echo "项目 $CURSEFORGE_ID 存在，且这个令牌对它有权限" ;;
-              403) echo "::error::403 —— 项目 $CURSEFORGE_ID 不是这个令牌能碰的，检查 CURSEFORGE_ID 是不是填成了别人的项目"; exit 1 ;;
-              404) echo "::error::404 —— 找不到项目 $CURSEFORGE_ID，CURSEFORGE_ID 填错了"; exit 1 ;;
-              *)   echo "::error::验项目 ID 时拿到意外的状态码 $CODE"; head -c 300 cf-project.txt; exit 1 ;;
+              400) echo "::error::CURSEFORGE_ID=$CURSEFORGE_ID 不是有效的项目 ID：$(head -c 200 cf-project.txt)"; exit 1 ;;
+              200|403) echo "项目 $CURSEFORGE_ID 存在" ;;
+              # 别为一个没预料到的状态码把整次检查判失败 —— 这一步是辅助，
+              # 不该比它要验的东西本身还容易出假警报。
+              *) echo "::warning::验 $CURSEFORGE_ID 时拿到状态码 $CODE，无法判断，跳过这一项" ;;
             esac
           fi
-          # 这个接口本身就要令牌，取得到就说明令牌有效。
-          curl -sS --fail-with-body -H "X-Api-Token: $CURSEFORGE_TOKEN" \
-               https://minecraft.curseforge.com/api/game/versions -o versions.json || {
-            echo "::error::CurseForge 令牌无效，或没有这个项目的权限"; exit 1; }
-          echo "令牌有效，取到 $(python3 -c 'import json;print(len(json.load(open("versions.json"))))') 条版本记录"
+
           # release.yml 里两支分别声称的那几样，逐个确认对方表里有。
           # 对不上就是发版当场失败的那种错，宁可在这里先看见。
           python3 - <<'PY'
