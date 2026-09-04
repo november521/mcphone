@@ -80,6 +80,12 @@ jobs:
             exit 1
           fi
           echo "jar_path=$JAR_PATH" >> "$GITHUB_OUTPUT"
+          # 下面两个给发布到 Modrinth / CurseForge 的步骤用。
+          # 那两步是 YAML 里的 with:，跑不了 shell，只能在这儿把值取出来。
+          # minecraft_version 不会误匹配别的键 —— 正则要求名字后面紧跟等号。
+          echo "mod_version=$MOD_VERSION" >> "$GITHUB_OUTPUT"
+          MC_VERSION=$(grep -E '^minecraft_version=' gradle.properties | cut -d= -f2- | tr -d '[:space:]')
+          echo "mc_version=$MC_VERSION" >> "$GITHUB_OUTPUT"
 
       # 同名 tag 已有 Release 时先删掉，否则 gh release create 会直接失败。
       # 语义是"重推 tag ＝ 重新出这个版本"。只删与本次 tag 同名的那一个。
@@ -106,3 +112,121 @@ jobs:
           else
             gh release create "$GITHUB_REF_NAME" "$JAR_PATH" --title "$TITLE" --generate-notes
           fi
+
+      # ---------------- 发布到 Modrinth 与 CurseForge ----------------
+      #
+      # 与 main 分支那一份【结构相同、参数不同】：加载器是 forge 不是 neoforge，
+      # Java 是 17 不是 21，版本名里的前缀也不一样。改这一份的时候记得那边也有
+      # 一份 —— 两支各发各的包，谁漏了都只是"那一支没发到平台上"，不会报错。
+      #
+      # 用 Kira-NT/mc-publish。作者改过名，网上大量教程写的还是
+      # Kir-Antipov/mc-publish —— 那个地址目前靠 GitHub 的仓库重定向还能用，
+      # 但重定向会在原名被别人注册时失效，所以这里写现在的名字。
+      # 版本钉死在 v3.3.1 而不是 v3：v3 是会移动的 tag，作者一推新版，
+      # 我们这边就在毫无改动的情况下换了行为。
+      #
+      # 【四个配置项都在 GitHub 网页上填，不改这个文件】：
+      #   仓库 → Settings → Secrets and variables → Actions
+      #     Variables 页：MODRINTH_ID、CURSEFORGE_ID     （项目 ID，公开信息）
+      #     Secrets 页：  MODRINTH_TOKEN、CURSEFORGE_TOKEN（令牌，绝不能进仓库）
+      # 这些是【仓库级】的，不分分支：main 那边填过就不用再填。
+      #
+      # 两支发到【同一个】Modrinth / CurseForge 项目下，靠 game-versions
+      # 区分。所以两支的 mod_version 绝不能撞号 —— 眼下是 1.8.x 与 0.10.x，
+      # 天然错开；哪天真撞上了，平台会以"版本号已存在"拒绝上传。
+      - name: Check publishing credentials
+        id: creds
+        # 令牌只在这一步进环境，不挂到 job 级 env 上 —— 那样上面每一步
+        # （包括 ./gradlew build 跑的一堆第三方插件）都能读到它。
+        env:
+          MODRINTH_ID: ${{ vars.MODRINTH_ID }}
+          MODRINTH_TOKEN: ${{ secrets.MODRINTH_TOKEN }}
+          CURSEFORGE_ID: ${{ vars.CURSEFORGE_ID }}
+          CURSEFORGE_TOKEN: ${{ secrets.CURSEFORGE_TOKEN }}
+        run: |
+          # 缺凭据就跳过那个平台并留一条 warning，不让整次发版判失败：
+          # GitHub Release 此时已经建好了，为一个还没配的令牌把它标成红叉，
+          # 只会让人误以为发出去的包有问题。
+          if [ -n "$MODRINTH_ID" ] && [ -n "$MODRINTH_TOKEN" ]; then
+            echo "modrinth=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "modrinth=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::跳过 Modrinth：变量 MODRINTH_ID 或密钥 MODRINTH_TOKEN 没配"
+          fi
+          if [ -n "$CURSEFORGE_ID" ] && [ -n "$CURSEFORGE_TOKEN" ]; then
+            echo "curseforge=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "curseforge=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::跳过 CurseForge：变量 CURSEFORGE_ID 或密钥 CURSEFORGE_TOKEN 没配"
+          fi
+
+      - name: Prepare changelog for mod sites
+        id: changelog
+        if: steps.creds.outputs.modrinth == 'true' || steps.creds.outputs.curseforge == 'true'
+        run: |
+          # 上面建 Release 时没有说明文件可以退回 --generate-notes，
+          # 这两个平台没有那个东西：changelog 留空，版本页就真的是一片空白。
+          # 所以这里保证【总有一个文件】，最差也是一条指回 Release 的链接。
+          NOTES_FILE="docs/release-notes/${GITHUB_REF_NAME}.md"
+          if [ ! -f "$NOTES_FILE" ]; then
+            NOTES_FILE="build/publish-changelog.md"
+            echo "完整更新内容见 https://github.com/${GITHUB_REPOSITORY}/releases/tag/${GITHUB_REF_NAME}" > "$NOTES_FILE"
+            echo "::warning::未找到 docs/release-notes/${GITHUB_REF_NAME}.md，两个平台的更新日志只会有一条 Release 链接"
+          fi
+          echo "file=$NOTES_FILE" >> "$GITHUB_OUTPUT"
+
+      # 两个平台【刻意分成两步】。mc-publish 只往"id 与 token 都齐了"的平台发，
+      # 合成一步也能跑，但那样一个平台没配好、或者一个平台挂了，另一个就一起
+      # 发不出去。
+      - name: Publish to Modrinth
+        if: steps.creds.outputs.modrinth == 'true'
+        uses: Kira-NT/mc-publish@v3.3.1
+        with:
+          modrinth-id: ${{ vars.MODRINTH_ID }}
+          modrinth-token: ${{ secrets.MODRINTH_TOKEN }}
+          # 【不传 github-token】：Release 上面已经用 gh 建好并挂好 jar 了，
+          # 再让它插一手就是重复上传。这个输入没有默认值，不写即不发。
+          #
+          # 【按确切文件名传，绝不能用它默认的 build/libs 通配】。
+          # 这一支尤其要紧：jarJar 会额外出一个不含内嵌 JavaMP3 的 -slim，
+          # 而它默认那条 glob 会把两个都算进去 —— 玩家下到 -slim，
+          # 表现是"放 mp3 必崩"，而发版全绿。
+          files: ${{ steps.find-jar.outputs.jar_path }}
+          name: MCphone Forge 1.20.1 v${{ steps.find-jar.outputs.mod_version }}
+          version: ${{ steps.find-jar.outputs.mod_version }}
+          version-type: release
+          changelog-file: ${{ steps.changelog.outputs.file }}
+          loaders: forge
+          game-versions: ${{ steps.find-jar.outputs.mc_version }}
+          # 17，不是 21 —— 与本分支 setup-java 那一步同一个数。
+          java: 17
+          # 依赖【不写】，让它从 jar 里的 mods.toml 自己读（curios、waystones
+          # 等会作为可选依赖标上去）。Modrinth 这边这么做是安全的：查不到的
+          # 依赖它 catch 住再 filter 掉，不会连累上传。CurseForge 那边
+          # 【不能】这样，理由见下面那一步。
+
+      - name: Publish to CurseForge
+        if: steps.creds.outputs.curseforge == 'true'
+        uses: Kira-NT/mc-publish@v3.3.1
+        with:
+          curseforge-id: ${{ vars.CURSEFORGE_ID }}
+          curseforge-token: ${{ secrets.CURSEFORGE_TOKEN }}
+          files: ${{ steps.find-jar.outputs.jar_path }}
+          name: MCphone Forge 1.20.1 v${{ steps.find-jar.outputs.mod_version }}
+          version: ${{ steps.find-jar.outputs.mod_version }}
+          version-type: release
+          changelog-file: ${{ steps.changelog.outputs.file }}
+          loaders: forge
+          game-versions: ${{ steps.find-jar.outputs.mc_version }}
+          java: 17
+          # 【刻意声明"没有依赖"】，空串就是这个意思（不写才是"从 jar 里读"）。
+          #
+          # 两个平台处理"不认识的依赖"的方式不一样：Modrinth 查不到就丢掉；
+          # CurseForge 是把 modId 原样当 slug 提交上去，slug 在那边不存在
+          # 就【整次上传失败】。而 mods.toml 里的 mcef、netmusic、balm 这几个
+          # 的 CurseForge slug 是否与 modId 同名，没有逐个核实过。
+          # 为一条装饰性的依赖信息赌上整次发版不划算。
+          #
+          # 等在 CurseForge 上逐个确认过 slug，再照 mc-publish 的语法
+          # （id@version(type)，一行一条）填回来。
+          dependencies: ''
