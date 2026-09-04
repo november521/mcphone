@@ -20,19 +20,26 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
           fetch-tags: true
 
       - name: Setup JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           java-version: '17'
           distribution: 'temurin'
 
+      # 【停在 v5，不要升 v6】。v6 把缓存那部分抽成了 gradle-actions-caching，
+      # 那是个不再开源的商业组件，启用缓存就等于接受 Gradle 自己那份
+      # Terms of Use（https://gradle.com/legal/terms-of-use/）。一个 MIT 的
+      # 模组仓库不该在顺手修个告警的时候，把自己绑上另一份条款。
+      #
+      # v5 相对 v4 的唯一变更就是跑在 node 24 上 —— 而那正是我们要修的那条
+      # 弃用告警。真需要 v6 里的东西时再单独权衡，别跟着"升到最新"一起做。
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v5
 
       - name: Make Gradle wrapper executable
         run: chmod +x ./gradlew
