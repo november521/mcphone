@@ -36,6 +36,37 @@ jobs:
             echo "::error::MODRINTH_ID=$MODRINTH_ID 取不到项目"; exit 1; }
           echo "项目 $TITLE"
 
+      # ↓↓↓ 临时诊断步骤，查清 403 的来源之后就删掉 ↓↓↓
+      - name: DIAG
+        env:
+          CURSEFORGE_ID: ${{ vars.CURSEFORGE_ID }}
+          CURSEFORGE_TOKEN: ${{ secrets.CURSEFORGE_TOKEN }}
+        run: |
+          probe() {
+            echo "--- $1 ---"
+            shift
+            CODE=$(curl -sS -o body.txt -w '%{http_code}' "$@" -H "X-Api-Token: $CURSEFORGE_TOKEN")
+            echo "HTTP $CODE"
+            echo "body: $(head -c 400 body.txt)"
+            echo
+          }
+          # 1) 我们的项目，本地化导出
+          probe "localization/export @ $CURSEFORGE_ID (我们的)" \
+            "https://minecraft.curseforge.com/api/projects/$CURSEFORGE_ID/localization/export"
+          # 2) 一个必然不存在的 ID —— 用来看这个端点区不区分"不存在"和"没权限"
+          probe "localization/export @ 999999999 (不存在)" \
+            "https://minecraft.curseforge.com/api/projects/999999999/localization/export"
+          # 3) JEI 的项目 ID，确实存在但绝不是我们的
+          probe "localization/export @ 238222 (JEI，别人的)" \
+            "https://minecraft.curseforge.com/api/projects/238222/localization/export"
+          # 4) 真正要紧的那个端点：不带任何 body 的 upload-file。
+          #    body 不合法必定失败，我们看的是【失败在哪一层】：
+          #    404/403 是项目层面的问题，400/422 说明项目和权限都对、只是数据不对。
+          probe "upload-file @ $CURSEFORGE_ID (无 body)" -X POST \
+            "https://minecraft.curseforge.com/api/projects/$CURSEFORGE_ID/upload-file"
+          probe "upload-file @ 238222 (无 body，别人的)" -X POST \
+            "https://minecraft.curseforge.com/api/projects/238222/upload-file"
+
       - name: CurseForge
         env:
           CURSEFORGE_ID: ${{ vars.CURSEFORGE_ID }}
