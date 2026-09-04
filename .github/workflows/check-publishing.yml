@@ -59,12 +59,14 @@ jobs:
           # 3) JEI 的项目 ID，确实存在但绝不是我们的
           probe "localization/export @ 238222 (JEI，别人的)" \
             "https://minecraft.curseforge.com/api/projects/238222/localization/export"
-          # 4) 真正要紧的那个端点：不带任何 body 的 upload-file。
-          #    body 不合法必定失败，我们看的是【失败在哪一层】：
-          #    404/403 是项目层面的问题，400/422 说明项目和权限都对、只是数据不对。
-          probe "upload-file @ $CURSEFORGE_ID (无 body)" -X POST \
+          # 4) 真正要紧的那个端点。上一轮不带 body 收到 411（服务器嫌没有
+          #    Content-Length，还没进应用层），这次带一个【必定不合法】的
+          #    multipart：只有 metadata={}，没有 file。
+          #    看的是失败在哪一层 —— 403 是项目层面没权限，400/422 说明
+          #    项目和权限都对、只是数据不对。拿 JEI 做对照。
+          probe "upload-file @ $CURSEFORGE_ID (metadata={} 无文件)" -X POST -F 'metadata={}' \\
             "https://minecraft.curseforge.com/api/projects/$CURSEFORGE_ID/upload-file"
-          probe "upload-file @ 238222 (无 body，别人的)" -X POST \
+          probe "upload-file @ 238222 (metadata={} 无文件，别人的)" -X POST -F 'metadata={}' \\
             "https://minecraft.curseforge.com/api/projects/238222/upload-file"
 
       - name: CurseForge
