@@ -25,6 +25,10 @@ public final class ChatNotifier {
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null) return;
 
+        // 自己刚发的那张图，回声一到就把像素直接塞进缓存，省得再从服务器下回来一遍。
+        // 借道这里是因为这儿本来就是"每条新消息都会经过"的地方
+        ChatImageSender.onNewMessage(message);
+
         if (message.sender().equals(mc.player.getUUID())) return;
         if (isViewing(peer)) return;
         if (!PhoneItem.isCarriedBy(mc.player)) return;

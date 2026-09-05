@@ -1,10 +1,13 @@
 package com.november.mcphone.feature.chat.client;
 
+import com.november.mcphone.core.ServerConfig;
 import com.november.mcphone.core.client.FontPalette;
 import com.november.mcphone.core.client.PhoneSkin;
 import com.november.mcphone.core.client.PhoneTheme;
 import com.november.mcphone.core.client.PlayerAvatar;
 import com.november.mcphone.feature.chat.ChatMessage;
+import com.november.mcphone.feature.chat.ImageBody;
+import com.november.mcphone.feature.chat.TextBody;
 import com.november.mcphone.feature.chat.net.ChatClientCache;
 import com.november.mcphone.feature.chat.net.ConversationSummary;
 import com.november.mcphone.feature.chat.net.MarkReadPacket;
@@ -70,6 +73,20 @@ public final class ChatConversation {
     private static final DateTimeFormatter TIME_FORMAT = DateTimeFormatter.ofPattern("HH:mm");
     private static final DateTimeFormatter DATE_TIME_FORMAT = DateTimeFormatter.ofPattern("MM-dd HH:mm");
 
+    /**
+     * 图片气泡最高多少像素。
+     *
+     * 气泡最宽只有 80 出头，一张 16:9 的截图按宽度算出来才 45 高，这个数管的是竖构图的图：
+     * 不封顶的话，一张竖着的截图会占掉大半个屏幕，前后几条消息全被挤出视野。
+     */
+    private static final int IMAGE_MAX_H = 56;
+
+    /** 输入栏左边那个图片键的边长。与音乐页那几个键一样大，它们是同一家的 */
+    private static final int IMAGE_BTN = 9;
+
+    /** 图片键与输入框之间的空隙 */
+    private static final int IMAGE_BTN_GAP = 2;
+
     private static final int AVATAR_SIZE = 16;
 
     private static final int AVATAR_GAP = 3;
@@ -101,6 +118,23 @@ public final class ChatConversation {
 
     private boolean sendHovered;
 
+    private boolean imageBtnHovered;
+
+    /** 玩家点了图片键，等 PhoneScreen 取走去开选照片那一页 */
+    private boolean pendingPickPhoto;
+
+    /** 正在放大看的那张图，null 表示没有 */
+    private UUID viewingImage;
+
+    /** 本帧画出来的图片气泡，供点击放大用；每帧重建，因为滚动一下位置就全变了 */
+    private final List<ImageHit> imageHits = new ArrayList<>();
+
+    /** 本帧消息区的上下边界。气泡是裁剪着画的，被裁掉的那半截不该还点得动 */
+    private int messageTop;
+    private int messageBottom;
+
+    private record ImageHit(UUID image, int x, int y, int w, int h) {}
+
     /** 上次上报过已读的那份消息列表，用来发现"又来新消息了" */
     private List<ChatMessage> markedFrom;
 
@@ -109,9 +143,25 @@ public final class ChatConversation {
     private List<ChatMessage> laidOutFrom;
     private int laidOutWidth = -1;
 
-    /** 排版后的一块：stamp 为 true 是居中的时间戳行，不画气泡；w/h 含内边距 */
-    private record Block(boolean stamp, boolean self, List<FormattedCharSequence> lines,
-                         int w, int h) {}
+    /** 排版后的一块是哪一种 */
+    private enum BlockType {
+        /** 居中的时间戳行，不画气泡 */
+        STAMP,
+        /** 文字气泡 */
+        TEXT,
+        /** 图片气泡 */
+        IMAGE
+    }
+
+    /**
+     * 排版后的一块。w/h 含内边距；lines 只有文字块用得上，image 只有图片块用得上。
+     *
+     * 图片块为什么在这一步就把尺寸算好：像素是"看到了才去要"的（见 {@link ChatImageCache}），
+     * 拿到之前也得把气泡摆出来，尺寸按消息自带的宽高算（见 ImageBody）。等图到了再按真实
+     * 比例重排的话，那一下跳动恰好发生在玩家正看着的地方。
+     */
+    private record Block(BlockType type, boolean self, List<FormattedCharSequence> lines,
+                         UUID image, int w, int h) {}
 
     /**
      * 进入会话。必须先 openConversation 再发请求，顺序不能颠倒：
@@ -134,6 +184,10 @@ public final class ChatConversation {
             box.setFocused(true);
         }
 
+        this.viewingImage = null;
+        this.pendingPickPhoto = false;
+        this.imageHits.clear();
+
         ChatClientCache.openConversation(peer);
         this.markedFrom = ChatClientCache.getMessages();
 
@@ -150,6 +204,10 @@ public final class ChatConversation {
         blocks = List.of();
         contentH = 0;
         sendHovered = false;
+        imageBtnHovered = false;
+        viewingImage = null;
+        pendingPickPhoto = false;
+        imageHits.clear();
         markedFrom = null;
         if (box != null) box.setFocused(false);
         ChatClientCache.closeConversation();
@@ -174,6 +232,65 @@ public final class ChatConversation {
         relayout(font, w);
         renderMessages(g, font, x, y, w, bottom);
         renderInputBar(g, font, x, inputTop, w, mouseX, mouseY, partialTick);
+
+        // 本帧画到的图片里还差像素的，攒一批去要。要在画完之后：画的时候才知道哪几张可见
+        ChatImageCache.flushRequests(peer);
+
+        // 放大图盖在所有东西上面，连输入栏一起盖住——它此刻不是能用的东西
+        if (viewingImage != null) {
+            renderImageViewer(g, font, phoneLeft, phoneTop + statusH,
+                    screenW, screenH - statusH - navH);
+        }
+    }
+
+    /**
+     * 点开一张图看大的：整块内容区盖上一层黑底，图等比居中。
+     *
+     * 为什么值得有这一手：气泡里那张最宽只有 80 个 GUI 像素，看得出是什么，看不清写了什么。
+     * 存下来的图有 256 的长边（见 ChatImage），铺满内容区正好用得上。
+     *
+     * 点哪儿都关掉，导航栏的返回键也关（见 {@link #dismissViewer()}）——这一层不是一页，
+     * 玩家不会觉得自己"进去了"，就不该要求他找一个特定的地方点。
+     */
+    private void renderImageViewer(GuiGraphics g, Font font,
+                                   int areaX, int areaY, int areaW, int areaH) {
+
+        g.fill(areaX, areaY, areaX + areaW, areaY + areaH, PhoneTheme.COLOR_OVERLAY);
+
+        var texture = ChatImageCache.get(viewingImage);
+        if (texture == null) {
+            String loading = Component.translatable("mcphone.chat.image_loading").getString();
+            g.drawString(font, loading,
+                    areaX + (areaW - font.width(loading)) / 2,
+                    areaY + (areaH - font.lineHeight) / 2, colorEmpty(), false);
+            return;
+        }
+
+        int hintH = font.lineHeight + 2;
+        GuiUtil.drawFitted(g, texture, areaX + 2, areaY + 2, areaW - 4, areaH - 4 - hintH);
+
+        String hint = Component.translatable("mcphone.chat.image_close_hint").getString();
+        g.drawString(font, hint, areaX + (areaW - font.width(hint)) / 2,
+                areaY + areaH - hintH, colorStamp(), false);
+    }
+
+    /** 关掉放大图。返回 false 表示本来就没在放大——那时返回键该照常退出会话 */
+    public boolean dismissViewer() {
+        if (viewingImage == null) return false;
+        viewingImage = null;
+        return true;
+    }
+
+    /** 取走"要去选一张照片"的请求，没有则返回 false */
+    public boolean consumePickPhotoRequest() {
+        boolean out = pendingPickPhoto;
+        pendingPickPhoto = false;
+        return out;
+    }
+
+    /** 当前会话的对端，PhoneScreen 发图时要知道发给谁 */
+    public UUID peer() {
+        return peer;
     }
 
     private int renderHeader(GuiGraphics g, Font font, int x, int y, int w) {
@@ -196,6 +313,11 @@ public final class ChatConversation {
     }
 
     private void renderMessages(GuiGraphics g, Font font, int x, int top, int w, int bottom) {
+        // 每帧重建：滚一下、来一条新消息，位置就全变了
+        imageHits.clear();
+        messageTop = top;
+        messageBottom = bottom;
+
         if (blocks.isEmpty()) {
             int y = top;
             for (var line : font.split(Component.translatable("mcphone.chat.conversation_empty"), w)) {
@@ -223,7 +345,7 @@ public final class ChatConversation {
     }
 
     private void renderBlock(GuiGraphics g, Font font, Block b, int x, int y, int w) {
-        if (b.stamp()) {
+        if (b.type() == BlockType.STAMP) {
             g.drawString(font, b.lines().get(0), x + (w - b.w()) / 2, y + STAMP_PAD_Y,
                     colorStamp(), false);
             return;
@@ -235,6 +357,11 @@ public final class ChatConversation {
                 bx, y, b.w(), b.h(),
                 b.self() ? COLOR_BUBBLE_SELF : COLOR_BUBBLE_PEER);
 
+        if (b.type() == BlockType.IMAGE) {
+            renderImageBlock(g, font, b, bx, y);
+            return;
+        }
+
         int ty = y + BUBBLE_PAD_Y;
         for (var line : b.lines()) {
             g.drawString(font, line, bx + BUBBLE_PAD_X, ty,
@@ -243,29 +370,78 @@ public final class ChatConversation {
         }
     }
 
+    /**
+     * 图片气泡里画什么，取决于像素到了没有。
+     *
+     * 问一句 {@link ChatImageCache#get} 就等于告诉缓存"这一帧它是可见的"，该去要的它自己会去要，
+     * 因此这里不必判断"要过没有"。三种没有像素的情况各说各的：还在路上、服务端说没了、
+     * 收到了但解不开——玩家至少知道该不该等。
+     */
+    private void renderImageBlock(GuiGraphics g, Font font, Block b, int bx, int y) {
+        int ix = bx + BUBBLE_PAD_X;
+        int iy = y + BUBBLE_PAD_Y;
+        int iw = b.w() - BUBBLE_PAD_X * 2;
+        int ih = b.h() - BUBBLE_PAD_Y * 2;
+
+        var texture = ChatImageCache.get(b.image());
+        if (texture != null) {
+            // 有像素才记位置：点一张还没到、或者已经过期的图，放大了也只是一块空白
+            imageHits.add(new ImageHit(b.image(), ix, iy, iw, ih));
+            GuiUtil.drawFitted(g, texture, ix, iy, iw, ih);
+            return;
+        }
+
+        // 没有像素时先铺一块底，否则气泡里是一个空洞，看不出这儿本该有张图
+        g.fill(ix, iy, ix + iw, iy + ih, PhoneTheme.COLOR_SCRIM);
+
+        String hint = switch (ChatImageCache.status(b.image())) {
+            case GONE -> Component.translatable("mcphone.chat.image_expired").getString();
+            case BROKEN -> Component.translatable("mcphone.chat.image_broken_local").getString();
+            case LOADING, READY -> "…";
+        };
+        // 先截再居中：气泡窄的时候（一张竖图）「已过期」放不下，按截断前的宽度算会偏出去
+        hint = GuiUtil.truncate(font, hint, iw - 2);
+        g.drawString(font, hint,
+                ix + Math.max(0, (iw - font.width(hint)) / 2),
+                iy + (ih - font.lineHeight) / 2,
+                colorEmpty(), false);
+    }
+
     private void renderInputBar(GuiGraphics g, Font font, int x, int y, int w,
                                 int mouseX, int mouseY, float partialTick) {
 
         String send = Component.translatable("mcphone.chat.send").getString();
         int sendW = font.width(send) + 4;
-        int boxW = w - sendW - 2;
+
+        // 服主关掉发图片时连位置都不留：那一格空着比一个点了没反应的键好
+        boolean canSendImage = ServerConfig.allowChatImages();
+        int btnRoom = canSendImage ? IMAGE_BTN + IMAGE_BTN_GAP : 0;
+
+        int barX = x + btnRoom;
+        int boxW = w - sendW - 2 - btnRoom;
+
+        if (canSendImage) {
+            renderImageButton(g, font, x, y, mouseX, mouseY);
+        } else {
+            imageBtnHovered = false;
+        }
 
         PhoneSkin.drawOrFill(g, PhoneSkin.Element.CHAT_INPUT_BAR,
-                x, y, boxW, INPUT_H, COLOR_INPUT_BG);
+                barX, y, boxW, INPUT_H, COLOR_INPUT_BG);
 
         // 无边框的 EditBox 不会自己垂直居中，手动摆到栏中间
         int textY = y + (INPUT_H - font.lineHeight) / 2 + 1;
         int textW = boxW - INPUT_TEXT_PAD * 2 - cursorRoom(font);
 
         if (box == null) {
-            box = new EditBox(font, x + INPUT_TEXT_PAD, textY,
+            box = new EditBox(font, barX + INPUT_TEXT_PAD, textY,
                     textW, INPUT_H - 4,
                     Component.translatable("mcphone.app.chat"));
-            box.setMaxLength(ChatMessage.MAX_TEXT_LENGTH);
+            box.setMaxLength(TextBody.MAX_LENGTH);
             box.setBordered(false);
             box.setFocused(true);
         } else {
-            box.setX(x + INPUT_TEXT_PAD);
+            box.setX(barX + INPUT_TEXT_PAD);
             box.setY(textY);
             box.setWidth(textW);
         }
@@ -278,6 +454,34 @@ public final class ChatConversation {
         boolean empty = box.getValue().isBlank();
         g.drawString(font, send, sendX + 2, textY,
                 empty ? COLOR_SEND_OFF : (sendHovered ? COLOR_SEND_HOVER : COLOR_SEND), false);
+    }
+
+    /**
+     * 输入栏左边那个图片键：贴图优先，没有贴图就画一个 ▣ 兜底，与音乐页那几个键同一个规矩。
+     *
+     * 正在发一张时画成灰的并且点不动：压缩与上传是异步的，连点两下会有两次上传交错着
+     * 发上去，而服务端按"片号必须连续"收（见 ChatImageUploads），交错的结果是两张都发不成。
+     */
+    private void renderImageButton(GuiGraphics g, Font font, int x, int barY,
+                                   int mouseX, int mouseY) {
+
+        int by = barY + (INPUT_H - IMAGE_BTN) / 2;
+        boolean sending = ChatImageSender.isBusy();
+
+        imageBtnHovered = !sending && GuiUtil.hit(mouseX, mouseY,
+                x - 1, by - 1, IMAGE_BTN + 2, IMAGE_BTN + 2);
+
+        if (imageBtnHovered) {
+            g.fill(x - 1, by - 1, x + IMAGE_BTN + 1, by + IMAGE_BTN + 1,
+                    PhoneTheme.COLOR_HOVER_STRONG);
+        }
+
+        if (PhoneSkin.draw(g, PhoneSkin.Element.CHAT_IMAGE, x, by, IMAGE_BTN, IMAGE_BTN)) return;
+
+        String glyph = "▣";
+        g.drawString(font, glyph, x + (IMAGE_BTN - font.width(glyph)) / 2, by,
+                sending ? COLOR_SEND_OFF : (imageBtnHovered ? COLOR_SEND_HOVER : COLOR_SEND),
+                false);
     }
 
     /** 消息列表没换实例就不重排：ChatClientCache 每次收包都产出新的不可变列表，身份没变即内容没变 */
@@ -296,16 +500,24 @@ public final class ChatConversation {
             if (m.time() - prevTime > STAMP_GAP_MS) {
                 FormattedCharSequence stamp =
                         Component.literal(formatStamp(m.time())).getVisualOrderText();
-                out.add(new Block(true, false, List.of(stamp),
+                out.add(new Block(BlockType.STAMP, false, List.of(stamp), null,
                         font.width(stamp), font.lineHeight + STAMP_PAD_Y * 2));
             }
             prevTime = m.time();
 
-            List<FormattedCharSequence> lines = font.split(Component.literal(m.text()), textMaxW);
+            boolean self = selfId != null && selfId.equals(m.sender());
+
+            if (m.body() instanceof ImageBody image) {
+                out.add(imageBlock(image, self, bubbleMaxW));
+                continue;
+            }
+
+            String text = m.body() instanceof TextBody t ? t.text() : m.body().preview().getString();
+            List<FormattedCharSequence> lines = font.split(Component.literal(text), textMaxW);
             int textW = 0;
             for (var line : lines) textW = Math.max(textW, font.width(line));
 
-            out.add(new Block(false, selfId != null && selfId.equals(m.sender()), lines,
+            out.add(new Block(BlockType.TEXT, self, lines, null,
                     textW + BUBBLE_PAD_X * 2,
                     lines.size() * font.lineHeight + BUBBLE_PAD_Y * 2));
         }
@@ -322,10 +534,44 @@ public final class ChatConversation {
         laidOutWidth = maxW;
     }
 
+    /** 按消息自带的宽高等比算出图片气泡多大，宽不超过气泡上限、高不超过 {@link #IMAGE_MAX_H} */
+    private static Block imageBlock(ImageBody image, boolean self, int bubbleMaxW) {
+        int maxW = Math.max(8, bubbleMaxW - BUBBLE_PAD_X * 2);
+
+        float scale = Math.min((float) maxW / image.width(), (float) IMAGE_MAX_H / image.height());
+        // 比屏幕还小的图不放大：放大只会糊，而手机上的图本来就该小
+        scale = Math.min(scale, 1f);
+
+        int w = Math.max(1, Math.round(image.width() * scale));
+        int h = Math.max(1, Math.round(image.height() * scale));
+
+        return new Block(BlockType.IMAGE, self, List.of(), image.image(),
+                w + BUBBLE_PAD_X * 2, h + BUBBLE_PAD_Y * 2);
+    }
+
     public boolean mouseClicked(double mx, double my, int button) {
+        // 放大图开着时点哪儿都是关掉它，别让点击漏到下面的气泡与输入栏
+        if (viewingImage != null) {
+            viewingImage = null;
+            return true;
+        }
+
+        if (button == 0 && imageBtnHovered) {
+            pendingPickPhoto = true;
+            return true;
+        }
         if (button == 0 && sendHovered) {
             send();
             return true;
+        }
+        // 点在消息区里才算数：气泡是裁剪着画的，露在外面的那半截看不见，也就不该点得动
+        if (button == 0 && my >= messageTop && my < messageBottom) {
+            for (ImageHit hit : imageHits) {
+                if (GuiUtil.hit(mx, my, hit.x(), hit.y(), hit.w(), hit.h())) {
+                    viewingImage = hit.image();
+                    return true;
+                }
+            }
         }
         if (box != null) box.mouseClicked(mx, my, button);
         return false;
@@ -359,6 +605,9 @@ public final class ChatConversation {
     }
 
     public boolean mouseScrolled(double scrollY) {
+        // 放大图盖着整块内容区，此时滚轮不该去翻它下面那些看不见的消息
+        if (viewingImage != null) return true;
+
         if (maxScroll <= 0) return false;
 
         scrollPx = Math.clamp(scrollPx + (int) (scrollY * SCROLL_STEP), 0, maxScroll);

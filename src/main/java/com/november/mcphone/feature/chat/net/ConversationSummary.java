@@ -1,20 +1,28 @@
 package com.november.mcphone.feature.chat.net;
 
-import com.november.mcphone.feature.chat.ChatMessage;
+import com.november.mcphone.feature.chat.MessageBody;
 import io.netty.buffer.ByteBuf;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 
+import java.util.Optional;
 import java.util.UUID;
 
 /**
  * 会话列表里的一行摘要；历史消息等玩家点进会话再单独拉。
  * StreamCodec 手写而不用 composite：composite 最多 6 个字段，本记录正好 6 个，用它以后加字段就得推倒重写。
- * online 是瞬时状态，现算现发不落盘；lastText 空串、lastTime 0 表示还没聊过。
+ * online 是瞬时状态，现算现发不落盘；last 为空、lastTime 0 表示还没聊过。
+ *
+ * 为什么带的是整条正文（{@link MessageBody}）而不是一行预览文字
+ *
+ * 那一行显示成什么，取决于最后一条是什么消息：文本就是正文，图片是「[图片]」，
+ * 日后再多一种就再多一种说法。带正文过来，客户端问一句 {@link MessageBody#preview()} 就有了，
+ * 加消息种类时这里一个字都不用改；带一行现成的字过来，则等于让服务端替客户端决定
+ * 用哪种语言——服主的服务端是英文的，玩家的客户端是中文的，这种事天天发生。
  */
 public record ConversationSummary(UUID id, String name, boolean online,
-                                  String lastText, long lastTime, int unread) {
+                                  Optional<MessageBody> last, long lastTime, int unread) {
 
     /**
      * 玩家名长度上限。原版名最长 16，但这是编解码器的硬上限，超了 writeUtf 直接抛异常断线，
@@ -28,6 +36,9 @@ public record ConversationSummary(UUID id, String name, boolean online,
         return name.length() <= MAX_NAME_LENGTH ? name : name.substring(0, MAX_NAME_LENGTH);
     }
 
+    private static final StreamCodec<ByteBuf, Optional<MessageBody>> LAST_CODEC =
+            ByteBufCodecs.optional(MessageBody.STREAM_CODEC);
+
     public static final StreamCodec<ByteBuf, ConversationSummary> STREAM_CODEC =
             new StreamCodec<>() {
                 @Override
@@ -35,10 +46,10 @@ public record ConversationSummary(UUID id, String name, boolean online,
                     UUID id = UUIDUtil.STREAM_CODEC.decode(buf);
                     String name = ByteBufCodecs.stringUtf8(MAX_NAME_LENGTH).decode(buf);
                     boolean online = ByteBufCodecs.BOOL.decode(buf);
-                    String lastText = ByteBufCodecs.stringUtf8(ChatMessage.MAX_TEXT_LENGTH).decode(buf);
+                    Optional<MessageBody> last = LAST_CODEC.decode(buf);
                     long lastTime = ByteBufCodecs.VAR_LONG.decode(buf);
                     int unread = ByteBufCodecs.VAR_INT.decode(buf);
-                    return new ConversationSummary(id, name, online, lastText, lastTime, unread);
+                    return new ConversationSummary(id, name, online, last, lastTime, unread);
                 }
 
                 @Override
@@ -46,7 +57,7 @@ public record ConversationSummary(UUID id, String name, boolean online,
                     UUIDUtil.STREAM_CODEC.encode(buf, value.id());
                     ByteBufCodecs.stringUtf8(MAX_NAME_LENGTH).encode(buf, value.name());
                     ByteBufCodecs.BOOL.encode(buf, value.online());
-                    ByteBufCodecs.stringUtf8(ChatMessage.MAX_TEXT_LENGTH).encode(buf, value.lastText());
+                    LAST_CODEC.encode(buf, value.last());
                     ByteBufCodecs.VAR_LONG.encode(buf, value.lastTime());
                     ByteBufCodecs.VAR_INT.encode(buf, value.unread());
                 }
@@ -54,6 +65,6 @@ public record ConversationSummary(UUID id, String name, boolean online,
 
     /** 还没聊过的联系人 */
     public static ConversationSummary empty(UUID id, String name, boolean online) {
-        return new ConversationSummary(id, name, online, "", 0L, 0);
+        return new ConversationSummary(id, name, online, Optional.empty(), 0L, 0);
     }
 }

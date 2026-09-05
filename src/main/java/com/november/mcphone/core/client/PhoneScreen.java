@@ -8,7 +8,10 @@ import com.november.mcphone.api.client.ui.PhoneCanvas;
 import com.november.mcphone.core.PhoneLocation;
 import com.november.mcphone.feature.chat.client.ChatAddContact;
 import com.november.mcphone.feature.chat.client.ChatConversation;
+import com.november.mcphone.feature.chat.client.ChatImageCache;
+import com.november.mcphone.feature.chat.client.ChatImageSender;
 import com.november.mcphone.feature.chat.client.ChatList;
+import com.november.mcphone.feature.chat.client.ChatPhotoPicker;
 import com.november.mcphone.feature.gallery.client.Gallery;
 import com.november.mcphone.feature.music.client.MusicPage;
 import com.november.mcphone.feature.notes.client.NoteEditor;
@@ -33,6 +36,7 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -40,7 +44,7 @@ import java.util.UUID;
 /** 手机主屏幕 GUI：管理各页面之间的导航（{@link Mode}）、分发输入、兜住附属页面的异常 */
 public final class PhoneScreen extends Screen {
 
-    public enum Mode { MAIN, SETTINGS, WALLPAPER_PICKER, FONT_COLOR_PICKER, APP_MANAGER, MUSIC_PLAYER, APP_STORE, APP_DETAIL, COMPANION_APPS, ADDON_PAGE, ABOUT, GALLERY, DEVICE_NAME, CHAT, CHAT_ADD_CONTACT, CHAT_CONVERSATION, NOTES, NOTE_EDIT, CLOCK, WEATHER, READER }
+    public enum Mode { MAIN, SETTINGS, WALLPAPER_PICKER, FONT_COLOR_PICKER, APP_MANAGER, MUSIC_PLAYER, APP_STORE, APP_DETAIL, COMPANION_APPS, ADDON_PAGE, ABOUT, GALLERY, DEVICE_NAME, CHAT, CHAT_ADD_CONTACT, CHAT_CONVERSATION, CHAT_PHOTO_PICKER, NOTES, NOTE_EDIT, CLOCK, WEATHER, READER }
 
     private final long openTimeMs;
     private boolean animationDone;
@@ -73,6 +77,7 @@ public final class PhoneScreen extends Screen {
     private final ChatList chatList = new ChatList();
     private final ChatAddContact chatAddContact = new ChatAddContact();
     private final ChatConversation chatConversation = new ChatConversation();
+    private final ChatPhotoPicker chatPhotoPicker = new ChatPhotoPicker();
 
     private final NotesList notesList = new NotesList();
     private final NoteEditor noteEditor = new NoteEditor();
@@ -131,6 +136,9 @@ public final class PhoneScreen extends Screen {
 
         if (this.mode == Mode.CHAT_CONVERSATION) chatConversation.close();
         if (target == Mode.CHAT_CONVERSATION) chatConversation.open(pendingConversationPeer);
+
+        if (this.mode == Mode.CHAT_PHOTO_PICKER) chatPhotoPicker.close();
+        if (target == Mode.CHAT_PHOTO_PICKER) chatPhotoPicker.open();
 
         if (target == Mode.WALLPAPER_PICKER) WallpaperStore.refresh();
 
@@ -274,6 +282,15 @@ public final class PhoneScreen extends Screen {
 
         if (mode == Mode.DEVICE_NAME) {
             navigateTo(Mode.SETTINGS);
+            return true;
+        }
+
+        // 放大看的那张图先关掉：那不是一页，但它盖住了整块内容区，返回键该先收它
+        if (mode == Mode.CHAT_CONVERSATION && chatConversation.dismissViewer()) return true;
+
+        // 选照片是从某个会话点进来的，返回自然回那个会话
+        if (mode == Mode.CHAT_PHOTO_PICKER) {
+            navigateTo(Mode.CHAT_CONVERSATION);
             return true;
         }
 
@@ -428,6 +445,10 @@ public final class PhoneScreen extends Screen {
                     PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
                     PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT,
                     mouseX, mouseY, partialTick, font);
+            case CHAT_PHOTO_PICKER -> chatPhotoPicker.render(g, phoneLeft, phoneTop,
+                    PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
+                    PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT,
+                    mouseX, mouseY, font);
             case NOTES             -> notesList.render(g, phoneLeft, phoneTop,
                     PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
                     PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT, mouseX, mouseY, font);
@@ -670,6 +691,22 @@ public final class PhoneScreen extends Screen {
             }
             case CHAT_CONVERSATION -> {
                 chatConversation.mouseClicked(mx, my, button);
+                if (chatConversation.consumePickPhotoRequest()) {
+                    // 先记下是谁：进选照片那一页会 close 掉会话，对端就没了
+                    pendingConversationPeer = chatConversation.peer();
+                    navigateTo(Mode.CHAT_PHOTO_PICKER);
+                }
+                yield true;
+            }
+            case CHAT_PHOTO_PICKER -> {
+                chatPhotoPicker.mouseClicked(mx, my, button);
+
+                Path photo = chatPhotoPicker.consumeSelection();
+                if (photo != null) {
+                    // 压缩与上传都在后面自己走，这里立刻回会话——玩家要看的是那条消息冒出来
+                    ChatImageSender.send(pendingConversationPeer, photo);
+                    navigateTo(Mode.CHAT_CONVERSATION);
+                }
                 yield true;
             }
             case NOTES -> {
@@ -723,6 +760,7 @@ public final class PhoneScreen extends Screen {
         if (mode == Mode.CHAT && chatList.mouseScrolled(scrollY)) return true;
         if (mode == Mode.CHAT_ADD_CONTACT && chatAddContact.mouseScrolled(scrollY)) return true;
         if (mode == Mode.CHAT_CONVERSATION && chatConversation.mouseScrolled(scrollY)) return true;
+        if (mode == Mode.CHAT_PHOTO_PICKER && chatPhotoPicker.mouseScrolled(scrollY)) return true;
         if (mode == Mode.NOTES && notesList.mouseScrolled(scrollY)) return true;
         if (mode == Mode.READER && bookList.mouseScrolled(scrollY)) return true;
         if (mode == Mode.MUSIC_PLAYER && musicPage.mouseScrolled(scrollY, my)) return true;
@@ -771,6 +809,7 @@ public final class PhoneScreen extends Screen {
         }
         // 相册方向键放最后，免得有人把背包键绑成方向键时被相册吃掉
         if (mode == Mode.GALLERY && gallery.keyPressed(keyCode)) return true;
+        if (mode == Mode.CHAT_PHOTO_PICKER && chatPhotoPicker.keyPressed(keyCode)) return true;
         if (mode == Mode.ADDON_PAGE
                 && callPage(p -> p.keyPressed(keyCode, scanCode, modifiers))) return true;
 
@@ -798,7 +837,12 @@ public final class PhoneScreen extends Screen {
         PhoneSession.save(mode, pendingConversationPeer);
 
         if (mode == Mode.GALLERY) gallery.close();
+        if (mode == Mode.CHAT_PHOTO_PICKER) chatPhotoPicker.close();
         if (mode == Mode.CHAT_CONVERSATION) chatConversation.close();
+
+        // 图片消息的贴图只在手机开着时有用。留到关机才放，是因为"会话 → 列表 → 会话"
+        // 是常有的来回，每次都放掉等于每次回来重下一遍
+        ChatImageCache.clear();
         if (mode == Mode.NOTE_EDIT) noteEditor.close();
 
         // 关手机、被顶掉、退出世界都不经过 navigateTo，IPhonePage.onClose() "一定会被调用"靠这一行兑现

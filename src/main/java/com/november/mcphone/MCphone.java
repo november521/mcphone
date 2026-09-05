@@ -39,11 +39,17 @@ public class MCphone {
         com.november.mcphone.core.ModSounds.SOUND_EVENTS.register(modEventBus);
         modEventBus.addListener(com.november.mcphone.core.net.NetworkHandler::register);
 
-        // 游戏总线，显式挂载：这两条漏了没有任何症状，只是下线玩家的表再也不缩小
+        // 游戏总线，显式挂载：这三条漏了没有任何症状，只是下线玩家的表再也不缩小
         net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener(
                 com.november.mcphone.core.net.RequestThrottle::onPlayerLoggedOut);
         net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener(
                 com.november.mcphone.feature.music.DiscService::onPlayerLoggedOut);
+        net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener(
+                com.november.mcphone.feature.chat.ChatImageUploads::onPlayerLoggedOut);
+
+        // 开服时清掉没有消息认领的图片文件，理由见 ChatImageStore.sweepOrphans
+        net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener(
+                com.november.mcphone.feature.chat.ChatImageStore::onServerStarted);
 
         // SERVER 而非 COMMON：必须由服主一份说了算，且 NeoForge 会同步给客户端供界面藏按钮
         modContainer.registerConfig(net.neoforged.fml.config.ModConfig.Type.SERVER,

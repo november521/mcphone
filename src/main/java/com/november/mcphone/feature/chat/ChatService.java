@@ -1,6 +1,7 @@
 package com.november.mcphone.feature.chat;
 
 import com.november.mcphone.core.ModAttachments;
+import com.november.mcphone.core.ServerConfig;
 import com.november.mcphone.feature.chat.net.ConversationSummary;
 import com.november.mcphone.feature.chat.net.OnlinePlayer;
 import com.november.mcphone.feature.chat.net.Relation;
@@ -12,6 +13,7 @@ import net.minecraft.server.players.GameProfileCache;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -44,7 +46,7 @@ public final class ChatService {
             out.add(tail.last() == null
                     ? ConversationSummary.empty(peer, name, isOnline)
                     : new ConversationSummary(peer, name, isOnline,
-                            tail.last().text(), tail.last().time(), tail.unread()));
+                            Optional.of(tail.last().body()), tail.last().time(), tail.unread()));
         }
 
         // 有消息的按最后一条时间倒序，没聊过的沉底
@@ -60,15 +62,106 @@ public final class ChatService {
         if (!FriendGuard.mayActOn(sender, targetId)) return null;
 
         UUID senderId = sender.getUUID();
-        String text = TextSanitizer.sanitize(rawText, ChatMessage.MAX_TEXT_LENGTH);
+        String text = TextSanitizer.sanitize(rawText, TextBody.MAX_LENGTH);
         if (text.isEmpty()) return null;
 
-        ChatMessage message = new ChatMessage(senderId, text, System.currentTimeMillis());
-        ChatData.get(sender.server).addMessage(senderId, targetId, message);
+        ChatMessage message = ChatMessage.text(senderId, text, System.currentTimeMillis());
+        store(sender, targetId, message);
 
         // 自己发的对自己是已读的，否则对方一回复就把中间这段全算成未读
         markReadAt(sender, targetId, message.time());
         return message;
+    }
+
+    /**
+     * 发图片前的门禁，在【动硬盘之前】问。
+     *
+     * 与 {@link #sendImage} 分开是因为中间隔着一次写文件，而那一次要挪到后台线程去做
+     * （见 ChatNetworking）：先在主线程把该拒的拒掉，别为一个连好友都不是的人写盘。
+     */
+    public static ImageOutcome maySendImage(ServerPlayer sender, UUID targetId) {
+        if (!ServerConfig.allowChatImages()) return ImageOutcome.DISABLED;
+        if (!FriendGuard.mayActOn(sender, targetId)) return ImageOutcome.NOTHING;
+        return ImageOutcome.OK;
+    }
+
+    /**
+     * 图片已经写进图片仓了，这里把对应的那条消息落库。返回落库后的消息，没通过校验返回 null。
+     *
+     * 校验要在这里【再做一遍】：写盘那一下是异步的，其间玩家可能已经把手机丢了、
+     * 或者被对方解除了好友。返回 null 时调用方负责把刚写下的那张图删掉。
+     */
+    public static ChatMessage sendImage(ServerPlayer sender, UUID targetId,
+                                        UUID imageId, int width, int height) {
+        if (maySendImage(sender, targetId) != ImageOutcome.OK) return null;
+
+        UUID senderId = sender.getUUID();
+        ChatMessage message = new ChatMessage(senderId, System.currentTimeMillis(),
+                new ImageBody(imageId, width, height));
+        store(sender, targetId, message);
+        trimImages(sender.server, senderId, targetId);
+
+        markReadAt(sender, targetId, message.time());
+        return message;
+    }
+
+    /**
+     * 这个人能不能要这张图。
+     *
+     * 判据与拉历史消息（{@link #getMessages}）完全一致：得是好友，且这张图确实出现在
+     * 他与对方的那段记录里。不这么判的话，知道一个图片 id 就能把别人的图要走——
+     * id 是随机 UUID，猜不出来，但它会随消息一起下发给会话的另一方，而"另一方"
+     * 可能日后解除了好友。
+     *
+     * 现扫这一段记录（至多 100 条）而不是另建索引，理由与 {@link ChatData#referencedImages}
+     * 那条一样：多一份要保持同步的东西，就多一处会悄悄对不上的地方。
+     */
+    public static boolean mayReadImage(ServerPlayer self, UUID peer, UUID imageId) {
+        if (!FriendData.get(self.server).areFriends(self.getUUID(), peer)) return false;
+
+        for (ChatMessage m : ChatData.get(self.server).getMessages(self.getUUID(), peer)) {
+            if (m.body() instanceof ImageBody image && image.image().equals(imageId)) return true;
+        }
+        return false;
+    }
+
+    /** 落库；被 100 条上限挤出去的若是图片消息，它那张图跟着删——没有消息认领的像素只是垃圾 */
+    private static void store(ServerPlayer sender, UUID targetId, ChatMessage message) {
+        List<ChatMessage> evicted =
+                ChatData.get(sender.server).addMessage(sender.getUUID(), targetId, message);
+
+        for (ChatMessage old : evicted) {
+            if (old.body() instanceof ImageBody image) {
+                ChatImageStore.delete(sender.server, image.image());
+            }
+        }
+    }
+
+    /**
+     * 一对会话里的图超过上限时，把最旧的那几张的像素删掉。
+     *
+     * 只删像素、不删消息：那条消息还在记录里，界面显示成「图片已过期」。删掉整条的话，
+     * 聊天记录会凭空少几行，而少的是什么谁也不知道——玩家只会觉得"我记得这儿说过话"。
+     */
+    private static void trimImages(MinecraftServer server, UUID a, UUID b) {
+        List<ChatMessage> messages = ChatData.get(server).getMessages(a, b);
+
+        int images = 0;
+        for (ChatMessage m : messages) {
+            if (m.body() instanceof ImageBody) images++;
+        }
+
+        int excess = images - ChatImage.MAX_IMAGES_PER_CONVERSATION;
+        if (excess <= 0) return;
+
+        // 列表是时间升序，从头删就是先删最旧的。已经过期的再删一次是无害的空操作
+        for (ChatMessage m : messages) {
+            if (excess <= 0) break;
+            if (m.body() instanceof ImageBody image) {
+                ChatImageStore.delete(server, image.image());
+                excess--;
+            }
+        }
     }
 
     /** 非好友一律返回空，免得解除好友后还能翻旧账 */

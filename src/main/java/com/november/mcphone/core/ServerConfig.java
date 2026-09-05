@@ -32,6 +32,9 @@ public final class ServerConfig {
     /** 允不允许好友之间互相传送 */
     public static final ModConfigSpec.BooleanValue ALLOW_FRIEND_TELEPORT;
 
+    /** 允不允许在美西螈里发图片 */
+    public static final ModConfigSpec.BooleanValue ALLOW_CHAT_IMAGES;
+
     static {
         ModConfigSpec.Builder builder = new ModConfigSpec.Builder();
 
@@ -48,6 +51,18 @@ public final class ServerConfig {
                 .translation("mcphone.config.allow_friend_teleport")
                 .define("allowFriendTeleport", true);
 
+        ALLOW_CHAT_IMAGES = builder
+                .comment("允不允许玩家在美西螈里把相册里的照片发给好友。",
+                        "关掉之后：输入栏左边那个图片键不再显示，服务端也会拒收上传的图。",
+                        "已经发过的图不会被删，仍然看得见——关掉的是「再发新的」。",
+                        "为什么会想关：图片是存进存档目录的（mcphone/chat-images/），",
+                        "一张至多 96 KB，每对会话最多留 20 张。人多的服务器请自行算一下硬盘。",
+                        "Allow sending photos from the Gallery to friends in the Axolotl app.",
+                        "When off, the image button is hidden and the server rejects uploads.",
+                        "Images already sent stay readable; they are stored under the world folder.")
+                .translation("mcphone.config.allow_chat_images")
+                .define("allowChatImages", true);
+
         builder.pop();
         SPEC = builder.build();
     }
@@ -61,5 +76,10 @@ public final class ServerConfig {
      */
     public static boolean allowFriendTeleport() {
         return !SPEC.isLoaded() || ALLOW_FRIEND_TELEPORT.get();
+    }
+
+    /** 允不允许发图片。没加载时返回 true，理由同 {@link #allowFriendTeleport()} */
+    public static boolean allowChatImages() {
+        return !SPEC.isLoaded() || ALLOW_CHAT_IMAGES.get();
     }
 }

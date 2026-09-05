@@ -224,9 +224,10 @@ public final class ChatList {
             preview = Component.translatable("mcphone.chat.teleport_hint").getString();
             previewColor = FontPalette.link();
         } else {
-            preview = c.lastText().isEmpty()
-                    ? Component.translatable("mcphone.chat.no_message").getString()
-                    : c.lastText();
+            // 显示成什么由那条消息自己说（文本是正文，图片是「[图片]」），见 MessageBody.preview
+            preview = c.last().isPresent()
+                    ? c.last().get().preview().getString()
+                    : Component.translatable("mcphone.chat.no_message").getString();
             previewColor = colorPreview();
         }
         g.drawString(font, GuiUtil.truncate(font, preview, w - (nameX - x) - tpW),

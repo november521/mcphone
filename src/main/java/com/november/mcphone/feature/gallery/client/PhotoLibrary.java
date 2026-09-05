@@ -1,18 +1,13 @@
 package com.november.mcphone.feature.gallery.client;
 
 import com.mojang.blaze3d.platform.NativeImage;
+import com.november.mcphone.core.client.ImageCodec;
 import net.minecraft.Util;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.renderer.texture.DynamicTexture;
-import net.minecraft.resources.ResourceLocation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.awt.Graphics2D;
-import java.awt.RenderingHints;
-import java.awt.image.BufferedImage;
 import java.io.IOException;
-import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -23,7 +18,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import javax.imageio.ImageIO;
 
 /**
  * 相册照片库 —— 扫描 <游戏目录>/screenshots/，按需提供缩略图。
@@ -110,15 +104,6 @@ public final class PhotoLibrary {
         String cacheKey() { return fileName + ":" + lastModified; }
     }
 
-    /**
-     * 一张已就绪的缩略图贴图。
-     *
-     * 必须带上宽高：把缩略图等比塞进格子要用 GuiGraphics 的 11 参 blit，
-     * 而那个重载需要纹理的真实尺寸才能算出源区域。缩略图是等比缩小的，
-     * 宽高比各不相同（截图有 16:9 也有窗口化的怪比例），不能写死。
-     */
-    public record Thumb(ResourceLocation texture, int width, int height) {}
-
     /** 已扫描到的照片，新的在前 */
     private static final List<Photo> PHOTOS = new ArrayList<>();
 
@@ -130,13 +115,13 @@ public final class PhotoLibrary {
      * 访问序 LinkedHashMap：每次 thumbnail() 命中都会把该项移到最新，
      * 于是"当前页"始终是热的，被逐出的必然是翻过去很久的旧页。
      */
-    private static final Map<String, Thumb> THUMBNAILS =
+    private static final Map<String, ImageCodec.Texture> THUMBNAILS =
             new LinkedHashMap<>(MIN_CACHED + 1, 0.75f, true) {
                 @Override
-                protected boolean removeEldestEntry(Map.Entry<String, Thumb> eldest) {
+                protected boolean removeEldestEntry(Map.Entry<String, ImageCodec.Texture> eldest) {
                     if (size() <= maxCached) return false;
                     // 逐出的同时归还显存，否则贴图会一直留在 TextureManager 里
-                    Minecraft.getInstance().getTextureManager().release(eldest.getValue().texture());
+                    ImageCodec.release(eldest.getValue());
                     return true;
                 }
             };
@@ -146,9 +131,6 @@ public final class PhotoLibrary {
 
     /** 加载失败的缓存键，避免每帧重试同一个坏文件 */
     private static final Set<String> FAILED = new HashSet<>();
-
-    /** 贴图 ResourceLocation 的自增序号，保证路径唯一且字符合法 */
-    private static int textureSeq = 0;
 
     /**
      * 缓存世代，每次 releaseAll 递增。
@@ -224,11 +206,11 @@ public final class PhotoLibrary {
      * 加载完成后的某一帧自然就拿到贴图了。每帧调用是安全的：
      * 加载中与失败的都有集合挡着，不会重复提交。
      */
-    public static Thumb thumbnail(Photo photo) {
+    public static ImageCodec.Texture thumbnail(Photo photo) {
         if (photo == null) return null;
 
         String key = photo.cacheKey();
-        Thumb cached = THUMBNAILS.get(key);   // 命中即刷新 LRU 位置
+        ImageCodec.Texture cached = THUMBNAILS.get(key);   // 命中即刷新 LRU 位置
         if (cached != null) return cached;
 
         if (FAILED.contains(key) || LOADING.contains(key)) return null;
@@ -258,32 +240,21 @@ public final class PhotoLibrary {
                 return;
             }
 
-            THUMBNAILS.put(key, upload(image, "photo_thumb_"));
+            THUMBNAILS.put(key, ImageCodec.upload(image, "photo_thumb_"));
         });
     }
 
     /**
      * 后台读盘缩放，完成后回到渲染线程交给 onReady（失败时传 null）。
-     * 缩略图与大图预览共用这条路径。
+     * 缩略图与大图预览共用这条路径。读、缩、转都在 {@link ImageCodec} 里，
+     * 与美西螈收图片消息那条路共用同一份。
      */
     private static void submit(Path path, int maxSide, java.util.function.Consumer<NativeImage> onReady) {
         Util.backgroundExecutor().execute(() -> {
-            NativeImage image = readAndScale(path, maxSide);
+            NativeImage image = ImageCodec.readAndScale(path, maxSide);
             // 回到渲染线程：贴图上传是 GL 调用
             Minecraft.getInstance().execute(() -> onReady.accept(image));
         });
-    }
-
-    /** 把已就绪的 NativeImage 注册成贴图。必须在渲染线程调用。 */
-    private static Thumb upload(NativeImage image, String namePrefix) {
-        ResourceLocation loc = ResourceLocation.fromNamespaceAndPath(
-                "mcphone", namePrefix + (textureSeq++));
-        // 尺寸要在 register 之前取：DynamicTexture 接管 NativeImage 后
-        // 不该再碰它
-        int w = image.getWidth();
-        int h = image.getHeight();
-        Minecraft.getInstance().getTextureManager().register(loc, new DynamicTexture(image));
-        return new Thumb(loc, w, h);
     }
 
     //  大图预览（单张查看用）
@@ -301,7 +272,7 @@ public final class PhotoLibrary {
     private static String previewKey = null;
 
     /** 当前预览贴图，加载完成前为 null */
-    private static Thumb preview = null;
+    private static ImageCodec.Texture preview = null;
 
     /**
      * 取一张照片的大图预览。同一时刻只保留一张——
@@ -310,7 +281,7 @@ public final class PhotoLibrary {
      * 未就绪时返回 null，调用方可以先拿缩略图放大顶着，
      * 这样翻看时不会出现空白。
      */
-    public static Thumb preview(Photo photo) {
+    public static ImageCodec.Texture preview(Photo photo) {
         if (photo == null) return null;
 
         String key = photo.cacheKey();
@@ -328,7 +299,7 @@ public final class PhotoLibrary {
                 image.close();
                 return;
             }
-            preview = upload(image, "photo_view_");
+            preview = ImageCodec.upload(image, "photo_view_");
         });
         return null;
     }
@@ -336,7 +307,7 @@ public final class PhotoLibrary {
     /** 释放预览贴图。退出单张查看、或切换到另一张时调用。 */
     public static void releasePreview() {
         if (preview != null) {
-            Minecraft.getInstance().getTextureManager().release(preview.texture());
+            ImageCodec.release(preview);
             preview = null;
         }
         // 键一并清掉：在飞的那次加载回来时会发现键对不上，自行丢弃
@@ -362,93 +333,11 @@ public final class PhotoLibrary {
         }
 
         // 连带回收这张的贴图：文件都没了，留着缓存纯占显存
-        Thumb stale = THUMBNAILS.remove(photo.cacheKey());
-        if (stale != null) Minecraft.getInstance().getTextureManager().release(stale.texture());
+        ImageCodec.release(THUMBNAILS.remove(photo.cacheKey()));
         if (photo.cacheKey().equals(previewKey)) releasePreview();
 
         refresh();
         return true;
-    }
-
-    /**
-     * 读盘 → 缩小 → 转成 NativeImage。全程在后台线程，失败返回 null。
-     */
-    private static NativeImage readAndScale(Path path, int maxSide) {
-        try (InputStream in = Files.newInputStream(path)) {
-            BufferedImage src = ImageIO.read(in);
-            if (src == null) {
-                LOGGER.warn("无法读取照片: {}", path.getFileName());
-                return null;
-            }
-
-            BufferedImage thumb = scaleDown(src, maxSide);
-            int w = thumb.getWidth();
-            int h = thumb.getHeight();
-
-            NativeImage out = new NativeImage(w, h, false);
-            for (int y = 0; y < h; y++) {
-                for (int x = 0; x < w; x++) {
-                    int argb = thumb.getRGB(x, y);
-                    int a = (argb >> 24) & 0xFF;
-                    int r = (argb >> 16) & 0xFF;
-                    int g = (argb >> 8) & 0xFF;
-                    int b = argb & 0xFF;
-                    // ARGB → ABGR（NativeImage 的内部字节序）
-                    out.setPixelRGBA(x, y, (a << 24) | (b << 16) | (g << 8) | r);
-                }
-            }
-            return out;
-
-        } catch (IOException e) {
-            LOGGER.warn("加载照片失败: {} - {}", path.getFileName(), e.getMessage());
-            return null;
-        } catch (OutOfMemoryError e) {
-            // 超大截图（如 4K 全景）可能撑爆堆，吞掉当作加载失败，
-            // 总比整个游戏崩掉强
-            LOGGER.warn("照片过大，内存不足: {}", path.getFileName());
-            return null;
-        }
-    }
-
-    /**
-     * 等比缩小到长边不超过 maxSide。
-     *
-     * 逐次减半而不是一步到位：从 1920 直接 bilinear 缩到 96，每个目标像素
-     * 只采样了源图 2×2 的范围，等于把 99% 的像素直接扔掉，结果全是噪点。
-     * 每次只缩一半则相邻两级的 2×2 采样恰好覆盖全部像素，等效于逐级均值，
-     * 缩略图就干净了。
-     */
-    private static BufferedImage scaleDown(BufferedImage src, int maxSide) {
-        int w = src.getWidth();
-        int h = src.getHeight();
-        if (w <= maxSide && h <= maxSide) return src;
-
-        // 目标尺寸：等比缩放，且至少 1 像素
-        float ratio = (float) maxSide / Math.max(w, h);
-        int targetW = Math.max(1, Math.round(w * ratio));
-        int targetH = Math.max(1, Math.round(h * ratio));
-
-        BufferedImage cur = src;
-        int curW = w, curH = h;
-
-        while (curW > targetW * 2 && curH > targetH * 2) {
-            curW = Math.max(targetW, curW / 2);
-            curH = Math.max(targetH, curH / 2);
-            cur = redraw(cur, curW, curH);
-        }
-        return redraw(cur, targetW, targetH);
-    }
-
-    private static BufferedImage redraw(BufferedImage src, int w, int h) {
-        BufferedImage dst = new BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB);
-        Graphics2D g2 = dst.createGraphics();
-        g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION,
-                RenderingHints.VALUE_INTERPOLATION_BILINEAR);
-        g2.setRenderingHint(RenderingHints.KEY_RENDERING,
-                RenderingHints.VALUE_RENDER_QUALITY);
-        g2.drawImage(src, 0, 0, w, h, null);
-        g2.dispose();
-        return dst;
     }
 
     //  释放
@@ -460,8 +349,7 @@ public final class PhotoLibrary {
      * 正在加载中的不作处理：世代一变，它们完成时会自行丢弃。
      */
     public static void releaseAll() {
-        var tm = Minecraft.getInstance().getTextureManager();
-        for (Thumb t : THUMBNAILS.values()) tm.release(t.texture());
+        for (ImageCodec.Texture t : THUMBNAILS.values()) ImageCodec.release(t);
         THUMBNAILS.clear();
         FAILED.clear();
         releasePreview();

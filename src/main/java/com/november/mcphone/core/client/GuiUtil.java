@@ -92,6 +92,25 @@ public final class GuiUtil {
         RenderSystem.disableBlend();
     }
 
+    /**
+     * 把一张贴图等比缩放、居中画进给定的方框。
+     *
+     * 相册的缩略图格子、单张查看的大图、美西螈里的图片气泡都要这么画：外来的图什么比例
+     * 都有（截图有 16:9，也有窗口化的怪比例），拉满方框会变形，而"等比 + 居中"这几行
+     * 算式每写一次都有算错一处的机会。
+     */
+    public static void drawFitted(GuiGraphics g, ImageCodec.Texture texture,
+                                  int x, int y, int boxW, int boxH) {
+        if (texture == null || boxW <= 0 || boxH <= 0) return;
+
+        float scale = Math.min((float) boxW / texture.width(), (float) boxH / texture.height());
+        int w = Math.max(1, Math.round(texture.width() * scale));
+        int h = Math.max(1, Math.round(texture.height() * scale));
+
+        drawTexture(g, texture.location(), x + (boxW - w) / 2, y + (boxH - h) / 2, w, h,
+                texture.width(), texture.height());
+    }
+
     //  物品图标
 
     /**

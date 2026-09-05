@@ -1,7 +1,7 @@
 package com.november.mcphone.feature.chat.net;
 
 import com.november.mcphone.MCphone;
-import com.november.mcphone.feature.chat.ChatMessage;
+import com.november.mcphone.feature.chat.TextBody;
 import io.netty.buffer.ByteBuf;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.network.codec.ByteBufCodecs;
@@ -21,7 +21,7 @@ public record SendChatMessagePacket(UUID target, String text) implements CustomP
     public static final StreamCodec<ByteBuf, SendChatMessagePacket> STREAM_CODEC =
             StreamCodec.composite(
                     UUIDUtil.STREAM_CODEC, SendChatMessagePacket::target,
-                    ByteBufCodecs.stringUtf8(ChatMessage.MAX_TEXT_LENGTH), SendChatMessagePacket::text,
+                    ByteBufCodecs.stringUtf8(TextBody.MAX_LENGTH), SendChatMessagePacket::text,
                     SendChatMessagePacket::new
             );
 

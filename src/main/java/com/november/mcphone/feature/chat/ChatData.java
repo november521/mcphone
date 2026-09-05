@@ -10,8 +10,10 @@ import net.minecraft.world.level.saveddata.SavedData;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
 import java.util.UUID;
 
@@ -63,16 +65,42 @@ public class ChatData extends SavedData {
         return list == null ? List.of() : List.copyOf(list);
     }
 
-    /** 超出上限时丢弃最旧的 */
-    public void addMessage(UUID from, UUID to, ChatMessage message) {
+    /**
+     * 超出上限时丢弃最旧的，被丢掉的那几条一并返回。
+     *
+     * 返回而不是自己处理：被挤出去的如果是图片消息，它那张图也该从图片仓里删掉，
+     * 而"什么时候删图"是业务上的事（{@link ChatService}），不该由存储层替它决定。
+     * 绝大多数情况返回的是空列表。
+     */
+    public List<ChatMessage> addMessage(UUID from, UUID to, ChatMessage message) {
         List<ChatMessage> list =
                 conversations.computeIfAbsent(conversationKey(from, to), k -> new ArrayList<>());
         list.add(message);
 
+        List<ChatMessage> evicted = List.of();
         while (list.size() > MAX_MESSAGES_PER_CONVERSATION) {
-            list.remove(0);
+            if (evicted.isEmpty()) evicted = new ArrayList<>(1);
+            evicted.add(list.remove(0));
         }
         setDirty();
+        return evicted;
+    }
+
+    /**
+     * 全服所有消息引用到的图片 id。只有服务器启动时清理孤儿文件用得上，见
+     * {@link ChatImageStore#sweepOrphans}。
+     *
+     * 走一遍全部会话，在启动时做一次是划算的：另存一份"图片 → 会话"的索引，就要保证它
+     * 与消息列表永远一致，而那正是最容易被下一次改动悄悄破坏的东西。
+     */
+    public Set<UUID> referencedImages() {
+        Set<UUID> out = new HashSet<>();
+        for (List<ChatMessage> list : conversations.values()) {
+            for (ChatMessage m : list) {
+                if (m.body() instanceof ImageBody image) out.add(image.image());
+            }
+        }
+        return out;
     }
 
     /** 会话列表那一行要的两样东西；last 在还没聊过时为 null */

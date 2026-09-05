@@ -65,6 +65,20 @@ public final class ChatClientCache {
         messageListener = listener;
     }
 
+    /**
+     * 图片像素到了。同样走监听器：解码与贴图是客户端的事，本类连 import 都不能有。
+     * data 为空数组表示服务端说这张图没了，见 ChatImageDataPacket。
+     */
+    private static BiConsumer<UUID, byte[]> imageListener = (image, data) -> {};
+
+    public static void setImageListener(BiConsumer<UUID, byte[]> listener) {
+        imageListener = listener;
+    }
+
+    static void onImageData(UUID image, byte[] data) {
+        imageListener.accept(image, data);
+    }
+
     /** 追加与通知的条件恰好相反（正看着才追加，没看着才提醒），放一起免得改一漏一 */
     static void onNewMessage(UUID peer, ChatMessage message) {
         appendMessage(peer, message);

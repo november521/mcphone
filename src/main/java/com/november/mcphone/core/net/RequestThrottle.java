@@ -50,6 +50,19 @@ import java.util.concurrent.ConcurrentHashMap;
  *                 停止还要再发一轮。一秒二十次的话，代价落在周围每一个
  *                 玩家身上，而不在按的那个人身上
  *
+ * 第三个例外：发图片
+ *
+ * 也是"做事情"，两点同样对得上，而且比前两个更硬：
+ *
+ *   丢了看得见 —— 图没出现在会话里，一眼就知道没成；而且这一条不是静默丢弃，
+ *                 服务端会回一句"发得太快了"（见 ImageOutcome.TOO_FAST）
+ *   单次很贵   —— 一张图要写一个几十 KB 的文件进存档目录，还要原样发给收件人。
+ *                 一秒二十张的话，那是每秒往硬盘上写将近 2 MB，且永久占着——
+ *                 图片是留在存档里的，不像传送那样做完就完了
+ *
+ * 它的间隔取 2 秒，比另外两档都长：这不是"防手快"，是防有人拿聊天当上传通道。
+ * 正常玩家选一张图、点一下、看它出现，本来就不止 2 秒。
+ *
  * 它挡的是发包频率，【不是】玩法上的冷却。真要给传送或唱片加冷却是另一件
  * 事，该由玩法层面决定，不该藏在一个叫"限流"的类里。
  *
@@ -104,7 +117,11 @@ public final class RequestThrottle {
         /** 唱片仓的状态查询。打开音乐 App 时来一次 */
         DISC_STATE,
         /** 唱片仓上的按键：放入、取出、播放停止、开背包。理由见类注释 */
-        DISC_ACTION(PRESS_INTERVAL_MS);
+        DISC_ACTION(PRESS_INTERVAL_MS),
+        /** 会话里要图片的像素。拉取类，但一次要好几张，见 RequestChatImagePacket */
+        CHAT_IMAGE_DATA,
+        /** 发一张图。"做事情"的包，第三个例外，理由见类注释 */
+        CHAT_IMAGE(IMAGE_INTERVAL_MS);
 
         private final long minIntervalMs;
 
@@ -122,6 +139,9 @@ public final class RequestThrottle {
 
     /** 玩家按一下才有一次的那些，间隔短一些，理由见类注释 */
     private static final long PRESS_INTERVAL_MS = 250L;
+
+    /** 发图片两次之间至少隔这么久，理由见类注释里的第三个例外 */
+    private static final long IMAGE_INTERVAL_MS = 2000L;
 
     /**
      * 每个玩家上次各类请求的时刻。

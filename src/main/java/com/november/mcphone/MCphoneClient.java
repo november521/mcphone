@@ -9,6 +9,8 @@ import com.november.mcphone.core.client.PhoneSession;
 import com.november.mcphone.core.client.PhoneSkin;
 import com.november.mcphone.core.menu.ModMenus;
 import com.november.mcphone.feature.camera.client.CameraHandler;
+import com.november.mcphone.feature.chat.client.ChatImageCache;
+import com.november.mcphone.feature.chat.client.ChatImageSender;
 import com.november.mcphone.feature.chat.client.ChatNotifier;
 import com.november.mcphone.feature.chat.net.ChatClientCache;
 import com.november.mcphone.feature.music.client.DiscBayScreen;
@@ -67,6 +69,8 @@ public class MCphoneClient {
         NeoForge.EVENT_BUS.addListener(
                 (ClientPlayerNetworkEvent.LoggingOut event) -> {
                     ChatClientCache.clear();
+                    ChatImageCache.clear();
+                    ChatImageSender.clear();
                     NotesClientCache.clear();
                     StoreClientCache.clear();
                     PhoneScreenRegistry.unloadWorld();
@@ -99,6 +103,7 @@ public class MCphoneClient {
                 PhoneScreenRegistry::enforcePurchases);
 
         ChatClientCache.setMessageListener(ChatNotifier::onMessage);
+        ChatClientCache.setImageListener(ChatImageCache::accept);
     }
 
     /** 资源重载时清空换肤贴图的探测缓存，否则 F3+T 或换资源包后画的还是旧贴图，且不报错。 */

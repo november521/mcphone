@@ -153,7 +153,7 @@ public final class PhoneToast implements Toast {
      * 渲染时的 truncate 负责，这里只是别让它做无用功。
      */
     public static String preview(ChatMessage message) {
-        String raw = message.text();
+        String raw = message.body().preview().getString();
         return raw.length() <= PREVIEW_MAX_CHARS ? raw : raw.substring(0, PREVIEW_MAX_CHARS);
     }
 
