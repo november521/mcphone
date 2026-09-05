@@ -72,8 +72,8 @@ public final class PhoneSkin {
         /** 会话列表在线好友行的"传送"小图标。建议 7×7，按实际绘制尺寸画（不做平滑缩放）；缺图时画 → 字符 */
         CHAT_TELEPORT("chat/teleport", "chat_teleport"),
 
-        /** 会话界面输入栏左边的"发图片"键。建议 9×9，与音乐页那几个键等大；缺图时画 ▣ 字符 */
-        CHAT_IMAGE("chat/image", "chat_image"),
+        /** 会话界面输入栏左边那个「+」（点开是图片 / 表情）。建议 9×9，与音乐页那几个键等大；缺图时画 + 字符 */
+        CHAT_ATTACH("chat/attach", "chat_attach"),
 
         /** 收到消息的通知底。建议 160×32（原版通知槽位尺寸） */
         TOAST_BG("phone/toast", "toast_bg"),

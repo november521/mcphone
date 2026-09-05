@@ -1,6 +1,7 @@
 package com.november.mcphone.feature.chat.net;
 
 import com.november.mcphone.feature.chat.ChatImageStore;
+import com.november.mcphone.feature.chat.ConversationKey;
 import com.november.mcphone.feature.chat.ChatImageUploads;
 import com.november.mcphone.feature.chat.ChatMessage;
 import com.november.mcphone.feature.chat.ChatService;
@@ -227,7 +228,9 @@ public final class ChatNetworking {
         MinecraftServer server = sender.server;
 
         Util.backgroundExecutor().execute(() -> {
-            UUID imageId = ChatImageStore.write(server, upload.png());
+            // 按内容 + 会话算 id：同一张表情反复发只存一份，见 ChatImageStore.write
+            UUID imageId = ChatImageStore.write(server,
+                    ConversationKey.of(sender.getUUID(), upload.target()), upload.png());
 
             server.execute(() -> {
                 if (imageId == null) {
@@ -239,8 +242,10 @@ public final class ChatNetworking {
                         imageId, upload.width(), upload.height());
                 if (message == null) {
                     // 写盘这一会儿工夫里关系变了（解除好友、手机丢了）：把刚落地的那张图收回去，
-                    // 否则它就是一张永远没有消息认领的孤儿
-                    ChatImageStore.delete(server, imageId);
+                    // 否则它就是一张永远没有消息认领的孤儿。走"没人认领才删"那条——
+                    // 同一张图先前可能已经发过一次，那次的消息还在
+                    ChatService.deleteImageIfUnreferenced(server,
+                            sender.getUUID(), upload.target(), imageId);
                     return;
                 }
 

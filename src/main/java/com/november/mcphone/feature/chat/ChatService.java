@@ -12,6 +12,7 @@ import net.minecraft.server.players.GameProfileCache;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -132,9 +133,24 @@ public final class ChatService {
 
         for (ChatMessage old : evicted) {
             if (old.body() instanceof ImageBody image) {
-                ChatImageStore.delete(sender.server, image.image());
+                deleteImageIfUnreferenced(sender.server, sender.getUUID(), targetId, image.image());
             }
         }
+    }
+
+    /**
+     * 没有别的消息还认领着这张图，才真的删。
+     *
+     * 图片按内容存（见 {@link ChatImageStore#write}），同一张表情反复发落在同一个文件上，
+     * 于是一条消息被挤出去【不等于】那张图没人要了——直接删的话，前面那几条会一起变成
+     * 「图片已过期」。
+     */
+    public static void deleteImageIfUnreferenced(MinecraftServer server, UUID a, UUID b,
+                                                 UUID imageId) {
+        for (ChatMessage m : ChatData.get(server).getMessages(a, b)) {
+            if (m.body() instanceof ImageBody image && image.image().equals(imageId)) return;
+        }
+        ChatImageStore.delete(server, imageId);
     }
 
     /**
@@ -146,21 +162,24 @@ public final class ChatService {
     private static void trimImages(MinecraftServer server, UUID a, UUID b) {
         List<ChatMessage> messages = ChatData.get(server).getMessages(a, b);
 
-        int images = 0;
+        // 数的是【不同的图】而不是图片消息：同一张表情发二十次只该占一个名额，它也只占一个文件。
+        // 插入序的 map + 先 remove 再 put，于是键的顺序就是"最后一次用到"的先后
+        LinkedHashMap<UUID, Boolean> lastUse = new LinkedHashMap<>();
         for (ChatMessage m : messages) {
-            if (m.body() instanceof ImageBody) images++;
+            if (m.body() instanceof ImageBody image) {
+                lastUse.remove(image.image());
+                lastUse.put(image.image(), Boolean.TRUE);
+            }
         }
 
-        int excess = images - ChatImage.MAX_IMAGES_PER_CONVERSATION;
+        int excess = lastUse.size() - ChatImage.MAX_IMAGES_PER_CONVERSATION;
         if (excess <= 0) return;
 
-        // 列表是时间升序，从头删就是先删最旧的。已经过期的再删一次是无害的空操作
-        for (ChatMessage m : messages) {
+        // 从头删就是先删"最久没再发过的那张"。已经过期的再删一次是无害的空操作
+        for (UUID imageId : lastUse.keySet()) {
             if (excess <= 0) break;
-            if (m.body() instanceof ImageBody image) {
-                ChatImageStore.delete(server, image.image());
-                excess--;
-            }
+            ChatImageStore.delete(server, imageId);
+            excess--;
         }
     }
 

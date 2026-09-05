@@ -7,8 +7,12 @@ import net.neoforged.neoforge.event.server.ServerStartedEvent;
 import net.minecraft.world.level.storage.LevelResource;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.Set;
 import java.util.UUID;
 
@@ -65,17 +69,47 @@ public final class ChatImageStore {
      * 收下一张图，返回分配给它的 id；写不进去返回 null。
      *
      * id 由服务端生成，不采信客户端：让客户端指定 id，等于允许它覆盖别人的图。
+     *
+     * 按内容算 id —— 同一张图反复发只存一份
+     *
+     * id 是 SHA-256(会话键 + 图片字节) 的前 16 个字节。于是同一对好友之间反复发同一张表情，
+     * 算出来的是同一个 id、落在同一个文件上：第二次起连写盘都省了，也只占"每对会话 20 张"
+     * 里的一个名额。表情就是靠这一条才发得起——它天生要被反复发。
+     *
+     * 为什么把会话键也拌进去
+     *
+     * 不拌的话，同一张图在全服只有一份，删它就得先确认【全服】没有别的消息还认领着它，
+     * 那是一次全表扫描，而删除发生在每次发图之后。拌进会话键则每对会话各存一份，删之前
+     * 只要看这一段记录（至多 100 条）—— 代价是几十 KB 的重复，换来的是删除永远便宜。
      */
-    public static UUID write(MinecraftServer server, byte[] png) {
-        UUID id = UUID.randomUUID();
+    public static UUID write(MinecraftServer server, ConversationKey conversation, byte[] png) {
+        UUID id = idFor(conversation, png);
         Path path = file(server, id);
         try {
+            // 已经有了就直接用：同一张图、同一对会话，内容一样就是同一个文件
+            if (Files.isRegularFile(path)) return id;
+
             Files.createDirectories(path.getParent());
             Files.write(path, png);
             return id;
         } catch (IOException e) {
             MCphone.LOGGER.error("[MCphone] 图片写入失败: {}", e.getMessage());
             return null;
+        }
+    }
+
+    /** SHA-256(会话键 + 字节) 的前 16 字节。SHA-256 而不是 UUID.nameUUIDFromBytes（那是 MD5） */
+    private static UUID idFor(ConversationKey conversation, byte[] png) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            digest.update(conversation.toStorageKey().getBytes(StandardCharsets.UTF_8));
+            digest.update(png);
+            ByteBuffer hash = ByteBuffer.wrap(digest.digest());
+            return new UUID(hash.getLong(), hash.getLong());
+        } catch (NoSuchAlgorithmException e) {
+            // SHA-256 是 Java 平台必须实现的算法，走不到这儿；真走到了也不能让一条消息把服务器带走
+            MCphone.LOGGER.error("[MCphone] 取不到 SHA-256，退回随机 id: {}", e.getMessage());
+            return UUID.randomUUID();
         }
     }
 

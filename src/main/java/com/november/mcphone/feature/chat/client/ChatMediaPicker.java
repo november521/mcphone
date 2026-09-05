@@ -1,9 +1,11 @@
 package com.november.mcphone.feature.chat.client;
 
 import com.november.mcphone.core.client.FontPalette;
+import com.november.mcphone.core.client.GuiUtil;
+import com.november.mcphone.core.client.ImageFolder;
 import com.november.mcphone.core.client.PhoneTheme;
 import com.november.mcphone.feature.gallery.client.PhotoGridPainter;
-import com.november.mcphone.feature.gallery.client.PhotoLibrary;
+import net.minecraft.Util;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
@@ -12,52 +14,77 @@ import java.nio.file.Path;
 import java.util.List;
 
 /**
- * 「选一张照片发给他」那一页：相册的网格，点一下就发。
+ * 「挑一张发出去」的那一页 —— 相册与表情共用一个类，只是盯着不同的目录。
  *
- * 为什么不直接复用相册那一页
+ * 为什么不复用相册那一页
  *
  * 相册是"看自己的照片"：点开是单张查看，还带一个不可撤销的删除键。这一页是"挑一张"，
  * 点一下就该发出去——同一个手势在两页里必须是两件事，硬合成一页就要多一个模式开关，
  * 而那个开关会渗进相册的每一处交互。
  *
- * 真正该共用的是网格本身（格子多大、几列、怎么翻页），那部分在 {@link PhotoGridPainter}，
- * 照片的扫描与缩略图缓存在 {@link PhotoLibrary}，两边用的是同一份。
+ * 为什么照片与表情又是同一个类
+ *
+ * 它们要的东西一模一样：一格一格的缩略图、翻页、点一下发出去。不同的只有目录、标题、
+ * 以及表情那一页多一个「打开文件夹」——那点不同值不得复制一份两百行的网格代码。
+ * 网格本身在 {@link PhotoGridPainter}，目录与缩略图缓存在 {@link ImageFolder}。
  *
  * 选中之后本页只是把路径交出去（{@link #consumeSelection()}），发不发、发给谁由
  * PhoneScreen 决定——它才知道刚才是从哪个会话点进来的。
  */
-public final class ChatPhotoPicker {
+public final class ChatMediaPicker {
 
     private static final int PAD = 6;
+
+    /** 文字键的命中区四边各放宽多少，与别处的文字键同一个数 */
+    private static final int HIT_PAD = 2;
+
+    private final ImageFolder folder;
+    private final String titleKey;
+    private final String emptyKey;
+
+    /** 表情那一页给一个「打开文件夹」；相册不给——照片本来就是游戏自己写进去的 */
+    private final boolean openFolderButton;
 
     private int page;
 
     /** 上一帧算出的每页容量，供点击与翻页复用 */
     private int perPage = PhotoGridPainter.COLS * 4;
 
-    /** 本帧鼠标悬停的照片下标（全局下标，非页内），-1 为无 */
+    /** 本帧鼠标悬停的下标（全局下标，非页内），-1 为无 */
     private int hoveredIdx = -1;
 
     /** 本帧鼠标是否悬停在翻页箭头上：-1 上一页，1 下一页，0 都不是 */
     private int hoveredPager;
 
+    private boolean openFolderHovered;
+
     /** 玩家选中的那张，等 PhoneScreen 取走 */
     private Path selected;
 
-    /** 进来时重扫目录，这样刚拍的照片立刻可见 */
+    public ChatMediaPicker(ImageFolder folder, String titleKey, String emptyKey,
+                           boolean openFolderButton) {
+        this.folder = folder;
+        this.titleKey = titleKey;
+        this.emptyKey = emptyKey;
+        this.openFolderButton = openFolderButton;
+    }
+
+    /** 进来时重扫目录，这样刚拍的照片、刚丢进去的表情立刻可见 */
     public void open() {
-        PhotoLibrary.refresh();
+        folder.refresh();
         page = 0;
         hoveredIdx = -1;
         hoveredPager = 0;
+        openFolderHovered = false;
         selected = null;
     }
 
     /** 离开时释放缩略图贴图，与相册同一个理由：这些贴图对别的界面毫无用处 */
     public void close() {
-        PhotoLibrary.releaseAll();
+        folder.releaseAll();
         hoveredIdx = -1;
         hoveredPager = 0;
+        openFolderHovered = false;
     }
 
     /** 取走"选了这张"，没有则返回 null */
@@ -71,27 +98,18 @@ public final class ChatPhotoPicker {
                        int screenW, int screenH, int statusH, int navH,
                        int mouseX, int mouseY, Font font) {
 
-        final List<PhotoLibrary.Photo> photos = PhotoLibrary.getPhotos();
+        final List<ImageFolder.Entry> items = folder.entries();
 
         int x = phoneLeft + PAD;
         int y = phoneTop + statusH + 4;
         int w = screenW - PAD * 2;
 
-        g.drawString(font, Component.translatable("mcphone.chat.pick_photo").getString(),
-                x, y, FontPalette.title(), true);
-        if (!photos.isEmpty()) {
-            String count = String.valueOf(photos.size());
-            g.drawString(font, count, x + w - font.width(count), y, FontPalette.subtle(), false);
-        }
-        y += font.lineHeight + 4;
+        y = renderHeader(g, font, items.size(), x, y, w, mouseX, mouseY);
 
-        g.fill(x, y, x + w, y + 1, PhoneTheme.COLOR_DIVIDER);
-        y += 4;
-
-        if (photos.isEmpty()) {
+        if (items.isEmpty()) {
             hoveredIdx = -1;
             hoveredPager = 0;
-            for (var line : font.split(Component.translatable("mcphone.chat.pick_photo_empty"), w)) {
+            for (var line : font.split(Component.translatable(emptyKey), w)) {
                 g.drawString(font, line, x, y, FontPalette.subtle(), false);
                 y += font.lineHeight;
             }
@@ -105,16 +123,16 @@ public final class ChatPhotoPicker {
         perPage = PhotoGridPainter.COLS * PhotoGridPainter.rowsFor(gridBottom - gridTop);
 
         // 缓存必须装得下一整页，否则同页内先加载的会被后加载的挤掉，下一帧又重新加载，画面持续闪烁
-        PhotoLibrary.ensureCacheFor(perPage);
+        folder.ensureCacheFor(perPage);
 
-        int pageCount = Math.max(1, (photos.size() + perPage - 1) / perPage);
+        int pageCount = Math.max(1, (items.size() + perPage - 1) / perPage);
         page = Math.clamp(page, 0, pageCount - 1);
 
         int gridX = x + (w - PhotoGridPainter.gridWidth()) / 2;
 
         hoveredIdx = -1;
         int first = page * perPage;
-        int last = Math.min(first + perPage, photos.size());
+        int last = Math.min(first + perPage, items.size());
 
         for (int i = first; i < last; i++) {
             int slot = i - first;
@@ -124,22 +142,57 @@ public final class ChatPhotoPicker {
             boolean hovered = PhotoGridPainter.cellHit(cx, cy, mouseX, mouseY);
             if (hovered) hoveredIdx = i;
 
-            PhotoGridPainter.cell(g, font, photos.get(i), cx, cy, hovered);
+            PhotoGridPainter.cell(g, font, folder, items.get(i), cx, cy, hovered);
         }
 
         hoveredPager = PhotoGridPainter.pager(g, font, x, gridBottom + 2, w, pagerH,
                 page, pageCount, mouseX, mouseY);
     }
 
+    /** 标题一行：左边标题，右边是总数，或者表情那一页的「打开文件夹」 */
+    private int renderHeader(GuiGraphics g, Font font, int total,
+                             int x, int y, int w, int mouseX, int mouseY) {
+
+        g.drawString(font, Component.translatable(titleKey).getString(),
+                x, y, FontPalette.title(), true);
+
+        if (openFolderButton) {
+            String open = Component.translatable("mcphone.chat.open_folder").getString();
+            int openW = font.width(open);
+            int openX = x + w - openW;
+            openFolderHovered = GuiUtil.hit(mouseX, mouseY,
+                    openX - HIT_PAD, y - HIT_PAD, openW + HIT_PAD * 2, font.lineHeight + HIT_PAD * 2);
+            g.drawString(font, open, openX, y,
+                    openFolderHovered ? FontPalette.title() : FontPalette.link(), false);
+        } else {
+            openFolderHovered = false;
+            if (total > 0) {
+                String count = String.valueOf(total);
+                g.drawString(font, count, x + w - font.width(count), y, FontPalette.subtle(), false);
+            }
+        }
+
+        y += font.lineHeight + 4;
+        g.fill(x, y, x + w, y + 1, PhoneTheme.COLOR_DIVIDER);
+        return y + 4;
+    }
+
     public boolean mouseClicked(double mx, double my, int button) {
         if (button != 0) return false;
+
+        if (openFolderHovered) {
+            // 交给系统的文件管理器开，不弹任何 Java 自己的窗口：
+            // AWT 的选择器在 macOS 上要与游戏抢主线程，而这条走的是 xdg-open / explorer / open
+            Util.getPlatform().openPath(folder.ensureDirectory());
+            return true;
+        }
 
         if (hoveredPager < 0) { flip(-1); return true; }
         if (hoveredPager > 0) { flip(1); return true; }
 
         if (hoveredIdx >= 0) {
-            PhotoLibrary.Photo photo = PhotoLibrary.get(hoveredIdx);
-            if (photo != null) selected = photo.path();
+            ImageFolder.Entry entry = folder.get(hoveredIdx);
+            if (entry != null) selected = entry.path();
             return true;
         }
         return false;
@@ -152,7 +205,7 @@ public final class ChatPhotoPicker {
         return true;
     }
 
-    /** 方向键翻页，Home/End 跳首尾页——照片上千张时只能一页页点箭头会很难受 */
+    /** 方向键翻页，Home/End 跳首尾页——攒了几百张时只能一页页点箭头会很难受 */
     public boolean keyPressed(int keyCode) {
         switch (keyCode) {
             case 262, 264 -> { flip(1); return true; }    // → ↓
@@ -169,7 +222,7 @@ public final class ChatPhotoPicker {
     }
 
     private int lastPage() {
-        int n = PhotoLibrary.count();
+        int n = folder.count();
         if (n == 0 || perPage <= 0) return 0;
         return (n + perPage - 1) / perPage - 1;
     }

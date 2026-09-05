@@ -12,8 +12,10 @@ import com.november.mcphone.core.ServerConfig;
 import com.november.mcphone.feature.chat.client.ChatImageCache;
 import com.november.mcphone.feature.chat.client.ChatImageSender;
 import com.november.mcphone.feature.chat.client.ChatList;
-import com.november.mcphone.feature.chat.client.ChatPhotoPicker;
+import com.november.mcphone.feature.chat.client.ChatMediaPicker;
+import com.november.mcphone.feature.chat.client.StickerLibrary;
 import com.november.mcphone.feature.gallery.client.Gallery;
+import com.november.mcphone.feature.gallery.client.PhotoLibrary;
 import com.november.mcphone.feature.music.client.MusicPage;
 import com.november.mcphone.feature.notes.client.NoteEditor;
 import com.november.mcphone.feature.notes.client.NotesList;
@@ -45,7 +47,7 @@ import java.util.UUID;
 /** 手机主屏幕 GUI：管理各页面之间的导航（{@link Mode}）、分发输入、兜住附属页面的异常 */
 public final class PhoneScreen extends Screen {
 
-    public enum Mode { MAIN, SETTINGS, WALLPAPER_PICKER, FONT_COLOR_PICKER, APP_MANAGER, MUSIC_PLAYER, APP_STORE, APP_DETAIL, COMPANION_APPS, ADDON_PAGE, ABOUT, GALLERY, DEVICE_NAME, CHAT, CHAT_ADD_CONTACT, CHAT_CONVERSATION, CHAT_PHOTO_PICKER, NOTES, NOTE_EDIT, CLOCK, WEATHER, READER }
+    public enum Mode { MAIN, SETTINGS, WALLPAPER_PICKER, FONT_COLOR_PICKER, APP_MANAGER, MUSIC_PLAYER, APP_STORE, APP_DETAIL, COMPANION_APPS, ADDON_PAGE, ABOUT, GALLERY, DEVICE_NAME, CHAT, CHAT_ADD_CONTACT, CHAT_CONVERSATION, CHAT_PHOTO_PICKER, CHAT_STICKER_PICKER, NOTES, NOTE_EDIT, CLOCK, WEATHER, READER }
 
     private final long openTimeMs;
     private boolean animationDone;
@@ -78,7 +80,15 @@ public final class PhoneScreen extends Screen {
     private final ChatList chatList = new ChatList();
     private final ChatAddContact chatAddContact = new ChatAddContact();
     private final ChatConversation chatConversation = new ChatConversation();
-    private final ChatPhotoPicker chatPhotoPicker = new ChatPhotoPicker();
+    /**
+     * 「挑一张发出去」的两页：一页盯着截图目录，一页盯着表情目录。
+     * 同一个类的两个实例——除了目录与标题，它们做的是一模一样的事，见 {@link ChatMediaPicker}。
+     */
+    private final ChatMediaPicker chatPhotoPicker = new ChatMediaPicker(
+            PhotoLibrary.folder(), "mcphone.chat.pick_photo", "mcphone.chat.pick_photo_empty", false);
+
+    private final ChatMediaPicker chatStickerPicker = new ChatMediaPicker(
+            StickerLibrary.folder(), "mcphone.chat.pick_sticker", "mcphone.chat.pick_sticker_empty", true);
 
     private final NotesList notesList = new NotesList();
     private final NoteEditor noteEditor = new NoteEditor();
@@ -141,6 +151,9 @@ public final class PhoneScreen extends Screen {
         if (this.mode == Mode.CHAT_PHOTO_PICKER) chatPhotoPicker.close();
         if (target == Mode.CHAT_PHOTO_PICKER) chatPhotoPicker.open();
 
+        if (this.mode == Mode.CHAT_STICKER_PICKER) chatStickerPicker.close();
+        if (target == Mode.CHAT_STICKER_PICKER) chatStickerPicker.open();
+
         if (target == Mode.WALLPAPER_PICKER) WallpaperStore.refresh();
 
         if (this.mode == Mode.NOTES) notesList.close();
@@ -185,6 +198,13 @@ public final class PhoneScreen extends Screen {
      */
     @Override
     public void onFilesDrop(List<Path> files) {
+        // 表情页开着时，拖进来是"收进表情目录"而不是"发出去"：那一页的语境就是攒表情。
+        // 这也是表情唯一的游戏内导入方式——弹系统文件选择器要 AWT，在 macOS 上与游戏抢主线程
+        if (mode == Mode.CHAT_STICKER_PICKER) {
+            importStickers(files);
+            return;
+        }
+
         UUID target = switch (mode) {
             case CHAT_CONVERSATION -> chatConversation.peer();
             // 选照片那一页也收：人已经在"挑一张"的语境里了，拖进来是同一个意思
@@ -213,6 +233,43 @@ public final class PhoneScreen extends Screen {
     }
 
     /**
+     * 把拖进来的图片收进表情目录。
+     *
+     * 这里【收全部】而不是只收第一张：拖一整包表情进来是常事，而导入不像发送那样一次只能一个。
+     * 复制文件在后台线程做，完了回主线程重扫目录——玩家看到的是它们一张张出现在格子里。
+     */
+    private void importStickers(List<Path> files) {
+        List<Path> pictures = files.stream().filter(PhoneScreen::looksLikeImage).toList();
+        if (pictures.isEmpty()) {
+            tellPlayer("mcphone.chat.drop_not_image");
+            return;
+        }
+
+        net.minecraft.Util.backgroundExecutor().execute(() -> {
+            int imported = 0;
+            for (Path picture : pictures) {
+                if (StickerLibrary.importFrom(picture) != null) imported++;
+            }
+            final int done = imported;
+            Minecraft.getInstance().execute(() -> {
+                StickerLibrary.refresh();
+                if (done > 0) tellPlayer("mcphone.chat.sticker_imported", done);
+                else tellPlayer("mcphone.chat.sticker_import_failed");
+            });
+        });
+    }
+
+    /**
+     * 挑好的那张：发出去，然后立刻回会话——玩家要看的是那条消息冒出来，
+     * 压缩与上传都在后面自己走。没挑（点了翻页、点了空白）就什么都不做。
+     */
+    private void sendPicked(Path picked) {
+        if (picked == null) return;
+        ChatImageSender.send(pendingConversationPeer, picked);
+        navigateTo(Mode.CHAT_CONVERSATION);
+    }
+
+    /**
      * 按扩展名判，不去读文件头。
      *
      * 真正能不能解码由 ImageIO 说了算（见 ImageCodec），这里只是别把一个拖错的
@@ -224,10 +281,10 @@ public final class PhoneScreen extends Screen {
                 || name.endsWith(".gif") || name.endsWith(".bmp");
     }
 
-    private void tellPlayer(String translationKey) {
+    private void tellPlayer(String translationKey, Object... args) {
         // 动作栏而不是聊天框：玩家的眼睛正看着手机屏幕
         if (minecraft != null && minecraft.player != null) {
-            minecraft.player.displayClientMessage(Component.translatable(translationKey), true);
+            minecraft.player.displayClientMessage(Component.translatable(translationKey, args), true);
         }
     }
 
@@ -350,8 +407,8 @@ public final class PhoneScreen extends Screen {
         // 放大看的那张图先关掉：那不是一页，但它盖住了整块内容区，返回键该先收它
         if (mode == Mode.CHAT_CONVERSATION && chatConversation.dismissViewer()) return true;
 
-        // 选照片是从某个会话点进来的，返回自然回那个会话
-        if (mode == Mode.CHAT_PHOTO_PICKER) {
+        // 选照片、选表情都是从某个会话点进来的，返回自然回那个会话
+        if (mode == Mode.CHAT_PHOTO_PICKER || mode == Mode.CHAT_STICKER_PICKER) {
             navigateTo(Mode.CHAT_CONVERSATION);
             return true;
         }
@@ -508,6 +565,10 @@ public final class PhoneScreen extends Screen {
                     PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT,
                     mouseX, mouseY, partialTick, font);
             case CHAT_PHOTO_PICKER -> chatPhotoPicker.render(g, phoneLeft, phoneTop,
+                    PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
+                    PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT,
+                    mouseX, mouseY, font);
+            case CHAT_STICKER_PICKER -> chatStickerPicker.render(g, phoneLeft, phoneTop,
                     PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
                     PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT,
                     mouseX, mouseY, font);
@@ -753,22 +814,26 @@ public final class PhoneScreen extends Screen {
             }
             case CHAT_CONVERSATION -> {
                 chatConversation.mouseClicked(mx, my, button);
-                if (chatConversation.consumePickPhotoRequest()) {
-                    // 先记下是谁：进选照片那一页会 close 掉会话，对端就没了
+
+                ChatConversation.Attach attach = chatConversation.consumeAttachRequest();
+                if (attach != null) {
+                    // 先记下是谁：进挑东西那一页会 close 掉会话，对端就没了
                     pendingConversationPeer = chatConversation.peer();
-                    navigateTo(Mode.CHAT_PHOTO_PICKER);
+                    navigateTo(switch (attach) {
+                        case IMAGE -> Mode.CHAT_PHOTO_PICKER;
+                        case STICKER -> Mode.CHAT_STICKER_PICKER;
+                    });
                 }
                 yield true;
             }
             case CHAT_PHOTO_PICKER -> {
                 chatPhotoPicker.mouseClicked(mx, my, button);
-
-                Path photo = chatPhotoPicker.consumeSelection();
-                if (photo != null) {
-                    // 压缩与上传都在后面自己走，这里立刻回会话——玩家要看的是那条消息冒出来
-                    ChatImageSender.send(pendingConversationPeer, photo);
-                    navigateTo(Mode.CHAT_CONVERSATION);
-                }
+                sendPicked(chatPhotoPicker.consumeSelection());
+                yield true;
+            }
+            case CHAT_STICKER_PICKER -> {
+                chatStickerPicker.mouseClicked(mx, my, button);
+                sendPicked(chatStickerPicker.consumeSelection());
                 yield true;
             }
             case NOTES -> {
@@ -823,6 +888,7 @@ public final class PhoneScreen extends Screen {
         if (mode == Mode.CHAT_ADD_CONTACT && chatAddContact.mouseScrolled(scrollY)) return true;
         if (mode == Mode.CHAT_CONVERSATION && chatConversation.mouseScrolled(scrollY)) return true;
         if (mode == Mode.CHAT_PHOTO_PICKER && chatPhotoPicker.mouseScrolled(scrollY)) return true;
+        if (mode == Mode.CHAT_STICKER_PICKER && chatStickerPicker.mouseScrolled(scrollY)) return true;
         if (mode == Mode.NOTES && notesList.mouseScrolled(scrollY)) return true;
         if (mode == Mode.READER && bookList.mouseScrolled(scrollY)) return true;
         if (mode == Mode.MUSIC_PLAYER && musicPage.mouseScrolled(scrollY, my)) return true;
@@ -872,6 +938,7 @@ public final class PhoneScreen extends Screen {
         // 相册方向键放最后，免得有人把背包键绑成方向键时被相册吃掉
         if (mode == Mode.GALLERY && gallery.keyPressed(keyCode)) return true;
         if (mode == Mode.CHAT_PHOTO_PICKER && chatPhotoPicker.keyPressed(keyCode)) return true;
+        if (mode == Mode.CHAT_STICKER_PICKER && chatStickerPicker.keyPressed(keyCode)) return true;
         if (mode == Mode.ADDON_PAGE
                 && callPage(p -> p.keyPressed(keyCode, scanCode, modifiers))) return true;
 
@@ -900,6 +967,7 @@ public final class PhoneScreen extends Screen {
 
         if (mode == Mode.GALLERY) gallery.close();
         if (mode == Mode.CHAT_PHOTO_PICKER) chatPhotoPicker.close();
+        if (mode == Mode.CHAT_STICKER_PICKER) chatStickerPicker.close();
         if (mode == Mode.CHAT_CONVERSATION) chatConversation.close();
 
         // 图片消息的贴图只在手机开着时有用。留到关机才放，是因为"会话 → 列表 → 会话"

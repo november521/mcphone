@@ -3,6 +3,7 @@ package com.november.mcphone.feature.gallery.client;
 import com.november.mcphone.core.client.FontPalette;
 import com.november.mcphone.core.client.GuiUtil;
 import com.november.mcphone.core.client.ImageCodec;
+import com.november.mcphone.core.client.ImageFolder;
 import com.november.mcphone.core.client.PhoneTheme;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
@@ -71,13 +72,17 @@ public final class PhotoGridPainter {
         return mouseX >= cx && mouseX < cx + CELL_W && mouseY >= cy && mouseY < cy + CELL_H;
     }
 
-    /** 画一个缩略图格子：底色 + 等比居中的图 + 悬停高亮。图还没加载好就画一个占位点 */
-    public static void cell(GuiGraphics g, Font font, PhotoLibrary.Photo photo,
+    /**
+     * 画一个缩略图格子：底色 + 等比居中的图 + 悬停高亮。图还没加载好就画一个占位点。
+     *
+     * 收 {@link ImageFolder} 而不是写死相册：表情那一页画的是同一种格子，只是目录不同。
+     */
+    public static void cell(GuiGraphics g, Font font, ImageFolder folder, ImageFolder.Entry entry,
                             int cx, int cy, boolean hovered) {
 
         g.fill(cx, cy, cx + CELL_W, cy + CELL_H, COLOR_CELL_BG);
 
-        ImageCodec.Texture thumb = PhotoLibrary.thumbnail(photo);
+        ImageCodec.Texture thumb = folder.thumbnail(entry);
         if (thumb == null) {
             // 还在后台加载（或加载失败），画个占位点，下一帧再问
             String dots = "…";

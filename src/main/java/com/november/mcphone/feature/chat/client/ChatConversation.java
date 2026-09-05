@@ -83,11 +83,15 @@ public final class ChatConversation {
      */
     private static final int IMAGE_MAX_H = 56;
 
-    /** 输入栏左边那个图片键的边长。与音乐页那几个键一样大，它们是同一家的 */
-    private static final int IMAGE_BTN = 9;
+    /** 输入栏左边那个「+」键的边长。与音乐页那几个键一样大，它们是同一家的 */
+    private static final int ATTACH_BTN = 9;
 
-    /** 图片键与输入框之间的空隙 */
-    private static final int IMAGE_BTN_GAP = 2;
+    /** 「+」与输入框之间的空隙 */
+    private static final int ATTACH_BTN_GAP = 2;
+
+    /** 「+」弹出的那张小菜单：内边距，以及每一行比字高出多少 */
+    private static final int MENU_PAD = 3;
+    private static final int MENU_ROW_EXTRA = 3;
 
     /**
      * 文字按钮的命中区四边各放宽多少。
@@ -128,10 +132,35 @@ public final class ChatConversation {
 
     private boolean sendHovered;
 
-    private boolean imageBtnHovered;
+    private boolean attachBtnHovered;
 
-    /** 玩家点了图片键，等 PhoneScreen 取走去开选照片那一页 */
-    private boolean pendingPickPhoto;
+    /** 「+」点开之后那张小菜单开着没有 */
+    private boolean attachMenuOpen;
+
+    /** 本帧鼠标停在菜单的哪一项上，null 表示都不在 */
+    private Attach attachHovered;
+
+    /** 玩家在菜单里选了什么，等 PhoneScreen 取走去开对应的那一页 */
+    private Attach pendingAttach;
+
+    /**
+     * 「+」能发的东西。
+     *
+     * 加一种（分享物品、发个坐标……）就在这里加一项：菜单的高度、悬停判定、点击分派
+     * 全是按这个枚举算出来的，一行都不用改。正文那一层的扩展点在 MessageBody。
+     */
+    public enum Attach {
+        /** 相册里的照片 */
+        IMAGE("mcphone.chat.attach_image"),
+        /** 自己导入的表情 */
+        STICKER("mcphone.chat.attach_sticker");
+
+        private final String labelKey;
+
+        Attach(String labelKey) { this.labelKey = labelKey; }
+
+        public String label() { return Component.translatable(labelKey).getString(); }
+    }
 
     /** 正在放大看的那张图，null 表示没有 */
     private UUID viewingImage;
@@ -200,7 +229,9 @@ public final class ChatConversation {
         }
 
         this.viewingImage = null;
-        this.pendingPickPhoto = false;
+        this.attachMenuOpen = false;
+        this.attachHovered = null;
+        this.pendingAttach = null;
         this.imageHits.clear();
 
         ChatClientCache.openConversation(peer);
@@ -219,10 +250,12 @@ public final class ChatConversation {
         blocks = List.of();
         contentH = 0;
         sendHovered = false;
-        imageBtnHovered = false;
+        attachBtnHovered = false;
+        attachMenuOpen = false;
+        attachHovered = null;
         viewingImage = null;
         saveHovered = false;
-        pendingPickPhoto = false;
+        pendingAttach = null;
         imageHits.clear();
         markedFrom = null;
         if (box != null) box.setFocused(false);
@@ -347,10 +380,10 @@ public final class ChatConversation {
         return true;
     }
 
-    /** 取走"要去选一张照片"的请求，没有则返回 false */
-    public boolean consumePickPhotoRequest() {
-        boolean out = pendingPickPhoto;
-        pendingPickPhoto = false;
+    /** 取走"要去选点什么发出去"的请求，没有则返回 null */
+    public Attach consumeAttachRequest() {
+        Attach out = pendingAttach;
+        pendingAttach = null;
         return out;
     }
 
@@ -479,17 +512,19 @@ public final class ChatConversation {
         String send = Component.translatable("mcphone.chat.send").getString();
         int sendW = font.width(send) + 4;
 
-        // 服主关掉发图片时连位置都不留：那一格空着比一个点了没反应的键好
-        boolean canSendImage = ServerConfig.allowChatImages();
-        int btnRoom = canSendImage ? IMAGE_BTN + IMAGE_BTN_GAP : 0;
+        // 服主关掉发图片时连位置都不留：那一格空着比一个点了没反应的键好。
+        // 「+」眼下只通向图片与表情，两者都是图片消息，所以这个开关一关它就该消失
+        boolean canAttach = ServerConfig.allowChatImages();
+        int btnRoom = canAttach ? ATTACH_BTN + ATTACH_BTN_GAP : 0;
 
         int barX = x + btnRoom;
         int boxW = w - sendW - 2 - btnRoom;
 
-        if (canSendImage) {
-            renderImageButton(g, font, x, y, mouseX, mouseY);
+        if (canAttach) {
+            renderAttachButton(g, font, x, y, mouseX, mouseY);
         } else {
-            imageBtnHovered = false;
+            attachBtnHovered = false;
+            attachMenuOpen = false;
         }
 
         PhoneSkin.drawOrFill(g, PhoneSkin.Element.CHAT_INPUT_BAR,
@@ -523,31 +558,76 @@ public final class ChatConversation {
     }
 
     /**
-     * 输入栏左边那个图片键：贴图优先，没有贴图就画一个 ▣ 兜底，与音乐页那几个键同一个规矩。
+     * 输入栏左边那个「+」：贴图优先，没有贴图就画一个 + 字符兜底，与音乐页那几个键同一个规矩。
+     *
+     * 为什么是「+」而不是直接一个图片键：能发的东西不止一种（现在是图片与表情，往后还会有别的），
+     * 每多一种就在输入栏挤一个键的话，那条栏很快就没地方打字了。「+」把它们收进一张小菜单。
      *
      * 正在发一张时画成灰的并且点不动：压缩与上传是异步的，连点两下会有两次上传交错着
      * 发上去，而服务端按"片号必须连续"收（见 ChatImageUploads），交错的结果是两张都发不成。
      */
-    private void renderImageButton(GuiGraphics g, Font font, int x, int barY,
-                                   int mouseX, int mouseY) {
+    private void renderAttachButton(GuiGraphics g, Font font, int x, int barY,
+                                    int mouseX, int mouseY) {
 
-        int by = barY + (INPUT_H - IMAGE_BTN) / 2;
+        int by = barY + (INPUT_H - ATTACH_BTN) / 2;
         boolean sending = ChatImageSender.isBusy();
+        if (sending) attachMenuOpen = false;
 
-        imageBtnHovered = !sending && GuiUtil.hit(mouseX, mouseY,
-                x - 1, by - 1, IMAGE_BTN + 2, IMAGE_BTN + 2);
+        attachBtnHovered = !sending && GuiUtil.hit(mouseX, mouseY,
+                x - 1, by - 1, ATTACH_BTN + 2, ATTACH_BTN + 2);
 
-        if (imageBtnHovered) {
-            g.fill(x - 1, by - 1, x + IMAGE_BTN + 1, by + IMAGE_BTN + 1,
+        if (attachBtnHovered || attachMenuOpen) {
+            g.fill(x - 1, by - 1, x + ATTACH_BTN + 1, by + ATTACH_BTN + 1,
                     PhoneTheme.COLOR_HOVER_STRONG);
         }
 
-        if (PhoneSkin.draw(g, PhoneSkin.Element.CHAT_IMAGE, x, by, IMAGE_BTN, IMAGE_BTN)) return;
+        if (!PhoneSkin.draw(g, PhoneSkin.Element.CHAT_ATTACH, x, by, ATTACH_BTN, ATTACH_BTN)) {
+            String glyph = "+";
+            g.drawString(font, glyph, x + (ATTACH_BTN - font.width(glyph)) / 2, by,
+                    sending ? COLOR_SEND_OFF
+                            : (attachBtnHovered || attachMenuOpen ? COLOR_SEND_HOVER : COLOR_SEND),
+                    false);
+        }
 
-        String glyph = "▣";
-        g.drawString(font, glyph, x + (IMAGE_BTN - font.width(glyph)) / 2, by,
-                sending ? COLOR_SEND_OFF : (imageBtnHovered ? COLOR_SEND_HOVER : COLOR_SEND),
-                false);
+        if (attachMenuOpen) renderAttachMenu(g, font, x, by, mouseX, mouseY);
+    }
+
+    /**
+     * 「+」弹出来的那张小菜单，贴着按钮往上长。
+     *
+     * 往上而不是往下：按钮就贴在输入栏上，往下会盖住导航栏，而那是玩家退出去的路。
+     * 菜单开着的时候点别处一律是关掉它（见 mouseClicked），所以不必画关闭键。
+     */
+    private void renderAttachMenu(GuiGraphics g, Font font, int btnX, int btnY,
+                                  int mouseX, int mouseY) {
+
+        Attach[] items = Attach.values();
+        int rowH = font.lineHeight + MENU_ROW_EXTRA;
+
+        int width = 0;
+        for (Attach item : items) width = Math.max(width, font.width(item.label()));
+        width += MENU_PAD * 2;
+
+        int height = items.length * rowH + MENU_PAD * 2;
+        int menuX = btnX;
+        int menuY = btnY - height - 2;
+
+        g.fill(menuX, menuY, menuX + width, menuY + height, PhoneTheme.COLOR_OVERLAY);
+        g.renderOutline(menuX, menuY, width, height, PhoneTheme.COLOR_DIVIDER);
+
+        attachHovered = null;
+        int rowY = menuY + MENU_PAD;
+        for (Attach item : items) {
+            boolean hovered = GuiUtil.hit(mouseX, mouseY, menuX, rowY, width, rowH - 1);
+            if (hovered) {
+                attachHovered = item;
+                g.fill(menuX + 1, rowY, menuX + width - 1, rowY + rowH - 1,
+                        PhoneTheme.COLOR_ROW_HOVER);
+            }
+            g.drawString(font, item.label(), menuX + MENU_PAD, rowY + (rowH - font.lineHeight) / 2,
+                    hovered ? FontPalette.title() : FontPalette.body(), false);
+            rowY += rowH;
+        }
     }
 
     /** 消息列表没换实例就不重排：ChatClientCache 每次收包都产出新的不可变列表，身份没变即内容没变 */
@@ -624,8 +704,16 @@ public final class ChatConversation {
             return true;
         }
 
-        if (button == 0 && imageBtnHovered) {
-            pendingPickPhoto = true;
+        // 菜单开着时：点中某一项就走那一项，点别处一律只是关掉菜单，不再往下传
+        if (attachMenuOpen) {
+            if (button == 0 && attachHovered != null) pendingAttach = attachHovered;
+            attachMenuOpen = false;
+            attachHovered = null;
+            return true;
+        }
+
+        if (button == 0 && attachBtnHovered) {
+            attachMenuOpen = true;
             return true;
         }
         if (button == 0 && sendHovered) {

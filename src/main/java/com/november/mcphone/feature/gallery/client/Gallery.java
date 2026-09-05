@@ -5,6 +5,7 @@ import com.november.mcphone.core.client.PhoneSkin;
 import com.november.mcphone.core.client.PhoneTheme;
 import com.november.mcphone.core.client.GuiUtil;
 import com.november.mcphone.core.client.ImageCodec;
+import com.november.mcphone.core.client.ImageFolder;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
@@ -121,7 +122,7 @@ public final class Gallery {
                        int screenW, int screenH, int statusH, int navH,
                        int mouseX, int mouseY, Font font) {
 
-        final List<PhotoLibrary.Photo> photos = PhotoLibrary.getPhotos();
+        final List<ImageFolder.Entry> photos = PhotoLibrary.getPhotos();
 
         // 照片可能在查看期间被删空，或下标越界，此时退回网格
         if (viewing >= photos.size()) viewing = photos.isEmpty() ? -1 : photos.size() - 1;
@@ -191,7 +192,7 @@ public final class Gallery {
             boolean hovered = PhotoGridPainter.cellHit(cx, cy, mouseX, mouseY);
             if (hovered) hoveredIdx = i;
 
-            PhotoGridPainter.cell(g, font, photos.get(i), cx, cy, hovered);
+            PhotoGridPainter.cell(g, font, PhotoLibrary.folder(), photos.get(i), cx, cy, hovered);
         }
 
         hoveredPager = PhotoGridPainter.pager(g, font, x, gridBottom + 2, w, pagerH,
@@ -223,9 +224,9 @@ public final class Gallery {
     private void renderViewer(GuiGraphics g, int phoneLeft, int phoneTop,
                               int screenW, int screenH, int statusH, int navH,
                               int mouseX, int mouseY, Font font,
-                              List<PhotoLibrary.Photo> photos) {
+                              List<ImageFolder.Entry> photos) {
 
-        PhotoLibrary.Photo photo = photos.get(viewing);
+        ImageFolder.Entry photo = photos.get(viewing);
 
         final int x = phoneLeft + PAD;
         final int w = screenW - PAD * 2;
@@ -321,7 +322,7 @@ public final class Gallery {
     }
 
     /** 大图区域：黑底 + 等比居中的照片 */
-    private void renderPhoto(GuiGraphics g, Font font, PhotoLibrary.Photo photo,
+    private void renderPhoto(GuiGraphics g, Font font, ImageFolder.Entry photo,
                              int areaX, int areaY, int areaW, int areaH) {
 
         // 黑底：照片可能是任意比例，留白处不该透出壁纸
@@ -397,7 +398,7 @@ public final class Gallery {
         if (!deleteArmed) { deleteArmed = true; return; }
         deleteArmed = false;
 
-        PhotoLibrary.Photo photo = PhotoLibrary.get(viewing);
+        ImageFolder.Entry photo = PhotoLibrary.get(viewing);
         if (photo == null || !PhotoLibrary.delete(photo)) return;
 
         // 删完停在原下标上——那里已经是下一张照片了，
