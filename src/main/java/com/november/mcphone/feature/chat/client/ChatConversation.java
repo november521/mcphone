@@ -14,7 +14,9 @@ import com.november.mcphone.feature.chat.net.MarkReadPacket;
 import com.november.mcphone.feature.chat.net.RequestConversationsPacket;
 import com.november.mcphone.feature.chat.net.RequestMessagesPacket;
 import com.november.mcphone.feature.chat.net.SendChatMessagePacket;
+import com.november.mcphone.feature.gallery.client.PhotoLibrary;
 import com.november.mcphone.core.client.GuiUtil;
+import net.minecraft.Util;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
@@ -87,6 +89,14 @@ public final class ChatConversation {
     /** 图片键与输入框之间的空隙 */
     private static final int IMAGE_BTN_GAP = 2;
 
+    /**
+     * 文字按钮的命中区四边各放宽多少。
+     *
+     * 正好按字的边界算会点不中：这一行字才 9 像素高，而手机整体是缩放显示的。
+     * 与相册那几个文字键同一个数。
+     */
+    private static final int HIT_PAD = 2;
+
     private static final int AVATAR_SIZE = 16;
 
     private static final int AVATAR_GAP = 3;
@@ -125,6 +135,11 @@ public final class ChatConversation {
 
     /** 正在放大看的那张图，null 表示没有 */
     private UUID viewingImage;
+
+    /** 本帧鼠标是否停在放大图右上角那个「保存」上，以及它画在哪儿 */
+    private boolean saveHovered;
+    private int saveX;
+    private int saveY;
 
     /** 本帧画出来的图片气泡，供点击放大用；每帧重建，因为滚动一下位置就全变了 */
     private final List<ImageHit> imageHits = new ArrayList<>();
@@ -206,6 +221,7 @@ public final class ChatConversation {
         sendHovered = false;
         imageBtnHovered = false;
         viewingImage = null;
+        saveHovered = false;
         pendingPickPhoto = false;
         imageHits.clear();
         markedFrom = null;
@@ -239,7 +255,7 @@ public final class ChatConversation {
         // 放大图盖在所有东西上面，连输入栏一起盖住——它此刻不是能用的东西
         if (viewingImage != null) {
             renderImageViewer(g, font, phoneLeft, phoneTop + statusH,
-                    screenW, screenH - statusH - navH);
+                    screenW, screenH - statusH - navH, mouseX, mouseY);
         }
     }
 
@@ -247,15 +263,19 @@ public final class ChatConversation {
      * 点开一张图看大的：整块内容区盖上一层黑底，图等比居中。
      *
      * 为什么值得有这一手：气泡里那张最宽只有 80 个 GUI 像素，看得出是什么，看不清写了什么。
-     * 存下来的图有 256 的长边（见 ChatImage），铺满内容区正好用得上。
+     * 存下来的图有 384 的长边（见 ChatImage），铺满内容区差不多正好是原尺寸。
      *
      * 点哪儿都关掉，导航栏的返回键也关（见 {@link #dismissViewer()}）——这一层不是一页，
      * 玩家不会觉得自己"进去了"，就不该要求他找一个特定的地方点。
      */
     private void renderImageViewer(GuiGraphics g, Font font,
-                                   int areaX, int areaY, int areaW, int areaH) {
+                                   int areaX, int areaY, int areaW, int areaH,
+                                   int mouseX, int mouseY) {
 
         g.fill(areaX, areaY, areaX + areaW, areaY + areaH, PhoneTheme.COLOR_OVERLAY);
+
+        // 图还没到时这一层没有任何可点的东西，悬停先归零，免得留着上一帧的
+        saveHovered = false;
 
         var texture = ChatImageCache.get(viewingImage);
         if (texture == null) {
@@ -267,11 +287,57 @@ public final class ChatConversation {
         }
 
         int hintH = font.lineHeight + 2;
-        GuiUtil.drawFitted(g, texture, areaX + 2, areaY + 2, areaW - 4, areaH - 4 - hintH);
+        GuiUtil.drawFitted(g, texture, areaX + 2, areaY + 2 + font.lineHeight,
+                areaW - 4, areaH - 6 - hintH - font.lineHeight);
+
+        // 「保存」摆右上角，与相册单张查看里的删除同一个位置：那一角是这一层唯一的动作，
+        // 而下面整片都是"点哪儿都关掉"，动作键不能混在里面
+        String save = Component.translatable("mcphone.chat.image_save").getString();
+        int saveW = font.width(save);
+        saveX = areaX + areaW - saveW - 4;
+        saveY = areaY + 2;
+        saveHovered = GuiUtil.hit(mouseX, mouseY,
+                saveX - HIT_PAD, saveY - HIT_PAD, saveW + HIT_PAD * 2, font.lineHeight + HIT_PAD * 2);
+        g.drawString(font, save, saveX, saveY,
+                saveHovered ? COLOR_SEND_HOVER : COLOR_SEND, false);
 
         String hint = Component.translatable("mcphone.chat.image_close_hint").getString();
         g.drawString(font, hint, areaX + (areaW - font.width(hint)) / 2,
                 areaY + areaH - hintH, colorStamp(), false);
+    }
+
+    /**
+     * 把正在看的这张存进相册（也就是截图目录，见 PhotoLibrary）。
+     *
+     * 存的是收到的原始 PNG 字节，不是屏幕上那张贴图——贴图是解码放大过的像素，
+     * 从它反推不回原文件。字节由 ChatImageCache 一并留着。
+     *
+     * 存进截图目录而不是另开一个地方：相册扫的就是那儿，存完立刻能在相册里看到、
+     * 也就能再发给别人。写盘放后台线程，回主线程报一句。
+     */
+    private void saveViewingImage() {
+        UUID image = viewingImage;
+        if (image == null) return;
+
+        byte[] png = ChatImageCache.bytes(image);
+        if (png == null) {
+            tell("mcphone.chat.image_not_loaded");
+            return;
+        }
+
+        Util.backgroundExecutor().execute(() -> {
+            String name = PhotoLibrary.save(png, "mcphone-");
+            Minecraft.getInstance().execute(() -> {
+                if (name == null) tell("mcphone.chat.image_save_failed");
+                else tell("mcphone.chat.image_saved", name);
+            });
+        });
+    }
+
+    /** 与服务端拒收时同一个位置：动作栏。玩家的眼睛正看着手机屏幕，聊天框那一行他看不见 */
+    private static void tell(String key, Object... args) {
+        var player = Minecraft.getInstance().player;
+        if (player != null) player.displayClientMessage(Component.translatable(key, args), true);
     }
 
     /** 关掉放大图。返回 false 表示本来就没在放大——那时返回键该照常退出会话 */
@@ -550,9 +616,11 @@ public final class ChatConversation {
     }
 
     public boolean mouseClicked(double mx, double my, int button) {
-        // 放大图开着时点哪儿都是关掉它，别让点击漏到下面的气泡与输入栏
+        // 放大图开着时点哪儿都是关掉它，别让点击漏到下面的气泡与输入栏。
+        // 右上角那个「保存」是唯一的例外，所以要先判它
         if (viewingImage != null) {
-            viewingImage = null;
+            if (button == 0 && saveHovered) saveViewingImage();
+            else viewingImage = null;
             return true;
         }
 

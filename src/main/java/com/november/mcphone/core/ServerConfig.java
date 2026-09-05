@@ -56,7 +56,7 @@ public final class ServerConfig {
                         "关掉之后：输入栏左边那个图片键不再显示，服务端也会拒收上传的图。",
                         "已经发过的图不会被删，仍然看得见——关掉的是「再发新的」。",
                         "为什么会想关：图片是存进存档目录的（mcphone/chat-images/），",
-                        "一张至多 96 KB，每对会话最多留 20 张。人多的服务器请自行算一下硬盘。",
+                        "一张至多 128 KB，每对会话最多留 20 张。人多的服务器请自行算一下硬盘。",
                         "Allow sending photos from the Gallery to friends in the Axolotl app.",
                         "When off, the image button is hidden and the server rejects uploads.",
                         "Images already sent stay readable; they are stored under the world folder.")

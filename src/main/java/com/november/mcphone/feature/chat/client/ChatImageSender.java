@@ -20,7 +20,7 @@ import java.util.UUID;
  *
  * 截图是全屏分辨率的，一张 1920×1080 的 PNG 常有两三 MB。原样发上去，一是根本发不动
  * （客户端发给服务端的包上限 32767 字节），二是服主要替所有人存那么大的文件。而手机
- * 屏幕上一个气泡最宽 80 个 GUI 像素，256 的长边已经比看得见的还清楚，见 {@link ChatImage#MAX_SIDE}。
+ * 气泡里那张最宽只有 80 个 GUI 像素，但图是点得开的，放大后要铺满整块屏幕，见 {@link ChatImage#MAX_SIDE}。
  *
  * 压完还是太大怎么办
  *
@@ -38,8 +38,8 @@ public final class ChatImageSender {
 
     private ChatImageSender() {}
 
-    /** 压不进上限时依次降到这几档长边 */
-    private static final int[] FALLBACK_SIDES = {192, 128};
+    /** 压不进上限时依次降到这几档长边。降一档面积就少三成多，噪点最狠的画面也能落进上限 */
+    private static final int[] FALLBACK_SIDES = {320, 256, 192};
 
     /** 一次上传最多允许拖这么久，超时就当它没发出去，放开下一次 */
     private static final long SEND_TIMEOUT_MS = 15_000L;

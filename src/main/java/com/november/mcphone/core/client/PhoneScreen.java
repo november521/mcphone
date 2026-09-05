@@ -8,6 +8,7 @@ import com.november.mcphone.api.client.ui.PhoneCanvas;
 import com.november.mcphone.core.PhoneLocation;
 import com.november.mcphone.feature.chat.client.ChatAddContact;
 import com.november.mcphone.feature.chat.client.ChatConversation;
+import com.november.mcphone.core.ServerConfig;
 import com.november.mcphone.feature.chat.client.ChatImageCache;
 import com.november.mcphone.feature.chat.client.ChatImageSender;
 import com.november.mcphone.feature.chat.client.ChatList;
@@ -167,6 +168,67 @@ public final class PhoneScreen extends Screen {
 
     public void back() {
         navigateTo(Mode.MAIN);
+    }
+
+    /**
+     * 把图片文件拖进游戏窗口 —— 正开着某个会话时，等同于选了这张图发出去。
+     *
+     * 为什么值得有这一条：从相册选图的前提是那张图【已经在截图目录里】。而玩家想发的
+     * 常常是刚从别处存下来的一张图，按现在的路子他得先把文件手动挪进 screenshots/，
+     * 再开手机进相册翻出来。拖进来一步到位。
+     *
+     * 原版把窗口的拖放回调转给当前 Screen（MouseHandler.onDrop），所以这里只要覆写就行，
+     * 不必自己碰 GLFW。
+     *
+     * 一次只收第一张图：上传本来就是一次一张（见 ChatImageSender），拖一叠进来时挑第一张
+     * 比整批拒绝有用。不是图片的文件说一句就算了——玩家多半是拖错了窗口。
+     */
+    @Override
+    public void onFilesDrop(List<Path> files) {
+        UUID target = switch (mode) {
+            case CHAT_CONVERSATION -> chatConversation.peer();
+            // 选照片那一页也收：人已经在"挑一张"的语境里了，拖进来是同一个意思
+            case CHAT_PHOTO_PICKER -> pendingConversationPeer;
+            default -> null;
+        };
+        if (target == null) return;
+
+        if (!ServerConfig.allowChatImages()) {
+            tellPlayer("mcphone.chat.image_disabled");
+            return;
+        }
+        if (ChatImageSender.isBusy()) {
+            tellPlayer("mcphone.chat.image_too_fast");
+            return;
+        }
+
+        Path picture = files.stream().filter(PhoneScreen::looksLikeImage).findFirst().orElse(null);
+        if (picture == null) {
+            tellPlayer("mcphone.chat.drop_not_image");
+            return;
+        }
+
+        ChatImageSender.send(target, picture);
+        if (mode == Mode.CHAT_PHOTO_PICKER) navigateTo(Mode.CHAT_CONVERSATION);
+    }
+
+    /**
+     * 按扩展名判，不去读文件头。
+     *
+     * 真正能不能解码由 ImageIO 说了算（见 ImageCodec），这里只是别把一个拖错的
+     * 存档或 jar 当成图片提交上去。这几种都是 ImageIO 自带解码器认得的。
+     */
+    private static boolean looksLikeImage(Path path) {
+        String name = path.getFileName().toString().toLowerCase(java.util.Locale.ROOT);
+        return name.endsWith(".png") || name.endsWith(".jpg") || name.endsWith(".jpeg")
+                || name.endsWith(".gif") || name.endsWith(".bmp");
+    }
+
+    private void tellPlayer(String translationKey) {
+        // 动作栏而不是聊天框：玩家的眼睛正看着手机屏幕
+        if (minecraft != null && minecraft.player != null) {
+            minecraft.player.displayClientMessage(Component.translatable(translationKey), true);
+        }
     }
 
     /** 正开着与这个人的会话吗，收到消息时据此决定要不要弹通知 */

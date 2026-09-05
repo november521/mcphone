@@ -13,6 +13,8 @@ out/
 !**/src/**/out/
 
 .run/
+# 在仓库根目录跑 gradlew 时 log4j 会在这儿建一个空的 logs/，别让它进版本库
+logs/
 
 ### Eclipse ###
 .apt_generated

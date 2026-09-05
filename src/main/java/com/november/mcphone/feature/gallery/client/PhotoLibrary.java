@@ -314,6 +314,37 @@ public final class PhotoLibrary {
         previewKey = null;
     }
 
+    //  写入
+
+    /**
+     * 把一段 PNG 字节存进截图目录，成功返回文件名。
+     *
+     * 存这儿而不是另开一个目录：相册扫的就是这里（见类注释），存进来的图立刻出现在相册里，
+     * 也就能再发给别人。文件名带上模组前缀与时间戳，与原版截图区分得开，也不会撞名。
+     *
+     * 后台线程调用——这是一次写盘。写完不主动 refresh：相册每次打开都会重扫。
+     */
+    public static String save(byte[] png, String namePrefix) {
+        String name = namePrefix + TIMESTAMP.format(java.time.LocalDateTime.now()) + ".png";
+        try {
+            Path dir = screenshotDir();
+            Files.createDirectories(dir);
+            // CREATE_NEW：同一秒内存两张也不会把先存的那张覆盖掉
+            Files.write(dir.resolve(name), png, java.nio.file.StandardOpenOption.CREATE_NEW);
+            return name;
+        } catch (java.nio.file.FileAlreadyExistsException e) {
+            LOGGER.warn("保存图片失败：{} 已存在", name);
+            return null;
+        } catch (IOException e) {
+            LOGGER.warn("保存图片失败: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    /** 与原版截图的命名风格一致：年-月-日_时.分.秒 */
+    private static final java.time.format.DateTimeFormatter TIMESTAMP =
+            java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd_HH.mm.ss");
+
     //  删除
 
     /**

@@ -57,11 +57,11 @@ public final class ChatImageCache {
     /**
      * 缓存条数上限。
      *
-     * 一屏至多显示三四张，留 24 条是给上下翻用的余量。一张 256 长边的图占
-     * 256×256×4 ≈ 256 KB 显存，24 张封顶 6 MB——比相册那份（96 长边）重得多，
-     * 所以数目要小得多。
+     * 一屏至多显示三四张，留 16 条是给上下翻用的余量。一张 384 长边的图占
+     * 384×216×4 ≈ 330 KB 显存，另外还留着原始的 PNG 字节（至多 128 KB，供"保存到相册"用），
+     * 16 条封顶约 7 MB——比相册那份（96 长边的缩略图）重得多，所以数目要小得多。
      */
-    private static final int MAX_ENTRIES = 24;
+    private static final int MAX_ENTRIES = 16;
 
     /** 要过之后多久没回音就再要一次 */
     private static final long RETRY_AFTER_MS = 6000L;
@@ -72,6 +72,15 @@ public final class ChatImageCache {
     private static final class Entry {
         Status status = Status.LOADING;
         ImageCodec.Texture texture;
+
+        /**
+         * 原始的 PNG 字节，供「保存到相册」用。
+         *
+         * 留着而不是要用时再问服务端要一遍：字节已经付过一次流量了，而且贴图是解码放大过的
+         * 像素，从它反推不回原文件。至多 128 KB 一张，随条目一起被 LRU 挤掉。
+         */
+        byte[] png;
+
         /** 0 表示还没要过 */
         long requestedAt;
     }
@@ -114,6 +123,17 @@ public final class ChatImageCache {
         return entry.status == Status.READY ? entry.texture : null;
     }
 
+    /**
+     * 这张图的原始 PNG 字节，没有则返回 null。只有「保存到相册」用得上。
+     *
+     * 留着字节而不是保存时再向服务端要一遍：这份流量已经付过了，而贴图是解码放大过的
+     * 像素，从它反推不回原文件。
+     */
+    public static byte[] bytes(UUID image) {
+        Entry entry = ENTRIES.get(image);
+        return entry == null ? null : entry.png;
+    }
+
     /** 这张图现在是什么状态。没问过的一律算"加载中"——界面下一帧就会去问 */
     public static Status status(UUID image) {
         Entry entry = ENTRIES.get(image);
@@ -150,7 +170,7 @@ public final class ChatImageCache {
     /**
      * 服务端把像素发来了（空数组表示这张图没了）。由 MCphoneClient 装的监听器调用。
      *
-     * 解码放后台线程：一张 256 见方的图解出来是 26 万个像素，逐个转字节序，放渲染线程
+     * 解码放后台线程：一张 384×216 的图解出来是八万多个像素，逐个转字节序，放渲染线程
      * 会看得见地卡一下。
      */
     public static void accept(UUID image, byte[] data) {
@@ -165,6 +185,7 @@ public final class ChatImageCache {
             entry.status = Status.GONE;
             return;
         }
+        entry.png = data;
 
         final int gen = generation;
         Util.backgroundExecutor().execute(() -> {
@@ -182,6 +203,7 @@ public final class ChatImageCache {
      */
     public static void seed(UUID image, byte[] png) {
         Entry entry = ENTRIES.computeIfAbsent(image, k -> new Entry());
+        entry.png = png;
         if (entry.status == Status.READY) return;
 
         final int gen = generation;
