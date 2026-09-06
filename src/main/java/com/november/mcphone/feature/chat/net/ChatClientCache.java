@@ -30,7 +30,7 @@ public final class ChatClientCache {
         return conversations;
     }
 
-    static void setConversations(List<ConversationSummary> list) {
+    public static void setConversations(List<ConversationSummary> list) {
         conversations = List.copyOf(list);
     }
 
@@ -52,7 +52,7 @@ public final class ChatClientCache {
         return messages;
     }
 
-    static void setMessages(UUID peer, List<ChatMessage> list) {
+    public static void setMessages(UUID peer, List<ChatMessage> list) {
         // 玩家可能在数据回来之前已退出或切换会话，过期数据直接丢弃
         if (!java.util.Objects.equals(openPeer, peer)) return;
         messages = List.copyOf(list);
@@ -75,12 +75,12 @@ public final class ChatClientCache {
         imageListener = listener;
     }
 
-    static void onImageData(UUID image, byte[] data) {
+    public static void onImageData(UUID image, byte[] data) {
         imageListener.accept(image, data);
     }
 
     /** 追加与通知的条件恰好相反（正看着才追加，没看着才提醒），放一起免得改一漏一 */
-    static void onNewMessage(UUID peer, ChatMessage message) {
+    public static void onNewMessage(UUID peer, ChatMessage message) {
         appendMessage(peer, message);
         messageListener.accept(peer, message);
     }
@@ -111,7 +111,7 @@ public final class ChatClientCache {
         return totalOnline > onlinePlayers.size();
     }
 
-    static void setOnlinePlayers(List<OnlinePlayer> list, int total) {
+    public static void setOnlinePlayers(List<OnlinePlayer> list, int total) {
         onlinePlayers = List.copyOf(list);
         totalOnline = total;
     }

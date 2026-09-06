@@ -9,18 +9,34 @@ import net.minecraft.client.resources.sounds.AbstractTickableSoundInstance;
 import net.minecraft.client.resources.sounds.Sound;
 import net.minecraft.client.resources.sounds.SoundInstance;
 import net.minecraft.client.sounds.AudioStream;
-import net.minecraft.client.sounds.SoundBufferLibrary;
 import net.minecraft.sounds.SoundSource;
+import net.minecraft.util.valueproviders.ConstantFloat;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.resources.ResourceLocation;
 
 import java.net.URL;
+import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * 手机外放网络音乐时的声源 —— 每 tick 把坐标贴到实体身上跟着人走（NetMusic 自己的声源钉在方块坐标上）。
- * 音频流走 NeoForge 可覆写的 getStream，{@link ModSounds#DISC_STREAM} 只是个壳；
- * 本类刻意不出现任何 NetMusic 类型，那一句关在 {@link NetMusicPlayback} 里。
+ *
+ * 音频流的注入方式与原版不同
+ *
+ * 原 NeoForge 版给 SoundInstance 加了可覆写的 getStream()，重写它就能让
+ * SoundEngine 用我们给的网络流。Fabric 没有这个钩子；vanilla 的 SoundEngine
+ * 只认「音效事件 → 资源包里的文件」。这里的做法：
+ *
+ *   1. 每个实例造一个【只属于自己】的 Sound（path 带 UUID），覆写 getSound()
+ *      让 SoundEngine 用这个 Sound；
+ *   2. 把这个 Sound 的 path 记进静态注册表；
+ *   3. {@link SoundEngineMixin} 拦 SoundBufferLibrary.getStream(path, ...)，
+ *      命中注册表时返回我们的网络流，否则走原逻辑。
+ *
+ * 音频流本身（NetMusicPlayback.openStream）关在 {@link NetMusicPlayback} 里。
  */
 public final class NetSongSound extends AbstractTickableSoundInstance {
 
@@ -30,6 +46,9 @@ public final class NetSongSound extends AbstractTickableSoundInstance {
     /** 到点之后再多放多久（游戏刻）：时长是 CD 上的整秒数，真实的流可能略长 */
     private static final int TAIL_TICKS = 50;
 
+    /** path → 声源。SoundEngine 取流时按 path 反查（见类注释） */
+    private static final Map<ResourceLocation, NetSongSound> BY_PATH = new ConcurrentHashMap<>();
+
     private final Entity source;
 
     private final URL url;
@@ -37,10 +56,15 @@ public final class NetSongSound extends AbstractTickableSoundInstance {
     /** 放多少刻。0 表示不知道时长，一直放到流自己结束 */
     private final int lifeTicks;
 
+    /** 这个实例专属的 Sound；SoundEngine 用它的 path 去取流 */
+    private final Sound streamSound;
+
+    private final ResourceLocation streamPath;
+
     private int ticks;
 
     public NetSongSound(Entity source, URL url, int seconds) {
-        super(ModSounds.DISC_STREAM.get(), SoundSource.RECORDS,
+        super(ModSounds.DISC_STREAM, SoundSource.RECORDS,
                 SoundInstance.createUnseededRandom());
 
         this.source = source;
@@ -50,7 +74,26 @@ public final class NetSongSound extends AbstractTickableSoundInstance {
         this.looping = false;
         this.delay = 0;
 
+        // 专属 Sound：stream=true，path 带 UUID，避免与别的实例撞车
+        this.streamSound = new Sound(
+                ResourceLocation.fromNamespaceAndPath(MCphone.MODID,
+                        "netstream_" + UUID.randomUUID()),
+                ConstantFloat.of(1.0F), ConstantFloat.of(1.0F), 1,
+                Sound.Type.FILE, true, false, 16);
+        this.streamPath = streamSound.getPath();
+        BY_PATH.put(streamPath, this);
+
         follow();
+    }
+
+    /** SoundEngine 取流时按 path 找声源；没找到返回 null（走原逻辑） */
+    public static NetSongSound byPath(ResourceLocation path) {
+        return BY_PATH.get(path);
+    }
+
+    @Override
+    public Sound getSound() {
+        return streamSound;
     }
 
     @Override
@@ -71,12 +114,19 @@ public final class NetSongSound extends AbstractTickableSoundInstance {
     /** 自停时必须从表里摘掉，否则那张表会一直攥着 Entity；被外面停掉走的是另一条路，不会重复 */
     private void finish() {
         stop();
+        BY_PATH.remove(streamPath);
         NetSongPlayback.forget(this);
     }
 
     /** 还没开始就作废：工厂必须返回一个实例，所以造出来立刻掐掉。不走 finish()，这一份从没进过表 */
     void cancel() {
         stop();
+        BY_PATH.remove(streamPath);
+    }
+
+    /** 外部（NetSongPlayback.stop/clear）停掉时也要从注册表摘掉 */
+    void unregister() {
+        BY_PATH.remove(streamPath);
     }
 
     private void follow() {
@@ -89,9 +139,7 @@ public final class NetSongSound extends AbstractTickableSoundInstance {
      * 必须在后台线程上开：这一句会真的去连网络。
      * 开不出来抛 CompletionException，声源静静地不响，而不是把异常甩进渲染线程。
      */
-    @Override
-    public CompletableFuture<AudioStream> getStream(SoundBufferLibrary buffers,
-                                                    Sound sound, boolean looping) {
+    public CompletableFuture<AudioStream> openStream() {
         return CompletableFuture.supplyAsync(() -> {
             try {
                 return NetMusicPlayback.openStream(url);

@@ -10,7 +10,6 @@ import com.november.mcphone.core.client.PhoneTheme;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
-import net.minecraft.util.Mth;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -114,7 +113,7 @@ public final class AppManagerPage {
         final int visible = availH < rowH ? 1 : (availH - rowH) / (rowH + 2) + 1;
         // 卸载会让列表变短，不夹一下就会停在空白处
         maxScrollOffset = Math.max(0, apps.size() - visible);
-        scrollOffset = Mth.clamp(scrollOffset, 0, maxScrollOffset);
+        scrollOffset = Math.clamp(scrollOffset, 0, maxScrollOffset);
 
         hovered = -1;
         for (int i = scrollOffset; i < apps.size(); i++) {

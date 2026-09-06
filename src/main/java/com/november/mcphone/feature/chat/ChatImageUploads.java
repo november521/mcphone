@@ -1,7 +1,6 @@
 package com.november.mcphone.feature.chat;
 
 import net.minecraft.server.level.ServerPlayer;
-import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 
 import java.util.Map;
 import java.util.UUID;
@@ -128,7 +127,7 @@ public final class ChatImageUploads {
      * 与 RequestThrottle 那张表同理：不清的话，每个发了一半就跑掉的人都会留下几十 KB，
      * 而这份内存要等到服务器重启才还回来。挂载见 MCphone 的构造函数。
      */
-    public static void onPlayerLoggedOut(PlayerEvent.PlayerLoggedOutEvent event) {
-        SESSIONS.remove(event.getEntity().getUUID());
+    public static void onPlayerLoggedOut(java.util.UUID playerId) {
+        SESSIONS.remove(playerId);
     }
 }

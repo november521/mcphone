@@ -25,7 +25,7 @@ public final class NotesClientCache {
         return summaries;
     }
 
-    static void setSummaries(List<NoteSummary> list) {
+    public static void setSummaries(List<NoteSummary> list) {
         summaries = List.copyOf(list);
     }
 
@@ -49,7 +49,7 @@ public final class NotesClientCache {
         openNote = null;
     }
 
-    static void setOpenNote(Note note) {
+    public static void setOpenNote(Note note) {
         // 迟到的回包：玩家已退出或切换，直接丢弃
         if (note.id() != pendingId) return;
         openNote = note;

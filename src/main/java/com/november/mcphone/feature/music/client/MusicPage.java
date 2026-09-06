@@ -5,7 +5,6 @@ import com.november.mcphone.core.client.FontPalette;
 import com.november.mcphone.core.client.GuiUtil;
 import com.november.mcphone.core.client.PhoneSkin;
 import com.november.mcphone.core.client.PhoneTheme;
-import com.november.mcphone.core.net.MCphoneNetwork;
 import com.november.mcphone.feature.music.PlayMode;
 import com.november.mcphone.feature.music.Track;
 import com.november.mcphone.feature.music.client.playback.AudioDecoders;
@@ -16,8 +15,8 @@ import com.november.mcphone.feature.music.net.OpenDiscBayPacket;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
-import net.minecraft.util.Mth;
 import net.minecraft.world.item.ItemStack;
+import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 
 import java.util.List;
 
@@ -89,7 +88,7 @@ public final class MusicPage {
         MusicSources.refreshAll();
 
         // 唱片仓的真值在服务端，进来先要一份，否则会先显示上一次的快照
-        MCphoneNetwork.sendToServer(new DiscActionPacket(DiscActionPacket.Action.QUERY));
+        ClientPlayNetworking.send(new DiscActionPacket(DiscActionPacket.Action.QUERY));
     }
 
     /** 离开 App 刻意不停音乐；退出世界时才由 LocalPlayback.shutdown 收掉 */
@@ -342,7 +341,7 @@ public final class MusicPage {
         if (total <= 0L) return;
 
         long elapsed = LocalPlayback.elapsedMillis();
-        float ratio = Mth.clamp(elapsed / (float) total, 0.0F, 1.0F);
+        float ratio = Math.clamp(elapsed / (float) total, 0.0F, 1.0F);
         g.fill(x, y, x + (int) (w * ratio), y + PROGRESS_H, PhoneTheme.COLOR_MUSIC_PROGRESS);
     }
 
@@ -409,7 +408,7 @@ public final class MusicPage {
 
         // 开背包键必须先判：空仓时它盖在「整条＝放入」上面
         if (hitAt(mx, my, discBackpackX, btnY2)) {
-            MCphoneNetwork.sendToServer(new OpenDiscBayPacket());
+            ClientPlayNetworking.send(new OpenDiscBayPacket());
             return true;
         }
 
@@ -430,7 +429,7 @@ public final class MusicPage {
     }
 
     private static void send(DiscActionPacket.Action action) {
-        MCphoneNetwork.sendToServer(new DiscActionPacket(action));
+        ClientPlayNetworking.send(new DiscActionPacket(action));
     }
 
     private boolean hitAt(double mx, double my, int bx, int by) {
@@ -483,6 +482,6 @@ public final class MusicPage {
         int visible = Math.max(1, availableHeight / (font.lineHeight + ROW_EXTRA));
 
         maxScroll = Math.max(0, total - visible);
-        scrollOffset = Mth.clamp(scrollOffset, 0, maxScroll);
+        scrollOffset = Math.clamp(scrollOffset, 0, maxScroll);
     }
 }

@@ -58,6 +58,7 @@ public final class NetSongPlayback {
 
         NetSongSound sound = ACTIVE.remove(entityId);
         if (sound != null) {
+            sound.unregister();
             Minecraft.getInstance().getSoundManager().stop(sound);
         }
         return epoch;
@@ -78,6 +79,7 @@ public final class NetSongPlayback {
 
         MCphone.LOGGER.debug("[MCphone] 退出世界，停掉 {} 条正在响的网络音乐", ACTIVE.size());
         for (NetSongSound sound : ACTIVE.values()) {
+            sound.unregister();
             Minecraft.getInstance().getSoundManager().stop(sound);
         }
         ACTIVE.clear();

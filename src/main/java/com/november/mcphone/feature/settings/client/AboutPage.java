@@ -3,18 +3,16 @@ package com.november.mcphone.feature.settings.client;
 import com.november.mcphone.MCphone;
 import com.november.mcphone.api.client.app.IPhoneApp;
 import com.november.mcphone.api.client.app.RequiredMod;
-import com.november.mcphone.compat.CuriosCompat;
 import com.november.mcphone.compat.NetMusicCompat;
 import com.november.mcphone.core.client.FontPalette;
 import com.november.mcphone.core.client.GuiUtil;
 import com.november.mcphone.core.client.PhoneScreenRegistry;
 import com.november.mcphone.core.client.PhoneTheme;
-import com.november.mcphone.platform.ModPresence;
 import net.minecraft.SharedConstants;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
-import net.minecraft.util.Mth;
+import net.fabricmc.loader.api.FabricLoader;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -85,11 +83,11 @@ public final class AboutPage {
         final int top = y;
         final int bottom = phoneTop + screenH - navH;
 
-        scrollPx = Mth.clamp(scrollPx, 0, maxScroll);
+        scrollPx = Math.clamp(scrollPx, 0, maxScroll);
         y -= scrollPx;
 
         // 裁掉滚出去的部分，否则正文会画到状态栏和导航栏上
-        GuiUtil.enableScissor(g, x, top, x + w, bottom);
+        g.enableScissor(x, top, x + w, bottom);
 
         // ---- 名字与版本 ----
         g.drawString(font, "MCphone", x, y, FontPalette.title(), false);
@@ -114,13 +112,11 @@ public final class AboutPage {
                 x, y, FontPalette.subtle(), false);
         y += font.lineHeight + 2;
 
-        // Curios 与 NetMusic 都是"能力型"联动：装了多点东西，但都不对应任何
+        // NetMusic 是"能力型"联动：装了多点东西，但都不对应任何
         // 一个 App，所以从 App 的前置声明里汇总不出来，只能单独写在这儿。
+        // （原 NeoForge 版还列了 Curios；Curios 在 1.21.1 Fabric 上没有构建，故不列。）
         // 这一页存在的理由就是回答玩家"我怎么没有这个"，漏一条他就会把
         // "功能不见了"当成 bug 来报
-        y = compatRow(g, font, x, y, w,
-                Component.translatable("mcphone.compat.curios").getString(),
-                CuriosCompat.isLoaded());
         y = compatRow(g, font, x, y, w,
                 Component.translatable("mcphone.compat.netmusic").getString(),
                 NetMusicCompat.isLoaded());
@@ -133,10 +129,10 @@ public final class AboutPage {
         // 玩家往下滚就能看到。截断是那个 bug 本身，不是它的兜底。
         for (RequiredMod mod : companionMods()) {
             y = compatRow(g, font, x, y, w, mod.displayName(),
-                    ModPresence.isLoaded(mod.modId()));
+                    FabricLoader.getInstance().isModLoaded(mod.modId()));
         }
 
-        GuiUtil.disableScissor(g);
+        g.disableScissor();
 
         // 这一帧画到哪儿，就是内容有多高；下一帧的滚动上限按它来
         maxScroll = Math.max(0, (y + scrollPx) - bottom);
@@ -146,7 +142,7 @@ public final class AboutPage {
     public boolean mouseScrolled(double scrollY, Font font) {
         int step = font.lineHeight * 3;
         int before = scrollPx;
-        scrollPx = Mth.clamp(scrollPx - (int) (scrollY * step), 0, maxScroll);
+        scrollPx = Math.clamp(scrollPx - (int) (scrollY * step), 0, maxScroll);
         return scrollPx != before;
     }
 

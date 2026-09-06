@@ -3,7 +3,6 @@ package com.november.mcphone.feature.chat;
 import com.november.mcphone.MCphone;
 import net.minecraft.Util;
 import net.minecraft.server.MinecraftServer;
-import net.neoforged.neoforge.event.server.ServerStartedEvent;
 import net.minecraft.world.level.storage.LevelResource;
 
 import java.io.IOException;
@@ -190,9 +189,7 @@ public final class ChatImageStore {
      *
      * 挂载见 MCphone 的构造函数。漏挂没有任何症状——硬盘慢慢变大，一年后才看得出来。
      */
-    public static void onServerStarted(ServerStartedEvent event) {
-        MinecraftServer server = event.getServer();
-
+    public static void onServerStarted(MinecraftServer server) {
         // 聊天记录是 SavedData，只能在主线程碰；扫目录与删文件是磁盘上的事，挪去后台。
         // 启动这一刻的引用集合就是全部：那时还没有人连进来，产生不了新的图
         Set<UUID> referenced = ChatData.get(server).referencedImages();

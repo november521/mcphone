@@ -6,13 +6,11 @@ import com.november.mcphone.MCphone;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.sounds.AudioStream;
 import net.minecraft.sounds.SoundSource;
-import net.minecraft.util.Mth;
 import org.lwjgl.openal.AL;
 import org.lwjgl.openal.ALC10;
 import org.lwjgl.openal.ALCapabilities;
 
 import javax.sound.sampled.AudioFormat;
-import net.neoforged.neoforge.client.event.ClientTickEvent;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -165,7 +163,7 @@ public final class LocalPlayback {
 
     /** App 里的音量，0..1，下一 tick 生效 */
     public static void setVolume(float v) {
-        volume = Mth.clamp(v, 0.0F, 1.0F);
+        volume = Math.clamp(v, 0.0F, 1.0F);
     }
 
     public static float getVolume() {
@@ -202,7 +200,7 @@ public final class LocalPlayback {
     }
 
     /** 每 tick 泵一次流、跟上音量变化、发现停了就收尾 */
-    public static void onClientTick(ClientTickEvent.Post event) {
+    public static void onClientTick() {
         if (state != State.PLAYING || channel == null) return;
 
         Ending ending;

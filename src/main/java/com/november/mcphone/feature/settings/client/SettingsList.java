@@ -2,6 +2,7 @@ package com.november.mcphone.feature.settings.client;
 
 import com.november.mcphone.core.client.FontPalette;
 import com.november.mcphone.core.client.PhoneTheme;
+import com.november.mcphone.core.client.anim.UiMotion;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
@@ -48,6 +49,15 @@ public final class SettingsList {
     /** 鼠标停在第几行，-1 表示没有 */
     private int hovered = -1;
 
+    /** hover 高亮的淡入淡出进度（0..1），用 UiMotion 驱动 */
+    private float hoverAlpha;
+
+    /** 最近一次 hover 的那一行的 y 坐标。离开后高亮在它上面淡出 */
+    private int fadeRowY;
+
+    /** 上一帧时间，算 dt 用 */
+    private long lastFrameMs;
+
     /** 换一份列表。PhoneScreen 建好之后交进来 */
     public void setItems(List<Item> items) {
         this.items = items == null ? new ArrayList<>() : items;
@@ -57,6 +67,9 @@ public final class SettingsList {
     /** 进入这一页时清掉悬停，免得沿用上一次离开时停在哪一行 */
     public void open() {
         hovered = -1;
+        hoverAlpha = 0f;
+        fadeRowY = 0;
+        lastFrameMs = 0L;
     }
 
     public void render(GuiGraphics g, int phoneLeft, int phoneTop,
@@ -84,6 +97,10 @@ public final class SettingsList {
 
         final int rowH = font.lineHeight + 4;
 
+        long now = System.currentTimeMillis();
+        float dt = lastFrameMs == 0L ? 0f : Math.max(1f, Math.min(50f, now - lastFrameMs));
+        lastFrameMs = now;
+
         hovered = -1;
         for (int i = 0; i < items.size(); i++) {
             if (y + font.lineHeight + 6 > bottom) break;
@@ -92,7 +109,7 @@ public final class SettingsList {
 
             if (mouseX >= x && mouseX <= x + w && mouseY >= y && mouseY <= y + rowH) {
                 hovered = i;
-                g.fill(x, y, x + w, y + rowH, PhoneTheme.COLOR_ROW_HOVER);
+                fadeRowY = y;
             }
 
             g.drawString(font, item.label(), x + 2, y + 2, FontPalette.body(), false);
@@ -109,6 +126,17 @@ public final class SettingsList {
                     FontPalette.subtle(), false);
 
             y += rowH + 2;
+        }
+
+        // 高亮淡入/淡出统一画在最后：鼠标停在某一行时 hovered 更新 fadeRowY，
+        // 移开后 alpha 在最后停过的那一行上淡掉，不会"啪"地消失。
+        hoverAlpha = UiMotion.approach(hoverAlpha, hovered >= 0 ? 1f : 0f,
+                dt, UiMotion.HOVER_MS);
+        if (hoverAlpha > 0.01f) {
+            int base = PhoneTheme.COLOR_ROW_HOVER;
+            int alpha = (int) (((base >>> 24) & 0xFF) * hoverAlpha);
+            g.fill(x, fadeRowY, x + w, fadeRowY + rowH,
+                    (alpha << 24) | (base & 0x00FFFFFF));
         }
     }
 

@@ -1,54 +1,19 @@
 name: Release
 
-# 版本号【只由这份 workflow 改】，任何人手动改 gradle.properties 的 mod_version
-# 都会被 build.yml 里那道 guard-version 拦下。
+# 只在推 v* tag 时触发。build.yml 触发于 push 分支，两者不重叠、不会重复跑。
 #
-# 为什么改成这样
+# 这一支（main = NeoForge 1.21.1）用不带前缀的 v<版本>，与分支化之前的十来个
+# 老 tag 一脉相承。1.20.1-forge 分支那边用 forge-v<版本>——tag 在 git 里是
+# 【仓库级】的、不属于任何分支，两支都用 v1.0.0 会撞名。
 #
-# 原先是"人手改 mod_version、人手打 tag，这里再校验两者一致"。那套的问题不在于
-# 校验不严，而在于【版本号在没发版的时候也会动】：每个 commit 随手 +1，攒出一串
-# 谁也没见过的号，还会因为分支合并往回走——1.10.1 到 1.10.4 之间就出现过两个
-# 内容不同、mod_version 都写 1.10.1 的 commit。而这个字段是要烧进 jar、在游戏内
-# 模组列表里显示的。
-#
-# 现在：平时提交一律不碰它，发版时在 Actions 页面手动触发这份 workflow，选一个
-# bump 类型，由 CI 算出新号、写进文件、构建、提交、打 tag、发布。仓库里那个值
-# 因此永远等于"最近一次发出去的版本"。
-#
-# 怎么选 bump 类型：三档各指什么写在 gradle.properties 的 mod_version 上方。
+# 至于该跑哪份 workflow，不用自己分派：推 tag 时 GitHub 用的是【tag 所指向那个
+# commit 里的】workflow 文件，tag 打在哪个分支上就跑那个分支的。
 on:
-  workflow_dispatch:
-    inputs:
-      version:
-        description: '版本号怎么升（promote ＝ 把当前的预发布后缀摘掉转正，如 1.10.1-beta.1 → 1.10.1）'
-        required: true
-        type: choice
-        options:
-          - patch
-          - minor
-          - major
-          - promote
-          - custom
-      custom_version:
-        description: '自定义版本号（仅当上面选 custom 时填，形如 1.11.0）'
-        required: false
-        type: string
-      release_type:
-        description: '发布渠道（beta/alpha 会把 GitHub Release 标成预发布，两个平台也按这个渠道收）'
-        required: true
-        type: choice
-        default: release
-        options:
-          - release
-          - beta
-          - alpha
-      dry_run:
-        description: '试跑：构建与校验照跑，但不提交、不打 tag、不发布'
-        required: false
-        type: boolean
-        default: false
+  push:
+    tags:
+      - 'v*'
 
-# 默认的 GITHUB_TOKEN 是只读的，不显式提权就推不了 commit、也建不了 Release。
+# 默认的 GITHUB_TOKEN 是只读的，不显式提权就创建不了 Release。
 permissions:
   contents: write
 
@@ -72,88 +37,27 @@ jobs:
       # 那是个不再开源的商业组件，启用缓存就等于接受 Gradle 自己那份
       # Terms of Use（https://gradle.com/legal/terms-of-use/）。一个 MIT 的
       # 模组仓库不该在顺手修个告警的时候，把自己绑上另一份条款。
+      #
+      # v5 相对 v4 的唯一变更就是跑在 node 24 上 —— 而那正是我们要修的那条
+      # 弃用告警。真需要 v6 里的东西时再单独权衡，别跟着"升到最新"一起做。
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v5
 
       - name: Make Gradle wrapper executable
         run: chmod +x ./gradlew
 
-      # ---------------- 版本号 ----------------
-      - name: 算出新版本号
-        id: ver
-        env:
-          BUMP: ${{ inputs.version }}
-          CUSTOM: ${{ inputs.custom_version }}
+      # 打了 v1.0.1 而 gradle.properties 还写着 1.0.0，是发版事故的常见来源：
+      # jar 文件名、模组列表里的版本号会与 Release 标题对不上。宁可在这里失败。
+      - name: Verify tag matches mod_version
         run: |
-          set -euo pipefail
-          CURRENT=$(grep -E '^mod_version=' gradle.properties | cut -d= -f2- | tr -d '[:space:]')
-
-          # 版本号允许带一截预发布后缀：1.10.1-beta.1。它是 Maven 版本序里的
-          # 【小于】1.10.1 的那一档，NeoForge 读的就是这套序，所以"先发 beta 再转正"
-          # 在玩家那边是正常的升级方向，而不是降级。
-          #
-          # 升级基准取的是去掉后缀的那一段：站在 1.10.1-beta.1 上选 patch 得到 1.10.2
-          # （那一版的 beta 不要了），选 promote 得到 1.10.1（那一版转正）。
-          BASE="${CURRENT%%-*}"
-          SUFFIX="${CURRENT#"$BASE"}"
-          if ! printf '%s' "$BASE" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
-            echo "::error::gradle.properties 里的 mod_version=$CURRENT 不是 x.y.z 也不是 x.y.z-后缀，无法在它基础上升"
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          MOD_VERSION=$(grep -E '^mod_version=' gradle.properties | cut -d= -f2- | tr -d '[:space:]')
+          echo "tag=$GITHUB_REF_NAME  mod_version=$MOD_VERSION"
+          if [ "$TAG_VERSION" != "$MOD_VERSION" ]; then
+            echo "::error::tag $GITHUB_REF_NAME 与 gradle.properties 的 mod_version=$MOD_VERSION 不一致，请先对齐再发版"
             exit 1
           fi
 
-          if [ "$BUMP" = "custom" ]; then
-            if [ -z "$CUSTOM" ]; then
-              echo "::error::选了 custom 就必须填 custom_version"
-              exit 1
-            fi
-            # 后缀只收 [0-9A-Za-z.-]：tag 名与 jar 文件名都由它拼出来
-            if ! printf '%s' "$CUSTOM" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
-              echo "::error::custom_version=$CUSTOM 不是 x.y.z 或 x.y.z-后缀（如 1.10.1-beta.1）。tag 名与 jar 文件名都由它拼出来，不接受别的形状"
-              exit 1
-            fi
-            NEW="$CUSTOM"
-          elif [ "$BUMP" = "promote" ]; then
-            # 转正：把预发布后缀摘掉，版本号本身不动
-            if [ -z "$SUFFIX" ]; then
-              echo "::error::当前是 $CURRENT，本来就没有预发布后缀，没什么可转正的。要升号请选 patch / minor / major"
-              exit 1
-            fi
-            NEW="$BASE"
-          else
-            IFS=. read -r MA MI PA <<< "$BASE"
-            case "$BUMP" in
-              major) MA=$((MA + 1)); MI=0; PA=0 ;;
-              minor) MI=$((MI + 1)); PA=0 ;;
-              patch) PA=$((PA + 1)) ;;
-              *) echo "::error::认不出的 bump 类型：$BUMP"; exit 1 ;;
-            esac
-            NEW="$MA.$MI.$PA"
-          fi
-
-          # tag 撞名就停。原先那套是"同名 tag 已有 Release 就删掉重建"，因为
-          # 重推 tag 是个明确的人为动作。现在版本号由 CI 生成，撞名只可能是
-          # 上一次发版跑到一半失败了——那种情况下悄悄覆盖掉已经发出去的东西
-          # 比失败更糟，所以在这儿停，让人先看清楚上次断在哪儿。
-          if git rev-parse -q --verify "refs/tags/v$NEW" >/dev/null; then
-            echo "::error::tag v$NEW 已存在。多半是上一次发版中途失败，请先确认那次的状态再重来"
-            exit 1
-          fi
-
-          echo "当前 $CURRENT  ->  新版本 $NEW（$BUMP）"
-          echo "current=$CURRENT" >> "$GITHUB_OUTPUT"
-          echo "new=$NEW" >> "$GITHUB_OUTPUT"
-          echo "tag=v$NEW" >> "$GITHUB_OUTPUT"
-
-      - name: 写进 gradle.properties
-        env:
-          NEW: ${{ steps.ver.outputs.new }}
-        run: |
-          set -euo pipefail
-          # 只动 mod_version 那一行，别的属性一个字不碰
-          sed -i -E "s/^mod_version=.*/mod_version=${NEW}/" gradle.properties
-          grep -E '^mod_version=' gradle.properties
-
-      # ---------------- 构建与校验 ----------------
       - name: Build with Gradle
         run: ./gradlew build
 
@@ -168,110 +72,57 @@ jobs:
 
       - name: Find built JAR
         id: find-jar
-        env:
-          NEW: ${{ steps.ver.outputs.new }}
         run: |
-          set -euo pipefail
           # 【按确切文件名取，不要 find | head -1】，理由见 build.yml 里同名步骤。
           # 这里更要紧：挑错就是把一个旧版本挂上 Release，玩家会真的下载。
-          JAR_PATH="build/libs/mcphone-${NEW}.jar"
+          #
+          # mod_version 已经在上面与 tag 校验过一致，直接拿它拼名字。
+          MOD_VERSION=$(grep -E '^mod_version=' gradle.properties | cut -d= -f2- | tr -d '[:space:]')
+          JAR_PATH="build/libs/mcphone-${MOD_VERSION}.jar"
           if [ ! -f "$JAR_PATH" ]; then
             echo "::error::没找到 $JAR_PATH。build/libs 下现有："
             ls -la build/libs || true
             exit 1
           fi
           echo "jar_path=$JAR_PATH" >> "$GITHUB_OUTPUT"
-          # 下面发布到 Modrinth / CurseForge 的步骤是 YAML 的 with:，跑不了
-          # shell，值只能在这儿取出来。minecraft_version 不会误匹配
-          # minecraft_version_range —— 正则要求名字后面紧跟等号。
+          # 下面两个给发布到 Modrinth / CurseForge 的步骤用。
+          # 那两步是 YAML 里的 with:，跑不了 shell，只能在这儿把值取出来。
+          # minecraft_version 不会误匹配 minecraft_version_range —— 正则要求
+          # 名字后面紧跟等号。
+          echo "mod_version=$MOD_VERSION" >> "$GITHUB_OUTPUT"
           MC_VERSION=$(grep -E '^minecraft_version=' gradle.properties | cut -d= -f2- | tr -d '[:space:]')
           echo "mc_version=$MC_VERSION" >> "$GITHUB_OUTPUT"
 
-      # ---------------- 发版说明 ----------------
-      #
-      # 版本号现在是 CI 现算的，写说明的人事先不知道自己写的是哪一版。
-      # 所以约定改成：平时把下一版的说明写进 docs/release-notes/next.md，
-      # 发版时这里把它改名成 v<新版本>.md，一起进那个 release commit。
-      #
-      # 也仍然认 v<新版本>.md：知道自己在发哪一版时可以直接写好那个文件名。
-      - name: 准备发版说明
-        id: notes
+      # 同名 tag 已有 Release 时先删掉，否则下面的 gh release create 会直接失败。
+      # 语义是"重推 tag ＝ 重新出这个版本"：强推同名 tag 本身已是明确的破坏性
+      # 动作，不会误触。只删与本次 tag 同名的那一个，不碰其他版本。
+      - name: Remove pre-existing release for this tag
         env:
-          TAG: ${{ steps.ver.outputs.tag }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          set -euo pipefail
-          TARGET="docs/release-notes/${TAG}.md"
-          if [ -f "$TARGET" ]; then
-            echo "使用已有的 $TARGET"
-          elif [ -f docs/release-notes/next.md ]; then
-            mkdir -p docs/release-notes
-            git mv docs/release-notes/next.md "$TARGET"
-            echo "next.md 改名为 $TARGET"
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            echo "::warning::$GITHUB_REF_NAME 已存在 Release，将删除后重建"
+            gh release delete "$GITHUB_REF_NAME" --yes
           else
-            echo "::warning::没有 docs/release-notes/next.md，也没有 ${TARGET}。GitHub Release 会退回自动生成的提交列表，而那个玩家读不懂"
-            echo "file=" >> "$GITHUB_OUTPUT"
-            exit 0
+            echo "$GITHUB_REF_NAME 尚无 Release，直接创建"
           fi
-          echo "file=$TARGET" >> "$GITHUB_OUTPUT"
 
-      # ---------------- 提交、打 tag、推送 ----------------
-      #
-      # 提交人刻意是 github-actions[bot]：build.yml 的 guard-version 认的就是
-      # 这个邮箱，别人手改 mod_version 会被它拦下。改这里的身份等于把那道闸拆了。
-      - name: 提交版本号并打 tag
-        if: ${{ inputs.dry_run != true }}
-        env:
-          NEW: ${{ steps.ver.outputs.new }}
-          TAG: ${{ steps.ver.outputs.tag }}
-        run: |
-          set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add gradle.properties docs/release-notes
-          if git diff --cached --quiet; then
-            echo "::error::没有任何改动可提交，版本号大概没写进去"
-            exit 1
-          fi
-          git commit -m "release: v${NEW}"
-          git tag "$TAG"
-          git push
-          git push origin "$TAG"
-
+      # 正文取自仓库内与 tag 同名的说明文件，让 Release 描述也进版本控制；
+      # 没有对应文件时退回 GitHub 依据提交记录自动生成，不至于发出一个空描述。
       - name: Create GitHub Release
-        if: ${{ inputs.dry_run != true }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           JAR_PATH: ${{ steps.find-jar.outputs.jar_path }}
-          TAG: ${{ steps.ver.outputs.tag }}
-          NOTES_FILE: ${{ steps.notes.outputs.file }}
-          RELEASE_TYPE: ${{ inputs.release_type }}
         run: |
-          set -euo pipefail
-          TITLE="MCphone NeoForge 1.21.1 ${TAG}"
-          # beta / alpha 一律标成预发布：GitHub 上那一版不会顶掉 Latest，
-          # 玩家从仓库首页点下载拿到的仍然是上一个正式版
-          PRERELEASE=""
-          if [ "$RELEASE_TYPE" != "release" ]; then
-            TITLE="$TITLE ($RELEASE_TYPE)"
-            PRERELEASE="--prerelease"
-          fi
-          if [ -n "$NOTES_FILE" ]; then
-            gh release create "$TAG" "$JAR_PATH" --title "$TITLE" $PRERELEASE --notes-file "$NOTES_FILE"
+          NOTES_FILE="docs/release-notes/${GITHUB_REF_NAME}.md"
+          TITLE="MCphone NeoForge 1.21.1 ${GITHUB_REF_NAME}"
+          if [ -f "$NOTES_FILE" ]; then
+            echo "使用 $NOTES_FILE 作为 Release 正文"
+            gh release create "$GITHUB_REF_NAME" "$JAR_PATH" --title "$TITLE" --notes-file "$NOTES_FILE"
           else
-            gh release create "$TAG" "$JAR_PATH" --title "$TITLE" $PRERELEASE --generate-notes
+            echo "未找到 $NOTES_FILE，退回自动生成正文"
+            gh release create "$GITHUB_REF_NAME" "$JAR_PATH" --title "$TITLE" --generate-notes
           fi
-
-      - name: 试跑：只报告，不发布
-        if: ${{ inputs.dry_run == true }}
-        env:
-          NEW: ${{ steps.ver.outputs.new }}
-          JAR_PATH: ${{ steps.find-jar.outputs.jar_path }}
-          NOTES_FILE: ${{ steps.notes.outputs.file }}
-        run: |
-          echo "试跑：本来会发 v${NEW}"
-          echo "  jar    ${JAR_PATH}"
-          echo "  说明   ${NOTES_FILE:-（没有，会退回自动生成）}"
-          echo "没有提交、没有打 tag、没有发布。"
 
       # ---------------- 发布到 Modrinth 与 CurseForge ----------------
       #
@@ -288,7 +139,6 @@ jobs:
       # 这些是【仓库级】的，不分分支：1.20.1-forge 那边不用再填一遍。
       - name: Check publishing credentials
         id: creds
-        if: ${{ inputs.dry_run != true }}
         # 令牌只在这一步进环境，不挂到 job 级 env 上 —— 那样上面每一步
         # （包括 ./gradlew build 跑的一堆第三方插件）都能读到它。
         env:
@@ -299,7 +149,8 @@ jobs:
         run: |
           # 缺凭据就跳过那个平台并留一条 warning，不让整次发版判失败：
           # GitHub Release 此时已经建好了，为一个还没配的令牌把它标成红叉，
-          # 只会让人误以为发出去的包有问题。
+          # 只会让人误以为发出去的包有问题。warning 在 Actions 页面上是黄色
+          # 的一行，不至于悄没声地跳过。
           if [ -n "$MODRINTH_ID" ] && [ -n "$MODRINTH_TOKEN" ]; then
             echo "modrinth=true" >> "$GITHUB_OUTPUT"
           else
@@ -315,27 +166,24 @@ jobs:
 
       - name: Prepare changelog for mod sites
         id: changelog
-        if: ${{ inputs.dry_run != true && (steps.creds.outputs.modrinth == 'true' || steps.creds.outputs.curseforge == 'true') }}
-        env:
-          TAG: ${{ steps.ver.outputs.tag }}
-          NOTES_FILE: ${{ steps.notes.outputs.file }}
+        if: steps.creds.outputs.modrinth == 'true' || steps.creds.outputs.curseforge == 'true'
         run: |
-          set -euo pipefail
           # 上面建 Release 时没有说明文件可以退回 --generate-notes，
           # 这两个平台没有那个东西：changelog 留空，版本页就真的是一片空白。
           # 所以这里保证【总有一个文件】，最差也是一条指回 Release 的链接。
-          FILE="$NOTES_FILE"
-          if [ -z "$FILE" ]; then
-            FILE="build/publish-changelog.md"
-            echo "完整更新内容见 https://github.com/${GITHUB_REPOSITORY}/releases/tag/${TAG}" > "$FILE"
+          NOTES_FILE="docs/release-notes/${GITHUB_REF_NAME}.md"
+          if [ ! -f "$NOTES_FILE" ]; then
+            NOTES_FILE="build/publish-changelog.md"
+            echo "完整更新内容见 https://github.com/${GITHUB_REPOSITORY}/releases/tag/${GITHUB_REF_NAME}" > "$NOTES_FILE"
+            echo "::warning::未找到 docs/release-notes/${GITHUB_REF_NAME}.md，两个平台的更新日志只会有一条 Release 链接"
           fi
-          echo "file=$FILE" >> "$GITHUB_OUTPUT"
+          echo "file=$NOTES_FILE" >> "$GITHUB_OUTPUT"
 
       # 两个平台【刻意分成两步】。mc-publish 只往"id 与 token 都齐了"的平台发，
       # 合成一步也能跑，但那样一个平台没配好、或者一个平台挂了，另一个就一起
       # 发不出去。
       - name: Publish to Modrinth
-        if: ${{ inputs.dry_run != true && steps.creds.outputs.modrinth == 'true' }}
+        if: steps.creds.outputs.modrinth == 'true'
         uses: Kira-NT/mc-publish@v3.3.1
         with:
           modrinth-id: ${{ vars.MODRINTH_ID }}
@@ -347,9 +195,9 @@ jobs:
           # 理由与 find-jar 那步同一个：挑错就是把旧版本发到平台上，
           # 而那边不像 GitHub，删了重发会留下痕迹、玩家可能已经下过。
           files: ${{ steps.find-jar.outputs.jar_path }}
-          name: MCphone NeoForge 1.21.1 ${{ steps.ver.outputs.tag }}
-          version: ${{ steps.ver.outputs.new }}
-          version-type: ${{ inputs.release_type }}
+          name: MCphone NeoForge 1.21.1 ${{ github.ref_name }}
+          version: ${{ steps.find-jar.outputs.mod_version }}
+          version-type: release
           changelog-file: ${{ steps.changelog.outputs.file }}
           loaders: neoforge
           game-versions: ${{ steps.find-jar.outputs.mc_version }}
@@ -360,15 +208,15 @@ jobs:
           # CurseForge 那边【不能】这样，理由见下面那一步。
 
       - name: Publish to CurseForge
-        if: ${{ inputs.dry_run != true && steps.creds.outputs.curseforge == 'true' }}
+        if: steps.creds.outputs.curseforge == 'true'
         uses: Kira-NT/mc-publish@v3.3.1
         with:
           curseforge-id: ${{ vars.CURSEFORGE_ID }}
           curseforge-token: ${{ secrets.CURSEFORGE_TOKEN }}
           files: ${{ steps.find-jar.outputs.jar_path }}
-          name: MCphone NeoForge 1.21.1 ${{ steps.ver.outputs.tag }}
-          version: ${{ steps.ver.outputs.new }}
-          version-type: ${{ inputs.release_type }}
+          name: MCphone NeoForge 1.21.1 ${{ github.ref_name }}
+          version: ${{ steps.find-jar.outputs.mod_version }}
+          version-type: release
           changelog-file: ${{ steps.changelog.outputs.file }}
           loaders: neoforge
           game-versions: ${{ steps.find-jar.outputs.mc_version }}
@@ -380,4 +228,7 @@ jobs:
           # 就【整次上传失败】。而 mods.toml 里的 mcef、netmusic、balm 这几个
           # 的 CurseForge slug 是否与 modId 同名，没有逐个核实过。
           # 为一条装饰性的依赖信息赌上整次发版不划算。
+          #
+          # 等在 CurseForge 上逐个确认过 slug，再照 mc-publish 的语法
+          # （id@version(type)，一行一条）填回来。
           dependencies: ''

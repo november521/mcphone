@@ -2,7 +2,6 @@ package com.november.mcphone.feature.notes.client;
 
 import com.november.mcphone.core.client.FontPalette;
 import com.november.mcphone.core.client.PhoneTheme;
-import com.november.mcphone.core.net.MCphoneNetwork;
 import com.november.mcphone.feature.notes.NotePrinter;
 import com.november.mcphone.feature.notes.NoteSummary;
 import com.november.mcphone.feature.notes.net.NotesClientCache;
@@ -13,6 +12,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
+import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 
 import java.util.List;
 
@@ -55,7 +55,7 @@ public final class NotesList {
         toast = "";
         pendingOpen = null;
         pendingNew = false;
-        MCphoneNetwork.sendToServer(new RequestNoteListPacket());
+        ClientPlayNetworking.send(new RequestNoteListPacket());
     }
 
     public void close() {
@@ -203,7 +203,7 @@ public final class NotesList {
             return;
         }
 
-        MCphoneNetwork.sendToServer(new PrintNotePacket(id));
+        ClientPlayNetworking.send(new PrintNotePacket(id));
         showToast("mcphone.notes.print_done");
     }
 

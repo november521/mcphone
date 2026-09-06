@@ -1,6 +1,6 @@
 package com.november.mcphone.feature.store;
 
-import com.november.mcphone.core.PhonePlayerData;
+import com.november.mcphone.core.ModAttachments;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 
@@ -16,6 +16,6 @@ public final class AppAccess {
     public static boolean canUse(ServerPlayer player, ResourceLocation appId) {
         if (player == null || appId == null) return false;
         if (!AppPriceRegistry.isPaid(appId)) return true;
-        return PhonePlayerData.of(player).purchasedApps().has(appId);
+        return player.getAttachedOrCreate(ModAttachments.PURCHASED_APPS).has(appId);
     }
 }

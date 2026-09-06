@@ -1,9 +1,9 @@
 package com.november.mcphone.core.net;
 
 import com.november.mcphone.MCphone;
-import com.november.mcphone.core.PhoneItemData;
+import com.november.mcphone.core.ModAttachments;
+import com.november.mcphone.core.ModDataComponents;
 import com.november.mcphone.core.PhoneItem;
-import com.november.mcphone.core.PhonePlayerData;
 import com.november.mcphone.core.menu.ModMenus;
 import com.november.mcphone.core.menu.PhoneContainerMenu;
 import com.november.mcphone.feature.enderchest.net.OpenEnderChestPacket;
@@ -13,24 +13,25 @@ import com.november.mcphone.feature.settings.net.SetWallpaperPacket;
 import com.november.mcphone.feature.settings.net.SyncWallpaperPacket;
 import com.november.mcphone.feature.store.AppAccess;
 import com.november.mcphone.feature.waystone.net.OpenWaystoneSelectionPacket;
+import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
+import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
-import com.november.mcphone.core.PhoneItemData;
-import com.november.mcphone.core.PhoneLocation;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.InteractionHand;
 import net.minecraft.world.SimpleMenuProvider;
 import net.minecraft.world.inventory.PlayerEnderChestContainer;
 import net.minecraft.world.item.ItemStack;
-import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
-import net.neoforged.neoforge.network.registration.PayloadRegistrar;
 
 /**
- * 网络包处理 —— 注册并处理所有 MCphone 网络包。
+ * 网络包处理（服务端一半）—— 注册 C2S 包并处理服务端收到的请求。
  *
- * 注册入口：在 MCphone 构造函数中通过
- * modEventBus.addListener(NetworkHandler::register) 挂载。
+ * 原 NeoForge 版一次注册全部方向；Fabric 的 ClientPlayNetworking 是客户端专用
+ * 类，不能出现在这个会被专用服务器加载的类里。所以 S2C 的注册与客户端接收
+ * 全部挪到 {@code core/client/ClientNetworking} 与各 feature 的 client 网络类，
+ * 本类只保留 {@link #registerServer()}。
+ *
+ * Fabric 的服务端接收回调已经跑在服务端主线程上，原来的 enqueueWork 包装去掉。
  */
 public final class NetworkHandler {
 
@@ -56,107 +57,40 @@ public final class NetworkHandler {
                         .withStyle(ChatFormatting.RED), true);
     }
 
-    // ---- 由 MCphone 构造函数调用 ----
-    public static void register(final RegisterPayloadHandlersEvent event) {
-        PayloadRegistrar registrar = event.registrar("1");
+    /** C2S：注册 + 服务端接收，由 MCphone.onInitialize 调用 */
+    public static void registerServer() {
+        PayloadTypeRegistry.playC2S().register(SetWallpaperPacket.TYPE, SetWallpaperPacket.STREAM_CODEC);
+        ServerPlayNetworking.registerGlobalReceiver(SetWallpaperPacket.TYPE, NetworkHandler::handleSetWallpaper);
 
-        // C2S: 玩家选了壁纸
-        MCphoneNetwork.registerToServer(
-                registrar,
-                SetWallpaperPacket.TYPE,
-                SetWallpaperPacket.STREAM_CODEC,
-                NetworkHandler::handleSetWallpaper
-        );
+        PayloadTypeRegistry.playC2S().register(SetDeviceNamePacket.TYPE, SetDeviceNamePacket.STREAM_CODEC);
+        ServerPlayNetworking.registerGlobalReceiver(SetDeviceNamePacket.TYPE, NetworkHandler::handleSetDeviceName);
 
-        // S2C: 同步壁纸给玩家
-        MCphoneNetwork.registerToClient(
-                registrar,
-                SyncWallpaperPacket.TYPE,
-                SyncWallpaperPacket.STREAM_CODEC,
-                NetworkHandler::handleSyncWallpaper
-        );
+        PayloadTypeRegistry.playC2S().register(OpenEnderChestPacket.TYPE, OpenEnderChestPacket.STREAM_CODEC);
+        ServerPlayNetworking.registerGlobalReceiver(OpenEnderChestPacket.TYPE, NetworkHandler::handleOpenEnderChest);
 
-        // C2S: 玩家给手机起名
-        MCphoneNetwork.registerToServer(
-                registrar,
-                SetDeviceNamePacket.TYPE,
-                SetDeviceNamePacket.STREAM_CODEC,
-                NetworkHandler::handleSetDeviceName
-        );
-
-        // C2S: 玩家开了/关了手机界面（点亮手上那部的屏幕，别人也看得见）
-        MCphoneNetwork.registerToServer(
-                registrar,
-                PhoneScreenOnPacket.TYPE,
-                PhoneScreenOnPacket.STREAM_CODEC,
-                NetworkHandler::handlePhoneScreenOn
-        );
-
-        // C2S: 玩家在手机里点了末影箱
-        MCphoneNetwork.registerToServer(
-                registrar,
-                OpenEnderChestPacket.TYPE,
-                OpenEnderChestPacket.STREAM_CODEC,
-                NetworkHandler::handleOpenEnderChest
-        );
-
-        // C2S: 玩家在手机里点了传送石
-        //
         // 无条件注册，不看服务端装没装 Waystones：网络包类型的注册两端必须
         // 对称，少注册一个，装了 Waystones 的客户端发来这个包时，服务端会
         // 因为不认识它而把玩家踢下线。装没装的判断放在处理函数里。
-        MCphoneNetwork.registerToServer(
-                registrar,
-                OpenWaystoneSelectionPacket.TYPE,
-                OpenWaystoneSelectionPacket.STREAM_CODEC,
-                NetworkHandler::handleOpenWaystoneSelection
-        );
+        PayloadTypeRegistry.playC2S().register(OpenWaystoneSelectionPacket.TYPE, OpenWaystoneSelectionPacket.STREAM_CODEC);
+        ServerPlayNetworking.registerGlobalReceiver(OpenWaystoneSelectionPacket.TYPE, NetworkHandler::handleOpenWaystoneSelection);
 
-        // 聊天与记事本的包各自成组，注册与处理都在自己的类里：
+        // 聊天/记事本/商店/音乐的包各自成组，注册与处理都在自己的类里：
         // 本类只保留"注册总入口"这一个职责，不做杂物间
-        com.november.mcphone.feature.chat.net.ChatNetworking.register(registrar);
-        com.november.mcphone.feature.notes.net.NotesNetworking.register(registrar);
-        com.november.mcphone.feature.store.net.StoreNetworking.register(registrar);
-        com.november.mcphone.feature.music.net.MusicNetworking.register(registrar);
-        com.november.mcphone.feature.terminal.net.TerminalNetworking.register(registrar);
+        com.november.mcphone.feature.chat.net.ChatNetworking.registerServer();
+        com.november.mcphone.feature.notes.net.NotesNetworking.registerServer();
+        com.november.mcphone.feature.store.net.StoreNetworking.registerServer();
+        com.november.mcphone.feature.music.net.MusicNetworking.registerServer();
     }
 
-    //  处理函数
-
-    /**
-     * 服务端收到：把"亮着的那部"记到物品堆上，别人看到的模型才会跟着变。
-     *
-     * 只认<b>拿在手上</b>的。手机在背包或饰品栏里时那件物品在别人眼里根本不渲染，点亮它
-     * 没有任何人看得见——客户端那边同样不会为这种情况发包，这里再挡一道是因为包可以伪造。
-     *
-     * 两只手都先清一遍再点亮，无状态：不去记"上次点亮了谁"。记下来的那个位置随时会失效
-     * （换手、放回背包、丢出去），而清两格的代价是零。
-     *
-     * 极端情况下会残留：开着手机的那一瞬间被别的东西（指令、别的模组）把手里那部挪走，
-     * 关机时就清不到它了。组件不落盘（见 {@code ModDataComponents.SCREEN_ON}），所以那点
-     * 残留在下次读档时自己消失，不值得为它多记一份状态。
-     */
-    private static void handlePhoneScreenOn(PhoneScreenOnPacket packet, ServerPlayer player) {
-        ItemStack lit = packet.lit()
-                .filter(location -> location instanceof PhoneLocation.InHand)
-                .map(location -> location.resolve(player))
-                .filter(PhoneItem::isPhone)
-                .orElse(ItemStack.EMPTY);
-
-        for (InteractionHand hand : InteractionHand.values()) {
-            ItemStack held = player.getItemInHand(hand);
-            if (held != lit) PhoneItemData.clearScreenOn(held);
-        }
-
-        if (!lit.isEmpty()) PhoneItemData.setScreenOn(lit);
-    }
+    //  处理函数（服务端）
 
     /** 服务端收到：记录壁纸选择，广播给该玩家的客户端 */
-    private static void handleSetWallpaper(SetWallpaperPacket packet, ServerPlayer player) {
-        PhonePlayerData.of(player).setWallpaper(new WallpaperData(packet.wallpaperFileName()));
+    private static void handleSetWallpaper(SetWallpaperPacket packet, ServerPlayNetworking.Context ctx) {
+        var player = ctx.player();
+        player.setAttached(ModAttachments.WALLPAPER, new WallpaperData(packet.wallpaperFileName()));
 
         // 发回给该玩家确认
-        MCphoneNetwork.sendToPlayer(player, new SyncWallpaperPacket(packet.wallpaperFileName()));
+        ServerPlayNetworking.send(player, new SyncWallpaperPacket(packet.wallpaperFileName()));
 
         MCphone.LOGGER.debug("玩家 {} 设置壁纸: {}", player.getName().getString(),
                 packet.wallpaperFileName().isEmpty() ? "默认" : packet.wallpaperFileName());
@@ -165,53 +99,41 @@ public final class NetworkHandler {
     /**
      * 服务端收到：把设备名写进玩家指定的那一部手机。
      *
-     * 客户端发来的东西一律不信：
-     *   - 那个位置上确实是手机吗（否则就能给任意物品改名了，
-     *     何况位置本身就可能已经失效——手机被丢掉了）
-     *   - 名字再清洗一遍（客户端可以是伪造的，绕过界面直接发包）
-     *
-     * 手上与背包里的改完不必手动同步：玩家背包容器每 tick 会用
-     * ItemStack.matches 比对上一次的快照，组件变了就自动下发。饰品栏
-     * 不归原版管，故统一调一次 writeBack，由位置自己决定要不要动作。
+     * 客户端发来的东西一律不信：那个位置上确实是手机吗、名字再清洗一遍。
      */
-    private static void handleSetDeviceName(SetDeviceNamePacket packet, ServerPlayer player) {
+    private static void handleSetDeviceName(SetDeviceNamePacket packet, ServerPlayNetworking.Context ctx) {
+        var player = ctx.player();
         ItemStack stack = packet.location().resolve(player);
 
-        // 那个位置上不是手机就什么都不做：位置由客户端给出，可能已经
-        // 失效（手机被丢掉了），也可能是伪造的
         if (!PhoneItem.isPhone(stack)) return;
 
-        // 空名字＝清除设备名，恢复默认物品名 —— 这道规范化在 setDeviceName 里，
-        // 不在这儿：门面存在的理由就是收编调用点
         String name = SetDeviceNamePacket.sanitize(packet.name());
-        PhoneItemData.setDeviceName(stack, name);
+        if (name.isEmpty()) {
+            stack.remove(ModDataComponents.DEVICE_NAME);
+        } else {
+            stack.set(ModDataComponents.DEVICE_NAME, name);
+        }
 
-        // 手上与背包里的改完原版自会同步，饰品栏得显式写回去通知 Curios
+        // 手上与背包里的改完原版自会同步，饰品栏已从本版移除（Curios 在 1.21.1 Fabric 无构建）
         packet.location().writeBack(player, stack);
 
         MCphone.LOGGER.debug("玩家 {} 设置设备名: {}", player.getName().getString(),
-                name.isBlank() ? "(清除)" : name);
+                name.isEmpty() ? "(清除)" : name);
     }
 
     /**
      * 服务端收到：给玩家打开他自己的末影箱，界面装在手机机身里。
-     *
-     * 校验玩家身上确实带着手机——包是客户端发的，不能信。没有这道检查，
-     * 任何人改个客户端就能凭空开末影箱，手机这个前提条件形同虚设。
-     *
-     * 容器直接用 player.getEnderChestInventory()，就是原版那一个：
-     * 与方块末影箱、跨维度完全互通，不另存一份数据，也就不存在两边
-     * 不同步的问题。
+     * 校验玩家身上确实带着手机——包是客户端发的，不能信。
      */
-    private static void handleOpenEnderChest(OpenEnderChestPacket packet, ServerPlayer player) {
+    private static void handleOpenEnderChest(OpenEnderChestPacket packet, ServerPlayNetworking.Context ctx) {
+        ServerPlayer player = ctx.player();
+
         if (!PhoneItem.isCarriedBy(player)) {
             MCphone.LOGGER.debug("玩家 {} 请求开末影箱但身上没有手机，已忽略",
                     player.getName().getString());
             return;
         }
 
-        // 买过了吗。安装是纯客户端动作，改个客户端就能把 App 塞进主屏，
-        // 购买那一步完全绕开——所以服务端必须自己问一句
         if (!AppAccess.canUse(player, APP_ENDER_CHEST)) {
             notPurchased(player);
             return;
@@ -220,28 +142,19 @@ public final class NetworkHandler {
         PlayerEnderChestContainer enderChest = player.getEnderChestInventory();
         player.openMenu(new SimpleMenuProvider(
                 (containerId, inventory, p) -> new PhoneContainerMenu(
-                        ModMenus.ENDER_CHEST.get(), containerId, inventory,
+                        ModMenus.ENDER_CHEST, containerId, inventory,
                         enderChest, ModMenus.ENDER_CHEST_SIZE),
                 Component.translatable("mcphone.container.ender_chest")));
     }
 
     /**
      * 服务端收到：给玩家打开传送石碑的选点界面。
-     *
-     * 校验与末影箱一致——身上得真有手机。包是客户端发的，不能信；没有这道
-     * 检查，任何人改个客户端就能凭空传送，手机这个前提条件形同虚设。
-     *
-     * 界面与传送全交给 Waystones，我们只负责发起。
-     *
-     * 开不成时给一句 actionbar 提示。玩家点了图标、界面却没弹出来，什么都不
-     * 说是最糟的一种失败——他会以为是自己点错了，反复点，然后来报"手机坏了"。
-     * 一句话就能把他引向真正的原因：服务端没装传送石碑，或者版本对不上。
-     *
-     * 这条路在正常情况下走不到：没装 Waystones 时那个 App 压根不登记，客户端
-     * 也就发不出这个包。能走到这里，说明两端装的模组不一致、对方改了 API，
-     * 或者有人在伪造包——前两种玩家有权知道，第三种告诉他也无妨。
+     * 校验与末影箱一致——身上得真有手机。
      */
-    private static void handleOpenWaystoneSelection(OpenWaystoneSelectionPacket packet, ServerPlayer player) {
+    private static void handleOpenWaystoneSelection(OpenWaystoneSelectionPacket packet,
+                                                    ServerPlayNetworking.Context ctx) {
+        ServerPlayer player = ctx.player();
+
         if (!PhoneItem.isCarriedBy(player)) {
             MCphone.LOGGER.debug("玩家 {} 请求开传送石但身上没有手机，已忽略",
                     player.getName().getString());
@@ -254,26 +167,20 @@ public final class NetworkHandler {
         }
 
         if (!com.november.mcphone.compat.WaystonesCompat.openSelection(player)) {
-            // true = 显示在物品栏上方那一行，不占聊天记录。与 Waystones
-            // 自己报传送失败时的位置一致，玩家不会觉得是两个模组在说话
             player.displayClientMessage(
                     Component.translatable("mcphone.waystone.unavailable"), true);
         }
     }
 
-    /** 客户端收到：更新本地缓存的壁纸纹理引用（PhoneScreen 每帧查询） */
-    private static void handleSyncWallpaper(SyncWallpaperPacket packet) {
-        WakeholderData.setWallpaperFileName(packet.wallpaperFileName());
-    }
-
     /**
-     * 客户端本地壁纸缓存 —— 在 PhoneScreen 渲染时读取。
-     * 放到这个独立 holder 类中避免 PhoneScreen 直接依赖 network 包。
+     * 客户端本地壁纸缓存 —— 在 PhoneScreen/PhoneChassis 渲染时读取。
+     * 放到这个独立 holder 类中避免 UI 直接依赖 network 包。纯静态字符串，
+     * 不含任何客户端类型，放在本类里不会被专用服务器判为违规。
      */
     public static final class WakeholderData {
         private static String currentWallpaper = "";
 
         public static String get() { return currentWallpaper; }
-        static void setWallpaperFileName(String name) { currentWallpaper = name; }
+        public static void setWallpaperFileName(String name) { currentWallpaper = name; }
     }
 }

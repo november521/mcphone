@@ -6,7 +6,7 @@ import com.november.mcphone.MCphone;
 import com.november.mcphone.api.client.app.IPhoneApp;
 import com.november.mcphone.api.client.app.RequiredMod;
 import com.november.mcphone.feature.store.AppPriceRegistry;
-import com.november.mcphone.feature.store.net.StoreClientCache;
+import com.november.mcphone.feature.store.client.StoreClientCache;
 import com.november.mcphone.util.SpiLoader;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ServerData;

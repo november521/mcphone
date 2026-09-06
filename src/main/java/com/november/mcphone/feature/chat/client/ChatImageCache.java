@@ -2,11 +2,11 @@ package com.november.mcphone.feature.chat.client;
 
 import com.mojang.blaze3d.platform.NativeImage;
 import com.november.mcphone.core.client.ImageCodec;
-import com.november.mcphone.core.net.MCphoneNetwork;
 import com.november.mcphone.feature.chat.ChatImage;
 import com.november.mcphone.feature.chat.net.RequestChatImagePacket;
 import net.minecraft.Util;
 import net.minecraft.client.Minecraft;
+import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -207,7 +207,7 @@ public final class ChatImageCache {
 
         for (UUID id : wanted) ENTRIES.get(id).requestedAt = now;
         lastRequestMs = now;
-        MCphoneNetwork.sendToServer(new RequestChatImagePacket(peer, wanted));
+        ClientPlayNetworking.send(new RequestChatImagePacket(peer, wanted));
     }
 
     /**

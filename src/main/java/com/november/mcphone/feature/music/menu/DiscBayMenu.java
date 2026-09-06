@@ -42,7 +42,7 @@ public class DiscBayMenu extends AbstractContainerMenu {
 
     /** 服务端构造：容器背后就是玩家那份 DiscState 附件 */
     public DiscBayMenu(int containerId, Inventory playerInventory, Container container) {
-        super(ModMenus.DISC_BAY.get(), containerId);
+        super(ModMenus.DISC_BAY, containerId);
         checkContainerSize(container, DiscBayContainer.SIZE);
 
         final RegistryAccess registries = playerInventory.player.level().registryAccess();

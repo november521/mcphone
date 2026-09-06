@@ -3,7 +3,6 @@ package com.november.mcphone.feature.chat.client;
 import com.november.mcphone.core.client.FontPalette;
 import com.november.mcphone.core.client.PhoneTheme;
 import com.november.mcphone.core.client.PlayerAvatar;
-import com.november.mcphone.core.net.MCphoneNetwork;
 import com.november.mcphone.feature.chat.net.ChatClientCache;
 import com.november.mcphone.feature.chat.net.FriendRequestPacket;
 import com.november.mcphone.feature.chat.net.OnlinePlayer;
@@ -15,6 +14,7 @@ import com.november.mcphone.core.client.GuiUtil;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
+import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 
 import java.util.List;
 
@@ -138,10 +138,10 @@ public final class ChatAddContact {
         if (p == null) return false;
 
         switch (p.relation()) {
-            case NONE -> MCphoneNetwork.sendToServer(new FriendRequestPacket(p.id()));
+            case NONE -> ClientPlayNetworking.send(new FriendRequestPacket(p.id()));
             case REQUEST_RECEIVED ->
-                    MCphoneNetwork.sendToServer(new RespondFriendRequestPacket(p.id(), true));
-            case FRIEND -> MCphoneNetwork.sendToServer(new RemoveFriendPacket(p.id()));
+                    ClientPlayNetworking.send(new RespondFriendRequestPacket(p.id(), true));
+            case FRIEND -> ClientPlayNetworking.send(new RemoveFriendPacket(p.id()));
             // 已发出的申请只能等对方处理，重复发包没用
             case REQUEST_SENT -> { }
         }
@@ -183,7 +183,7 @@ public final class ChatAddContact {
         if (now - lastRequestMs < REFRESH_INTERVAL_MS) return;
 
         lastRequestMs = now;
-        MCphoneNetwork.sendToServer(new RequestOnlinePlayersPacket());
+        ClientPlayNetworking.send(new RequestOnlinePlayersPacket());
     }
 
     private static int rowHeight() {

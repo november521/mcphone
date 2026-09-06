@@ -1,21 +1,21 @@
 package com.november.mcphone.feature.camera.client;
 
 import com.november.mcphone.core.client.MCphoneKeyBindings;
+import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Screenshot;
-import net.neoforged.neoforge.client.event.ClientTickEvent;
-import net.neoforged.neoforge.client.event.RenderGuiEvent;
-import net.neoforged.neoforge.client.event.ScreenEvent;
+import net.minecraft.client.gui.GuiGraphics;
 
 /**
- * 相机模式的事件监听。三个事件都在游戏总线（NeoForge.EVENT_BUS），由 MCphoneClient 显式 addListener；
- * 按键的注册在模组总线，见 MCphoneKeyBindings。拍照的分帧时序见 {@link CameraMode} 的类注释。
+ * 相机模式的事件监听。Fabric 侧由 MCphoneClient 挂到各个客户端事件上：
+ * tick（{@code ClientTickEvents}）、HUD 渲染（{@code HudRenderCallback}）、
+ * 屏幕打开（{@code ScreenEvents.BEFORE_INIT}）。
  */
 public final class CameraHandler {
 
     private CameraHandler() {}
 
-    public static void onClientTick(ClientTickEvent.Post event) {
+    public static void onClientTick() {
         if (!CameraMode.isActive()) return;
 
         Minecraft mc = Minecraft.getInstance();
@@ -41,7 +41,7 @@ public final class CameraHandler {
         }
     }
 
-    public static void onRenderGui(RenderGuiEvent.Post event) {
+    public static void onRenderGui(GuiGraphics guiGraphics, DeltaTracker deltaTracker) {
         if (!CameraMode.isActive()) return;
 
         // 拍照期间必须跳过取景框，否则会被拍进照片
@@ -52,18 +52,18 @@ public final class CameraHandler {
 
         Minecraft mc = Minecraft.getInstance();
         CameraOverlay.render(
-                event.getGuiGraphics(),
+                guiGraphics,
                 mc.font,
                 mc.getWindow().getGuiScaledWidth(),
                 mc.getWindow().getGuiScaledHeight(),
                 System.currentTimeMillis(),
                 // 模糊后处理要它来插值。false ＝ 不算暂停时的那一份，相机模式下
                 // 游戏本来就没暂停，两者一样，取跟着游戏时间的那个更合语义
-                event.getPartialTick().getGameTimeDeltaPartialTick(false));
+                deltaTracker.getGameTimeDeltaPartialTick(false));
     }
 
     /** 安全网：打开任意界面就退出相机模式，否则玩家会卡在没有 HUD 的状态里 */
-    public static void onScreenOpening(ScreenEvent.Opening event) {
+    public static void onScreenOpening() {
         CameraMode.exit();
     }
 }

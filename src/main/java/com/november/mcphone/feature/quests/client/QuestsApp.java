@@ -71,7 +71,7 @@ public final class QuestsApp extends PhoneApp {
      * 必须自己判：默认实现只看 requiredMods()，而这个 App 一条都不声明 —— 照默认
      * 走就是"永远可用"，主屏上会多一个点了没反应的图标。
      *
-     * 这里问的是 ModPresence，不是"任务档案同步了没"。档案没同步是【一时】的状态，
+     * 这里问的是 ModList，不是"任务档案同步了没"。档案没同步是【一时】的状态，
      * 拿它当可用性会让这一格在进服的头几秒里闪一下才出现；而那种情形 FTB 自己
      * 会在玩家点下去时把话说清楚，见 {@link FtbQuestsBook} 的类注释。
      */
@@ -91,8 +91,4 @@ public final class QuestsApp extends PhoneApp {
     public void onPress() {
         FtbQuestsBook.open();
     }
-
-    /** 界面不在手机里：开的是 FTB Quests 自己那本任务书，快捷键不必先开机 */
-    @Override
-    public boolean opensInsidePhone() { return false; }
 }

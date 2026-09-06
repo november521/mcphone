@@ -2,7 +2,6 @@ package com.november.mcphone.core.net;
 
 import com.november.mcphone.MCphone;
 import net.minecraft.server.level.ServerPlayer;
-import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 
 import java.util.Map;
 import java.util.UUID;
@@ -191,7 +190,7 @@ public final class RequestThrottle {
      *
      * 玩家再上线时 computeIfAbsent 自会重建一条。
      */
-    public static void onPlayerLoggedOut(PlayerEvent.PlayerLoggedOutEvent event) {
-        LAST_REQUEST.remove(event.getEntity().getUUID());
+    public static void onPlayerLoggedOut(java.util.UUID playerId) {
+        LAST_REQUEST.remove(playerId);
     }
 }

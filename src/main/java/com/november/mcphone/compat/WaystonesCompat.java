@@ -1,9 +1,9 @@
 package com.november.mcphone.compat;
 
 import com.november.mcphone.MCphone;
-import com.november.mcphone.platform.ModPresence;
 import net.blay09.mods.balm.api.Balm;
 import net.blay09.mods.waystones.menu.WaystoneSelectionListBuilder;
+import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
@@ -11,6 +11,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.fabricmc.loader.api.FabricLoader;
 
 /**
  * Waystones（传送石碑）兼容层 —— 让手机里的「传送石」App 打开它的选点界面。
@@ -109,11 +110,11 @@ public final class WaystonesCompat {
     /**
      * 装没装 Waystones。
      *
-     * 不缓存，与 CuriosCompat 同理：ModPresence 底下就是一次 map 查找，而缓存
+     * 不缓存，与 CuriosCompat 同理：ModList 内部就是一次 map 查找，而缓存
      * 要挑一个"模组列表已经就绪"的时机去填，反而容易在加载早期取到错的值。
      */
     public static boolean isLoaded() {
-        return ModPresence.isLoaded(WAYSTONES_MODID);
+        return FabricLoader.getInstance().isModLoaded(WAYSTONES_MODID);
     }
 
     /**

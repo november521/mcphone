@@ -1,7 +1,6 @@
 package com.november.mcphone.compat;
 
 import com.november.mcphone.MCphone;
-import net.neoforged.bus.api.IEventBus;
 
 import java.util.List;
 
@@ -33,19 +32,21 @@ public final class CompatModules {
 
     private CompatModules() {}
 
-    /** 全部兼容模块。加新的就往这里加一行 */
-    private static final List<CompatModule> MODULES = List.of(
-            new IntegratedDynamicsCompat()
-    );
+    /** 全部兼容模块。加新的就往这里加一行。
+     *
+     * 注意：原 NeoForge 版有 IntegratedDynamicsCompat（修它注册表回滚时炸方块
+     * 的那个 bug）。那是 NeoForge 加载器的缺陷，Fabric 没有这套注册回滚机制，
+     * 而且 Integrated Dynamics 在 Fabric 上根本没有构建，所以这里不再列它。 */
+    private static final List<CompatModule> MODULES = List.of();
 
     /**
-     * 装载所有该装的兼容模块。在 MCphone 构造函数中调用一次。
+     * 装载所有该装的兼容模块。在 MCphone.onInitialize 中调用一次。
      */
-    public static void init(IEventBus modEventBus) {
+    public static void init() {
         for (CompatModule module : MODULES) {
             try {
                 if (!module.isNeeded()) continue;
-                module.apply(modEventBus);
+                module.apply();
                 MCphone.LOGGER.info("已启用兼容模块：{}", module.targetModId());
             } catch (Throwable t) {
                 // 这里捕 Throwable 而不是 Exception 是刻意的：兼容模块最常见的

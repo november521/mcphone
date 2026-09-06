@@ -1,7 +1,6 @@
 package com.november.mcphone.compat;
 
-import com.november.mcphone.platform.ModPresence;
-import net.neoforged.bus.api.IEventBus;
+import net.fabricmc.loader.api.FabricLoader;
 
 /**
  * 一个针对某个外部模组的兼容模块。
@@ -33,7 +32,7 @@ public interface CompatModule {
      * 的版本上还去动人家的东西。
      */
     default boolean isNeeded() {
-        return ModPresence.isLoaded(targetModId());
+        return FabricLoader.getInstance().isModLoaded(targetModId());
     }
 
     /**
@@ -45,5 +44,5 @@ public interface CompatModule {
      * 抛的异常它兜不住，各模块必须自己在回调体内再兜一层——理由见
      * CompatModules 的类注释，那不是谨慎，是必须。
      */
-    void apply(IEventBus modEventBus);
+    void apply();
 }

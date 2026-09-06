@@ -3,13 +3,13 @@ package com.november.mcphone.feature.reader.client.source;
 import com.november.mcphone.MCphone;
 import com.november.mcphone.core.client.GuiUtil;
 import com.november.mcphone.feature.reader.BookRef;
-import com.november.mcphone.platform.ModPresence;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
+import net.fabricmc.loader.api.FabricLoader;
 
 import java.lang.reflect.Method;
 import java.util.ArrayList;
@@ -94,7 +94,7 @@ public final class GuideMeSource implements BookSource {
     /** 这个方法里不能出现任何 guideme 的东西，它得在对方缺席时也能安全执行 */
     @Override
     public boolean isAvailable() {
-        return ModPresence.isLoaded(GUIDEME_MODID);
+        return FabricLoader.getInstance().isModLoaded(GUIDEME_MODID);
     }
 
     @Override

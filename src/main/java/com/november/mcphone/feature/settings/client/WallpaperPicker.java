@@ -2,14 +2,13 @@ package com.november.mcphone.feature.settings.client;
 
 import com.november.mcphone.core.client.FontPalette;
 import com.november.mcphone.core.client.PhoneTheme;
-import com.november.mcphone.core.net.MCphoneNetwork;
 import com.november.mcphone.feature.settings.net.SetWallpaperPacket;
 import com.november.mcphone.core.client.GuiUtil;
 import net.minecraft.Util;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.util.Mth;
+import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 
 import java.util.List;
 
@@ -164,7 +163,7 @@ public final class WallpaperPicker {
         final int totalRows = (wallpapers.size() + COLS - 1) / COLS;
         // 删掉几张图之后行数会变少，不夹一下就会停在空白处
         maxScrollRow = Math.max(0, totalRows - visibleRows);
-        scrollRow = Mth.clamp(scrollRow, 0, maxScrollRow);
+        scrollRow = Math.clamp(scrollRow, 0, maxScrollRow);
 
         int x = contentX;
         int y = contentY;
@@ -265,14 +264,14 @@ public final class WallpaperPicker {
 
         if (hoveredIdx == -2) {
             // "恢复默认背景"
-            MCphoneNetwork.sendToServer(new SetWallpaperPacket(""));
+            ClientPlayNetworking.send(new SetWallpaperPacket(""));
             return true;
         }
 
         if (hoveredIdx >= 0) {
             WallpaperStore.WallpaperEntry wp = WallpaperStore.getWallpaper(hoveredIdx);
             if (wp != null) {
-                MCphoneNetwork.sendToServer(new SetWallpaperPacket(wp.fileName()));
+                ClientPlayNetworking.send(new SetWallpaperPacket(wp.fileName()));
                 return true;
             }
         }

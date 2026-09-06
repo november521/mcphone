@@ -7,7 +7,7 @@ import com.november.mcphone.core.client.PhoneScreenRegistry;
 import com.november.mcphone.core.client.PhoneSkin;
 import com.november.mcphone.core.client.PhoneTheme;
 import com.november.mcphone.feature.store.client.AppSourceRegistry;
-import com.november.mcphone.feature.store.net.StoreClientCache;
+import com.november.mcphone.feature.store.client.StoreClientCache;
 import com.november.mcphone.core.client.GuiUtil;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;

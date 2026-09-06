@@ -1,7 +1,6 @@
 package com.november.mcphone.core.client;
 
 import net.minecraft.client.Minecraft;
-import net.neoforged.neoforge.client.event.ClientTickEvent;
 
 /**
  * 快捷键开机。
@@ -24,8 +23,8 @@ public final class PhoneKeyHandler {
 
     private PhoneKeyHandler() {}
 
-    /** 由 MCphoneClient 构造函数挂到游戏总线 */
-    public static void onClientTick(ClientTickEvent.Post event) {
+    /** 由 MCphoneClient 挂到 ClientTickEvents */
+    public static void onClientTick() {
         Minecraft mc = Minecraft.getInstance();
 
         boolean pressed = false;

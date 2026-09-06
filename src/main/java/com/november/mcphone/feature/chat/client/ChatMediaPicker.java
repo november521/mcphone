@@ -9,7 +9,6 @@ import net.minecraft.Util;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
-import net.minecraft.util.Mth;
 
 import java.nio.file.Path;
 import java.util.List;
@@ -127,7 +126,7 @@ public final class ChatMediaPicker {
         folder.ensureCacheFor(perPage);
 
         int pageCount = Math.max(1, (items.size() + perPage - 1) / perPage);
-        page = Mth.clamp(page, 0, pageCount - 1);
+        page = Math.clamp(page, 0, pageCount - 1);
 
         int gridX = x + (w - PhotoGridPainter.gridWidth()) / 2;
 
@@ -219,7 +218,7 @@ public final class ChatMediaPicker {
 
     private void flip(int delta) {
         // 到头就停住，不循环——不然一直滚轮会在首尾之间反复跳
-        page = Mth.clamp(page + delta, 0, lastPage());
+        page = Math.clamp(page + delta, 0, lastPage());
     }
 
     private int lastPage() {

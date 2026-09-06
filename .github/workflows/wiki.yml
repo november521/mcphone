@@ -1,0 +1,69 @@
+name: Sync Wiki
+
+# wiki 是【生成物】，仓库是唯一真源。
+#
+# 为什么不手抄一份到 wiki 上：手抄就是两份，两份就会分叉，而分叉之后人们信的是 wiki
+# ——它更显眼。这份接口文档已经烂过一次，修的时候还专门加了个编译守门人
+# （docs/AddonApiExamples.java）。wiki 副本在仓库外、CI 外，守门人管不着它。
+#
+# 页面清单与链接改写规则都在 docs/wiki/render.py 里，加一页改那一个文件。
+#
+# 第一次跑之前 wiki 必须先存在：GitHub 只在你在网页上创建第一页时才真正建出
+# <repo>.wiki 那个仓库，API 建不了。没建的话这个 workflow 会给一条警告然后正常结束，
+# 不会把 main 弄红。
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'README.md'
+      - 'docs/addon-api.md'
+      - 'docs/wiki/**'
+      - '.github/workflows/wiki.yml'
+  workflow_dispatch:
+
+# 推 wiki 仓库要的就是这个
+permissions:
+  contents: write
+
+# 同时来两次推送时，后来的等前一次跑完——两个任务同时往 wiki 推必然撞车
+concurrency:
+  group: wiki
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Clone the wiki
+        id: clone
+        run: |
+          if git clone --depth 1 \
+              "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.wiki.git" wiki
+          then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::wiki 还没建出来。去 https://github.com/${{ github.repository }}/wiki 点一次「Create the first page」随便存一页，之后这个 workflow 就会自己接管（GitHub 的 API 建不了 wiki 页，只能网页点这一下）。"
+          fi
+
+      - name: Render pages
+        if: steps.clone.outputs.ok == 'true'
+        run: python3 docs/wiki/render.py wiki
+
+      - name: Commit & push
+        if: steps.clone.outputs.ok == 'true'
+        working-directory: wiki
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "wiki 已经是最新的，不推了"
+            exit 0
+          fi
+          git commit -m "docs: 从 ${GITHUB_SHA:0:7} 同步"
+          git push

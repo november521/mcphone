@@ -1,8 +1,8 @@
 package com.november.mcphone.feature.reader.client.compat;
 
 import com.november.mcphone.feature.reader.BookRef;
-import com.november.mcphone.platform.ModPresence;
 import net.minecraft.client.gui.GuiGraphics;
+import net.fabricmc.loader.api.FabricLoader;
 
 /**
  * 一条书籍特例 —— 某个模组的书跟别人不一样，这里专门照顾它。
@@ -60,7 +60,7 @@ public interface BookQuirk {
      * 这个判断只算一次并缓存，别放会随时间变化的条件。
      */
     default boolean isNeeded() {
-        return ModPresence.isLoaded(targetModId());
+        return FabricLoader.getInstance().isModLoaded(targetModId());
     }
 
     /** 这本书归这条特例管吗。要尽量窄，理由见类注释 */

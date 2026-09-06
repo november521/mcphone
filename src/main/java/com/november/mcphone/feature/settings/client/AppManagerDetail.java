@@ -10,14 +10,13 @@ import com.november.mcphone.core.client.FontPalette;
 import com.november.mcphone.core.client.GuiUtil;
 import com.november.mcphone.core.client.PhoneScreenRegistry;
 import com.november.mcphone.core.client.PhoneTheme;
-import com.november.mcphone.platform.ModPresence;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.util.Mth;
-import net.neoforged.neoforge.client.settings.KeyModifier;
+import net.fabricmc.loader.api.FabricLoader;
+import com.november.mcphone.core.client.KeyModifier;
 import org.lwjgl.glfw.GLFW;
 
 import java.util.List;
@@ -43,8 +42,7 @@ import java.util.function.Supplier;
  * 是灰的，并写明为什么——不写的话玩家会以为是坏了。
  *
  * 快捷键这一行是【每个 App 各绑各的】，默认未指定：点一下开始等键，按哪个是哪个，
- * 键盘与鼠标键（含侧键）都行，按住 Ctrl / Shift / Alt 再按就是组合键，ESC 清除、
- * 左键算了。撞了车不拦死——先说被谁占了，
+ * 按住 Ctrl / Shift / Alt 再按就是组合键，ESC 清除。撞了车不拦死——先说被谁占了，
  * 再按一次同一个组合就照绑。绑定表与"为什么不做成 KeyMapping"见
  * {@link com.november.mcphone.core.client.AppHotkeys}。
  *
@@ -184,11 +182,11 @@ public final class AppManagerDetail {
         final int bodyBottom = bottom - BUTTON_H * actionRows - font.lineHeight - 8 - actionRows * 2;
         final int bodyTop = y;
 
-        scrollPx = Mth.clamp(scrollPx, 0, maxScroll);
+        scrollPx = Math.clamp(scrollPx, 0, maxScroll);
         y -= scrollPx;
 
         // 越界的部分交给 scissor 裁，不再"放不下就不画"——那样卸载键上方会凭空少几行
-        GuiUtil.enableScissor(g, x, bodyTop, x + w, bodyBottom);
+        g.enableScissor(x, bodyTop, x + w, bodyBottom);
 
         String desc = safe(app::getDescription, "");
         if (desc.isBlank()) desc = Component.translatable("mcphone.store.no_description").getString();
@@ -208,7 +206,7 @@ public final class AppManagerDetail {
             y = drawModLine(g, font, x, y, w, "mcphone.gui.app_companion", companion);
         }
 
-        GuiUtil.disableScissor(g);
+        g.disableScissor();
 
         maxScroll = Math.max(0, (y + scrollPx) - bodyBottom);
 
@@ -221,7 +219,7 @@ public final class AppManagerDetail {
     /** 滚轮翻正文。头部与底下那两行操作不跟着滚：它们得一直够得着 */
     public boolean mouseScrolled(double scrollY, Font font) {
         int before = scrollPx;
-        scrollPx = Mth.clamp(scrollPx - (int) (scrollY * font.lineHeight * 3), 0, maxScroll);
+        scrollPx = Math.clamp(scrollPx - (int) (scrollY * font.lineHeight * 3), 0, maxScroll);
         return scrollPx != before;
     }
 
@@ -236,7 +234,7 @@ public final class AppManagerDetail {
     /** 前置 / 联动那几行：模组名 + 装没装 */
     private static int drawModLine(GuiGraphics g, Font font, int x, int y, int w,
                                    String labelKey, RequiredMod mod) {
-        boolean loaded = ModPresence.isLoaded(mod.modId());
+        boolean loaded = FabricLoader.getInstance().isModLoaded(mod.modId());
         String label = Component.translatable(labelKey).getString() + " " + mod.displayName();
         String mark = Component.translatable(loaded
                 ? "mcphone.gui.app_mod_present" : "mcphone.gui.app_mod_absent").getString();
@@ -363,7 +361,7 @@ public final class AppManagerDetail {
     }
 
     /**
-     * 收玩家按的那一下键盘。鼠标那一下走 {@link #captureMouse}。
+     * 收玩家按的那一下。
      *
      * ESC 是清除，与原版「按键设置」里的意思一致——那儿也是按 ESC 解绑，玩家不用
      * 学第二套。
@@ -403,39 +401,6 @@ public final class AppManagerDetail {
         if (KeyModifier.isKeyCodeModifier(key)) return;
         if (key.equals(InputConstants.UNKNOWN)) return;
 
-        applyCapture(key);
-    }
-
-    /**
-     * 等键时按下的鼠标键。原版的按键设置里鼠标键（含侧键）本来就能绑，这里没有理由
-     * 不能——第一版只接了键盘那条路，侧键就是从那儿漏掉的。
-     *
-     * 【左键除外，它是"算了"】：左键是在手机里点东西的那只手，绑给某个 App 的话，
-     * 玩家在世界里每次挖方块都会开一次手机；何况等键时总得留一个不用记的退路——
-     * 点一下走开就等于反悔，和这一页别处（卸载上膛后点别处即卸下）是同一条规矩。
-     * 其余的键（右键、中键、侧键 4/5……）照绑，撞了车照样是"再按一次强制"。
-     */
-    public void captureMouse(int button) {
-        if (app == null) {
-            capturingKey = false;
-            return;
-        }
-
-        if (button == GLFW.GLFW_MOUSE_BUTTON_LEFT) {
-            MCphone.LOGGER.info("[MCphone] 绑键：收到鼠标左键，当作取消");
-            capturingKey = false;
-            pendingForce = null;
-            return;
-        }
-
-        // 收到的是几号键先记下来。侧键在有些鼠标的驱动里被映射成了键盘按键，
-        // 那种情况下这一行不会出现，而是走 captureKey——一眼就能分清是哪种
-        MCphone.LOGGER.info("[MCphone] 绑键：收到鼠标第 {} 号键", button);
-        applyCapture(InputConstants.Type.MOUSE.getOrCreate(button));
-    }
-
-    /** 键盘与鼠标合流的地方：连着此刻按住的修饰键成一条绑定，撞车就上膛等确认 */
-    private void applyCapture(InputConstants.Key key) {
         AppHotkeys.Binding binding = AppHotkeys.Binding.of(key, AppHotkeys.activeModifiers());
 
         // 上膛的那个组合又按了一次＝他知道自己在做什么
@@ -448,11 +413,9 @@ public final class AppManagerDetail {
 
         String owner = ownerOf(binding);
         if (owner != null) {
-            MCphone.LOGGER.info("[MCphone] 绑键：{} 已被「{}」占用，等再按一次确认",
-                    binding.serialize(), owner);
             pendingForce = binding;
             pendingOwner = owner;
-            return;                 // 继续等：可以再按一次坚持，也可以换一个组合
+            return;                 // 继续等键：可以再按一次坚持，也可以换一个组合
         }
 
         AppHotkeys.bind(app.getId(), binding);
@@ -560,7 +523,10 @@ public final class AppManagerDetail {
 
     /** 这个 App 是哪个模组给的：按 id 的命名空间查，查不到就把命名空间本身显示出来 */
     private String providerName() {
-        return ModPresence.displayName(app.getId().getNamespace());
+        String namespace = app.getId().getNamespace();
+        return FabricLoader.getInstance().getModContainer(namespace)
+                .map(c -> c.getMetadata().getName())
+                .orElse(namespace);
     }
 
     /**

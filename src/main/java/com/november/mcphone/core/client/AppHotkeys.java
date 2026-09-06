@@ -6,7 +6,6 @@ import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
-import net.neoforged.neoforge.client.settings.KeyModifier;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -192,9 +191,11 @@ public final class AppHotkeys {
 
         List<KeyMapping> out = new ArrayList<>(1);
         for (KeyMapping mapping : mc.options.keyMappings) {
-            if (!binding.key().equals(mapping.getKey())) continue;
-            KeyModifier m = mapping.getKeyModifier();
-            if (m == KeyModifier.NONE || binding.modifiers().contains(m)) out.add(mapping);
+            if (!binding.key().equals(((com.november.mcphone.mixin.KeyMappingAccessor) mapping).mcphone$getKey())) continue;
+            // Fabric 的 KeyMapping 没有修饰键概念（全部等价于"无修饰"），所以只要
+            // 键相同就算冲突——与 NeoForge 下"对方是 NONE 修饰、我们的组合里哪怕
+            // 带着 Ctrl 照样算冲突"的语义一致（Ctrl+E 会连背包键 E 一起响）
+            out.add(mapping);
         }
         return out;
     }
@@ -212,17 +213,12 @@ public final class AppHotkeys {
         if (binding == null || binding.key().equals(InputConstants.UNKNOWN)) return;
         BOUND.entrySet().removeIf(e -> e.getValue().equals(binding));
         BOUND.put(appId, binding);
-        // 留一行日志：绑键是玩家一次一次做的事，不会刷屏；而"按了没反应"这类问题，
-        // 有没有这一行就是"没绑上"与"绑上了但按下去没认出来"的分界线
-        MCphone.LOGGER.info("[MCphone] 快捷键：{} 绑到 {}", appId, binding.serialize());
         ClientConfig.saveAppHotkeys(serialize());
     }
 
     /** 解绑并存盘。本来就没绑就什么都不做，省一次无谓的写盘 */
     public static void clear(ResourceLocation appId) {
-        if (BOUND.remove(appId) == null) return;
-        MCphone.LOGGER.info("[MCphone] 快捷键：{} 解绑", appId);
-        ClientConfig.saveAppHotkeys(serialize());
+        if (BOUND.remove(appId) != null) ClientConfig.saveAppHotkeys(serialize());
     }
 
     //  配置 ←→ 这张表

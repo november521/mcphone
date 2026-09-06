@@ -1,7 +1,6 @@
 package com.november.mcphone.core;
 
 import com.november.mcphone.MCphone;
-import com.november.mcphone.compat.CuriosCompat;
 import com.november.mcphone.core.client.PhoneScreenOpener;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.InteractionHand;
@@ -41,11 +40,12 @@ public class PhoneItem extends Item {
      * 发消息、凭空开末影箱，而那种客户端同样变不出一部手机来。
      *
      * 原版的 contains 会连主背包、盔甲栏、副手一起扫，手上那只自然也在内。
-     * 没装 Curios 时 {@link CuriosCompat} 直接返回 false，不碰它的类。
+     *
+     * （原 NeoForge 版还会扫 Curios 饰品槽，见 CuriosCompat；Curios 在
+     * 1.21.1 的 Fabric 上没有构建，故 Fabric 版只查手上与背包。）
      */
     public static boolean isCarriedBy(Player player) {
-        if (player.getInventory().contains(PhoneItem::isPhone)) return true;
-        return CuriosCompat.isEquipped(player, PhoneItem::isPhone);
+        return player.getInventory().contains(PhoneItem::isPhone);
     }
 
     @Override
@@ -77,7 +77,7 @@ public class PhoneItem extends Item {
      */
     @Override
     public Component getName(ItemStack stack) {
-        String deviceName = PhoneItemData.getDeviceName(stack);
+        String deviceName = stack.get(ModDataComponents.DEVICE_NAME);
         if (deviceName != null && !deviceName.isBlank()) {
             return Component.literal(deviceName);
         }

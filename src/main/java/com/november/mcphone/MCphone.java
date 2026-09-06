@@ -4,75 +4,93 @@ import com.mojang.logging.LogUtils;
 import com.november.mcphone.core.ModAttachments;
 import com.november.mcphone.core.ModCreativeTabs;
 import com.november.mcphone.core.ModDataComponents;
+import com.november.mcphone.core.ModSounds;
 import com.november.mcphone.core.PhoneItem;
+import com.november.mcphone.core.menu.ModMenus;
+import com.november.mcphone.core.net.SyncServerConfigPacket;
+import net.fabricmc.api.ModInitializer;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
+import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
+import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
+import net.fabricmc.loader.api.FabricLoader;
+import net.minecraft.core.Registry;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.Rarity;
-import net.neoforged.bus.api.IEventBus;
-import net.neoforged.fml.ModContainer;
-import net.neoforged.fml.common.Mod;
-import net.neoforged.neoforge.registries.DeferredItem;
-import net.neoforged.neoforge.registries.DeferredRegister;
 import org.slf4j.Logger;
 
-@Mod(MCphone.MODID)
-public class MCphone {
+/**
+ * MCphone 的 Fabric 入口（主端）。
+ *
+ * 原 NeoForge 版是 {@code @Mod} 构造器里做注册与挂事件；Fabric 把它拆成
+ * {@link ModInitializer}（本类，主端/服务端）与 {@link MCphoneClient}
+ * （{@code ClientModInitializer}，客户端）。
+ */
+public class MCphone implements ModInitializer {
 
     public static final String MODID = "mcphone";
     public static final Logger LOGGER = LogUtils.getLogger();
 
     /**
      * 运行时的真实版本号，tooltip 用它填 %s，语言文件里不写死。
-     * 在构造函数里由 modContainer 赋值，不用 ModList 静态查询——那依赖 FML 的类加载时序，取不到时是静默的空值。
+     * 在 onInitialize 里从 Fabric Loader 的模组元数据取。
      */
     private static String version = "";
 
-    public static final DeferredRegister.Items ITEMS = DeferredRegister.createItems(MODID);
+    /** 手机物品。注册在 {@link #onInitialize()}。 */
+    public static PhoneItem PHONE;
 
-    public static final DeferredItem<PhoneItem> PHONE = ITEMS.registerItem("phone",
-            props -> new PhoneItem(props.stacksTo(1).rarity(Rarity.RARE)));
+    @Override
+    public void onInitialize() {
+        // 物品：手机
+        PHONE = new PhoneItem(new Item.Properties().stacksTo(1).rarity(Rarity.RARE));
+        Registry.register(BuiltInRegistries.ITEM,
+                ResourceLocation.fromNamespaceAndPath(MODID, "phone"), PHONE);
 
-    public MCphone(IEventBus modEventBus, ModContainer modContainer) {
-        ITEMS.register(modEventBus);
-        ModDataComponents.COMPONENTS.register(modEventBus);
-        ModCreativeTabs.TABS.register(modEventBus);
-        com.november.mcphone.core.menu.ModMenus.MENUS.register(modEventBus);
-        ModAttachments.ATTACHMENT_TYPES.register(modEventBus);
-        com.november.mcphone.core.ModSounds.SOUND_EVENTS.register(modEventBus);
-        modEventBus.addListener(com.november.mcphone.core.net.NetworkHandler::register);
+        ModDataComponents.register();
+        ModCreativeTabs.register();
+        ModMenus.register();
+        ModSounds.register();
+        ModAttachments.ensureLoaded();
 
-        // 游戏总线，显式挂载：这三条漏了没有任何症状，只是下线玩家的表再也不缩小
-        net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener(
-                com.november.mcphone.core.net.RequestThrottle::onPlayerLoggedOut);
-        net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener(
-                com.november.mcphone.feature.music.DiscService::onPlayerLoggedOut);
-        net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener(
-                com.november.mcphone.feature.chat.ChatImageUploads::onPlayerLoggedOut);
+        // 网络：C2S 的注册 + 服务端接收
+        com.november.mcphone.core.net.NetworkHandler.registerServer();
 
-        // 手机替卡槽里的终端供电。漏了它的症状是"终端在手机里会没电"，见 TerminalCharger
-        net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener(
-                com.november.mcphone.feature.terminal.TerminalCharger::onPlayerTick);
+        // 游戏生命周期 —— 对应原 NeoForge 的 NeoForge.EVENT_BUS 几条
+        ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> {
+            var id = handler.getPlayer().getUUID();
+            com.november.mcphone.core.net.RequestThrottle.onPlayerLoggedOut(id);
+            com.november.mcphone.feature.music.DiscService.onPlayerLoggedOut(id);
+            com.november.mcphone.feature.chat.ChatImageUploads.onPlayerLoggedOut(id);
+        });
 
-        // 开服时清掉没有消息认领的图片文件，理由见 ChatImageStore.sweepOrphans
-        net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener(
-                com.november.mcphone.feature.chat.ChatImageStore::onServerStarted);
+        // 开服时清掉没有消息认领的图片文件（理由见 ChatImageStore.sweepOrphans）
+        // 并加载/生成服务端配置
+        ServerLifecycleEvents.SERVER_STARTED.register(server -> {
+            com.november.mcphone.feature.chat.ChatImageStore.onServerStarted(server);
+            com.november.mcphone.core.ServerConfig.load(server);
+        });
 
-        // SERVER 而非 COMMON：必须由服主一份说了算，且 NeoForge 会同步给客户端供界面藏按钮
-        modContainer.registerConfig(net.neoforged.fml.config.ModConfig.Type.SERVER,
-                com.november.mcphone.core.ServerConfig.SPEC, "mcphone-server.toml");
+        // 玩家进入世界时把服主那份服务端配置推给他（Fabric 没有 NeoForge 的自动同步）
+        ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> {
+            var cfg = com.november.mcphone.core.ServerConfig.allowFriendTeleport();
+            var img = com.november.mcphone.core.ServerConfig.allowChatImages();
+            var kb = com.november.mcphone.core.ServerConfig.chatImageMaxBytes() / 1024;
+            ServerPlayNetworking.send(handler.getPlayer(), new SyncServerConfigPacket(cfg, img, kb));
+        });
 
-        // 「终端」App 接哪几家存储模组，setup 阶段才点数 —— 那时所有模组都构造完了。
-        // 为什么不能更早，见 Terminals.onCommonSetup
-        modEventBus.addListener(
-                com.november.mcphone.feature.terminal.integration.Terminals::onCommonSetup);
+        // 兼容模块（能力型 + 缺陷型）统一装载
+        com.november.mcphone.compat.CompatModules.init();
 
-        // 放在自家注册之后：兼容模块可能要看我们已经注册了什么
-        com.november.mcphone.compat.CompatModules.init(modEventBus);
-
-        version = modContainer.getModInfo().getVersion().toString();
+        version = FabricLoader.getInstance().getModContainer(MODID)
+                .map(c -> c.getMetadata().getVersion().getFriendlyString())
+                .orElse("");
 
         LOGGER.info("MCphone 模组加载完成 —— 手机已就绪");
     }
 
-    /** 本模组版本号，如 "1.0.0"。模组构造前调用会得到空串。 */
+    /** 本模组版本号，如 "1.0.0"。onInitialize 前调用会得到空串。 */
     public static String getVersion() {
         return version;
     }

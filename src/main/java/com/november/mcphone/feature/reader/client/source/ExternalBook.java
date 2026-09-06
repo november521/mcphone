@@ -1,12 +1,12 @@
 package com.november.mcphone.feature.reader.client.source;
 
-import com.november.mcphone.platform.ModPresence;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.fabricmc.loader.api.FabricLoader;
 
 /**
  * 白名单里的一本外部手册 —— 压根不是 Patchouli 书的那种。
@@ -71,7 +71,7 @@ public interface ExternalBook {
 
     /** 这个方法里不能出现对方模组的任何类型，否则它自己就先炸了 */
     default boolean isAvailable() {
-        return ModPresence.isLoaded(modId());
+        return FabricLoader.getInstance().isModLoaded(modId());
     }
 
     /**

@@ -3,9 +3,9 @@ package com.november.mcphone.feature.reader.client.source;
 import com.november.mcphone.MCphone;
 import com.november.mcphone.core.client.GuiUtil;
 import com.november.mcphone.feature.reader.BookRef;
-import com.november.mcphone.platform.ModPresence;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
+import net.fabricmc.loader.api.FabricLoader;
 import vazkii.patchouli.api.PatchouliAPI;
 import vazkii.patchouli.client.book.BookIcon;
 import vazkii.patchouli.common.book.Book;
@@ -80,7 +80,7 @@ public final class PatchouliSource implements BookSource {
     /** 这个方法里【不能】出现任何 vazkii.* 的类型，否则它自己就先炸了 */
     @Override
     public boolean isAvailable() {
-        return ModPresence.isLoaded(PATCHOULI_MODID);
+        return FabricLoader.getInstance().isModLoaded(PATCHOULI_MODID);
     }
 
     @Override

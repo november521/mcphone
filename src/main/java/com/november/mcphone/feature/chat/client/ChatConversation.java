@@ -6,7 +6,6 @@ import com.november.mcphone.core.client.PhoneSkin;
 import com.november.mcphone.core.client.PhoneTheme;
 import com.november.mcphone.core.client.PlayerAvatar;
 import com.november.mcphone.core.client.ImageCodec;
-import com.november.mcphone.core.net.MCphoneNetwork;
 import com.november.mcphone.feature.chat.ChatImage;
 import com.november.mcphone.feature.chat.ChatMessage;
 import com.november.mcphone.feature.chat.ImageBody;
@@ -26,7 +25,7 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.FormattedCharSequence;
-import net.minecraft.util.Mth;
+import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -244,7 +243,7 @@ public final class ChatConversation {
         ChatClientCache.openConversation(peer);
         this.markedFrom = ChatClientCache.getMessages();
 
-        MCphoneNetwork.sendToServer(new RequestMessagesPacket(peer));
+        ClientPlayNetworking.send(new RequestMessagesPacket(peer));
     }
 
     public boolean isViewing(UUID other) {
@@ -444,19 +443,18 @@ public final class ChatConversation {
 
         final int viewH = bottom - top;
         maxScroll = Math.max(0, contentH - viewH);
-        scrollPx = Mth.clamp(scrollPx, 0, maxScroll);
+        scrollPx = Math.clamp(scrollPx, 0, maxScroll);
 
         // 不足一屏从顶往下排；超出时贴底，scrollPx 把内容往下推露出更早的消息
         int y = contentH <= viewH ? top : bottom - contentH + scrollPx;
 
-        // 走 GuiUtil 那一层：原版的 enableScissor 收窗口坐标、不跟随 pose，而整个手机是
-        // 套在一层缩放里画的（界面大小 × 开机动画）。直接交本地坐标，界面大小一改字就被切
-        GuiUtil.enableScissor(g, x, top, x + w, bottom);
+        // enableScissor 收屏幕坐标、不跟随 pose；开机缩放动画期间到不了这里，不必补偿
+        g.enableScissor(x, top, x + w, bottom);
         for (Block b : blocks) {
             if (y + b.h() > top && y < bottom) renderBlock(g, font, b, x, y, w);
             y += b.h() + BLOCK_GAP;
         }
-        GuiUtil.disableScissor(g);
+        g.disableScissor();
     }
 
     private void renderBlock(GuiGraphics g, Font font, Block b, int x, int y, int w) {
@@ -806,7 +804,7 @@ public final class ChatConversation {
         String text = box.getValue();
         if (text.isBlank()) return;
 
-        MCphoneNetwork.sendToServer(new SendChatMessagePacket(peer, text));
+        ClientPlayNetworking.send(new SendChatMessagePacket(peer, text));
         box.setValue("");
 
         // 回到底部，自己刚发的那条得看得见
@@ -819,7 +817,7 @@ public final class ChatConversation {
 
         if (maxScroll <= 0) return false;
 
-        scrollPx = Mth.clamp(scrollPx + (int) (scrollY * SCROLL_STEP), 0, maxScroll);
+        scrollPx = Math.clamp(scrollPx + (int) (scrollY * SCROLL_STEP), 0, maxScroll);
         return true;
     }
 
@@ -829,7 +827,7 @@ public final class ChatConversation {
         if (now - lastRequestMs < REFRESH_INTERVAL_MS) return;
 
         lastRequestMs = now;
-        MCphoneNetwork.sendToServer(new RequestConversationsPacket());
+        ClientPlayNetworking.send(new RequestConversationsPacket());
     }
 
     /** 会话开着时来了新消息，补一次已读上报：服务端只在拉历史时标已读 */
@@ -838,7 +836,7 @@ public final class ChatConversation {
         if (src == markedFrom || peer == null) return;
 
         markedFrom = src;
-        MCphoneNetwork.sendToServer(new MarkReadPacket(peer));
+        ClientPlayNetworking.send(new MarkReadPacket(peer));
     }
 
     private ConversationSummary summary() {

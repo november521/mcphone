@@ -3,7 +3,6 @@ package com.november.mcphone.feature.chat.client;
 import com.november.mcphone.MCphone;
 import com.november.mcphone.core.client.GifCodec;
 import com.november.mcphone.core.client.ImageCodec;
-import com.november.mcphone.core.net.MCphoneNetwork;
 import com.november.mcphone.feature.chat.ChatImage;
 import com.november.mcphone.feature.chat.ChatMessage;
 import com.november.mcphone.feature.chat.ImageBody;
@@ -11,7 +10,7 @@ import com.november.mcphone.feature.chat.net.SendChatImagePacket;
 import net.minecraft.Util;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
-import net.neoforged.neoforge.client.event.ClientTickEvent;
+import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 
 import java.awt.AlphaComposite;
 import java.awt.Graphics2D;
@@ -189,7 +188,7 @@ public final class ChatImageSender {
      *
      * 挂 tick 而不是挂会话界面的每帧：玩家点完表情就退出手机是常事，那一张照样该发出去。
      */
-    public static void onClientTick(ClientTickEvent.Post event) {
+    public static void onClientTick() {
         if (QUEUE.isEmpty() || isBusy()) return;
 
         Queued next = QUEUE.poll();
@@ -405,7 +404,7 @@ public final class ChatImageSender {
             byte[] chunk = new byte[to - from];
             System.arraycopy(png, from, chunk, 0, chunk.length);
 
-            MCphoneNetwork.sendToServer(new SendChatImagePacket(
+            ClientPlayNetworking.send(new SendChatImagePacket(
                     peer, encoded.width(), encoded.height(), encoded.frames(), encoded.frameMs(),
                     index, chunkCount, chunk));
         }
