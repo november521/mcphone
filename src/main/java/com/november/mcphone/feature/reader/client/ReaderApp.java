@@ -4,8 +4,6 @@ import com.november.mcphone.api.client.app.RequiredMod;
 import com.november.mcphone.core.client.PhoneApp;
 import com.november.mcphone.core.client.PhoneScreen;
 import com.november.mcphone.feature.reader.client.source.BookSources;
-import com.november.mcphone.feature.reader.client.source.GuideMeSource;
-import com.november.mcphone.feature.reader.client.source.ImmersiveEngineeringManual;
 import com.november.mcphone.feature.reader.client.source.PatchouliSource;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
@@ -54,13 +52,12 @@ public final class ReaderApp extends PhoneApp {
      */
     @Override
     public List<RequiredMod> companionMods() {
+        // Fabric 1.21.1 版只保留有 Fabric 构建的书源。原 NeoForge 版还列了
+        // GuideME 与 Immersive Engineering（它们没有 Fabric 版，列出只会让
+        // 「关于」页永远显示"未装"，而那两样在 Fabric 上根本装不了）。
         return List.of(
                 new RequiredMod(PatchouliSource.PATCHOULI_MODID,
-                        Component.translatable("mcphone.compat.patchouli").getString()),
-                new RequiredMod(GuideMeSource.GUIDEME_MODID,
-                        Component.translatable("mcphone.compat.guideme").getString()),
-                new RequiredMod(ImmersiveEngineeringManual.MODID,
-                        Component.translatable("mcphone.compat.immersiveengineering").getString()));
+                        Component.translatable("mcphone.compat.patchouli").getString()));
     }
 
     /**

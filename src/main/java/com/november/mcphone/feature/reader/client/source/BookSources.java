@@ -42,9 +42,10 @@ public final class BookSources {
     private BookSources() {}
 
     /** 全部书源。加新的就往这里加一行 */
+    // Fabric 1.21.1 版只有 Patchouli 一个外部书源体系（GuideME 无 Fabric 版，
+    // 已随移植剔除；外部手册白名单见 ExternalBookSource）。
     private static final List<BookSource> SOURCES = List.of(
             new PatchouliSource(),
-            new GuideMeSource(),
             new ExternalBookSource()
     );
 

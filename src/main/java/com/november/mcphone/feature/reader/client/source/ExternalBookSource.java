@@ -35,9 +35,9 @@ public final class ExternalBookSource implements BookSource {
     private static final String SOURCE_ID = "external";
 
     /** 全部外部手册。加新的就往这里加一行 */
-    private static final List<ExternalBook> WHITELIST = List.of(
-            new ImmersiveEngineeringManual()
-    );
+    // Fabric 1.21.1 版：原 NeoForge 版白名单里的《工程师手册》（Immersive
+    // Engineering）没有 Fabric 构建，已随移植剔除。将来有 Fabric 版再往这里加。
+    private static final List<ExternalBook> WHITELIST = List.of();
 
     /** 扫出来的书，类型必须是中性的——上层引用本类时不该被牵连着加载别人的类 */
     private List<BookRef> books = List.of();
