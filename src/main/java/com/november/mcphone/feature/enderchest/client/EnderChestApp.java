@@ -20,6 +20,13 @@ public final class EnderChestApp extends PhoneApp {
         return false;
     }
 
+    /**
+     * 界面不在手机里：开的是原版末影箱那口容器。快捷键因此不先开机——手机弹出来之后
+     * 还要等服务端把容器开回来才被顶掉，中间白闪一下。
+     */
+    @Override
+    public boolean opensInsidePhone() { return false; }
+
     @Override
     public void onPress() {
         // 只发包不自己开界面：容器菜单必须由服务端 openMenu 建立，界面由原版流程自动弹出

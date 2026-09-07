@@ -2,6 +2,7 @@ package com.november.mcphone.core.menu;
 
 import com.november.mcphone.MCphone;
 import com.november.mcphone.feature.music.menu.DiscBayMenu;
+import com.november.mcphone.feature.terminal.menu.TerminalSlotMenu;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.world.flag.FeatureFlags;
 import net.minecraft.world.inventory.MenuType;
@@ -41,6 +42,18 @@ public final class ModMenus {
             MENUS.register("ender_chest", () -> new MenuType<>(
                     (containerId, playerInventory) -> new PhoneContainerMenu(
                             ModMenus.ENDER_CHEST.get(), containerId, playerInventory, ENDER_CHEST_SIZE),
+                    FeatureFlags.DEFAULT_FLAGS));
+
+    /**
+     * 手机终端卡槽 —— 一个终端格 ＋ 玩家背包，形状和下面的唱片仓一样。
+     *
+     * 客户端与服务端共用同一个构造，不像下面两个要占位容器：卡槽的内容由
+     * {@link com.november.mcphone.feature.terminal.TerminalSlot} 自己发包同步（这一支的
+     * capability 没有 NeoForge 那种 .sync()），客户端本来就读得到，不必等原版的容器同步包。
+     */
+    public static final Supplier<MenuType<TerminalSlotMenu>> TERMINAL_SLOT =
+            MENUS.register("terminal_slot", () -> new MenuType<>(
+                    TerminalSlotMenu::new,
                     FeatureFlags.DEFAULT_FLAGS));
 
     /**

@@ -73,6 +73,11 @@ public final class MCphone {
         context.registerConfig(net.minecraftforge.fml.config.ModConfig.Type.SERVER,
                 com.november.mcphone.core.ServerConfig.SPEC, "mcphone-server.toml");
 
+        // 「终端」App 接哪几家存储模组，setup 阶段才点数 —— 那时所有模组都构造完了。
+        // 为什么不能更早，见 Terminals.onCommonSetup
+        modBus.addListener(
+                com.november.mcphone.feature.terminal.integration.Terminals::onCommonSetup);
+
         // 网络包的注册【必须在构造期完成】。SimpleChannel 是按注册顺序发放
         // 整数序号的，等到 FMLCommonSetupEvent 之类再注册，两端的注册时机
         // 只要有一处不同，序号就对不上——而那不会报错，只会解出乱码字段
@@ -84,6 +89,27 @@ public final class MCphone {
         MinecraftForge.EVENT_BUS.addGenericListener(Entity.class,
                 ModCapabilities::onAttachCapabilities);
         MinecraftForge.EVENT_BUS.addListener(ModCapabilities::onPlayerClone);
+
+        // 终端卡槽那一格要自己补同步：Forge 1.20.1 的 capability 没有 NeoForge
+        // 那种 .sync()，上线、重生、换维度这三处不发一次，客户端手里就是空的。
+        // 为什么客户端非知道不可，见 TerminalSlot 的类注释
+        MinecraftForge.EVENT_BUS.addListener(
+                com.november.mcphone.feature.terminal.TerminalSlot::onPlayerLoggedIn);
+        MinecraftForge.EVENT_BUS.addListener(
+                com.november.mcphone.feature.terminal.TerminalSlot::onPlayerRespawn);
+        MinecraftForge.EVENT_BUS.addListener(
+                com.november.mcphone.feature.terminal.TerminalSlot::onChangedDimension);
+
+        // 手机上"屏幕亮着"那一位的补擦。那一支不需要：它那个组件不落盘，这一支是 NBT，
+        // 会跟着存档留下来 —— 开着手机崩一次就永远亮着。理由与擦不到的那一种见类注释
+        // 卡槽里那台终端由手机供电。只在有容器界面开着时每秒补一次，理由见 TerminalCharger
+        MinecraftForge.EVENT_BUS.addListener(
+                com.november.mcphone.feature.terminal.TerminalCharger::onPlayerTick);
+
+        MinecraftForge.EVENT_BUS.addListener(
+                com.november.mcphone.core.PhoneScreenOnCleanup::onPlayerLoggedIn);
+        MinecraftForge.EVENT_BUS.addListener(
+                com.november.mcphone.core.PhoneScreenOnCleanup::onPlayerLoggedOut);
 
         // 游戏总线，显式挂载：这三条漏了没有任何症状，只是下线玩家的表再也不缩小
         MinecraftForge.EVENT_BUS.addListener(

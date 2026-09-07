@@ -56,6 +56,56 @@ public final class PhoneItemData {
         stack.getOrCreateTag().putString(KEY_DEVICE_NAME, name);
     }
 
+    /**
+     * 屏幕正亮着在 NBT 里的键。
+     *
+     * 【这一位与那一支的差别最大，读之前先看这里】。那边它是一个只声明了
+     * {@code networkSynchronized}、<b>没声明 persistent</b> 的组件——同步得出去、但不落盘，
+     * 因为它说的是"此刻有人正开着它"，不是手机自身的属性。
+     *
+     * 1.20.1 的 NBT <b>同步与落盘是同一份</b>，做不到只同步不落盘。于是多出一件那边不用做的
+     * 事：开着手机崩一次，这一位会跟着存进存档，那部手机就永远亮着。补擦放在
+     * {@link PhoneScreenOnCleanup}（上线、下线各一道），理由与擦不到的那一种都写在那个类里。
+     *
+     * 灭着的手机<b>不带这个键</b>，而不是带一个 false —— 与设备名同一条规矩：空标签会让物品
+     * 不再与原版的那只相等，影响堆叠与配方匹配。
+     */
+    private static final String KEY_SCREEN_ON = "ScreenOn";
+
+    /** NBT 的字节类型 id（布尔在 NBT 里就是 byte），判类型用 */
+    private static final byte TAG_BYTE = 1;
+
+    /**
+     * 这一部手机的屏幕正亮着吗 —— 物品模型据此在黑屏与白屏之间切。
+     *
+     * 写它的只有服务端收到 {@code PhoneScreenOnPacket} 那一处，读它的只有渲染那一处
+     * （{@code PhoneItemProperties}）。
+     */
+    public static boolean isScreenOn(ItemStack stack) {
+        CompoundTag tag = stack.getTag();
+        // 判类型而不是直接 getBoolean，理由与 getDeviceName 那句相同：这个键谁都写得进来
+        return tag != null && tag.contains(KEY_SCREEN_ON, TAG_BYTE) && tag.getBoolean(KEY_SCREEN_ON);
+    }
+
+    /** 点亮这一部的屏幕 */
+    public static void setScreenOn(ItemStack stack) {
+        if (stack.isEmpty()) return;
+        stack.getOrCreateTag().putBoolean(KEY_SCREEN_ON, true);
+    }
+
+    /**
+     * 灭掉这一部的屏幕。移除键而不是写 false，理由见 {@link #KEY_SCREEN_ON}。
+     *
+     * 擦完之后如果整个标签空了就把标签本身也去掉：留一个 {@code {}} 在那儿，这只手机就与
+     * 原版新给的那只不相等了。
+     */
+    public static void clearScreenOn(ItemStack stack) {
+        CompoundTag tag = stack.getTag();
+        if (tag == null || !tag.contains(KEY_SCREEN_ON)) return;
+        tag.remove(KEY_SCREEN_ON);
+        if (tag.isEmpty()) stack.setTag(null);
+    }
+
     /** 清除设备名，恢复默认物品名。移除键而不是写空串，理由见 KEY_DEVICE_NAME */
     public static void clearDeviceName(ItemStack stack) {
         CompoundTag tag = stack.getTag();

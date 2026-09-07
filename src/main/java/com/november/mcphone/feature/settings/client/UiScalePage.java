@@ -46,6 +46,10 @@ public final class UiScalePage {
     /** 滑块宽度。4 像素：细了抓不住，粗了在 108 像素宽的条上显得笨重 */
     private static final int KNOB_W = 4;
 
+    /** 加减号那两根杠：长 8、厚 2。在 14 像素的键上两头各留 3 像素，正中 */
+    private static final int GLYPH_LEN = 8;
+    private static final int GLYPH_THICK = 2;
+
     /** 拖动时按 5% 对齐：手拖不出 1% 的精度，对齐之后数字不会跳得没规律 */
     private static final int DRAG_SNAP = 5;
 
@@ -98,9 +102,9 @@ public final class UiScalePage {
         barX = x + BTN + 4;
         barW = w - (BTN + 4) * 2;
 
-        drawStepButton(g, font, minusX, rowY, "−", PhoneScale.percent() > PhoneScale.MIN_PERCENT,
+        drawStepButton(g, minusX, rowY, false, PhoneScale.percent() > PhoneScale.MIN_PERCENT,
                 mouseX, mouseY);
-        drawStepButton(g, font, plusX, rowY, "+", PhoneScale.percent() < PhoneScale.MAX_PERCENT,
+        drawStepButton(g, plusX, rowY, true, PhoneScale.percent() < PhoneScale.MAX_PERCENT,
                 mouseX, mouseY);
 
         int barY = rowY + (BTN - BAR_H) / 2;
@@ -178,8 +182,16 @@ public final class UiScalePage {
      * 一个加减键。底可换肤，悬停时整张提亮——有贴图之后"换个颜色"是看不见的，
      * 那一档只能靠亮度，见 {@link PhoneSkin#drawOrFill(GuiGraphics, PhoneSkin.Element,
      * int, int, int, int, int, boolean)}。
+     *
+     * 【减号与加号是画出来的，不是字符。】原来写的是 "−"（U+2212）与 "+"（ASCII）两个
+     * 字符串，按 {@code (BTN - font.width) / 2} 与 {@code (BTN - lineHeight) / 2} 居中——
+     * 而这两个字模在各自行高里的落点根本不一样：减号是一根悬在中线附近的短杠、加号是个
+     * 占满字身的十字，横居中算出来也就差一两像素，竖着更是差一整档。两个键并排摆着，
+     * 差一像素都看得出来。何况字符还受字体与资源包影响，今天对齐了明天换套字体又歪。
+     *
+     * 画成两根杠就没有这些事：长度与厚度都从 BTN 推出来，永远正中。
      */
-    private void drawStepButton(GuiGraphics g, Font font, int x, int y, String glyph,
+    private void drawStepButton(GuiGraphics g, int x, int y, boolean plus,
                                 boolean enabled, int mouseX, int mouseY) {
         boolean hovered = enabled && GuiUtil.hit(mouseX, mouseY, x, y, BTN, BTN);
 
@@ -187,9 +199,14 @@ public final class UiScalePage {
                 hovered ? PhoneTheme.COLOR_STEP_BUTTON_HOVER : PhoneTheme.COLOR_STEP_BUTTON,
                 hovered);
 
-        g.drawString(font, glyph, x + (BTN - font.width(glyph)) / 2,
-                y + (BTN - font.lineHeight) / 2,
-                enabled ? FontPalette.title() : FontPalette.dim(), false);
+        int color = enabled ? FontPalette.title() : FontPalette.dim();
+        int off = (BTN - GLYPH_LEN) / 2;        // 长边两头留的空
+        int mid = (BTN - GLYPH_THICK) / 2;      // 短边两头留的空
+
+        g.fill(x + off, y + mid, x + off + GLYPH_LEN, y + mid + GLYPH_THICK, color);
+        if (plus) {
+            g.fill(x + mid, y + off, x + mid + GLYPH_THICK, y + off + GLYPH_LEN, color);
+        }
     }
 
     /** 点一下。落在条上等于"跳到这儿"并开始拖 */

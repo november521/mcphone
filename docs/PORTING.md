@@ -308,8 +308,13 @@ else { throw new IllegalStateException(...); }   // 这句不能省，见下
 第四刀撞出来的，前两版这条都漏了。语法能靠 grep 扫，库 API 不能：
 
 ```
-java.lang.Math.clamp(...)   Java 21 新增   全仓 6 处 / 4 个文件
+java.lang.Math.clamp(...)   Java 21 新增   （处数每刀都变，见下）
 ```
+
+**【这个数不要照着用，每刀都要重扫】**。它第四刀是 6 处 / 4 个文件，第八刀（追 1.10.0
+的「终端」与副手 HUD）又新撞进来 6 处 / 2 个文件 —— 那两个文件是从 main 逐字复制的，
+main 跑 Java 21，那边编得过。本体自己也踩过同一件事，1.10.x 里 main 那边一次改掉了 28 处，
+并给自己加了一道 `--release 17` 的闸专门防这个。
 
 `Math.clamp` 在 17 上根本不存在，报的是 `cannot find symbol`，看着像打错字，
 跟"Java 版本"四个字毫无关联。换成 `net.minecraft.util.Mth.clamp` 即可，

@@ -94,6 +94,17 @@ jobs:
           MC_VERSION=$(grep -E '^minecraft_version=' gradle.properties | cut -d= -f2- | tr -d '[:space:]')
           echo "mc_version=$MC_VERSION" >> "$GITHUB_OUTPUT"
 
+          # 发布渠道【从版本号推出来，不写死】。写死成 release 的后果是：发一个
+          # 0.12.0-beta.1 上去，Modrinth 与 CurseForge 都会把它标成正式版，
+          # 整合包作者与自动更新器照单全收 —— 而这恰恰是 beta 要避免的事。
+          # 推出来则没有"改了版本号却忘了改渠道"这一步可漏。
+          case "$MOD_VERSION" in
+            *alpha*) VERSION_TYPE=alpha ;;
+            *beta*)  VERSION_TYPE=beta ;;
+            *)       VERSION_TYPE=release ;;
+          esac
+          echo "version_type=$VERSION_TYPE" >> "$GITHUB_OUTPUT"
+
       # 同名 tag 已有 Release 时先删掉，否则 gh release create 会直接失败。
       # 语义是"重推 tag ＝ 重新出这个版本"。只删与本次 tag 同名的那一个。
       - name: Remove pre-existing release for this tag
@@ -114,10 +125,19 @@ jobs:
         run: |
           NOTES_FILE="docs/release-notes/${GITHUB_REF_NAME}.md"
           TITLE="MCphone Forge 1.20.1 v${GITHUB_REF_NAME#forge-v}"
+
+          # 预发布版要标出来，否则 GitHub 会把它挂成 Latest release，
+          # 仓库首页与"下载最新版"的链接都会指到一个 beta 上。
+          # 判据与两个平台的发布渠道同一个来源，见 find-jar 那一步
+          PRERELEASE=""
+          if [ "${{ steps.find-jar.outputs.version_type }}" != "release" ]; then
+            PRERELEASE="--prerelease"
+          fi
+
           if [ -f "$NOTES_FILE" ]; then
-            gh release create "$GITHUB_REF_NAME" "$JAR_PATH" --title "$TITLE" --notes-file "$NOTES_FILE"
+            gh release create "$GITHUB_REF_NAME" "$JAR_PATH" --title "$TITLE" --notes-file "$NOTES_FILE" $PRERELEASE
           else
-            gh release create "$GITHUB_REF_NAME" "$JAR_PATH" --title "$TITLE" --generate-notes
+            gh release create "$GITHUB_REF_NAME" "$JAR_PATH" --title "$TITLE" --generate-notes $PRERELEASE
           fi
 
       # ---------------- 发布到 Modrinth 与 CurseForge ----------------
@@ -201,7 +221,7 @@ jobs:
           files: ${{ steps.find-jar.outputs.jar_path }}
           name: MCphone Forge 1.20.1 v${{ steps.find-jar.outputs.mod_version }}
           version: ${{ steps.find-jar.outputs.mod_version }}
-          version-type: release
+          version-type: ${{ steps.find-jar.outputs.version_type }}
           changelog-file: ${{ steps.changelog.outputs.file }}
           loaders: forge
           game-versions: ${{ steps.find-jar.outputs.mc_version }}
@@ -221,7 +241,7 @@ jobs:
           files: ${{ steps.find-jar.outputs.jar_path }}
           name: MCphone Forge 1.20.1 v${{ steps.find-jar.outputs.mod_version }}
           version: ${{ steps.find-jar.outputs.mod_version }}
-          version-type: release
+          version-type: ${{ steps.find-jar.outputs.version_type }}
           changelog-file: ${{ steps.changelog.outputs.file }}
           loaders: forge
           game-versions: ${{ steps.find-jar.outputs.mc_version }}

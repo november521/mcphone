@@ -65,6 +65,10 @@ public final class QuestsApp extends PhoneApp {
                 Component.translatable("mcphone.compat.ftbquests").getString()));
     }
 
+    /** 界面不在手机里：开的是 FTB Quests 自己那本任务书，快捷键不必先开机 */
+    @Override
+    public boolean opensInsidePhone() { return false; }
+
     /**
      * 没有 FTB Quests 就没有内容可给，这一格不该出现。
      *

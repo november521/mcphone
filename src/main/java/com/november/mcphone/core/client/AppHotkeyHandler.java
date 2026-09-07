@@ -1,7 +1,9 @@
 package com.november.mcphone.core.client;
 
 import com.mojang.blaze3d.platform.InputConstants;
+import com.november.mcphone.MCphone;
 import com.november.mcphone.api.client.app.IPhoneApp;
+import com.november.mcphone.core.PhoneLocation;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.resources.ResourceLocation;
@@ -10,8 +12,11 @@ import net.minecraftforge.client.settings.KeyModifier;
 import org.lwjgl.glfw.GLFW;
 
 /**
- * 按下某个 App 的快捷键 —— 开机，并且直接进那个 App。键盘、鼠标键都行，支持
+ * 按下某个 App 的快捷键 —— 直接进那个 App。键盘、鼠标键都行，支持
  * Ctrl / Shift / Alt 的组合。
+ *
+ * 界面在手机【里】的 App（记事本、聊天、设置……）是开机再进那一页；界面在手机
+ * 【外面】的（终端、末影箱、相机……）根本不开机，直接交给它，见 {@link #launchOutside}。
  *
  * 绑定表在 {@link AppHotkeys}，界面在「设置 → App 管理器 → 某个 App」。
  *
@@ -122,10 +127,54 @@ public final class AppHotkeyHandler {
         if (app == null) return false;    // 目录里没有＝前置模组这局没装，不可用
 
         // 身上没有手机就开不了机，那就更谈不上进 App
+        // 界面不在手机里的那几个（终端、末影箱、传送石、任务书、浏览器、相机）不开机，
+        // 见 launchOutside
+        if (!opensInsidePhone(app)) return launchOutside(mc, app);
+
+        // 身上没有手机就开不了机，那就更谈不上进 App
         if (!PhoneScreenOpener.open(mc.player)) return false;
 
         if (mc.screen instanceof PhoneScreen phone) phone.launchApp(app);
         return true;
+    }
+
+    /**
+     * 界面在手机外面的 App：<b>不开机</b>，直接把这一下交给它。
+     *
+     * 为什么要专门分一条路
+     *
+     * 这几个 App 的 onPress() 要么自己 setScreen（浏览器、相机、任务书），要么发个包等
+     * 服务端开容器（终端、末影箱、传送石）。照旧先开机的话，手机会先弹出来——自己
+     * setScreen 的那几个是闪一帧，发包的那几个更久：界面得等服务端把容器开回来才换，
+     * 单机也要一整个 tick，联机再加一个来回。玩家看到的是"手机开了一下，然后终端才出来"，
+     * 而快捷键的全部意义就是省掉中间那一步。
+     *
+     * 手机仍然必须在身上：手机是那台设备，锁在箱子里的话按一下键不该开出终端来。这一句
+     * 同时顶替了 {@link PhoneScreenOpener#open} 顺手做的那次查找——那条路这里不走了。
+     *
+     * onPress() 抛了照样算"这一下我们收了"：与手机里点图标同一个规矩，记一条日志，但不让
+     * 这一下漏回原版去挥手、开背包。
+     */
+    private static boolean launchOutside(Minecraft mc, IPhoneApp app) {
+        if (mc.player == null || PhoneLocation.find(mc.player).isEmpty()) return false;
+
+        try {
+            app.onPress();
+        } catch (Throwable t) {
+            MCphone.LOGGER.error("[MCphone] App {} 的 onPress() 抛异常", app.getId(), t);
+        }
+        return true;
+    }
+
+    /** 附属答的话，问一句也得兜住。抛了当它在手机里——那是老行为 */
+    private static boolean opensInsidePhone(IPhoneApp app) {
+        try {
+            return app.opensInsidePhone();
+        } catch (Throwable t) {
+            MCphone.LOGGER.error("[MCphone] App {} 的 opensInsidePhone() 抛异常，当它在手机里",
+                    app.getId(), t);
+            return true;
+        }
     }
 
     /**

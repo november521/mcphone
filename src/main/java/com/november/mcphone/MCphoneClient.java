@@ -3,6 +3,7 @@ package com.november.mcphone;
 import com.november.mcphone.core.client.AppHotkeyHandler;
 import com.november.mcphone.core.client.ClientConfig;
 import com.november.mcphone.core.client.MCphoneKeyBindings;
+import com.november.mcphone.core.client.PhoneHud;
 import com.november.mcphone.core.client.PhoneKeyHandler;
 import com.november.mcphone.core.client.PhoneScreenRegistry;
 import com.november.mcphone.core.client.PhoneSession;
@@ -24,6 +25,7 @@ import com.november.mcphone.feature.music.client.playback.LocalPlayback;
 import com.november.mcphone.feature.notes.net.NotesClientCache;
 import com.november.mcphone.feature.settings.client.WallpaperStore;
 import com.november.mcphone.feature.store.net.StoreClientCache;
+import com.november.mcphone.feature.terminal.client.TerminalSlotScreen;
 import net.minecraft.client.gui.screens.MenuScreens;
 import net.minecraft.server.packs.resources.ResourceManagerReloadListener;
 import net.minecraftforge.api.distmarker.Dist;
@@ -83,7 +85,14 @@ public final class MCphoneClient {
 
         modBus.addListener(MCphoneKeyBindings::register);
 
+        // 副手 HUD 那一层。1.21.1 那边是 RegisterGuiLayersEvent + registerAbove(BOSS_OVERLAY)；
+        // 1.20.1 上对应的是 RegisterGuiOverlaysEvent，插的位置一样，见 PhoneHud
+        modBus.addListener(PhoneHud::onRegisterOverlays);
+
         MinecraftForge.EVENT_BUS.addListener(PhoneKeyHandler::onClientTick);
+
+        // 手机进出副手、Alt 与 G 的按下松开都在这条 tick 里判，见 PhoneHud
+        MinecraftForge.EVENT_BUS.addListener(PhoneHud::onClientTick);
 
         MinecraftForge.EVENT_BUS.addListener(CameraHandler::onClientTick);
         MinecraftForge.EVENT_BUS.addListener(CameraHandler::onRenderGui);
@@ -111,6 +120,14 @@ public final class MCphoneClient {
         // 上一个的数据，音乐还在放，OpenAL 设备句柄也会漏
         MinecraftForge.EVENT_BUS.addListener(
                 (ClientPlayerNetworkEvent.LoggingOut event) -> {
+                    // 排在最前：它要在下面那些缓存被清掉之前把会话存下来。
+                    // 这条路上不能碰 setScreen，理由见 PhoneHud.onWorldLeave
+                    PhoneHud.onWorldLeave();
+
+                    // 去重用的记忆跟着世界走：不清的话，进新世界开手机会因为"和上次一样"
+                    // 被判成没变，那部手机在别人眼里就不亮
+                    com.november.mcphone.core.client.PhoneScreenOnSync.forget();
+
                     ChatClientCache.clear();
                     ChatImageCache.clear();
                     ChatImageSender.clear();
@@ -175,7 +192,12 @@ public final class MCphoneClient {
         event.enqueueWork(() -> {
             MenuScreens.register(ModMenus.ENDER_CHEST.get(), PhoneContainerScreen::new);
             MenuScreens.register(ModMenus.DISC_BAY.get(), DiscBayScreen::new);
+            MenuScreens.register(ModMenus.TERMINAL_SLOT.get(), TerminalSlotScreen::new);
         });
+
+        // 手机物品的黑屏/白屏切换。enqueueWork 同上：ItemProperties 后面是普通 HashMap，
+        // 而这个事件和别的模组并行跑，见 PhoneItemProperties
+        event.enqueueWork(com.november.mcphone.core.client.PhoneItemProperties::register);
 
         // 必须在 App 目录构建之前：BrowserApp 登记时会问后端在不在。
         // 不进 enqueueWork：它只做一次 ModList 查询与一次赋值，碰的全是自家

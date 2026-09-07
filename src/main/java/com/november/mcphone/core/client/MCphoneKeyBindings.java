@@ -56,6 +56,42 @@ public final class MCphoneKeyBindings {
             GLFW.GLFW_KEY_H,
             CATEGORY);
 
+    /**
+     * 按一下唤出鼠标操作副手 HUD 上那部手机，再按一下收起。默认左 Alt —— 原版 1.21.1 未占用。
+     *
+     * 【这个键不能用 consumeClick / isDown 判断。】它要答的是"此刻按着没有"，
+     * 而按下的那一刻 {@link net.minecraft.client.Minecraft#setScreen} 会调
+     * KeyMapping.releaseAll() 把所有 KeyMapping 的按下状态清掉——手机界面一开
+     * isDown() 立刻变 false，而 {@link PhoneHud} 认的是"按下去的那一沿"，
+     * 一个永远回不到按下状态的键切不动任何东西。
+     *
+     * 所以 {@link PhoneHud} 直接查物理按键（InputConstants.isKeyDown）。留着
+     * KeyMapping 是为了让玩家能在原版按键设置里改键，并让冲突提示照常工作。
+     */
+    public static final KeyMapping HUD_INTERACT = new KeyMapping(
+            "key.mcphone.hud_interact",
+            KeyConflictContext.IN_GAME,
+            InputConstants.Type.KEYSYM,
+            GLFW.GLFW_KEY_LEFT_ALT,
+            CATEGORY);
+
+    /**
+     * 唤出 / 收起副手 HUD 上那部手机。默认 G —— 原版 1.21.1 未占用。
+     *
+     * 为什么"放进副手就自动亮"之外还要这一个：手机也可以挂在 Curios 的饰品槽里，
+     * 那时候副手是空的（挂饰品栏的意思本来就是"腾出两只手"），自动那条规矩够不着它。
+     * 这个键让手机收在饰品栏、背包、甚至主手上时同样能把 HUD 叫出来。
+     *
+     * 它【顶掉】自动那条规矩，而不是与之并列——手机在副手上时按它也要能收起来，
+     * 否则会出现"按了没反应"。恢复自动的时机见 {@link PhoneHud} 里 Override 那段。
+     */
+    public static final KeyMapping HUD_TOGGLE = new KeyMapping(
+            "key.mcphone.hud_toggle",
+            KeyConflictContext.IN_GAME,
+            InputConstants.Type.KEYSYM,
+            GLFW.GLFW_KEY_G,
+            CATEGORY);
+
     private MCphoneKeyBindings() {}
 
     /** 由 MCphoneClient 构造函数挂到模组总线 */
@@ -63,5 +99,7 @@ public final class MCphoneKeyBindings {
         event.register(CAMERA_SHUTTER);
         event.register(CAMERA_EXIT);
         event.register(OPEN_PHONE);
+        event.register(HUD_INTERACT);
+        event.register(HUD_TOGGLE);
     }
 }

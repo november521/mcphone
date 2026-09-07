@@ -51,6 +51,13 @@ public final class WaystoneApp extends PhoneApp {
         return false;
     }
 
+    /**
+     * 界面不在手机里：开的是 Waystones 自己那张传送点列表。快捷键因此不先开机，
+     * 理由与末影箱那一格相同。
+     */
+    @Override
+    public boolean opensInsidePhone() { return false; }
+
     @Override
     public void onPress() {
         // 只发包不自己开界面：菜单与传送的校验都只有服务端说了算

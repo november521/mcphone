@@ -15,11 +15,13 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.SimpleMenuProvider;
 import net.minecraft.world.inventory.PlayerEnderChestContainer;
 import com.november.mcphone.core.PhoneItemData;
+import com.november.mcphone.core.PhoneLocation;
 import com.november.mcphone.feature.settings.WallpaperData;
 import com.november.mcphone.feature.settings.net.SetDeviceNamePacket;
 import com.november.mcphone.feature.settings.net.SetWallpaperPacket;
 import com.november.mcphone.feature.settings.net.SyncWallpaperPacket;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.InteractionHand;
 import net.minecraft.world.item.ItemStack;
 
 /**
@@ -84,6 +86,14 @@ public final class NetworkHandler {
                 NetworkHandler::handleSetDeviceName
         );
 
+        // C2S: 玩家开了/关了手机界面（点亮手上那部的屏幕，别人也看得见）
+        MCphoneNetwork.registerToServer(
+                PhoneScreenOnPacket.class,
+                PhoneScreenOnPacket::encode,
+                PhoneScreenOnPacket::decode,
+                NetworkHandler::handlePhoneScreenOn
+        );
+
         // C2S: 玩家在手机里点了末影箱
         MCphoneNetwork.registerToServer(
                 OpenEnderChestPacket.class,
@@ -101,6 +111,7 @@ public final class NetworkHandler {
         com.november.mcphone.feature.notes.net.NotesNetworking.register();
         com.november.mcphone.feature.store.net.StoreNetworking.register();
         com.november.mcphone.feature.music.net.MusicNetworking.register();
+        com.november.mcphone.feature.terminal.net.TerminalNetworking.register();
 
         // C2S: 玩家在手机里点了传送石。
         //
@@ -255,6 +266,33 @@ public final class NetworkHandler {
      * 客户端本地壁纸缓存 —— 在 PhoneScreen 渲染时读取。
      * 放到这个独立 holder 类中避免 PhoneScreen 直接依赖 network 包。
      */
+    /**
+     * 服务端收到：把"亮着的那部"记到物品上，别人看到的模型才会跟着变。
+     *
+     * 只认<b>拿在手上</b>的。手机在背包或饰品栏里时那件物品在别人眼里根本不渲染，点亮它
+     * 没有任何人看得见——客户端那边同样不会为这种情况发包，这里再挡一道是因为包可以伪造。
+     *
+     * 两只手都先清一遍再点亮，无状态：不去记"上次点亮了谁"。记下来的那个位置随时会失效
+     * （换手、放回背包、丢出去），而清两格的代价是零。
+     *
+     * 【这一支比那边多一道后事】：那边的标记不落盘，残留下次读档自己消失；这边是 NBT，
+     * 会跟着存档留下来，所以上线下线各补一次擦，见 {@link com.november.mcphone.core.PhoneScreenOnCleanup}。
+     */
+    private static void handlePhoneScreenOn(PhoneScreenOnPacket packet, ServerPlayer player) {
+        ItemStack lit = packet.lit()
+                .filter(location -> location instanceof PhoneLocation.InHand)
+                .map(location -> location.resolve(player))
+                .filter(PhoneItem::isPhone)
+                .orElse(ItemStack.EMPTY);
+
+        for (InteractionHand hand : InteractionHand.values()) {
+            ItemStack held = player.getItemInHand(hand);
+            if (held != lit) PhoneItemData.clearScreenOn(held);
+        }
+
+        if (!lit.isEmpty()) PhoneItemData.setScreenOn(lit);
+    }
+
     public static final class WakeholderData {
         private static String currentWallpaper = "";
 

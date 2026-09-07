@@ -154,6 +154,41 @@ dependencies {
     // 理由写在 gradle.properties 里。
     compileOnly fg.deobf("maven.modrinth:patchouli:${patchouli_version}")
 
+    // ---- 「终端」App 的三家存储模组，全是可选联动：装了任意一家这一格才出现 ----
+    //
+    // 三条都编译对着【最老】的 1.20.1 release，理由与 Waystones 那条相同：
+    // 往新编译、往旧运行会 NoSuchMethodError，反过来则几乎不会出事。
+    // 用到的入口在各自的两头都核过字节码，记在各自的联动类注释里。
+
+    // Applied Energistics 2 —— 无线终端、无线合成终端、无线样板访问终端。
+    //
+    // 【与 NeoForge 那一支不是同一代 API】。19.x 把"东西在哪儿"合成了一个
+    // ItemMenuHostLocator；15.x 还是分开的两套（MenuLocator 开菜单，
+    // IMenuItem.getMenuHost 只认背包槽位号），卡槽那条路因此要自己拼一个
+    // WirelessTerminalMenuHost，见 TerminalSlotLocator。
+    compileOnly fg.deobf("maven.modrinth:ae2:${ae2_version}")
+
+    // AE2WTLib（AE2 无线终端）—— 可选联动里的可选联动。
+    //
+    // 【这边直接对整个模组 jar 编译，那边编的是 ae2wtlib_api 构件】：15.x 还没
+    // 把 api 拆成单独的子包与单独的构件（de.mari_023.ae2wtlib.api.* 是后来才有
+    // 的），modmaven 上也就没有 15.x 的 ae2wtlib_api。接触面仍然只有
+    // Ae2wtlibSupport 一个类，与那边一样窄。
+    compileOnly fg.deobf("maven.modrinth:applied-energistics-2-wireless-terminals:${ae2wtlib_version}")
+
+    // Refined Storage —— 1.20.1 上是 1.12.x，也就是 RS【1】。
+    //
+    // 那边对的是 RS 2（2.0.x），两代之间 API 全换了。最要紧的一处后果是
+    // RS 的终端在这一支上【装不进手机卡槽】——1.12 的 PlayerSlot 是个具体类，
+    // 没有注册点。整段推理与实测见 RefinedStorageIntegration 的类注释。
+    compileOnly fg.deobf("maven.modrinth:refined-storage:${refinedstorage_version}")
+
+    // Tom's Simple Storage —— 高级无线终端。
+    //
+    // 三家里唯一一家两支逐字相同的：WirelessTerminal 那个接口在 1.6.1 与 2.4.2
+    // 上是同样三个方法，基础无线终端的 open 仍是一句 return。
+    compileOnly fg.deobf("maven.modrinth:toms-storage:${toms_version}")
+
     // JavaMP3 —— MP3 解码。【必需】依赖，不是可选联动。
     //
     // jarJar 而不是 implementation：模组 jar 不会自动带上第三方库，只写
@@ -389,3 +424,108 @@ tasks.register('pruneOldJars') {
     }
 }
 tasks.named('build').configure { finalizedBy 'pruneOldJars' }
+
+// ============================================================
+//  断言测试
+// ============================================================
+//
+// docs/ 下那几份 *Test.java 是带 main() 的独立断言测试。不用 JUnit 是因为
+// 它们要的是【真实的 Minecraft 类路径】——NbtOps、FriendlyByteBuf、UUIDUtil
+// 都是真货，测的就是"这些东西凑在一起对不对"，换成 mock 就什么都没测到。
+// 每份自己数断言、自己汇总，失败时 System.exit(1)。
+//
+// 它们守的是没有别的守卫的地方：ChatMessage 的存档格式、GIF 拆帧、图片编码、
+// 会话键、天气与世界时钟的取值，以及这一支特有的两份手写编解码往返测试
+// （ChatImagePacketTest、WallpaperPacketTest —— 那一支是组合子拼的，写反了都难，
+// 这边是读写两侧各写一遍的手写代码，中间没有任何东西保证它们对得上）。
+// 这几样出事时都是静默的。
+//
+// 【问题是它们一直没进构建】。跑法写在各自的类注释里，靠人手动 javac + java
+// 跑一遍——也就是说没人跑的时候，它们等于不存在。
+//
+// 现在挂在 check 上，跟着每一次 ./gradlew build 跑，CI 自动就带上了。
+//
+// docs/AddonApiExamples.java 没有 main()，所以只编不跑——而"编得过"本身就是
+// 它该受的那道校验：对外 API 的示例代码不能是编不过的。
+
+def assertTestsClasses = layout.buildDirectory.dir('classes/assert-tests')
+// 递归而不是只扫顶层：把测试挪进子目录是个再自然不过的整理动作，而顶层写死的
+// '*.java' 遇上它是【静默少跑几份】，不是报错。
+def assertTestsSource = fileTree('docs') { include '**/*.java' }
+def projectToolchain = java.toolchain
+
+// 哪几份带 main()：读文件头现判，【不要】在这里维护一张手写清单。
+// 加了一份测试却忘了往清单里补，症状是"构建绿的，但那份根本没跑"——
+// 而这整节存在的理由，就是不再让"没人跑"这件事悄悄发生。
+def assertTestMains = assertTestsSource.files.toSorted { it.name }.findResults { f ->
+    def text = f.getText('UTF-8')
+    // 修饰符顺序不固定（static public void main 一样合法），所以两个词分开断言，
+    // 不写成一串固定顺序——写死的那种漏掉时也是静默的
+    if (!(text =~ /(?m)^\s*(?=[^\n]*\bpublic\b)(?=[^\n]*\bstatic\b)[^\n]*\bvoid\s+main\s*\(/)) return null
+    def pkg = (text =~ /(?m)^\s*package\s+([\w.]+)\s*;/)
+    def simple = f.name - '.java'
+    // 没写 package 的就是默认包，类名本身即全限定名。这里【不能】返回 null 悄悄丢掉它 ——
+    // 那等于给这一节留了个"有测试但不跑"的后门
+    (pkg ? "${pkg[0][1]}.${simple}" : simple).toString()
+}
+
+tasks.register('compileAssertTests', JavaCompile) {
+    description = '编译 docs/ 下的断言测试与 API 示例'
+    group = 'verification'
+
+    source = assertTestsSource
+    // 主源码的产物 + 它的编译类路径：与各测试类注释里那条手写的 javac 命令等价。
+    // ForgeGradle 下 compileClasspath 里是【反混淆】过的 MC 与联动模组，正是手写
+    // 那条命令用的同一批 jar。
+    classpath = files(sourceSets.main.output, sourceSets.main.compileClasspath)
+    destinationDirectory = assertTestsClasses
+    javaCompiler = javaToolchains.compilerFor(projectToolchain)
+}
+
+// 一份测试一个 JavaExec 任务，而不是在 doLast 里 javaexec。
+// 那一支写这一段时的直接理由是它开了配置缓存（doLast 里 javaexec 在配置缓存下不成立），
+// 这一支【没开】org.gradle.configuration-cache，所以那条理由在这里不成立——但形状照抄，
+// 理由换成两条仍然成立的：一份挂了 Gradle 报得出是哪一份，以及将来真开了配置缓存不用回头改。
+def assertTestTasks = assertTestMains.collect { fqcn ->
+    def simple = fqcn.substring(fqcn.lastIndexOf('.') + 1)
+    tasks.register("assertTest${simple}", JavaExec) {
+        description = "跑 ${simple}"
+        group = 'verification'
+        dependsOn tasks.named('compileAssertTests')
+        classpath = files(assertTestsClasses, sourceSets.main.output, sourceSets.main.compileClasspath)
+        mainClass = fqcn
+        javaLauncher = javaToolchains.launcherFor(projectToolchain)
+    }
+}
+
+tasks.register('assertTests') {
+    description = '跑 docs/ 下所有带 main() 的断言测试'
+    group = 'verification'
+    dependsOn assertTestTasks
+
+    def names = assertTestMains.collect { it.substring(it.lastIndexOf('.') + 1) }
+
+    // 一份都没发现，绝不能当成"没有测试"就放行。
+    //
+    // 发现逻辑坏掉的方式不需要多离奇：docs/ 改个名、测试整体搬走、上面那个正则被
+    // 一次格式化打断。而它坏掉之后 compileAssertTests 是 NO-SOURCE、这个任务没有
+    // 任何依赖，check 照样全绿 —— 断言一条没跑，没有任何东西会告诉你。
+    // 「手写清单漏一条」与「整张清单为空」是同一个病的两种得法，这一节两种都要堵。
+    //
+    // 放在 doFirst 而不是配置期：配置期抛会连 ./gradlew tasks 和 IDE 的工程同步
+    // 一起打死，而这道断言只在"真要跑测试"时才有意义。挂在 check 上，CI 照样跑得到。
+    doFirst {
+        if (names.isEmpty()) {
+            throw new GradleException(
+                    'docs/ 下一份带 main() 的断言测试都没找到。\n' +
+                    '这不是"没有测试"，是发现逻辑坏了：文件被挪走或改名，或者判 main() 的那个正则失效了。\n' +
+                    '就这么放行的话 check 会全绿，而断言一条都没跑。')
+        }
+    }
+
+    // 把"跑了几份、跑了哪几份"印出来。上面那条只挡得住"一份都没有"，
+    // 少跑几份仍然是静默的 —— 这一行是留给人看的那道防线，CI 日志里翻得到
+    doLast { logger.lifecycle("断言测试 ${names.size()} 份跑完：${names.join('、')}") }
+}
+
+tasks.named('check').configure { dependsOn tasks.named('assertTests') }

@@ -65,7 +65,18 @@ public final class PhoneCanvas {
         this.style = style;
     }
 
-    /** 原版的绘制句柄。画什么都从它走 */
+    /**
+     * 原版的绘制句柄。画什么都从它走。
+     *
+     * <b>只有一件事别用它做：裁剪。</b> {@code graphics().enableScissor(...)} 收的是
+     * <b>窗口坐标</b>，而且不看 PoseStack；而玩家可以在「设置 → 界面大小」里把整个手机
+     * 放大（75%–300%）。你手上这些坐标是没缩放的手机坐标，直接交给原版，裁剪框就停在
+     * 100% 时的位置和大小上——内容被切掉一块，而且只在倍数不是 100% 时出现，你自己在
+     * 100% 下怎么测都是好的。用 {@link #clipped} 代替，它替你把矩形过一遍当前的变换矩阵。
+     *
+     * 别的都不用担心：这里给的 x/y/宽高，以及送进 {@code mouseClicked} / {@code mouseScrolled}
+     * 的鼠标坐标，两边一起换算过了。
+     */
     public GuiGraphics graphics() { return graphics; }
 
     /**

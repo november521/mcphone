@@ -1,6 +1,6 @@
 {
-  "parent": "minecraft:item/generated",
-  "textures": {
-    "layer0": "mcphone:item/phone"
-  }
+  "parent": "mcphone:item/phone_black",
+  "overrides": [
+    { "predicate": { "mcphone:screen_on": 1 }, "model": "mcphone:item/phone_white" }
+  ]
 }

@@ -20,6 +20,13 @@ public final class CameraApp extends PhoneApp {
         AppOptions.register(getId(), CameraFlash.appOption());
     }
 
+    /**
+     * 界面根本不在手机里：取景框画在世界上，{@link #onPress()} 第一件事就是把界面关掉。
+     * 快捷键因此不先开机——开了再关是白开一次，玩家看得见手机闪一下。
+     */
+    @Override
+    public boolean opensInsidePhone() { return false; }
+
     @Override
     public void onPress() {
         Minecraft mc = Minecraft.getInstance();

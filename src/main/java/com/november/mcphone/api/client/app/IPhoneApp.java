@@ -28,6 +28,28 @@ public interface IPhoneApp {
     ResourceLocation getIconTexture();
 
     /** 用户点击 App 图标时触发。在此打开 GUI、执行业务逻辑。 */
+    /**
+     * 你这个 App 的界面在不在手机里。只有【快捷键】那条路看这个数。
+     *
+     * true（默认）＝ 在手机里：{@link #openPage()} 那一页，或者 {@link #onPress()} 里
+     * 靠手机界面完成的跳转。快捷键先开机，再把玩家送进你这一页——和点图标完全同一条路。
+     *
+     * false ＝ 不在：{@link #onPress()} 自己 {@code setScreen} 一个别的界面，或者只发个包
+     * 让服务端开容器（内建的「终端」「末影箱」「传送石」「任务书」「浏览器」「相机」都是
+     * 这一种）。声明成 false 之后，快捷键<b>不再先把手机开出来</b>，直接调你的
+     * {@link #onPress()}——手机仍然要在玩家身上，否则这一下什么都不做。
+     *
+     * 为什么要你自己说，而不是我们看出来
+     *
+     * 从外面看不出来。只发包的那种，{@code onPress()} 返回的那一刻界面还没变（要等服务端
+     * 把容器开回来），和"什么都没做"分不出；而先开机再被你的界面顶掉，玩家是看得见手机
+     * 闪一下的——快捷键的全部意义正是省掉中间那一步。
+     *
+     * 默认 true 是为了不动老附属的行为：{@code onPress()} 里那句
+     * {@code if (screen instanceof PhoneScreen ps)} 照样成立。
+     */
+    default boolean opensInsidePhone() { return true; }
+
     void onPress();
 
     /**

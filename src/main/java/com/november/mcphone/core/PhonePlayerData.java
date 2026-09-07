@@ -9,6 +9,7 @@ import com.november.mcphone.feature.store.PurchasedApps;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtOps;
 import net.minecraft.nbt.Tag;
+import net.minecraft.world.item.ItemStack;
 import net.minecraftforge.common.util.INBTSerializable;
 
 /**
@@ -34,12 +35,14 @@ public final class PhonePlayerData implements INBTSerializable<CompoundTag> {
     private static final String KEY_NOTES = "personal_notes";
     private static final String KEY_CHAT_READ = "chat_read_state";
     private static final String KEY_DISC = "phone_disc";
+    private static final String KEY_TERMINAL = "phone_terminal";
     private static final String KEY_PURCHASED = "purchased_apps";
 
     private WallpaperData wallpaper = WallpaperData.DEFAULT;
     private NoteList notes = NoteList.EMPTY;
     private ChatReadState chatRead = ChatReadState.DEFAULT;
     private DiscState disc = DiscState.EMPTY;
+    private ItemStack terminal = ItemStack.EMPTY;
     private PurchasedApps purchasedApps = PurchasedApps.EMPTY;
 
     public WallpaperData wallpaper() {
@@ -74,6 +77,21 @@ public final class PhonePlayerData implements INBTSerializable<CompoundTag> {
         this.disc = value;
     }
 
+    /**
+     * 手机终端卡槽里那台终端（「终端」App 用）。空的时候是 {@link ItemStack#EMPTY}。
+     *
+     * 这一格给出的是<b>活的</b>那一个，不是副本 —— AE2 要往它上面写耗电与界面设置，
+     * 理由见 {@link com.november.mcphone.feature.terminal.TerminalSlot}。所以这里
+     * 【不能】图省事改成每次 copy 一份出去。
+     */
+    public ItemStack terminal() {
+        return terminal;
+    }
+
+    public void setTerminal(ItemStack value) {
+        this.terminal = value;
+    }
+
     public PurchasedApps purchasedApps() {
         return purchasedApps;
     }
@@ -88,6 +106,7 @@ public final class PhonePlayerData implements INBTSerializable<CompoundTag> {
         this.notes = other.notes;
         this.chatRead = other.chatRead;
         this.disc = other.disc;
+        this.terminal = other.terminal;
         this.purchasedApps = other.purchasedApps;
     }
 
@@ -102,12 +121,15 @@ public final class PhonePlayerData implements INBTSerializable<CompoundTag> {
      *   notes           标了                     → 拷
      *   chatRead        标了                     → 拷（不然死一次所有会话都变未读）
      *   disc            标了                     → 拷（唱片是可掉落的真物品，不能死一次就没）
+     *   terminal        标了                     → 拷（和唱片仓同一个道理，手机里的东西
+     *                                                 不该因为死一次就没）
      *   purchasedApps   标了                     → 拷（买过的东西不能因为死一次就没了）
      */
     public void copyDeathPersistentFrom(PhonePlayerData other) {
         this.notes = other.notes;
         this.chatRead = other.chatRead;
         this.disc = other.disc;
+        this.terminal = other.terminal;
         this.purchasedApps = other.purchasedApps;
     }
 
@@ -126,6 +148,9 @@ public final class PhonePlayerData implements INBTSerializable<CompoundTag> {
         DiscState.CODEC.encodeStart(NbtOps.INSTANCE, disc)
                 .resultOrPartial(err -> MCphone.LOGGER.error("唱片仓写入存档失败: {}", err))
                 .ifPresent(encoded -> tag.put(KEY_DISC, encoded));
+        // 终端那一格走 ItemStack 自己的 save，不走 Codec：1.20.1 上物品是 NBT 直存的，
+        // save 出来的形状与原版容器里的一模一样，将来手改存档的人认得
+        if (!terminal.isEmpty()) tag.put(KEY_TERMINAL, terminal.save(new CompoundTag()));
         PurchasedApps.CODEC.encodeStart(NbtOps.INSTANCE, purchasedApps)
                 .resultOrPartial(err -> MCphone.LOGGER.error("已购 App 写入存档失败: {}", err))
                 .ifPresent(encoded -> tag.put(KEY_PURCHASED, encoded));
@@ -141,6 +166,7 @@ public final class PhonePlayerData implements INBTSerializable<CompoundTag> {
         notes = NoteList.EMPTY;
         chatRead = ChatReadState.DEFAULT;
         disc = DiscState.EMPTY;
+        terminal = ItemStack.EMPTY;
         purchasedApps = PurchasedApps.EMPTY;
 
         Tag wp = tag.get(KEY_WALLPAPER);
@@ -169,6 +195,12 @@ public final class PhonePlayerData implements INBTSerializable<CompoundTag> {
             DiscState.CODEC.parse(NbtOps.INSTANCE, dc)
                     .resultOrPartial(err -> MCphone.LOGGER.warn("唱片仓读取失败，已退回空仓: {}", err))
                     .ifPresent(value -> disc = value);
+        }
+
+        // ItemStack.of 认得残缺的标签：读不出物品时给的是 EMPTY，不会抛，
+        // 所以这一处不需要上面那几个的 resultOrPartial 兜底
+        if (tag.contains(KEY_TERMINAL, Tag.TAG_COMPOUND)) {
+            terminal = ItemStack.of(tag.getCompound(KEY_TERMINAL));
         }
 
         Tag pa = tag.get(KEY_PURCHASED);

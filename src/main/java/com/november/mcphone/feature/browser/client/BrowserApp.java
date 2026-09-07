@@ -40,6 +40,16 @@ public final class BrowserApp extends PhoneApp {
         return BrowserBackends.isMcefLoaded();
     }
 
+    /**
+     * 界面不在手机里：MCEF 那块网页画在整个屏幕上，是另一个 Screen。快捷键因此不先开机
+     * ——手机弹出来只是白闪一帧，随即被浏览器盖掉。
+     *
+     * 代价是快捷键开的浏览器<b>关掉后回到游戏</b>，而不是回到手机（parent 是 null）。
+     * 从手机里点开的那条路不变，照样回得去。按快捷键的人本来就没在用手机。
+     */
+    @Override
+    public boolean opensInsidePhone() { return false; }
+
     @Override
     public void onPress() {
         Minecraft mc = Minecraft.getInstance();

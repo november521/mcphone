@@ -52,8 +52,17 @@ public final class MCphoneNetwork {
      * 插在了 NewMessage 与 RequestOnlinePlayers 之间，而不是追加在末尾——为的是让
      * 这个文件与 main 的注册顺序逐行对得上，往后再照着搬时不必两边数序号。
      * 代价就是它后面所有包的序号平移了三位，所以这里必须 +1。
+     *
+     * "3"：「终端」那两个包（TerminalAction / SyncTerminalSlot）同样插在了
+     * MusicNetworking 之后而不是追加在末尾，理由与上一条相同。而且这一次
+     * 【就算追加在末尾也得升】：SyncTerminalSlot 是 S2C 的，0.11.1 的客户端
+     * 收到一个它不认识的序号是解码抛异常、netty 当场断线，而不是安静地忽略。
+     * 升上来之后两端版本对不上直接拒绝连接，玩家看到的是一句人话。
      */
-    private static final String PROTOCOL_VERSION = "2";
+    //
+    // "4"：手机屏幕亮不亮那个 C2S 包（PhoneScreenOnPacket）。它插在设备名之后而不是
+    // 追加在末尾，后面所有包的序号跟着平移了，两端版本对不上必须拒绝连接。
+    private static final String PROTOCOL_VERSION = "4";
 
     private static final SimpleChannel CHANNEL = NetworkRegistry.newSimpleChannel(
             ResourceLocation.fromNamespaceAndPath(MCphone.MODID, "main"),

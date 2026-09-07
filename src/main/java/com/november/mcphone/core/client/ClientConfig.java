@@ -61,6 +61,21 @@ public final class ClientConfig {
     /** 界面大小只在"清晰的倍数"上取值。为什么这样更清楚见 {@link PhoneScale#snapPercent} */
     public static final ForgeConfigSpec.BooleanValue UI_SCALE_SNAP;
 
+    /** 手机放进副手时自动挂到 HUD 上。整套的来龙去脉见 {@link com.november.mcphone.core.client.PhoneHud} */
+    public static final ForgeConfigSpec.BooleanValue HUD_ENABLED;
+
+    /** HUD 上那部手机贴哪个角。九个锚点，解算见 {@link PhoneHudPlacement} */
+    public static final ForgeConfigSpec.EnumValue<PhoneHudPlacement.Anchor> HUD_ANCHOR;
+
+    /** 从锚点再往里挪多少像素，横 */
+    public static final ForgeConfigSpec.IntValue HUD_OFFSET_X;
+
+    /** 从锚点再往里挪多少像素，竖 */
+    public static final ForgeConfigSpec.IntValue HUD_OFFSET_Y;
+
+    /** HUD 上那部手机开多大，整数百分比。与 UI_SCALE 分开的理由见 {@link PhoneHudPlacement} */
+    public static final ForgeConfigSpec.IntValue HUD_SCALE;
+
     static {
         ForgeConfigSpec.Builder builder = new ForgeConfigSpec.Builder();
 
@@ -137,6 +152,52 @@ public final class ClientConfig {
                 .translation("mcphone.config.ui_scale_snap")
                 .define("uiScaleSnap", true);
 
+        HUD_ENABLED = builder
+                .comment("手机放进副手时，自动把它挂到 HUD 上（一直亮着，停在哪一页就显示哪一页）。",
+                        "这一项只管【自动】那条。关掉之后，『唤出/收起手机 HUD』那个键（默认 G）照样叫得出来",
+                        "——手机挂在 Curios 饰品栏里时副手是空的，只能靠那个键。",
+                        "按一下『操作手机 HUD』那个键（默认左 Alt）唤出鼠标直接点它，再按一下收起。",
+                        "位置与大小在游戏里改：设置 → 副手 HUD。",
+                        "Show the phone as a HUD overlay while it sits in your off hand.",
+                        "This only governs the automatic rule; the 'Toggle Phone HUD' key (default G)",
+                        "still summons it from your bag or a Curios slot.",
+                        "Tap the 'Use phone HUD' key (default Left Alt) for a cursor; tap again to dismiss.",
+                        "In-game: Settings -> Off-hand HUD.")
+                .translation("mcphone.config.hud_enabled")
+                .define("hudEnabled", true);
+
+        HUD_ANCHOR = builder
+                .comment("HUD 上那部手机贴哪个角。换分辨率、改 GUI 缩放之后靠它留在原处。",
+                        "在游戏里改：唤出鼠标后直接拖手机的边框，或者 设置 → 副手 HUD → 位置。",
+                        "Which corner the HUD phone sticks to; keeps it in place across resolutions.",
+                        "In-game: drag the phone's edge with the cursor up, or Settings -> Off-hand HUD.")
+                .translation("mcphone.config.hud_anchor")
+                .defineEnum("hudAnchor", PhoneHudPlacement.DEFAULT_ANCHOR);
+
+        HUD_OFFSET_X = builder
+                .comment("从锚点再往里挪多少像素（横）。贴着角落多半会压到物品栏，挪几像素才好看。",
+                        "Pixel offset from the anchor, horizontal.")
+                .translation("mcphone.config.hud_offset_x")
+                .defineInRange("hudOffsetX", 0,
+                        -PhoneHudPlacement.MAX_OFFSET, PhoneHudPlacement.MAX_OFFSET);
+
+        HUD_OFFSET_Y = builder
+                .comment("从锚点再往里挪多少像素（竖）。",
+                        "Pixel offset from the anchor, vertical.")
+                .translation("mcphone.config.hud_offset_y")
+                .defineInRange("hudOffsetY", 0,
+                        -PhoneHudPlacement.MAX_OFFSET, PhoneHudPlacement.MAX_OFFSET);
+
+        HUD_SCALE = builder
+                .comment("HUD 上那部手机开多大，百分比。与『手机界面大小』是两个数：",
+                        "那一档管全屏打开时多大，这一档管挂在角落里多大，后者必然小得多。",
+                        "在游戏里改：唤出鼠标后 Ctrl+滚轮，或者 设置 → 副手 HUD → 大小。",
+                        "Size of the HUD phone in percent. Separate from the full-screen UI size.",
+                        "In-game: Ctrl+scroll with the cursor up, or Settings -> Off-hand HUD.")
+                .translation("mcphone.config.hud_scale")
+                .defineInRange("hudScale", PhoneHudPlacement.DEFAULT_PERCENT,
+                        PhoneHudPlacement.MIN_PERCENT, PhoneHudPlacement.MAX_PERCENT);
+
         SPEC = builder.build();
     }
 
@@ -176,6 +237,10 @@ public final class ClientConfig {
         // 界面倍数更甚：每一帧、每一次鼠标换算都要用
         PhoneScale.load(UI_SCALE.get());
         PhoneScale.loadSnap(UI_SCALE_SNAP.get());
+
+        // HUD 同理：它每帧都要问位置与倍数，那是渲染路径上最热的地方
+        PhoneHudPlacement.load(HUD_ENABLED.get(), HUD_ANCHOR.get(),
+                HUD_OFFSET_X.get(), HUD_OFFSET_Y.get(), HUD_SCALE.get());
     }
 
     //  手机界面 → 配置
@@ -254,6 +319,34 @@ public final class ClientConfig {
     public static void saveUiScaleSnap(boolean value) {
         if (!SPEC.isLoaded()) return;
         UI_SCALE_SNAP.set(value);
+        SPEC.save();
+    }
+
+    /**
+     * 副手 HUD 的三组值。与上面几项同一套路数：{@link PhoneHudPlacement} 那边
+     * 已经用上新值了（下一帧就变），这里只负责落盘。
+     *
+     * 位置分成一个方法而不是三个：锚点与两个偏移是【一起】算出来的一份结果
+     * （见 {@link PhoneHudPlacement#derive}），分三次写会在中途存出一个
+     * 「新锚点配旧偏移」的组合——那一瞬间落盘失败的话，手机就摆到了谁也没要的地方。
+     */
+    public static void saveHudEnabled(boolean value) {
+        if (!SPEC.isLoaded()) return;
+        HUD_ENABLED.set(value);
+        SPEC.save();
+    }
+
+    public static void saveHudPlacement(PhoneHudPlacement.Anchor anchor, int offsetX, int offsetY) {
+        if (!SPEC.isLoaded()) return;
+        HUD_ANCHOR.set(anchor);
+        HUD_OFFSET_X.set(PhoneHudPlacement.clampOffset(offsetX));
+        HUD_OFFSET_Y.set(PhoneHudPlacement.clampOffset(offsetY));
+        SPEC.save();
+    }
+
+    public static void saveHudScale(int percent) {
+        if (!SPEC.isLoaded()) return;
+        HUD_SCALE.set(PhoneHudPlacement.clampPercent(percent));
         SPEC.save();
     }
 

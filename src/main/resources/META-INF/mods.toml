@@ -89,3 +89,52 @@ description='''
     versionRange="*"
     ordering="AFTER"
     side="CLIENT"
+
+# ---- 「终端」App 的三家存储模组 ----
+#
+# 为什么三条都是 mandatory=false 而不是把 AE2 写成必需：这一格要的是"有一家就行"，
+# 而 mods.toml 表达不了"三选一"。三条必需是要求全装；只把 AE2 写成必需又等于把另外
+# 两家降级成陪衬。"至少要有一家"这件事由 TerminalApp.isAvailable() 兜。
+#
+# 都不写下限，和上面 Curios、Waystones 同一个道理：我们用的是各家"替玩家打开这台
+# 终端"的入口（AE2 的 openFromInventory、RS 的 INetworkItemManager.open、
+# Tom's 的 WirelessTerminal.open），都是存在很久的东西，钉死版本只会误伤用旧版的
+# 服主 —— 而版本对不上的代价是"游戏拒绝启动"，比"这一个 App 不好使"严重得多。
+[[dependencies.${mod_id}]]
+    modId="ae2"
+    mandatory=false
+    versionRange="*"
+    # 必须在它之后加载：我们要往它的 locator 注册表里登记"终端在手机卡槽里"
+    ordering="AFTER"
+    side="BOTH"
+
+# AE2WTLib（AE2 无线终端）—— 可选依赖里的可选依赖。没装它照样能开 AE2 自己的
+# 无线终端；装了就必须认它，否则它的终端会被开成【普通】ME 终端（没有合成格），
+# 不崩不报错。见 Ae2wtlibSupport。
+[[dependencies.${mod_id}]]
+    modId="ae2wtlib"
+    mandatory=false
+    versionRange="*"
+    ordering="AFTER"
+    side="BOTH"
+
+# Refined Storage —— 1.20.1 上是 1.12.x（RS 1）。装了就能打开背包里的无线网格、
+# 无线合成监视器与便携网格。
+#
+# 【这一支上 RS 的终端装不进手机卡槽】，那是 RS 1 的 PlayerSlot 没有注册点造成的，
+# 不是配置问题，理由见 RefinedStorageIntegration 的类注释。
+[[dependencies.${mod_id}]]
+    modId="refinedstorage"
+    mandatory=false
+    versionRange="*"
+    ordering="AFTER"
+    side="BOTH"
+
+# Tom's Simple Storage —— 装了就能打开高级无线终端。
+# 基础无线终端认得出但远程开不了，那是它自己的设计，见 TomsStorageIntegration。
+[[dependencies.${mod_id}]]
+    modId="toms_storage"
+    mandatory=false
+    versionRange="*"
+    ordering="AFTER"
+    side="BOTH"
