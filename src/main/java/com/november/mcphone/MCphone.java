@@ -85,11 +85,17 @@ public final class MCphone {
                 ModCapabilities::onAttachCapabilities);
         MinecraftForge.EVENT_BUS.addListener(ModCapabilities::onPlayerClone);
 
-        // 游戏总线，显式挂载：这两条漏了没有任何症状，只是下线玩家的表再也不缩小
+        // 游戏总线，显式挂载：这三条漏了没有任何症状，只是下线玩家的表再也不缩小
         MinecraftForge.EVENT_BUS.addListener(
                 com.november.mcphone.core.net.RequestThrottle::onPlayerLoggedOut);
         MinecraftForge.EVENT_BUS.addListener(
                 com.november.mcphone.feature.music.DiscService::onPlayerLoggedOut);
+        MinecraftForge.EVENT_BUS.addListener(
+                com.november.mcphone.feature.chat.ChatImageUploads::onPlayerLoggedOut);
+
+        // 开服时清掉没有消息认领的图片文件，理由见 ChatImageStore.sweepOrphans
+        MinecraftForge.EVENT_BUS.addListener(
+                com.november.mcphone.feature.chat.ChatImageStore::onServerStarted);
 
         // 放在自家注册之后：兼容模块可能要看我们已经注册了什么
         com.november.mcphone.compat.CompatModules.init(modBus);

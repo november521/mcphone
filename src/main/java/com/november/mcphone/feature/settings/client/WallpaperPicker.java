@@ -7,7 +7,9 @@ import com.november.mcphone.core.client.GuiUtil;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.Mth;
 import com.november.mcphone.core.net.MCphoneNetwork;
+import com.november.mcphone.core.client.ImageFolder;
 
 import java.util.List;
 
@@ -16,6 +18,9 @@ import java.util.List;
  *
  * 渲染被嵌入到 PhoneScreen 的屏幕区域中。
  * 每张壁纸按比例缩放为缩略图展示。
+ *
+ * 网格按行滚（1.9.1 补的）。在那之前一屏只画得下两行四张，第五张起就是永远看不见 ——
+ * 而这个目录是玩家自己往里丢文件的地方，丢满是迟早的事。见 {@link #scrollRow}。
  */
 public final class WallpaperPicker {
 
@@ -27,15 +32,65 @@ public final class WallpaperPicker {
     private static final int PAD_Y = 2;
     private static final int COLS = 2;
 
-    private int hoveredIdx = -1;     // -2 = "默认"按钮, -1 = 无hover, 0..N = 壁纸索引
+    /** 标题与右上角那个键之间至少留的空隙 */
+    private static final int HEADER_GAP = 4;
+
+    /** 右上角那个键的点击判定往外放宽一点，字太小不好点 */
+    private static final int HIT_PAD = 2;
+
+    private int hoveredIdx = -1;     // -3 = "打开文件夹", -2 = "恢复默认", -1 = 无hover, 0..N = 壁纸索引
+
+    /**
+     * 网格从第几【行】开始画。
+     *
+     * 这一页原来没有滚动，也没有翻页：一屏两列两行，第五张之后的壁纸就是永远看不见。
+     * 而壁纸目录是玩家自己往里丢文件的地方，丢第五张进去是迟早的事——他会以为
+     * 那张图没被认出来，转头去报"壁纸加载不出来"。
+     */
+    private int scrollRow;
+
+    /** 上一帧算出来的滚动上限，给 mouseScrolled 夹用 —— 一屏放得下几行只有渲染时才知道 */
+    private int maxScrollRow;
+
+    /**
+     * 点过「打开文件夹」之后开始盯着目录，每秒重扫一次。
+     *
+     * 不这么做的话，这个键只完成了一半：玩家点开文件夹、拖一张 PNG 进去、切回游戏——
+     * 而这一页只在【进来的时候】扫过一次，那张图要退出去再进来才认。他多半会以为没放成功。
+     *
+     * 只在点过之后才盯：那是玩家说出"我要往里放东西"的唯一时刻。没点过的人不该为此
+     * 每秒付一次目录列举。
+     */
+    private boolean watchingFolder;
+
+    private long lastScanMs;
+
+    /** 目录重扫的间隔。列一次目录的开销可以忽略，真正贵的加载只发生在有新文件时 */
+    private static final long RESCAN_INTERVAL_MS = 1000L;
 
     public WallpaperPicker() {}
+
+    /** 每次进入这一页时调，见 PhoneScreen 的 navigateTo */
+    public void open() {
+        hoveredIdx = -1;
+        watchingFolder = false;
+        lastScanMs = 0L;
+        scrollRow = 0;
+    }
 
     //  渲染
 
     public void render(GuiGraphics g, int phoneLeft, int phoneTop,
                        int screenW, int screenH, int statusH, int navH,
                        int mouseX, int mouseY, net.minecraft.client.gui.Font font) {
+
+        if (watchingFolder) {
+            long now = System.currentTimeMillis();
+            if (now - lastScanMs >= RESCAN_INTERVAL_MS) {
+                lastScanMs = now;
+                WallpaperStore.refresh();   // 增量的：没有新文件时它什么都不做
+            }
+        }
 
         List<WallpaperStore.WallpaperEntry> wallpapers = WallpaperStore.getWallpapers();
 
@@ -44,12 +99,31 @@ public final class WallpaperPicker {
         int contentBottom = phoneTop + screenH - navH;
         int contentW = screenW - PAD_X * 2;
 
-        // ---- 标题 ----
-        g.drawString(font, Component.translatable("mcphone.gui.wallpaper_title").getString(),
-                contentX, contentY, FontPalette.title(), true);
-        contentY += font.lineHeight + 4;
-
         int hovered = -1;
+
+        // ---- 标题行：左边标题，右边「打开文件夹」----
+        //
+        // 挂在标题行而不是自己占一行：多占一行正好把网格从两行挤成一行，一屏能看到的
+        // 壁纸从四张掉到两张。1.9.1 给网格补上滚轮之后这不再是"看不见"，但每滚一下
+        // 只换两张仍然难挑——为了一个快捷键把主功能的密度砍掉一半，不划算。
+        //
+        // 挤不下时截的是标题：玩家正是点着「更换壁纸」那一行进来的，标题只是复述一遍；
+        // 而这个键是这一页唯一的新功能。中文两样都放得下，英文的标题会被截一截。
+        String open = Component.translatable("mcphone.gui.open_folder").getString();
+        int openW = font.width(open);
+        int openX = contentX + contentW - openW;
+        if (GuiUtil.hit(mouseX, mouseY, openX - HIT_PAD, contentY - HIT_PAD,
+                openW + HIT_PAD * 2, font.lineHeight + HIT_PAD * 2)) {
+            hovered = -3;
+        }
+        g.drawString(font, open, openX, contentY,
+                hovered == -3 ? FontPalette.title() : FontPalette.link(), false);
+
+        String title = GuiUtil.truncate(font,
+                Component.translatable("mcphone.gui.wallpaper_title").getString(),
+                openX - contentX - HEADER_GAP);
+        g.drawString(font, title, contentX, contentY, FontPalette.title(), true);
+        contentY += font.lineHeight + 4;
 
         // ---- "恢复默认" 按钮 ----
         int btnY = contentY;
@@ -80,14 +154,26 @@ public final class WallpaperPicker {
         }
 
         // ---- 壁纸缩略图网格 ----
+        //
+        // 一格占 cellH，最后一行不需要底下那点行距，所以判可见性用 cellNeed
+        final int cellNeed = THUMB_H + font.lineHeight + 2;
+        final int cellH = THUMB_H + font.lineHeight + 4 + 2;
+
+        final int availH = contentBottom - contentY;
+        final int visibleRows = availH < cellNeed ? 1 : (availH - cellNeed) / cellH + 1;
+        final int totalRows = (wallpapers.size() + COLS - 1) / COLS;
+        // 删掉几张图之后行数会变少，不夹一下就会停在空白处
+        maxScrollRow = Math.max(0, totalRows - visibleRows);
+        scrollRow = Mth.clamp(scrollRow, 0, maxScrollRow);
+
         int x = contentX;
         int y = contentY;
         int col = 0;
 
-        for (int i = 0; i < wallpapers.size(); i++) {
+        for (int i = scrollRow * COLS; i < wallpapers.size(); i++) {
             WallpaperStore.WallpaperEntry wp = wallpapers.get(i);
 
-            if (y + THUMB_H + font.lineHeight + 2 > contentBottom) break;
+            if (y + cellNeed > contentBottom) break;
 
             // hover 高亮
             if (GuiUtil.hit(mouseX, mouseY, x, y, THUMB_W, THUMB_H + font.lineHeight + 2)) {
@@ -149,11 +235,33 @@ public final class WallpaperPicker {
 
     //  点击
 
+    /** 滚轮翻网格，一次一行。到头了返回 false */
+    public boolean mouseScrolled(double scrollY) {
+        if (scrollY > 0 && scrollRow > 0) {
+            scrollRow--;
+            return true;
+        }
+        if (scrollY < 0 && scrollRow < maxScrollRow) {
+            scrollRow++;
+            return true;
+        }
+        return false;
+    }
+
     /**
      * 返回 true 表示选择了壁纸（界面应返回设置列表），false 表示点击在空白处。
      */
     public boolean mouseClicked(int button) {
         if (button != 0) return false;
+
+        if (hoveredIdx == -3) {
+            // 交给系统自己的文件管理器，不弹任何 Java 的窗口——AWT 的选择器在 macOS 上
+            // 要与游戏抢主线程。开完【留在这一页】：玩家接下来要做的是拖一张图进去再回来，
+            // 把他踢回设置列表等于让他再点两下进来
+            ImageFolder.openInFileManager(WallpaperStore.directory());
+            watchingFolder = true;
+            return false;
+        }
 
         if (hoveredIdx == -2) {
             // "恢复默认背景"

@@ -19,7 +19,11 @@ public final class MCphoneApi {
      * 注意这只能判断语义，不能替代类加载：直接引用新版才有的类型，在旧版上 JVM 校验时就抛
      * NoClassDefFoundError，轮不到那句 if——把新能力的调用单独关进一个类里，判断通过再碰它。
      *
-     *   1  —— IPhoneApp / IAppSource / ICost / IAppPriceProvider / RequiredMod
+     *   1  —— IPhoneApp / RequiredMod / IPhonePage / PhoneCanvas / PhoneStyle
+     *          IAppSource / AppInfo / ICost / ItemCost / EmcCost
+     *          IAppPriceProvider / IEmcWallet / EmcWallets
+     *
+     * 逐个方法的说明见 docs/addon-api.md，那份是给附属开发者看的，这里只记契约。
      */
     public static final int VERSION = 1;
 

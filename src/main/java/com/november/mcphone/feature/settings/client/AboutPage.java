@@ -13,6 +13,7 @@ import net.minecraft.SharedConstants;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
+import net.minecraft.util.Mth;
 import net.minecraftforge.fml.ModList;
 
 import java.util.LinkedHashMap;
@@ -46,23 +47,49 @@ import java.util.Map;
  */
 public final class AboutPage {
 
-    private AboutPage() {}
-
     private static final int PAD = 6;
 
-    public static void render(GuiGraphics g, int phoneLeft, int phoneTop,
-                              int screenW, int screenH, int statusH, int navH, Font font) {
+    /**
+     * 正文往上滚了多少像素。0 ＝ 贴着顶。
+     *
+     * 这一页原来一个字都滚不动：装的联动模组一多，列表画到屏幕底就画一个 "…" 收尾，
+     * 后面的永远看不到 —— 而这一页存在的理由恰恰是回答"我怎么没有这个功能"。
+     * 按像素滚而不是按行：这一页是长短不一的一段流水，不是等高的列表。
+     */
+    private int scrollPx;
+
+    /** 上一帧量出来的滚动上限。内容总高只有画完才知道，与 ChatConversation 同一套路 */
+    private int maxScroll;
+
+    /** 每次进这一页都从头看起 */
+    public void open() {
+        scrollPx = 0;
+    }
+
+    public void render(GuiGraphics g, int phoneLeft, int phoneTop,
+                       int screenW, int screenH, int statusH, int navH, Font font) {
 
         int x = phoneLeft + PAD;
         int y = phoneTop + statusH + 4;
         int w = screenW - PAD * 2;
 
+        // ---- 固定的标题：滚正文的时候它得留在原地 ----
         g.drawString(font, Component.translatable("mcphone.gui.about").getString(),
                 x, y, FontPalette.title(), true);
         y += font.lineHeight + 4;
 
         g.fill(x, y, x + w, y + 1, PhoneTheme.COLOR_DIVIDER);
         y += 5;
+
+        // ---- 以下是可滚的正文 ----
+        final int top = y;
+        final int bottom = phoneTop + screenH - navH;
+
+        scrollPx = Mth.clamp(scrollPx, 0, maxScroll);
+        y -= scrollPx;
+
+        // 裁掉滚出去的部分，否则正文会画到状态栏和导航栏上
+        GuiUtil.enableScissor(g, x, top, x + w, bottom);
 
         // ---- 名字与版本 ----
         g.drawString(font, "MCphone", x, y, FontPalette.title(), false);
@@ -101,15 +128,26 @@ public final class AboutPage {
         // 其余从各 App 声明的前置汇总。这一段【不能】改回手写清单：
         // v1.2.0 加了浏览器 App 却忘了往这儿加 MCEF，玩家看不到自己缺什么，
         // 只会把"App 不见了"当成 bug 来报。汇总出来就漏不掉了。
-        int bottom = phoneTop + screenH - navH - 2;
+        //
+        // 这里【不再】画到底就截一个 "…"：现在滚得动，越界的部分交给 scissor 裁，
+        // 玩家往下滚就能看到。截断是那个 bug 本身，不是它的兜底。
         for (RequiredMod mod : companionMods()) {
-            if (y + font.lineHeight > bottom) {
-                g.drawString(font, "…", x, y, FontPalette.subtle(), false);
-                break;
-            }
             y = compatRow(g, font, x, y, w, mod.displayName(),
                     ModList.get().isLoaded(mod.modId()));
         }
+
+        GuiUtil.disableScissor(g);
+
+        // 这一帧画到哪儿，就是内容有多高；下一帧的滚动上限按它来
+        maxScroll = Math.max(0, (y + scrollPx) - bottom);
+    }
+
+    /** 滚轮。一次三行，跟原版列表手感一致 */
+    public boolean mouseScrolled(double scrollY, Font font) {
+        int step = font.lineHeight * 3;
+        int before = scrollPx;
+        scrollPx = Mth.clamp(scrollPx - (int) (scrollY * step), 0, maxScroll);
+        return scrollPx != before;
     }
 
     /**

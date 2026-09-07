@@ -1,5 +1,6 @@
 package com.november.mcphone.api.client.ui;
 
+import com.november.mcphone.core.client.GuiUtil;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 
@@ -67,6 +68,44 @@ public final class PhoneCanvas {
     /** 原版的绘制句柄。画什么都从它走 */
     public GuiGraphics graphics() { return graphics; }
 
+    /**
+     * 在一个矩形里画，越界的部分裁掉 —— 做可滚动的列表、长文本时用它。
+     *
+     * <pre>{@code
+     * canvas.clipped(canvas.x(), canvas.y(), canvas.width(), canvas.height(), () -> {
+     *     int y = canvas.y() - scrollPx;
+     *     for (String line : lines) {
+     *         canvas.graphics().drawString(canvas.font(), line, canvas.x(), y, color, false);
+     *         y += canvas.font().lineHeight;
+     *     }
+     * });
+     * }</pre>
+     *
+     * <b>别自己调 {@code graphics().enableScissor(...)}。</b> 原版那句收的是窗口坐标，
+     * 而且【不看 PoseStack】——手机整体是可以被玩家放大的（设置 → 界面大小），页面里
+     * 那些坐标是没缩放过的手机坐标，直接交给原版，裁剪框就停在没缩放时的位置和大小上，
+     * 文字会被切掉一块，而且只在倍数不是 100% 时出现。这个方法替你把矩形过一遍当前的
+     * 变换矩阵，缩放几层都对。
+     *
+     * 为什么只给这一种写法、不给一对 enable/disable：裁剪是全局状态，enable 之后没能走到
+     * disable 的话，这一帧剩下的所有东西都会被切在你那个框里——你的页面抛一次异常，玩家
+     * 看到的是整个游戏界面缺了一块。这里的 body 抛了照样会把裁剪收回去（异常继续往上抛，
+     * 由 MCphone 按老规矩关掉你这一页）。
+     *
+     * 可以嵌套，内外两层取交集，与原版的裁剪栈一致。宽或高不为正时什么都不画，
+     * 但 <b>body 照样会执行</b>——你在里面顺手做的测量（算内容高度、滚动上限之类）
+     * 不会因为某一帧矩形退化成空而停摆。
+     *
+     * @param x    左边界（屏幕绝对坐标，与 {@link #x()} 同一套）
+     * @param y    上边界
+     * @param w    宽
+     * @param h    高
+     * @param body 裁剪生效期间画的东西
+     */
+    public void clipped(int x, int y, int w, int h, Runnable body) {
+        GuiUtil.clipped(graphics, x, y, x + w, y + h, body);
+    }
+
     /** 手机界面用的字体。用它量宽度、画字符串 */
     public Font font() { return font; }
 
@@ -94,7 +133,12 @@ public final class PhoneCanvas {
     /** 手机当前的配色。照着画，你的页面才像手机里的东西而不是外来户 */
     public PhoneStyle style() { return style; }
 
-    /** 鼠标在不在这个矩形里。省得每个页面各写一遍命中判定 */
+    /**
+     * 鼠标在不在这个矩形里。省得每个页面各写一遍命中判定。
+     *
+     * 矩形用的是与 {@link #x()} 同一套【屏幕绝对坐标】，不是相对内容区的偏移——
+     * 参数名里那个 r 是历史遗留，别照着它传相对坐标。
+     */
     public boolean hovered(int rx, int ry, int rw, int rh) {
         return mouseX >= rx && mouseX < rx + rw && mouseY >= ry && mouseY < ry + rh;
     }

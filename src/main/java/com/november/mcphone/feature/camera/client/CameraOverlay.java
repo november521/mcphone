@@ -31,15 +31,18 @@ public final class CameraOverlay {
     private static final int HINT_FADE_MS = 1200;
     private static final int COLOR_HINT = 0xFFFFFF;
 
-    /** 拍照白闪时长，毫秒 */
-    private static final int FLASH_MS = 220;
-
     private CameraOverlay() {}
 
-    public static void render(GuiGraphics g, Font font, int w, int h, long nowMs) {
+    /**
+     * 三层的顺序是有讲究的：模糊那一版的闪光【必须最先】，它糊的是这一帧已经画完的
+     * 画面（世界），卡尺与准星要留在清楚的一层上；白闪那一版反过来，得盖在最上面，
+     * 不然取景框浮在白幕上，看着不像闪了一下。
+     */
+    public static void render(GuiGraphics g, Font font, int w, int h, long nowMs, float partialTick) {
+        CameraFlash.renderBlur(g, partialTick, nowMs);
         renderViewfinder(g, w, h);
         renderHint(g, font, w, h, nowMs);
-        renderFlash(g, w, h, nowMs);
+        CameraFlash.renderWhite(g, w, h, nowMs);
     }
 
     private static void renderViewfinder(GuiGraphics g, int w, int h) {
@@ -90,14 +93,5 @@ public final class CameraOverlay {
 
         g.fill(x - 4, y - 3, x + tw + 4, y + font.lineHeight + 2, (int) (alpha * 0x88) << 24);
         g.drawString(font, text, x, y, a | COLOR_HINT, false);
-    }
-
-    private static void renderFlash(GuiGraphics g, int w, int h, long nowMs) {
-        long since = nowMs - CameraMode.getFlashAtMs();
-        if (since < 0 || since > FLASH_MS) return;
-
-        float alpha = 1.0f - (float) since / FLASH_MS;
-        int a = (int) (Mth.clamp(alpha, 0f, 1f) * 200) << 24;
-        g.fill(0, 0, w, h, a | 0xFFFFFF);
     }
 }

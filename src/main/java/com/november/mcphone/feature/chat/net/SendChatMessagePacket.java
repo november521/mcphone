@@ -1,7 +1,7 @@
 package com.november.mcphone.feature.chat.net;
 
+import com.november.mcphone.feature.chat.TextBody;
 import net.minecraft.network.FriendlyByteBuf;
-import com.november.mcphone.feature.chat.ChatMessage;
 
 import java.util.UUID;
 
@@ -10,12 +10,12 @@ public record SendChatMessagePacket(UUID target, String text) {
 
     public static void encode(SendChatMessagePacket msg, FriendlyByteBuf buf) {
         buf.writeUUID(msg.target());
-        buf.writeUtf(msg.text(), ChatMessage.MAX_TEXT_LENGTH);
+        buf.writeUtf(msg.text(), TextBody.MAX_LENGTH);
     }
 
     public static SendChatMessagePacket decode(FriendlyByteBuf buf) {
         return new SendChatMessagePacket(
                 buf.readUUID(),
-                buf.readUtf(ChatMessage.MAX_TEXT_LENGTH));
+                buf.readUtf(TextBody.MAX_LENGTH));
     }
 }

@@ -131,7 +131,11 @@ public final class CameraHandler {
                 mc.font,
                 mc.getWindow().getGuiScaledWidth(),
                 mc.getWindow().getGuiScaledHeight(),
-                System.currentTimeMillis());
+                System.currentTimeMillis(),
+                // 模糊后处理要它来插值。1.21.1 那边这个 getter 给的是 DeltaTracker，
+                // 还要再问它要一个 getGameTimeDeltaPartialTick(false)；1.20.1 上
+                // 它本身就是一个 float，取到的是同一个数
+                event.getPartialTick());
     }
 
     /** 安全网：打开任意界面就退出相机模式，否则玩家会卡在没有 HUD 的状态里 */

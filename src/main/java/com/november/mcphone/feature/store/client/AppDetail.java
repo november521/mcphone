@@ -168,8 +168,11 @@ public final class AppDetail {
                 && mouseY >= btnY && mouseY <= btnY + BUTTON_H;
 
         if (btnEnabled) {
+            // 悬停那一档要传下去：这个位上一旦有了贴图，"换个颜色"就再也看不出来了，
+            // 得让 PhoneSkin 整张提亮（1.9.2 补齐自带贴图之后这里就是这么坏掉的）
             PhoneSkin.drawOrFill(g, PhoneSkin.Element.STORE_BUTTON, btnX, btnY, btnW, BUTTON_H,
-                    btnHovered ? PhoneTheme.COLOR_BUTTON_HOVER : PhoneTheme.COLOR_BUTTON);
+                    btnHovered ? PhoneTheme.COLOR_BUTTON_HOVER : PhoneTheme.COLOR_BUTTON,
+                    btnHovered);
         } else {
             PhoneSkin.drawOrFill(g, PhoneSkin.Element.STORE_BUTTON_DISABLED,
                     btnX, btnY, btnW, BUTTON_H, PhoneTheme.COLOR_BUTTON_DISABLED);

@@ -4,6 +4,8 @@ import com.november.mcphone.core.client.FontPalette;
 import com.november.mcphone.core.client.PhoneSkin;
 import com.november.mcphone.core.client.PhoneTheme;
 import com.november.mcphone.core.client.GuiUtil;
+import com.november.mcphone.core.client.ImageCodec;
+import com.november.mcphone.core.client.ImageFolder;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
@@ -32,18 +34,14 @@ public final class Gallery {
 
     private static final int PAD = 6;
 
-    /** 每行缩略图数量 */
-    private static final int COLS = 3;
-
-    /** 缩略图格子尺寸。3 列 33 宽 + 2 道 4 间隙 = 107，正好落在 108 的内容宽里 */
-    private static final int CELL_W = 33;
-    private static final int CELL_H = 24;
-
-    /** 格子间距 */
-    private static final int GAP = 4;
-
-    /** 翻页箭头热区宽度。比字形大一圈——手机屏幕上字太小不好点 */
-    private static final int ARROW_HIT_W = 16;
+    /**
+     * 网格的列数、格子尺寸、间距、翻页条都搬到 {@link PhotoGridPainter} 了 —— 美西螈
+     * 「选一张发给好友」那一页画的是同一种网格，这些数只该有一份。
+     *
+     * 这里留的别名（连同下面两个箭头字符）是给【单张查看】用的：那一页的返回与左右切换
+     * 用的是同样的箭头与热区宽度，看着一致才不别扭，但它与网格的翻页不是一回事。
+     */
+    private static final int ARROW_HIT_W = PhotoGridPainter.ARROW_HIT_W;
 
     /**
      * 文字按钮的命中区四边各放宽多少。
@@ -53,20 +51,21 @@ public final class Gallery {
      */
     private static final int HIT_PAD = 2;
 
+    /** 标题行上三样东西之间至少留的空隙 */
+    private static final int HEADER_GAP = 4;
+
     /** 删除键的贴图边长。与音乐页那几个键一样大，它们是同一家的 */
     private static final int BTN = 9;
 
     // ==================== 颜色 ====================
 
-    private static final int COLOR_CELL_BG      = PhoneTheme.COLOR_SCRIM;
-    private static final int COLOR_CELL_HOVER   = PhoneTheme.COLOR_HOVER_STRONG;
     private static int colorCellBorder() { return FontPalette.link(); }
     private static int colorPager() { return FontPalette.body(); }
     private static int colorPagerOff() { return FontPalette.muted(); }
     private static int colorHint() { return FontPalette.subtle(); }
 
-    private static final String ARROW_PREV = "◁";
-    private static final String ARROW_NEXT = "▷";
+    private static final String ARROW_PREV = PhotoGridPainter.ARROW_PREV;
+    private static final String ARROW_NEXT = PhotoGridPainter.ARROW_NEXT;
 
     // ==================== 状态 ====================
 
@@ -80,12 +79,15 @@ public final class Gallery {
     private int hoveredPager = 0;
 
     /** 上一帧算出的每页容量，供点击与翻页复用 */
-    private int perPage = COLS * 5;
+    private int perPage = PhotoGridPainter.COLS * 5;
 
     // ---- 单张查看 ----
 
     /** 正在查看的照片下标，-1 表示当前是网格 */
     private int viewing = -1;
+
+    /** 本帧鼠标是否停在右上角那个「打开文件夹」上 */
+    private boolean openFolderHovered;
 
     /** 单张查看里鼠标悬停的按钮 */
     private enum ViewBtn { NONE, BACK, PREV, NEXT, DELETE }
@@ -108,6 +110,7 @@ public final class Gallery {
         page = 0;
         hoveredIdx = -1;
         hoveredPager = 0;
+        openFolderHovered = false;
         viewing = -1;
         deleteArmed = false;
     }
@@ -126,11 +129,12 @@ public final class Gallery {
                        int screenW, int screenH, int statusH, int navH,
                        int mouseX, int mouseY, Font font) {
 
-        final List<PhotoLibrary.Photo> photos = PhotoLibrary.getPhotos();
+        final List<ImageFolder.Entry> photos = PhotoLibrary.getPhotos();
 
         // 照片可能在查看期间被删空，或下标越界，此时退回网格
         if (viewing >= photos.size()) viewing = photos.isEmpty() ? -1 : photos.size() - 1;
         if (viewing >= 0) {
+            openFolderHovered = false;   // 单张查看里没有这一行，别让上一帧的悬停留着
             renderViewer(g, phoneLeft, phoneTop, screenW, screenH, statusH, navH,
                     mouseX, mouseY, font, photos);
             return;
@@ -140,12 +144,26 @@ public final class Gallery {
         int y = phoneTop + statusH + 4;
         int w = screenW - PAD * 2;
 
-        // ---- 标题：带照片总数 ----
+        // ---- 标题：左边标题，右上角「打开文件夹」，还装得下就再塞一个总数 ----
         String title = Component.translatable("mcphone.app.gallery").getString();
         g.drawString(font, title, x, y, FontPalette.title(), true);
+
+        String open = Component.translatable("mcphone.gui.open_folder").getString();
+        int openW = font.width(open);
+        int openX = x + w - openW;
+        openFolderHovered = GuiUtil.hit(mouseX, mouseY,
+                openX - HIT_PAD, y - HIT_PAD, openW + HIT_PAD * 2, font.lineHeight + HIT_PAD * 2);
+        g.drawString(font, open, openX, y,
+                openFolderHovered ? FontPalette.title() : FontPalette.link(), false);
+
+        // 总数往左让一格。让不下就不画：屏幕只有 120 宽，而一个读数不值得把那个键挤掉，
+        // 也不值得压在标题上。中英文的字宽差着一倍，所以是量出来的，不是写死的
         if (!photos.isEmpty()) {
             String count = String.valueOf(photos.size());
-            g.drawString(font, count, x + w - font.width(count), y, colorHint(), false);
+            int countX = openX - HEADER_GAP - font.width(count);
+            if (countX >= x + font.width(title) + HEADER_GAP) {
+                g.drawString(font, count, countX, y, colorHint(), false);
+            }
         }
         y += font.lineHeight + 4;
 
@@ -169,8 +187,7 @@ public final class Gallery {
         final int gridBottom = phoneTop + screenH - navH - pagerH - 2;
 
         // 行数按可用高度算，改主题尺寸时不必回来改这里
-        int rows = Math.max(1, (gridBottom - gridTop + GAP) / (CELL_H + GAP));
-        this.perPage = COLS * rows;
+        this.perPage = PhotoGridPainter.COLS * PhotoGridPainter.rowsFor(gridBottom - gridTop);
 
         // 缓存必须装得下一整页，否则同页内先加载的会被后加载的挤掉，
         // 下一帧又重新加载，画面持续闪烁。行数随手机屏幕高度变，
@@ -183,8 +200,7 @@ public final class Gallery {
         if (page < 0) page = 0;
 
         // 整个网格在内容区里居中
-        int gridW = COLS * CELL_W + (COLS - 1) * GAP;
-        int gridX = x + (w - gridW) / 2;
+        int gridX = x + (w - PhotoGridPainter.gridWidth()) / 2;
 
         hoveredIdx = -1;
         int first = page * perPage;
@@ -192,89 +208,17 @@ public final class Gallery {
 
         for (int i = first; i < last; i++) {
             int slot = i - first;
-            int cx = gridX + (slot % COLS) * (CELL_W + GAP);
-            int cy = gridTop + (slot / COLS) * (CELL_H + GAP);
+            int cx = PhotoGridPainter.cellX(gridX, slot);
+            int cy = PhotoGridPainter.cellY(gridTop, slot);
 
-            boolean hovered = mouseX >= cx && mouseX < cx + CELL_W
-                           && mouseY >= cy && mouseY < cy + CELL_H;
+            boolean hovered = PhotoGridPainter.cellHit(cx, cy, mouseX, mouseY);
             if (hovered) hoveredIdx = i;
 
-            renderCell(g, font, photos.get(i), cx, cy, hovered);
+            PhotoGridPainter.cell(g, font, PhotoLibrary.folder(), photos.get(i), cx, cy, hovered);
         }
 
-        renderPager(g, font, x, gridBottom + 2, w, pagerH, page, pageCount, mouseX, mouseY);
-    }
-
-    /** 画一个缩略图格子：底色 + 等比居中的图 + 悬停高亮 */
-    private void renderCell(GuiGraphics g, Font font, PhotoLibrary.Photo photo,
-                            int cx, int cy, boolean hovered) {
-
-        g.fill(cx, cy, cx + CELL_W, cy + CELL_H, COLOR_CELL_BG);
-
-        PhotoLibrary.Thumb thumb = PhotoLibrary.thumbnail(photo);
-        if (thumb == null) {
-            // 还在后台加载（或加载失败），画个占位点，下一帧再问
-            String dots = "…";
-            g.drawString(font, dots,
-                    cx + (CELL_W - font.width(dots)) / 2,
-                    cy + (CELL_H - font.lineHeight) / 2,
-                    colorHint(), false);
-        } else {
-            // 等比缩放塞进格子，留 1px 内边距免得贴着边框
-            int boxW = CELL_W - 2;
-            int boxH = CELL_H - 2;
-            float scale = Math.min((float) boxW / thumb.width(), (float) boxH / thumb.height());
-            int dw = Math.max(1, Math.round(thumb.width() * scale));
-            int dh = Math.max(1, Math.round(thumb.height() * scale));
-            int dx = cx + (CELL_W - dw) / 2;
-            int dy = cy + (CELL_H - dh) / 2;
-
-            // 11 参重载：目标宽高在前、UV 在后，源区取满整张纹理
-            GuiUtil.drawTexture(g, thumb.texture(), dx, dy, dw, dh,
-                    thumb.width(), thumb.height());
-        }
-
-        if (hovered) {
-            g.fill(cx, cy, cx + CELL_W, cy + CELL_H, COLOR_CELL_HOVER);
-            drawBorder(g, cx, cy, CELL_W, CELL_H, colorCellBorder());
-        }
-    }
-
-    private static void drawBorder(GuiGraphics g, int x, int y, int w, int h, int color) {
-        g.fill(x, y, x + w, y + 1, color);
-        g.fill(x, y + h - 1, x + w, y + h, color);
-        g.fill(x, y, x + 1, y + h, color);
-        g.fill(x + w - 1, y, x + w, y + h, color);
-    }
-
-    /** 底部翻页条：◁ 当前/总页 ▷ */
-    private void renderPager(GuiGraphics g, Font font, int x, int y, int w, int h,
-                             int cur, int pageCount, int mouseX, int mouseY) {
-
-        boolean canPrev = cur > 0;
-        boolean canNext = cur < pageCount - 1;
-
-        boolean onPrev = mouseX >= x && mouseX < x + ARROW_HIT_W
-                      && mouseY >= y && mouseY < y + h;
-        boolean onNext = mouseX >= x + w - ARROW_HIT_W && mouseX < x + w
-                      && mouseY >= y && mouseY < y + h;
-
-        hoveredPager = (onPrev && canPrev) ? -1 : (onNext && canNext) ? 1 : 0;
-
-        int ty = y + (h - font.lineHeight) / 2;
-
-        // 贴内容区边缘，与标题、总数、以及单张查看里的返回同一列。
-        // 原先这两个箭头各往里缩 2 像素 —— 那不是在补字形边距（◁ ▷ 在
-        // unifont 里是 8 点宽的半角字，墨迹列 1..6，左边距只有半个像素），
-        // 只是当初随手加的，结果是这一行比上下几行都窄一圈
-        g.drawString(font, ARROW_PREV, x, ty,
-                canPrev ? (onPrev ? colorCellBorder() : colorPager()) : colorPagerOff(), false);
-
-        String label = (cur + 1) + "/" + pageCount;
-        g.drawString(font, label, x + (w - font.width(label)) / 2, ty, colorPager(), false);
-
-        g.drawString(font, ARROW_NEXT, x + w - font.width(ARROW_NEXT), ty,
-                canNext ? (onNext ? colorCellBorder() : colorPager()) : colorPagerOff(), false);
+        hoveredPager = PhotoGridPainter.pager(g, font, x, gridBottom + 2, w, pagerH,
+                page, pageCount, mouseX, mouseY);
     }
 
     //  单张查看
@@ -293,7 +237,7 @@ public final class Gallery {
      *
      * 序号则相反：它只是个读数，点不点它都没事，占着最好按的那个角是浪费。
      * 挪到底部正中之后，这一行就成了 {@code ◁ 3/47 ▷}，与网格页的翻页条
-     * （见 {@link #renderPager}）一模一样——同一个位置在两页里含义相同，
+     * （见 {@link PhotoGridPainter#pager}）一模一样——同一个位置在两页里含义相同，
      * 不再是"网格里是页码、单张里是删除"。
      *
      * 大图未加载完时先拿缩略图放大顶着——虽然糊，但翻看时不会闪空白，
@@ -302,9 +246,9 @@ public final class Gallery {
     private void renderViewer(GuiGraphics g, int phoneLeft, int phoneTop,
                               int screenW, int screenH, int statusH, int navH,
                               int mouseX, int mouseY, Font font,
-                              List<PhotoLibrary.Photo> photos) {
+                              List<ImageFolder.Entry> photos) {
 
-        PhotoLibrary.Photo photo = photos.get(viewing);
+        ImageFolder.Entry photo = photos.get(viewing);
 
         final int x = phoneLeft + PAD;
         final int w = screenW - PAD * 2;
@@ -373,7 +317,7 @@ public final class Gallery {
         if (font.width(name) > w) name = font.plainSubstrByWidth(name, w - 6) + "…";
         g.drawString(font, name, x + (w - font.width(name)) / 2, nameRowY, colorHint(), false);
 
-        // 与顶部那个返回的 ◁ 同一列，理由见 renderPager
+        // 与顶部那个返回的 ◁ 同一列，理由见 PhotoGridPainter.pager
         g.drawString(font, ARROW_PREV, x, btnRowY,
                 canPrev ? (onPrev ? colorCellBorder() : colorPager()) : colorPagerOff(), false);
         g.drawString(font, ARROW_NEXT, x + w - font.width(ARROW_NEXT), btnRowY,
@@ -400,13 +344,13 @@ public final class Gallery {
     }
 
     /** 大图区域：黑底 + 等比居中的照片 */
-    private void renderPhoto(GuiGraphics g, Font font, PhotoLibrary.Photo photo,
+    private void renderPhoto(GuiGraphics g, Font font, ImageFolder.Entry photo,
                              int areaX, int areaY, int areaW, int areaH) {
 
         // 黑底：照片可能是任意比例，留白处不该透出壁纸
         g.fill(areaX, areaY, areaX + areaW, areaY + areaH, PhoneTheme.COLOR_OVERLAY);
 
-        PhotoLibrary.Thumb img = PhotoLibrary.preview(photo);
+        ImageCodec.Texture img = PhotoLibrary.preview(photo);
         if (img == null) img = PhotoLibrary.thumbnail(photo);   // 大图未就绪，先用缩略图顶着
 
         if (img == null) {
@@ -417,16 +361,7 @@ public final class Gallery {
             return;
         }
 
-        int boxW = areaW - 4;
-        int boxH = areaH - 4;
-        float scale = Math.min((float) boxW / img.width(), (float) boxH / img.height());
-        int dw = Math.max(1, Math.round(img.width() * scale));
-        int dh = Math.max(1, Math.round(img.height() * scale));
-        int dx = areaX + (areaW - dw) / 2;
-        int dy = areaY + (areaH - dh) / 2;
-
-        GuiUtil.drawTexture(g, img.texture(), dx, dy, dw, dh,
-                img.width(), img.height());
+        GuiUtil.drawFitted(g, img, areaX + 2, areaY + 2, areaW - 4, areaH - 4);
     }
 
     /** 切换到相邻照片。到头就停住。 */
@@ -470,6 +405,13 @@ public final class Gallery {
             return true;
         }
 
+        if (openFolderHovered) {
+            // 交给系统自己的文件管理器开，不弹任何 Java 的窗口：AWT 的选择器在 macOS 上
+            // 要与游戏抢主线程。目录不存在时先建出来——玩家点它的时候相册多半正是空的
+            ImageFolder.openInFileManager(PhotoLibrary.folder().ensureDirectory());
+            return true;
+        }
+
         if (hoveredPager < 0) { flip(-1); return true; }
         if (hoveredPager > 0) { flip(1); return true; }
 
@@ -485,7 +427,7 @@ public final class Gallery {
         if (!deleteArmed) { deleteArmed = true; return; }
         deleteArmed = false;
 
-        PhotoLibrary.Photo photo = PhotoLibrary.get(viewing);
+        ImageFolder.Entry photo = PhotoLibrary.get(viewing);
         if (photo == null || !PhotoLibrary.delete(photo)) return;
 
         // 删完停在原下标上——那里已经是下一张照片了，

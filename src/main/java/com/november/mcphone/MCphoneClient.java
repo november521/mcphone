@@ -1,5 +1,6 @@
 package com.november.mcphone;
 
+import com.november.mcphone.core.client.AppHotkeyHandler;
 import com.november.mcphone.core.client.ClientConfig;
 import com.november.mcphone.core.client.MCphoneKeyBindings;
 import com.november.mcphone.core.client.PhoneKeyHandler;
@@ -8,7 +9,10 @@ import com.november.mcphone.core.client.PhoneSession;
 import com.november.mcphone.core.client.PhoneSkin;
 import com.november.mcphone.core.client.PhoneContainerScreen;
 import com.november.mcphone.core.menu.ModMenus;
+import com.november.mcphone.feature.camera.client.CameraFlash;
 import com.november.mcphone.feature.camera.client.CameraHandler;
+import com.november.mcphone.feature.chat.client.ChatImageCache;
+import com.november.mcphone.feature.chat.client.ChatImageSender;
 import com.november.mcphone.feature.chat.client.ChatNotifier;
 import com.november.mcphone.feature.chat.net.ChatClientCache;
 import com.november.mcphone.feature.clock.client.PlayTime;
@@ -89,8 +93,16 @@ public final class MCphoneClient {
         MinecraftForge.EVENT_BUS.addListener(CameraHandler::onRenderTickEnd);
         MinecraftForge.EVENT_BUS.addListener(CameraHandler::onRenderGuiOverlayPre);
 
+        // 每个 App 自己的快捷键。它不是 KeyMapping，只能听按下事件，理由见 AppHotkeys。
+        // 鼠标键单独一条：那类事件与键盘的不是同一个类，而且它可以取消
+        MinecraftForge.EVENT_BUS.addListener(AppHotkeyHandler::onKeyInput);
+        MinecraftForge.EVENT_BUS.addListener(AppHotkeyHandler::onMouseInput);
+
         // 每 tick 泵一次音频流；没在放的时候第一行就返回
         MinecraftForge.EVENT_BUS.addListener(LocalPlayback::onClientTick);
+
+        // 冷却期里点的那几张图排着，每 tick 看一眼闸开了没有；队伍空的时候第一行就返回
+        MinecraftForge.EVENT_BUS.addListener(ChatImageSender::onClientTick);
 
         // 一首停下来时带停止原因通知控制器，见 LocalPlayback.Ending
         LocalPlayback.setEndListener(MusicController::onTrackEnded);
@@ -100,6 +112,8 @@ public final class MCphoneClient {
         MinecraftForge.EVENT_BUS.addListener(
                 (ClientPlayerNetworkEvent.LoggingOut event) -> {
                     ChatClientCache.clear();
+                    ChatImageCache.clear();
+                    ChatImageSender.clear();
                     NotesClientCache.clear();
                     StoreClientCache.clear();
                     PhoneScreenRegistry.unloadWorld();
@@ -132,13 +146,21 @@ public final class MCphoneClient {
         StoreClientCache.setSyncListener(PhoneScreenRegistry::enforcePurchases);
 
         ChatClientCache.setMessageListener(ChatNotifier::onMessage);
+        ChatClientCache.setImageListener(ChatImageCache::accept);
     }
 
-    /** 资源重载时清空换肤贴图的探测缓存，否则 F3+T 或换资源包后画的还是旧贴图，且不报错。 */
+    /**
+     * 资源重载时清空换肤贴图的探测缓存，否则 F3+T 或换资源包后画的还是旧贴图，且不报错。
+     *
+     * 相机那条模糊后处理链一并扔掉：着色器程序跟着资源走，重载之后旧的那份要么黑屏
+     * 要么直接崩，而且同样不报错。下次拍照时会重新建一条。
+     */
     @SubscribeEvent
     static void onRegisterReloadListeners(RegisterClientReloadListenersEvent event) {
-        event.registerReloadListener(
-                (ResourceManagerReloadListener) manager -> PhoneSkin.clearCache());
+        event.registerReloadListener((ResourceManagerReloadListener) manager -> {
+            PhoneSkin.clearCache();
+            CameraFlash.dispose();
+        });
     }
 
     @SubscribeEvent

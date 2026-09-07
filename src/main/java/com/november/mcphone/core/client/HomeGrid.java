@@ -17,10 +17,18 @@ import java.util.List;
 public final class HomeGrid {
 
     private int phoneLeft, phoneTop;
+
+    /**
+     * 本帧的插值系数，转交给 {@link IPhoneApp#renderIcon} —— 图标是可以动的（覆盖那个方法
+     * 自己画就行），而动画要平滑就得有它。
+     *
+     * 存成字段而不是一路传参：画图标那两处都在私有方法里，为一个只往下传不参与计算的值
+     * 给它们各加一个参数不值当。
+     */
+    private float partialTick;
     private int gridStartX, gridStartY;
     private Font font;
     private long nowMs;
-    private boolean animationDone;
 
     /** 鼠标停在第几个 App 上（全局下标），-1 表示没有 */
     private int hoveredAppIndex = -1;
@@ -54,10 +62,11 @@ public final class HomeGrid {
 
     /** localMouse 是已撤掉开机缩放的本地坐标；nowMs 由调用方取一次传进来，同一帧里翻页动画与边缘停留要对齐 */
     public void render(GuiGraphics g, int phoneLeft, int phoneTop, Font font,
-                       long nowMs, boolean animationDone,
-                       double localMouseX, double localMouseY) {
+                       long nowMs,
+                       double localMouseX, double localMouseY, float partialTick) {
         this.phoneLeft = phoneLeft;
         this.phoneTop = phoneTop;
+        this.partialTick = partialTick;
 
         this.gridStartX = phoneLeft + PhoneTheme.APP_GRID_PADDING_LEFT;
         this.gridStartY = phoneTop + PhoneTheme.STATUS_BAR_HEIGHT
@@ -65,7 +74,6 @@ public final class HomeGrid {
 
         this.font = font;
         this.nowMs = nowMs;
-        this.animationDone = animationDone;
 
         // 翻页动画走完在这里清起点，slideProgress 保持纯查询
         if (pageSlideStartMs > 0 && nowMs - pageSlideStartMs >= PhoneTheme.PAGE_SLIDE_MS) {
@@ -203,11 +211,11 @@ public final class HomeGrid {
             int w = PhoneTheme.PHONE_WIDTH;
             int inX = Math.round((1f - slide) * dir * w);
 
-            g.enableScissor(phoneLeft, phoneTop + PhoneTheme.STATUS_BAR_HEIGHT,
+            GuiUtil.enableScissor(g, phoneLeft, phoneTop + PhoneTheme.STATUS_BAR_HEIGHT,
                     phoneLeft + w, dotsTop());
             renderPageIcons(g, ordered, slideFromPage, inX - dir * w, floatingIndex);
             renderPageIcons(g, ordered, homePage, inX, floatingIndex);
-            g.disableScissor();
+            GuiUtil.disableScissor(g);
         }
 
         renderPageDots(g, HomeLayout.pageCount(ordered.size(), pageSize));
@@ -217,7 +225,7 @@ public final class HomeGrid {
         if (floatingApp != null) {
             int fx = (int) dragX - is / 2;
             int fy = (int) dragY - is / 2;
-            floatingApp.renderIcon(g, fx, fy, is, 0);
+            floatingApp.renderIcon(g, fx, fy, is, partialTick);
             drawAppName(g, floatingApp.getDisplayName().getString(), fx, fy, is);
         }
     }
@@ -251,7 +259,7 @@ public final class HomeGrid {
             }
 
             IPhoneApp app = ordered.get(i);
-            app.renderIcon(g, ix, iy, is, 0);
+            app.renderIcon(g, ix, iy, is, partialTick);
 
             drawBadge(g, app, ix, iy, is);
             drawAppName(g, app.getDisplayName().getString(), ix, iy, is);
@@ -437,8 +445,11 @@ public final class HomeGrid {
         slideFromPage = homePage;
         homePage = target;
 
-        // 开机动画里不滑：裁剪矩形按屏幕坐标算，与缩放中的手机对不上
-        pageSlideStartMs = animationDone ? System.currentTimeMillis() : 0;
+        // 开机动画里也照滑。原来这里挡着不滑，理由是"裁剪矩形按屏幕坐标算，与缩放中的
+        // 手机对不上"——那个毛病 1.9.3 已经修掉了（GuiUtil.enableScissor 把矩形过一遍
+        // pose 矩阵，开机动画那层缩放也在矩阵里）。留着这条限制的话，下一个人读到会以为
+        // 裁剪还是坏的，然后照着再避一次不存在的坑
+        pageSlideStartMs = System.currentTimeMillis();
 
         hoveredAppIndex = -1;
         return true;

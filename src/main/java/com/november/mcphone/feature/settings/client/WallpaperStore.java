@@ -64,6 +64,24 @@ public final class WallpaperStore {
     }
 
     /**
+     * 壁纸目录，不存在就先建出来。「打开文件夹」那个键要用。
+     *
+     * 建不出来也照样把路径交出去：交给系统的文件管理器，它自己会说"这个路径不存在"，
+     * 那比我们在手机屏幕上憋一句错误提示要清楚。
+     */
+    public static Path directory() {
+        Path dir = Path.of(WALLPAPER_DIR);
+        if (!Files.isDirectory(dir)) {
+            try {
+                Files.createDirectories(dir);
+            } catch (IOException e) {
+                LOGGER.warn("无法创建壁纸目录: {}", e.getMessage());
+            }
+        }
+        return dir;
+    }
+
+    /**
      * 重扫壁纸目录 —— 每次打开「更换壁纸」都调。
      *
      * 为什么必须能重扫

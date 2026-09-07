@@ -48,8 +48,13 @@ public final class MCphoneNetwork {
      *
      * 与 NeoForge 那一支 event.registrar("1") 里的 "1" 是同一个意思，
      * 但两支的编号各走各的：包的线格式本来就不一样，没有互通的可能。
+     *
+     * "2"：图片消息那三个包（SendChatImage / RequestChatImage / ChatImageData）
+     * 插在了 NewMessage 与 RequestOnlinePlayers 之间，而不是追加在末尾——为的是让
+     * 这个文件与 main 的注册顺序逐行对得上，往后再照着搬时不必两边数序号。
+     * 代价就是它后面所有包的序号平移了三位，所以这里必须 +1。
      */
-    private static final String PROTOCOL_VERSION = "1";
+    private static final String PROTOCOL_VERSION = "2";
 
     private static final SimpleChannel CHANNEL = NetworkRegistry.newSimpleChannel(
             ResourceLocation.fromNamespaceAndPath(MCphone.MODID, "main"),

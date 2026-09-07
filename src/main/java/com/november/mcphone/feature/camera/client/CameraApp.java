@@ -1,5 +1,6 @@
 package com.november.mcphone.feature.camera.client;
 
+import com.november.mcphone.core.client.AppOptions;
 import com.november.mcphone.core.client.PhoneApp;
 import com.november.mcphone.feature.camera.client.CameraMode;
 import net.minecraft.client.Minecraft;
@@ -13,6 +14,10 @@ public final class CameraApp extends PhoneApp {
 
     public CameraApp() {
         super("camera");
+
+        // 「快门闪光：白闪 / 模糊」那一行。在这儿登记而不是在 MCphoneClient 里，
+        // 是因为这里 getId() 现成——在别处登记就得把 "mcphone:camera" 再写一遍
+        AppOptions.register(getId(), CameraFlash.appOption());
     }
 
     @Override

@@ -30,7 +30,15 @@ public interface IPhoneApp {
     /** 用户点击 App 图标时触发。在此打开 GUI、执行业务逻辑。 */
     void onPress();
 
-    /** 绘制图标。默认整张纹理拉伸到 size×size，带抗锯齿的图请照此走——直接调 g.blit 会丢掉半透明。 */
+    /**
+     * 绘制图标。默认整张纹理拉伸到 size×size，带抗锯齿的图请照此走——直接调 g.blit 会丢掉半透明。
+     *
+     * <b>每帧调用</b>，所以图标可以是动的：覆盖它，自己按时间挑一帧画出来即可。
+     * partialTick 是本帧的插值系数，要做平滑动画（而不是按整 tick 跳）时用得上。
+     *
+     * 换肤那条路做不了动画：皮肤贴图是一张独立纹理，不进图集，原版 .mcmeta 的动画机制
+     * 对它不生效。要动就得覆盖这个方法。
+     */
     default void renderIcon(GuiGraphics g, int x, int y, int size, float partialTick) {
         ResourceLocation tex = getIconTexture();
         if (tex != null) {

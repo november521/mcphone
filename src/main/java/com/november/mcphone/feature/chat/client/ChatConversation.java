@@ -1,18 +1,25 @@
 package com.november.mcphone.feature.chat.client;
 
+import com.november.mcphone.core.ServerConfig;
 import net.minecraft.util.Mth;
 import com.november.mcphone.core.client.FontPalette;
 import com.november.mcphone.core.client.PhoneSkin;
 import com.november.mcphone.core.client.PhoneTheme;
 import com.november.mcphone.core.client.PlayerAvatar;
+import com.november.mcphone.core.client.ImageCodec;
+import com.november.mcphone.feature.chat.ChatImage;
 import com.november.mcphone.feature.chat.ChatMessage;
+import com.november.mcphone.feature.chat.ImageBody;
+import com.november.mcphone.feature.chat.TextBody;
 import com.november.mcphone.feature.chat.net.ChatClientCache;
 import com.november.mcphone.feature.chat.net.ConversationSummary;
 import com.november.mcphone.feature.chat.net.MarkReadPacket;
 import com.november.mcphone.feature.chat.net.RequestConversationsPacket;
 import com.november.mcphone.feature.chat.net.RequestMessagesPacket;
 import com.november.mcphone.feature.chat.net.SendChatMessagePacket;
+import com.november.mcphone.feature.gallery.client.PhotoLibrary;
 import com.november.mcphone.core.client.GuiUtil;
+import net.minecraft.Util;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
@@ -71,6 +78,32 @@ public final class ChatConversation {
     private static final DateTimeFormatter TIME_FORMAT = DateTimeFormatter.ofPattern("HH:mm");
     private static final DateTimeFormatter DATE_TIME_FORMAT = DateTimeFormatter.ofPattern("MM-dd HH:mm");
 
+    /**
+     * 一张图最高画多少像素。
+     *
+     * 宽度上限只有 80 出头，一张 16:9 的截图按宽度算出来才 45 高，这个数管的是竖构图的图：
+     * 不封顶的话，一张竖着的截图会占掉大半个屏幕，前后几条消息全被挤出视野。
+     */
+    private static final int IMAGE_MAX_H = 56;
+
+    /** 输入栏左边那个「+」键的边长。与音乐页那几个键一样大，它们是同一家的 */
+    private static final int ATTACH_BTN = 9;
+
+    /** 「+」与输入框之间的空隙 */
+    private static final int ATTACH_BTN_GAP = 2;
+
+    /** 「+」弹出的那张小菜单：内边距，以及每一行比字高出多少 */
+    private static final int MENU_PAD = 3;
+    private static final int MENU_ROW_EXTRA = 3;
+
+    /**
+     * 文字按钮的命中区四边各放宽多少。
+     *
+     * 正好按字的边界算会点不中：这一行字才 9 像素高，而手机整体是缩放显示的。
+     * 与相册那几个文字键同一个数。
+     */
+    private static final int HIT_PAD = 2;
+
     private static final int AVATAR_SIZE = 16;
 
     private static final int AVATAR_GAP = 3;
@@ -102,6 +135,53 @@ public final class ChatConversation {
 
     private boolean sendHovered;
 
+    private boolean attachBtnHovered;
+
+    /** 「+」点开之后那张小菜单开着没有 */
+    private boolean attachMenuOpen;
+
+    /** 本帧鼠标停在菜单的哪一项上，null 表示都不在 */
+    private Attach attachHovered;
+
+    /** 玩家在菜单里选了什么，等 PhoneScreen 取走去开对应的那一页 */
+    private Attach pendingAttach;
+
+    /**
+     * 「+」能发的东西。
+     *
+     * 加一种（分享物品、发个坐标……）就在这里加一项：菜单的高度、悬停判定、点击分派
+     * 全是按这个枚举算出来的，一行都不用改。正文那一层的扩展点在 MessageBody。
+     */
+    public enum Attach {
+        /** 相册里的照片 */
+        IMAGE("mcphone.chat.attach_image"),
+        /** 自己导入的表情 */
+        STICKER("mcphone.chat.attach_sticker");
+
+        private final String labelKey;
+
+        Attach(String labelKey) { this.labelKey = labelKey; }
+
+        public String label() { return Component.translatable(labelKey).getString(); }
+    }
+
+    /** 正在放大看的那张图，null 表示没有 */
+    private UUID viewingImage;
+
+    /** 本帧鼠标是否停在放大图右上角那个「保存」上，以及它画在哪儿 */
+    private boolean saveHovered;
+    private int saveX;
+    private int saveY;
+
+    /** 本帧画出来的那几张图，供点击放大用；每帧重建，因为滚动一下位置就全变了 */
+    private final List<ImageHit> imageHits = new ArrayList<>();
+
+    /** 本帧消息区的上下边界。消息是裁剪着画的，被裁掉的那半截不该还点得动 */
+    private int messageTop;
+    private int messageBottom;
+
+    private record ImageHit(UUID image, int x, int y, int w, int h) {}
+
     /** 上次上报过已读的那份消息列表，用来发现"又来新消息了" */
     private List<ChatMessage> markedFrom;
 
@@ -110,9 +190,29 @@ public final class ChatConversation {
     private List<ChatMessage> laidOutFrom;
     private int laidOutWidth = -1;
 
-    /** 排版后的一块：stamp 为 true 是居中的时间戳行，不画气泡；w/h 含内边距 */
-    private record Block(boolean stamp, boolean self, List<FormattedCharSequence> lines,
-                         int w, int h) {}
+    /** 排版后的一块是哪一种 */
+    private enum BlockType {
+        /** 居中的时间戳行，不画气泡 */
+        STAMP,
+        /** 文字气泡 */
+        TEXT,
+        /** 一张图。不套气泡，理由见 renderBlock */
+        IMAGE
+    }
+
+    /**
+     * 排版后的一块。文字块的 w/h 含气泡内边距，图片块就是图本身的大小；
+     * lines 只有文字块用得上，image 只有图片块用得上。
+     *
+     * 图片块为什么在这一步就把尺寸算好：像素是"看到了才去要"的（见 {@link ChatImageCache}），
+     * 拿到之前也得把那块地方占出来，尺寸按消息自带的宽高算（见 ImageBody）。等图到了再按真实
+     * 比例重排的话，那一下跳动恰好发生在玩家正看着的地方。
+     *
+     * frames/frameMs 也从消息上抄过来（静态图是 1 和 0）：像素里看不出一张图是不是动图，
+     * 而画的时候要靠它挑帧。
+     */
+    private record Block(BlockType type, boolean self, List<FormattedCharSequence> lines,
+                         UUID image, int w, int h, int frames, int frameMs) {}
 
     /**
      * 进入会话。必须先 openConversation 再发请求，顺序不能颠倒：
@@ -135,6 +235,12 @@ public final class ChatConversation {
             box.setFocused(true);
         }
 
+        this.viewingImage = null;
+        this.attachMenuOpen = false;
+        this.attachHovered = null;
+        this.pendingAttach = null;
+        this.imageHits.clear();
+
         ChatClientCache.openConversation(peer);
         this.markedFrom = ChatClientCache.getMessages();
 
@@ -151,6 +257,13 @@ public final class ChatConversation {
         blocks = List.of();
         contentH = 0;
         sendHovered = false;
+        attachBtnHovered = false;
+        attachMenuOpen = false;
+        attachHovered = null;
+        viewingImage = null;
+        saveHovered = false;
+        pendingAttach = null;
+        imageHits.clear();
         markedFrom = null;
         if (box != null) box.setFocused(false);
         ChatClientCache.closeConversation();
@@ -175,6 +288,123 @@ public final class ChatConversation {
         relayout(font, w);
         renderMessages(g, font, x, y, w, bottom);
         renderInputBar(g, font, x, inputTop, w, mouseX, mouseY, partialTick);
+
+        // 本帧画到的图片里还差像素的，攒一批去要。要在画完之后：画的时候才知道哪几张可见
+        ChatImageCache.flushRequests(peer);
+
+        // 放大图盖在所有东西上面，连输入栏一起盖住——它此刻不是能用的东西
+        if (viewingImage != null) {
+            renderImageViewer(g, font, phoneLeft, phoneTop + statusH,
+                    screenW, screenH - statusH - navH, mouseX, mouseY);
+        }
+    }
+
+    /**
+     * 点开一张图看大的：整块内容区盖上一层黑底，图等比居中。
+     *
+     * 为什么值得有这一手：消息里那张最宽只有 80 个 GUI 像素，看得出是什么，看不清写了什么。
+     * 存下来的图有 384 的长边（见 ChatImage），铺满内容区差不多正好是原尺寸。
+     *
+     * 点哪儿都关掉，导航栏的返回键也关（见 {@link #dismissViewer()}）——这一层不是一页，
+     * 玩家不会觉得自己"进去了"，就不该要求他找一个特定的地方点。
+     */
+    private void renderImageViewer(GuiGraphics g, Font font,
+                                   int areaX, int areaY, int areaW, int areaH,
+                                   int mouseX, int mouseY) {
+
+        g.fill(areaX, areaY, areaX + areaW, areaY + areaH, PhoneTheme.COLOR_OVERLAY);
+
+        // 图还没到时这一层没有任何可点的东西，悬停先归零，免得留着上一帧的
+        saveHovered = false;
+
+        var texture = ChatImageCache.get(viewingImage);
+        if (texture == null) {
+            String loading = Component.translatable("mcphone.chat.image_loading").getString();
+            g.drawString(font, loading,
+                    areaX + (areaW - font.width(loading)) / 2,
+                    areaY + (areaH - font.lineHeight) / 2, colorEmpty(), false);
+            return;
+        }
+
+        int hintH = font.lineHeight + 2;
+        drawImage(g, texture, viewingImage, areaX + 2, areaY + 2 + font.lineHeight,
+                areaW - 4, areaH - 6 - hintH - font.lineHeight);
+
+        // 「保存」摆右上角，与相册单张查看里的删除同一个位置：那一角是这一层唯一的动作，
+        // 而下面整片都是"点哪儿都关掉"，动作键不能混在里面
+        String save = Component.translatable("mcphone.chat.image_save").getString();
+        int saveW = font.width(save);
+        saveX = areaX + areaW - saveW - 4;
+        saveY = areaY + 2;
+        saveHovered = GuiUtil.hit(mouseX, mouseY,
+                saveX - HIT_PAD, saveY - HIT_PAD, saveW + HIT_PAD * 2, font.lineHeight + HIT_PAD * 2);
+        g.drawString(font, save, saveX, saveY,
+                saveHovered ? COLOR_SEND_HOVER : COLOR_SEND, false);
+
+        String hint = Component.translatable("mcphone.chat.image_close_hint").getString();
+        g.drawString(font, hint, areaX + (areaW - font.width(hint)) / 2,
+                areaY + areaH - hintH, colorStamp(), false);
+    }
+
+    /**
+     * 把正在看的这张存进相册（也就是截图目录，见 PhotoLibrary）。
+     *
+     * 存的是收到的原始 PNG 字节，不是屏幕上那张贴图——贴图是解码放大过的像素，
+     * 从它反推不回原文件。字节由 ChatImageCache 一并留着。
+     *
+     * 存进截图目录而不是另开一个地方：相册扫的就是那儿，存完立刻能在相册里看到、
+     * 也就能再发给别人。写盘放后台线程，回主线程报一句。
+     */
+    private void saveViewingImage() {
+        UUID image = viewingImage;
+        if (image == null) return;
+
+        byte[] png = ChatImageCache.bytes(image);
+        if (png == null) {
+            tell("mcphone.chat.image_not_loaded");
+            return;
+        }
+
+        // 动图存下来的是所有帧拼成的雪碧图，原样进相册就是一张莫名其妙的九宫格；存第一帧
+        int frames = ChatImageCache.frames(image);
+        final boolean animated = frames > 1;
+
+        Util.backgroundExecutor().execute(() -> {
+            byte[] saving = animated
+                    ? ImageCodec.cropCell(png, ChatImage.cols(frames), ChatImage.rows(frames))
+                    : png;
+            String name = saving == null ? null : PhotoLibrary.save(saving, "mcphone-");
+            Minecraft.getInstance().execute(() -> {
+                if (name == null) tell("mcphone.chat.image_save_failed");
+                else if (animated) tell("mcphone.chat.image_saved_frame", name);
+                else tell("mcphone.chat.image_saved", name);
+            });
+        });
+    }
+
+    /** 与服务端拒收时同一个位置：动作栏。玩家的眼睛正看着手机屏幕，聊天框那一行他看不见 */
+    private static void tell(String key, Object... args) {
+        var player = Minecraft.getInstance().player;
+        if (player != null) player.displayClientMessage(Component.translatable(key, args), true);
+    }
+
+    /** 关掉放大图。返回 false 表示本来就没在放大——那时返回键该照常退出会话 */
+    public boolean dismissViewer() {
+        if (viewingImage == null) return false;
+        viewingImage = null;
+        return true;
+    }
+
+    /** 取走"要去选点什么发出去"的请求，没有则返回 null */
+    public Attach consumeAttachRequest() {
+        Attach out = pendingAttach;
+        pendingAttach = null;
+        return out;
+    }
+
+    /** 当前会话的对端，PhoneScreen 发图时要知道发给谁 */
+    public UUID peer() {
+        return peer;
     }
 
     private int renderHeader(GuiGraphics g, Font font, int x, int y, int w) {
@@ -197,6 +427,11 @@ public final class ChatConversation {
     }
 
     private void renderMessages(GuiGraphics g, Font font, int x, int top, int w, int bottom) {
+        // 每帧重建：滚一下、来一条新消息，位置就全变了
+        imageHits.clear();
+        messageTop = top;
+        messageBottom = bottom;
+
         if (blocks.isEmpty()) {
             int y = top;
             for (var line : font.split(Component.translatable("mcphone.chat.conversation_empty"), w)) {
@@ -214,23 +449,33 @@ public final class ChatConversation {
         // 不足一屏从顶往下排；超出时贴底，scrollPx 把内容往下推露出更早的消息
         int y = contentH <= viewH ? top : bottom - contentH + scrollPx;
 
-        // enableScissor 收屏幕坐标、不跟随 pose；开机缩放动画期间到不了这里，不必补偿
-        g.enableScissor(x, top, x + w, bottom);
+        // 走 GuiUtil 那一层：原版的 enableScissor 收窗口坐标、不跟随 pose，而整个手机是
+        // 套在一层缩放里画的（界面大小 × 开机动画）。直接交本地坐标，界面大小一改字就被切
+        GuiUtil.enableScissor(g, x, top, x + w, bottom);
         for (Block b : blocks) {
             if (y + b.h() > top && y < bottom) renderBlock(g, font, b, x, y, w);
             y += b.h() + BLOCK_GAP;
         }
-        g.disableScissor();
+        GuiUtil.disableScissor(g);
     }
 
     private void renderBlock(GuiGraphics g, Font font, Block b, int x, int y, int w) {
-        if (b.stamp()) {
+        if (b.type() == BlockType.STAMP) {
             g.drawString(font, b.lines().get(0), x + (w - b.w()) / 2, y + STAMP_PAD_Y,
                     colorStamp(), false);
             return;
         }
 
         int bx = b.self() ? x + w - b.w() : x;
+
+        // 图片不套气泡：真实的聊天软件里图片就是图片本身，没有底色也没有一圈留白，
+        // 谁发的靠左右对齐看得出来。套一层气泡等于在图周围多画一圈没有意义的色块，
+        // 而手机屏幕只有 120 宽，那一圈还要从图身上扣
+        if (b.type() == BlockType.IMAGE) {
+            renderImageBlock(g, font, b, bx, y);
+            return;
+        }
+
         PhoneSkin.drawOrFill(g,
                 b.self() ? PhoneSkin.Element.CHAT_BUBBLE_SELF : PhoneSkin.Element.CHAT_BUBBLE_PEER,
                 bx, y, b.w(), b.h(),
@@ -244,29 +489,107 @@ public final class ChatConversation {
         }
     }
 
+    /**
+     * 图片那一块画什么，取决于像素到了没有。整块就是图本身，没有边距。
+     *
+     * 问一句 {@link ChatImageCache#get} 就等于告诉缓存"这一帧它是可见的"，该去要的它自己会去要，
+     * 因此这里不必判断"要过没有"。三种没有像素的情况各说各的：还在路上、服务端说没了、
+     * 收到了但解不开——玩家至少知道该不该等。没有像素时铺一块底，那是这一块唯一有底色的时候：
+     * 空着的话屏幕上就是一个洞，看不出这儿本该有张图。
+     */
+    private void renderImageBlock(GuiGraphics g, Font font, Block b, int bx, int y) {
+        int w = b.w();
+        int h = b.h();
+
+        // 每帧都告知：条目被逐出后会被重建成一条空的，而放大图那一层只有一个 id
+        ChatImageCache.declare(b.image(), b.frames(), b.frameMs());
+
+        var texture = ChatImageCache.get(b.image());
+        if (texture != null) {
+            // 有像素才记位置：点一张还没到、或者已经过期的图，放大了也只是一块空白
+            imageHits.add(new ImageHit(b.image(), bx, y, w, h));
+            drawImage(g, texture, b.image(), bx, y, w, h);
+            return;
+        }
+
+        g.fill(bx, y, bx + w, y + h, PhoneTheme.COLOR_SCRIM);
+
+        String hint = switch (ChatImageCache.status(b.image())) {
+            case GONE -> Component.translatable("mcphone.chat.image_expired").getString();
+            case BROKEN -> Component.translatable("mcphone.chat.image_broken_local").getString();
+            case LOADING, READY -> "…";
+        };
+        // 先截再居中：那一块窄的时候（一张竖图）「已过期」放不下，按截断前的宽度算会偏出去
+        hint = GuiUtil.truncate(font, hint, w - 2);
+        g.drawString(font, hint,
+                bx + Math.max(0, (w - font.width(hint)) / 2),
+                y + (h - font.lineHeight) / 2,
+                colorEmpty(), false);
+    }
+
+    /**
+     * 画这张图：静态图整张画，动图按时间挑一帧。
+     *
+     * 挑帧用墙上时间，而不是给每条消息各记一个播放起点：动图是循环播的，从哪一帧开始看
+     * 都一样，而记起点意味着每条消息多一份状态，还要在滚动、重排、翻回历史时维护它。
+     * 顺带的好处是同一张表情在屏幕上出现几次都是同步的，看着像一个整体。
+     */
+    private static void drawImage(GuiGraphics g, ImageCodec.Texture sheet, UUID id,
+                                  int x, int y, int boxW, int boxH) {
+        int frames = ChatImageCache.frames(id);
+        int cols = ChatImage.cols(frames);
+        int fw = sheet.width() / cols;
+        int fh = sheet.height() / ChatImage.rows(frames);
+
+        // 帧数与贴图对不上（伪造的消息，或者贴图被缩过）就整张画：糊一点也好过一片空白
+        if (frames <= 1 || fw <= 0 || fh <= 0) {
+            GuiUtil.drawFitted(g, sheet, x, y, boxW, boxH);
+            return;
+        }
+
+        int frameMs = ChatImageCache.frameMs(id);
+        int index = frameMs <= 0 ? 0 : (int) ((System.currentTimeMillis() / frameMs) % frames);
+        GuiUtil.drawFittedRegion(g, sheet, (index % cols) * fw, (index / cols) * fh, fw, fh,
+                x, y, boxW, boxH);
+    }
+
     private void renderInputBar(GuiGraphics g, Font font, int x, int y, int w,
                                 int mouseX, int mouseY, float partialTick) {
 
         String send = Component.translatable("mcphone.chat.send").getString();
         int sendW = font.width(send) + 4;
-        int boxW = w - sendW - 2;
+
+        // 服主关掉发图片时连位置都不留：那一格空着比一个点了没反应的键好。
+        // 「+」眼下只通向图片与表情，两者都是图片消息，所以这个开关一关它就该消失
+        boolean canAttach = ServerConfig.allowChatImages();
+        int btnRoom = canAttach ? ATTACH_BTN + ATTACH_BTN_GAP : 0;
+
+        int barX = x + btnRoom;
+        int boxW = w - sendW - 2 - btnRoom;
+
+        if (canAttach) {
+            renderAttachButton(g, font, x, y, mouseX, mouseY);
+        } else {
+            attachBtnHovered = false;
+            attachMenuOpen = false;
+        }
 
         PhoneSkin.drawOrFill(g, PhoneSkin.Element.CHAT_INPUT_BAR,
-                x, y, boxW, INPUT_H, COLOR_INPUT_BG);
+                barX, y, boxW, INPUT_H, COLOR_INPUT_BG);
 
         // 无边框的 EditBox 不会自己垂直居中，手动摆到栏中间
         int textY = y + (INPUT_H - font.lineHeight) / 2 + 1;
         int textW = boxW - INPUT_TEXT_PAD * 2 - cursorRoom(font);
 
         if (box == null) {
-            box = new EditBox(font, x + INPUT_TEXT_PAD, textY,
+            box = new EditBox(font, barX + INPUT_TEXT_PAD, textY,
                     textW, INPUT_H - 4,
                     Component.translatable("mcphone.app.chat"));
-            box.setMaxLength(ChatMessage.MAX_TEXT_LENGTH);
+            box.setMaxLength(TextBody.MAX_LENGTH);
             box.setBordered(false);
             box.setFocused(true);
         } else {
-            box.setX(x + INPUT_TEXT_PAD);
+            box.setX(barX + INPUT_TEXT_PAD);
             box.setY(textY);
             box.setWidth(textW);
         }
@@ -279,6 +602,81 @@ public final class ChatConversation {
         boolean empty = box.getValue().isBlank();
         g.drawString(font, send, sendX + 2, textY,
                 empty ? COLOR_SEND_OFF : (sendHovered ? COLOR_SEND_HOVER : COLOR_SEND), false);
+    }
+
+    /**
+     * 输入栏左边那个「+」：贴图优先，没有贴图就画一个 + 字符兜底，与音乐页那几个键同一个规矩。
+     *
+     * 为什么是「+」而不是直接一个图片键：能发的东西不止一种（现在是图片与表情，往后还会有别的），
+     * 每多一种就在输入栏挤一个键的话，那条栏很快就没地方打字了。「+」把它们收进一张小菜单。
+     *
+     * 正在发一张时画淡，但照样点得动：同时只能有一次上传（理由见 ChatImageSender），
+     * 而点快了的那几张是排队而不是丢掉。淡色是告诉玩家"上一张还在路上"，不是"别点了"。
+     * 只有队伍也排满了才真的点不动——那时候再收就不是手快而是刷屏了。
+     */
+    private void renderAttachButton(GuiGraphics g, Font font, int x, int barY,
+                                    int mouseX, int mouseY) {
+
+        int by = barY + (INPUT_H - ATTACH_BTN) / 2;
+        boolean sending = ChatImageSender.isBusy();
+        boolean blocked = ChatImageSender.isFull();
+        if (blocked) attachMenuOpen = false;
+
+        attachBtnHovered = !blocked && GuiUtil.hit(mouseX, mouseY,
+                x - 1, by - 1, ATTACH_BTN + 2, ATTACH_BTN + 2);
+
+        if (attachBtnHovered || attachMenuOpen) {
+            g.fill(x - 1, by - 1, x + ATTACH_BTN + 1, by + ATTACH_BTN + 1,
+                    PhoneTheme.COLOR_HOVER_STRONG);
+        }
+
+        if (!PhoneSkin.draw(g, PhoneSkin.Element.CHAT_ATTACH, x, by, ATTACH_BTN, ATTACH_BTN)) {
+            String glyph = "+";
+            g.drawString(font, glyph, x + (ATTACH_BTN - font.width(glyph)) / 2, by,
+                    sending || blocked ? COLOR_SEND_OFF
+                            : (attachBtnHovered || attachMenuOpen ? COLOR_SEND_HOVER : COLOR_SEND),
+                    false);
+        }
+
+        if (attachMenuOpen) renderAttachMenu(g, font, x, by, mouseX, mouseY);
+    }
+
+    /**
+     * 「+」弹出来的那张小菜单，贴着按钮往上长。
+     *
+     * 往上而不是往下：按钮就贴在输入栏上，往下会盖住导航栏，而那是玩家退出去的路。
+     * 菜单开着的时候点别处一律是关掉它（见 mouseClicked），所以不必画关闭键。
+     */
+    private void renderAttachMenu(GuiGraphics g, Font font, int btnX, int btnY,
+                                  int mouseX, int mouseY) {
+
+        Attach[] items = Attach.values();
+        int rowH = font.lineHeight + MENU_ROW_EXTRA;
+
+        int width = 0;
+        for (Attach item : items) width = Math.max(width, font.width(item.label()));
+        width += MENU_PAD * 2;
+
+        int height = items.length * rowH + MENU_PAD * 2;
+        int menuX = btnX;
+        int menuY = btnY - height - 2;
+
+        g.fill(menuX, menuY, menuX + width, menuY + height, PhoneTheme.COLOR_OVERLAY);
+        g.renderOutline(menuX, menuY, width, height, PhoneTheme.COLOR_DIVIDER);
+
+        attachHovered = null;
+        int rowY = menuY + MENU_PAD;
+        for (Attach item : items) {
+            boolean hovered = GuiUtil.hit(mouseX, mouseY, menuX, rowY, width, rowH - 1);
+            if (hovered) {
+                attachHovered = item;
+                g.fill(menuX + 1, rowY, menuX + width - 1, rowY + rowH - 1,
+                        PhoneTheme.COLOR_ROW_HOVER);
+            }
+            g.drawString(font, item.label(), menuX + MENU_PAD, rowY + (rowH - font.lineHeight) / 2,
+                    hovered ? FontPalette.title() : FontPalette.body(), false);
+            rowY += rowH;
+        }
     }
 
     /** 消息列表没换实例就不重排：ChatClientCache 每次收包都产出新的不可变列表，身份没变即内容没变 */
@@ -297,18 +695,26 @@ public final class ChatConversation {
             if (m.time() - prevTime > STAMP_GAP_MS) {
                 FormattedCharSequence stamp =
                         Component.literal(formatStamp(m.time())).getVisualOrderText();
-                out.add(new Block(true, false, List.of(stamp),
-                        font.width(stamp), font.lineHeight + STAMP_PAD_Y * 2));
+                out.add(new Block(BlockType.STAMP, false, List.of(stamp), null,
+                        font.width(stamp), font.lineHeight + STAMP_PAD_Y * 2, 1, 0));
             }
             prevTime = m.time();
 
-            List<FormattedCharSequence> lines = font.split(Component.literal(m.text()), textMaxW);
+            boolean self = selfId != null && selfId.equals(m.sender());
+
+            if (m.body() instanceof ImageBody image) {
+                out.add(imageBlock(image, self, bubbleMaxW));
+                continue;
+            }
+
+            String text = m.body() instanceof TextBody t ? t.text() : m.body().preview().getString();
+            List<FormattedCharSequence> lines = font.split(Component.literal(text), textMaxW);
             int textW = 0;
             for (var line : lines) textW = Math.max(textW, font.width(line));
 
-            out.add(new Block(false, selfId != null && selfId.equals(m.sender()), lines,
+            out.add(new Block(BlockType.TEXT, self, lines, null,
                     textW + BUBBLE_PAD_X * 2,
-                    lines.size() * font.lineHeight + BUBBLE_PAD_Y * 2));
+                    lines.size() * font.lineHeight + BUBBLE_PAD_Y * 2, 1, 0));
         }
 
         int total = 0;
@@ -323,10 +729,58 @@ public final class ChatConversation {
         laidOutWidth = maxW;
     }
 
+    /**
+     * 按消息自带的宽高等比算出这张图画多大：宽不超过气泡那条线、高不超过 {@link #IMAGE_MAX_H}。
+     *
+     * 块的大小就是图本身的大小，不留内边距——图片不套气泡，理由见 {@link #renderBlock}。
+     * 宽度上限仍跟文字气泡共用同一条线，那样一列消息的右边缘才是齐的。
+     */
+    private static Block imageBlock(ImageBody image, boolean self, int bubbleMaxW) {
+        float scale = Math.min((float) bubbleMaxW / image.width(),
+                               (float) IMAGE_MAX_H / image.height());
+        // 比屏幕还小的图不放大：放大只会糊，而手机上的图本来就该小
+        scale = Math.min(scale, 1f);
+
+        int w = Math.max(1, Math.round(image.width() * scale));
+        int h = Math.max(1, Math.round(image.height() * scale));
+
+        return new Block(BlockType.IMAGE, self, List.of(), image.image(), w, h,
+                image.frames(), image.frameMs());
+    }
+
     public boolean mouseClicked(double mx, double my, int button) {
+        // 放大图开着时点哪儿都是关掉它，别让点击漏到下面的气泡与输入栏。
+        // 右上角那个「保存」是唯一的例外，所以要先判它
+        if (viewingImage != null) {
+            if (button == 0 && saveHovered) saveViewingImage();
+            else viewingImage = null;
+            return true;
+        }
+
+        // 菜单开着时：点中某一项就走那一项，点别处一律只是关掉菜单，不再往下传
+        if (attachMenuOpen) {
+            if (button == 0 && attachHovered != null) pendingAttach = attachHovered;
+            attachMenuOpen = false;
+            attachHovered = null;
+            return true;
+        }
+
+        if (button == 0 && attachBtnHovered) {
+            attachMenuOpen = true;
+            return true;
+        }
         if (button == 0 && sendHovered) {
             send();
             return true;
+        }
+        // 点在消息区里才算数：气泡是裁剪着画的，露在外面的那半截看不见，也就不该点得动
+        if (button == 0 && my >= messageTop && my < messageBottom) {
+            for (ImageHit hit : imageHits) {
+                if (GuiUtil.hit(mx, my, hit.x(), hit.y(), hit.w(), hit.h())) {
+                    viewingImage = hit.image();
+                    return true;
+                }
+            }
         }
         if (box != null) box.mouseClicked(mx, my, button);
         return false;
@@ -360,6 +814,9 @@ public final class ChatConversation {
     }
 
     public boolean mouseScrolled(double scrollY) {
+        // 放大图盖着整块内容区，此时滚轮不该去翻它下面那些看不见的消息
+        if (viewingImage != null) return true;
+
         if (maxScroll <= 0) return false;
 
         scrollPx = Mth.clamp(scrollPx + (int) (scrollY * SCROLL_STEP), 0, maxScroll);

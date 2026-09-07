@@ -808,6 +808,107 @@ guideme.Guides                  createGuideItem(ResourceLocation)
 `./gradlew runClient` 肉眼过一遍**。MCEF 还要额外注意：它首次运行会去下载
 约 200 MB 的原生库，第一次点开浏览器多半会看到"MCEF 还没就绪"。
 
+### ✅ 第七刀：追上 main 的 1.9.0 ~ 1.9.3（+22 个文件，共 241 个）
+
+**移植不是一锤子买卖**，`main` 还在往前走。第六刀收尾时那一支停在 1.8.19，
+这一刀把之后的四个小版本一次追平：图片消息与表情（1.9.0）、四页滚不动的修复
+（1.9.1）、每个 App 一个快捷键与相机的模糊闪光（1.9.2）、界面大小（1.9.3）。
+
+#### 追平的做法：三路分流，而不是逐个文件重看
+
+`main` 在 `67a30af`（第六刀取的那一版）到 `4a6aebe`（v1.9.3）之间改了
+**63 个 java 文件**。按"这一支现在这个文件与 `67a30af` 是不是逐字相同"分三路：
+
+| 情况 | 个数 | 做法 |
+| --- | ---: | --- |
+| 与 `67a30af` 逐字相同 | 17 | 直接取 `4a6aebe` 的那一版覆盖 |
+| 这一支改过 | 19 | `git merge-file --diff3` 三方合并（base = `67a30af`） |
+| 这一支还没有 | 26 | 取 `4a6aebe` 的那一版新建，再按下面几条改 |
+
+**三方合并自动解决了 11 个，只剩 8 个要手工看**。而那 8 个冲突的位置几乎全落在
+同一条线上——**网络编解码**（`ChatMessage`、`ConversationSummary`、
+`SendChatMessagePacket`、`ChatNetworking`），也就是这份清单第 1 条说的那道总闸。
+另外三处分别是 `MCphone` 的事件总线名、`PhoneScreen` 的
+`mouseScrolled` 与 `renderBackground`（第 7 条），以及两个纯 import 冲突。
+
+**这说明清单里那几条"哪儿会分叉"是准的**：两支真正长得不一样的地方就那么几处，
+往后每次追平都会在同样的位置起冲突，而不是散落一片。
+
+#### 新撞出来的差异（清单里原先没有的）
+
+| 位置 | 1.21.1 | Forge 1.20.1 |
+| --- | --- | --- |
+| `Util.getPlatform().openPath(Path)` | 有 | **没有**，1.20.2 才加。只有收 `File` 的 `openFile` |
+| `PostChain.setUniform(String, float)` | 有 | **没有**，1.21 才加。`passes` 还是私有字段 |
+| `GameRenderer.MAX_BLUR_RADIUS` | 有（值 10） | 没有这个常量 |
+| `RenderGuiEvent.getPartialTick()` | 给 `DeltaTracker` | 直接就是 `float` |
+| `KeyModifier.getActiveModifiers()`（复数） | 有 | **只有单数的** `getActiveModifier()` |
+| `KeyModifier.MODIFIER_VALUES` | 正常字段 | 已标 `forRemoval`，换 `getValues(false)` |
+| `ModConfigSpec.defineListAllowEmpty(路径, 默认, 新行 Supplier, 校验)` | 四参 | **只有三参**，中间那个 Supplier 是给配置界面用的 |
+| `Codec.dispatch(键, 取种类, 取编解码器)` | 第三个收 `MapCodec` | DFU 6.0.8 收的是 `Codec`，末尾补一句 `.codec()` |
+
+前两条值得展开，其余照着表改就完了。
+
+**`getActiveModifiers()` 那一条是这批里唯一会静默出错的。** Forge 的单数版按
+Ctrl → Shift → Alt 的顺序返回**第一个**按住的，也就是说 `Ctrl+Shift+K` 在它眼里
+只是 `Ctrl`。照直译过来编得过、绑得上、按下去认不出来——**组合键这个功能会只剩
+一个修饰键**。改法是自己逐个问 `isActive(null)`（三个修饰键的实现都直接转调
+`Screen.hasXxxDown`，不看那个参数，实测过字节码）。
+
+**模糊闪光：1.20.1 上要自己拼那条后处理链。** 那一支是 `new` 一份原版的
+`shaders/post/blur.json`，再每帧 `setUniform("Radius", ...)`。这边没有 `setUniform`，
+`PostChain` 只在读 json 时取一次 uniform，之后再没有公开的口子——`passes` 是私有的。
+
+绕法不必上 AT，也不必反射：自带一份**只声明 swap 中转贴图、不声明任何 pass** 的
+`mcphone:shaders/post/camera_blur.json`，两个 pass 用公开的 `addPass` 加进去——
+它把创建出来的 `PostPass` 还回来，拿着它就能 `getEffect().safeGetUniform("Radius")`。
+着色器程序仍是原版那支 `shaders/program/blur`，走向（横一遍、竖一遍，
+主目标 → swap → 主目标）照抄原版的 `blur.json`，画出来与那一支是同一个效果。
+
+三个要点，缺一个就只在运行期发作：
+
+- `addPass` **不设正交矩阵**，`resize()` 才设。所以 `resize` 必须放在加完 pass
+  **之后**，漏了就是 `process()` 那一刻拿着一个 null 矩阵
+- 链建起来了、加 pass 时才炸的那一路要 `close()`，否则漏掉几张与屏幕同尺寸的贴图
+- `Codec.dispatch` 那条同理：DFU 6.0.8 的 `KeyDispatchCodec` 认得
+  `MapCodecCodec` 这层包装，认出来就把字段**摊平**写进同一个 map，
+  所以补 `.codec()` 之后存档格式与那一支**逐字相同**（收发两条路上都有这个分支，
+  已对着 6.0.8 的字节码核过）。不补的话编不过，补错地方则是存档格式悄悄变了
+
+#### 网络层：这次是**在中间插包**，所以协议号必须 +1
+
+图片那三个包（`SendChatImage` / `RequestChatImage` / `ChatImageData`）在 `main`
+的注册顺序里夹在 `NewMessage` 与 `RequestOnlinePlayers` 之间。**照着插而不是追加在
+末尾**，是为了让 `ChatNetworking` 与那一支逐行对得上，往后再追平时不必两边数序号。
+
+代价正是 `MCphoneNetwork` 类注释里写着的那一条：它后面所有包的序号平移了三位。
+所以 `PROTOCOL_VERSION` 从 `"1"` 升到 `"2"`。**这是这份清单里第一次真的用上那条规矩**。
+
+`Optional<MessageBody>` 那个字段没有对应的 `ByteBufCodecs.optional`，
+走 `FriendlyByteBuf.writeOptional/readOptional`——注意它的 `Writer` 是
+`(buf, 值)`，与本仓统一的 `encode(值, buf)` 方向相反，**不能直接传方法引用**。
+
+`MessageKind` 那张分派表是这一刀里唯一一处"形状变了但保证没丢"的改动：那边挂的是
+一对 `StreamCodec`，这边换成一对函数（`BiConsumer` / `Function`）。仍然挂在枚举的
+**构造函数参数**上而不是散成 switch —— 图的是同一件事：**加一种消息不给编解码器就
+编译不过**。写成 switch 换不来这个保证，Java 17 的 switch 语句不要求穷尽。
+
+#### 验收
+
+1. `./gradlew build` → `BUILD SUCCESSFUL`，**零 error、零 removal 告警**
+2. 断言测试从 6 个加到 **9 个**（`main` 那三个新的也搬了过来：
+   `ChatMessageCodecTest` 38、`GifDecodeTest` 33、`ImageEncodeTest` 55），
+   **122,330 条全绿**（28 + 80007 + 12301 + 30 + 91 + 29747 + 38 + 33 + 55）
+3. `verifyDistIsolation` → **146 个**非 client 类无一引用客户端类型；
+   `verifyServiceFiles` → 16 个类全部存在
+4. 资源树与 `main` 逐文件比对：除了数据包目录的单复数、`mods.toml`/`pack.mcmeta`
+   与新加的那份 `camera_blur.json`，**一个文件都不差**
+
+**验不到的还是界面，而且这一刀欠得比前几刀多。** 发图、表情、GIF 播放、快捷键绑定、
+界面大小这五样全是要点着看的东西，眼下只有编译器与断言测试担保。
+`ChatMessageCodecTest` 覆盖的是存档与线格式的往返，
+`GifDecodeTest` / `ImageEncodeTest` 覆盖的是拆帧与压缩——**都不含一个像素的绘制**。
+
 ### ⬜ 下一刀
 
 移植本身到此为止，剩下的都不是"搬代码"了：
@@ -818,6 +919,8 @@ guideme.Guides                  createGuideItem(ResourceLocation)
    `MCphoneClient` 上还缺的东西
 3. **Parchment 映射**：现在用的是官方混淆表，没有参数名
 4. ~~**GuideME**~~ ✅ 第六刀核实，本来就是通的（原先那句"1.20.1 上没有"是错的）
+5. **跟着 `main` 继续追平**。第七刀追到 1.9.3，那一支已经在 1.9.4 上了。
+   追平的做法见第七刀开头那张三分表——照它走，下次仍然只有那几处会起冲突
 
 ## 建议的推进顺序
 
