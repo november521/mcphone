@@ -1,6 +1,6 @@
 package com.november.mcphone.feature.notes;
 
-import io.netty.handler.codec.DecoderException;
+import com.november.mcphone.core.net.Wire;
 import net.minecraft.network.FriendlyByteBuf;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
@@ -32,15 +32,11 @@ public record NoteList(List<Note> notes) {
 
     /** 条数上限在编解码器层面封死，伪造客户端塞不进更多 */
     public static void encode(NoteList msg, FriendlyByteBuf buf) {
-        buf.writeCollection(msg.notes(), (b, v) -> Note.encode(v, b));
+        Wire.writeList(buf, msg.notes(), MAX_COUNT, Note::encode);
     }
 
     public static NoteList decode(FriendlyByteBuf buf) {
-        return new NoteList(
-                buf.readCollection(n -> {
-            if (n > MAX_COUNT) throw new DecoderException("列表超过上限 MAX_COUNT: " + n);
-            return new java.util.ArrayList<>(n);
-        }, Note::decode));
+        return new NoteList(Wire.readList(buf, MAX_COUNT, Note::decode));
     }
 
     public boolean isEmpty() {

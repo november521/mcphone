@@ -1,5 +1,6 @@
 package com.november.mcphone.feature.chat.net;
 
+import com.november.mcphone.core.net.Wire;
 import com.november.mcphone.feature.chat.ChatImage;
 import net.minecraft.network.FriendlyByteBuf;
 
@@ -34,7 +35,7 @@ public record SendChatImagePacket(UUID target, int width, int height, int frames
         buf.writeVarInt(value.frameMs());
         buf.writeVarInt(value.chunkIndex());
         buf.writeVarInt(value.chunkCount());
-        buf.writeByteArray(value.chunk());
+        Wire.writeBytes(buf, value.chunk(), ChatImage.CHUNK_BYTES);
     }
 
     public static SendChatImagePacket decode(FriendlyByteBuf buf) {
@@ -45,8 +46,8 @@ public record SendChatImagePacket(UUID target, int width, int height, int frames
         int frameMs = buf.readVarInt();
         int chunkIndex = buf.readVarInt();
         int chunkCount = buf.readVarInt();
-        // 超长的一片在解码阶段就被拒收，轮不到业务层
-        byte[] chunk = buf.readByteArray(ChatImage.CHUNK_BYTES);
+        // 超长的一片在解码阶段就被拒收，轮不到业务层；发的那一侧同样拦，见 Wire
+        byte[] chunk = Wire.readBytes(buf, ChatImage.CHUNK_BYTES);
         return new SendChatImagePacket(target, width, height, frames, frameMs,
                 chunkIndex, chunkCount, chunk);
     }

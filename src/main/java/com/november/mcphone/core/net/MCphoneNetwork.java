@@ -5,7 +5,6 @@ import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraftforge.network.NetworkDirection;
-import net.minecraftforge.network.NetworkEvent;
 import net.minecraftforge.network.NetworkRegistry;
 import net.minecraftforge.network.PacketDistributor;
 import net.minecraftforge.network.simple.SimpleChannel;
@@ -24,9 +23,9 @@ import java.util.function.Function;
  * PayloadRegistrar 就完事了。1.20.1 上这套【完全不存在】，对应物是 Forge 自己的
  * SimpleChannel：一条通道 + 手工分配的整数序号。
  *
- * 直接照着 SimpleChannel 的原生 API 写 34 个包，每个包都要记得
- * setPacketHandled、记得 enqueueWork、记得 getSender() 可能是 null —— 漏一样
- * 就是一个只在特定方向上才发作的 bug。所以这里把那三样收进注册函数里，
+ * 直接照着 SimpleChannel 的原生 API 写 34 个包，每个包都要挑对 consumer 的
+ * 变体、还要记得 getSender() 在客户端方向必然是 null —— 漏一样就是一个只在
+ * 特定方向上才发作的 bug。所以这里把它们收进两个注册函数，
  * 上层只写"收到包之后做什么"。
  *
  * 序号的规矩：只在末尾追加
@@ -70,13 +69,18 @@ public final class MCphoneNetwork {
      * 注册一个客户端 → 服务端的包。
      *
      * handler 拿到的是【已经确认非空的 ServerPlayer】，而且已经在主线程上。
-     * 这两件事都不是白来的：
      *
-     *   - NetworkEvent.Context.getSender() 只在服务端方向有值，客户端方向是
-     *     null。NeoForge 的 IPayloadContext.player() 两个方向都给得出玩家，
-     *     照那边的写法直译过来会在客户端方向空指针
-     *   - 网络包默认在【网络线程】上处理。碰世界、碰玩家、碰物品都必须先
-     *     enqueueWork 切回主线程，否则是并发访问，症状是偶发且无法复现
+     * 主线程那一半是 {@code consumerMainThread} 给的：它把处理函数包进
+     * {@code ctx.enqueueWork(...)}，并且自己调掉 {@code setPacketHandled(true)}
+     * ——两件事都不必在这里再写一遍（对着 Forge 47.4.23 的字节码核过：那个
+     * 方法体就是 enqueueWork 一句加 setPacketHandled 一句）。
+     * 【但只有这一个变体是这样】：{@code consumerNetworkThread(BiConsumer)}
+     * 两件都不做，照它写就是在网络线程上碰世界，症状偶发且无法复现。
+     *
+     * 非空那一半才是这里真正加的：{@code NetworkEvent.Context.getSender()}
+     * 只在服务端方向有值，客户端方向必然是 null。NeoForge 的
+     * {@code IPayloadContext.player()} 两个方向都给得出玩家，照那边的写法
+     * 直译过来会在客户端方向空指针。
      */
     public static <T> void registerToServer(Class<T> type,
                                             BiConsumer<T, FriendlyByteBuf> encoder,
@@ -86,12 +90,10 @@ public final class MCphoneNetwork {
                 .encoder(encoder)
                 .decoder(decoder)
                 .consumerMainThread((msg, ctxSupplier) -> {
-                    NetworkEvent.Context ctx = ctxSupplier.get();
-                    ServerPlayer sender = ctx.getSender();
+                    ServerPlayer sender = ctxSupplier.get().getSender();
                     // 连接在包排队期间断掉就会是 null。方向已由 NetworkDirection
                     // 限死，所以这里只可能是"人走了"，静默丢弃即可
                     if (sender != null) handler.accept(msg, sender);
-                    ctx.setPacketHandled(true);
                 })
                 .add();
     }
@@ -101,11 +103,12 @@ public final class MCphoneNetwork {
      *
      * handler 只拿得到包本身，【没有玩家参数】—— 客户端方向 getSender() 必然
      * 是 null，给一个永远为 null 的参数只会诱人去用它。客户端玩家要自己从
-     * Minecraft.getInstance() 取。
+     * Minecraft.getInstance() 取。线程与 setPacketHandled 同样由
+     * {@code consumerMainThread} 负责，见上面那个方法的注释。
      *
      * 注意 handler 的实现【不能】直接出现在专用服务端会加载的类里：碰
-     * Minecraft、碰 Screen 这些客户端类型，专用服务端一加载就崩。这条以后由
-     * verifyDistIsolation 任务来把关（还没加，见 docs/PORTING.md）。
+     * Minecraft、碰 Screen 这些客户端类型，专用服务端一加载就崩。这条由
+     * build.gradle 的 verifyDistIsolation 任务把关。
      */
     public static <T> void registerToClient(Class<T> type,
                                             BiConsumer<T, FriendlyByteBuf> encoder,
@@ -114,11 +117,7 @@ public final class MCphoneNetwork {
         CHANNEL.messageBuilder(type, nextId++, NetworkDirection.PLAY_TO_CLIENT)
                 .encoder(encoder)
                 .decoder(decoder)
-                .consumerMainThread((msg, ctxSupplier) -> {
-                    NetworkEvent.Context ctx = ctxSupplier.get();
-                    handler.accept(msg);
-                    ctx.setPacketHandled(true);
-                })
+                .consumerMainThread((msg, ctxSupplier) -> handler.accept(msg))
                 .add();
     }
 

@@ -1,8 +1,8 @@
 package com.november.mcphone.feature.store;
 
+import com.november.mcphone.core.net.Wire;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
-import io.netty.handler.codec.DecoderException;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.resources.ResourceLocation;
 
@@ -33,23 +33,19 @@ public record PurchasedApps(Set<ResourceLocation> ids) {
     );
 
     /**
-     * 条数上限在编解码器层面封死。
+     * 条数上限在编解码器层面封死，收发两侧都拦。
      *
      * 1.21.1 那边写成 ByteBufCodecs.list(MAX_COUNT)，上限由那个组合子带着。
-     * 1.20.1 上 FriendlyByteBuf.readList 【没有上限参数】，所以这道闸必须
-     * 自己补——照搬 readList 会让伪造客户端塞进任意长的列表。
+     * 1.20.1 上 FriendlyByteBuf 那一对读写方法【都没有上限参数】，所以这道闸
+     * 必须自己补——交给 {@link Wire}，理由见它的类注释。
      */
     public static void encode(PurchasedApps value, FriendlyByteBuf buf) {
-        buf.writeCollection(value.ids(), FriendlyByteBuf::writeResourceLocation);
+        Wire.writeList(buf, value.ids(), MAX_COUNT, (v, b) -> b.writeResourceLocation(v));
     }
 
     public static PurchasedApps decode(FriendlyByteBuf buf) {
-        List<ResourceLocation> list = buf.readCollection(n -> {
-            if (n > MAX_COUNT) {
-                throw new DecoderException("已购 App 列表超过上限 " + MAX_COUNT + ": " + n);
-            }
-            return new java.util.ArrayList<>(n);
-        }, FriendlyByteBuf::readResourceLocation);
+        List<ResourceLocation> list =
+                Wire.readList(buf, MAX_COUNT, FriendlyByteBuf::readResourceLocation);
         return new PurchasedApps(Set.copyOf(list));
     }
 

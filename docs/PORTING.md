@@ -61,14 +61,25 @@ CHANNEL.sendToServer(new FooPacket(1));
 NetworkRegistry.newSimpleChannel(id, () -> VERSION, VERSION::equals, VERSION::equals)
 ```
 
-**三个必须每个包都记得、因而不该每个包都手写的东西**，已经收进
-`core/net/MCphoneNetwork` 的两个注册函数里，上层只写"收到之后做什么"：
+**三件每个包都要操心的事**，已经收进 `core/net/MCphoneNetwork` 的两个注册函数里，
+上层只写"收到之后做什么"。⚠️ **这张表的前两行原先写错了**，第七刀对着
+Forge 47.4.23 的字节码核过之后改正：
 
-| 坑 | 漏了会怎样 |
-| --- | --- |
-| `ctx.setPacketHandled(true)` | Forge 每收一个包就在日志里报一次"未处理" |
-| `ctx.enqueueWork(...)` | 默认在**网络线程**上跑，碰世界/玩家/物品即并发访问，偶发且不可复现 |
-| `ctx.getSender()` 可能为 null | 客户端方向必然为 null；照 `IPayloadContext.player()` 直译过来就是空指针 |
+| 坑 | 谁负责 | 漏了会怎样 |
+| --- | --- | --- |
+| `ctx.enqueueWork(...)` | **Forge 自己**（选对 consumer 变体即可） | 在**网络线程**上碰世界/玩家/物品即并发访问，偶发且不可复现 |
+| `ctx.setPacketHandled(true)` | **Forge 自己**（同上） | Forge 每收一个包就在日志里报一次"未处理" |
+| `ctx.getSender()` 可能为 null | **只有这一条是我们加的** | 客户端方向必然为 null；照 `IPayloadContext.player()` 直译过来就是空指针 |
+
+**前两条由 `consumerMainThread` 免费给。** 它的方法体就是
+`ctx.enqueueWork(处理函数)` 一句加 `ctx.setPacketHandled(true)` 一句 ——
+原先那份清单说"三样都得自己记得"，于是注册函数里还多写了一次
+`setPacketHandled(true)`，纯属重复。
+
+**但换个变体就不是了**：`consumerNetworkThread(BiConsumer)` 两件都不做
+（另一个收 `ToBooleanBiFunction` 的重载只补 `setPacketHandled`，仍不切线程）。
+所以真正要记住的不是"这三样各写一遍"，而是**别用错变体** ——
+这也正是把它包起来的理由。
 
 所以 C2S 的处理函数签名是 `(包, ServerPlayer)` —— 玩家已确认非空、已在主线程；
 S2C 的是 `(包)` —— **故意不给玩家参数**，那个方向不存在有意义的玩家，
@@ -893,16 +904,52 @@ Ctrl → Shift → Alt 的顺序返回**第一个**按住的，也就是说 `Ctr
 **构造函数参数**上而不是散成 switch —— 图的是同一件事：**加一种消息不给编解码器就
 编译不过**。写成 switch 换不来这个保证，Java 17 的 switch 语句不要求穷尽。
 
+#### 复查捞出来的两件事
+
+**一、带上限的编解码，六处只拦了收的那一侧。**
+
+1.21.1 那边的 `ByteBufCodecs.list(上限)` / `byteArray(上限)` 是**两侧都拦**的：
+解码超量拒收，编码超量也直接抛。移植过来时 `FriendlyByteBuf` 没有对应的组合子，
+六处各自手写了一份"读之前检查"的分配器 —— 而**发的那一侧一处都没拦**。
+
+漏掉编码那一侧不是"少一道保险"，是把错误挪到了另一台机器上：
+
+| | 抛在哪儿 | 玩家看到什么 |
+| --- | --- | --- |
+| 拦了编码 | 发的那一端，指着攒出这串东西的那一行 | 发不出去，日志里有话说 |
+| 不拦编码 | **收的那一端**解码时抛，而 netty 的解码异常等于断开连接 | **对方莫名其妙掉线**，两边日志都指不到人 |
+
+`RequestChatImagePacket` 是 C2S 的，这一条尤其难看：超量的话服务端解码时抛，
+等于把发包的玩家自己踢下线。
+
+收进了 `core/net/Wire`（`writeList` / `readList` / `writeBytes` / `readBytes`），
+九处调用各缩成一行，两侧上限一起补齐。顺带修掉三处 `writeCollection` 的 lambda
+**捕获了外层的 buf 而不是用参数** —— 今天两者恰好是同一个对象，所以没出事。
+
+**二、手写的编解码没有往返测试。**
+
+那一支的编解码是组合子拼出来的，读写两侧**是同一份声明**；这边是两段各写一遍的
+手写代码，中间没有任何东西保证它们对得上。而写反的症状不是报错，是字段值乱七八糟
+（把 frames 与 frameMs 调个个儿，编译过、发得出、收得到，只是动画速度不对）。
+
+补了 `docs/ChatImagePacketTest.java`，47 条断言，覆盖那三个图片包与
+`ConversationSummary`（唯一带 `Optional` 的那个）的往返、空值边界、上限两侧。
+**这份测试自己也验过**：把 `SendChatImagePacket.decode` 里 frames 与 frameMs
+的读取顺序对调，它当场报出那两个字段的值互换了。
+
 #### 验收
 
 1. `./gradlew build` → `BUILD SUCCESSFUL`，**零 error、零 removal 告警**
-2. 断言测试从 6 个加到 **9 个**（`main` 那三个新的也搬了过来：
-   `ChatMessageCodecTest` 38、`GifDecodeTest` 33、`ImageEncodeTest` 55），
-   **122,330 条全绿**（28 + 80007 + 12301 + 30 + 91 + 29747 + 38 + 33 + 55）
-3. `verifyDistIsolation` → **146 个**非 client 类无一引用客户端类型；
+2. 断言测试从 6 个加到 **10 个**（`main` 那三个新的搬了过来：`ChatMessageCodecTest` 38、
+   `GifDecodeTest` 33、`ImageEncodeTest` 55；本支自己新写一个：`ChatImagePacketTest` 47），
+   **122,377 条全绿**（28 + 80007 + 12301 + 30 + 91 + 29747 + 38 + 33 + 55 + 47）
+3. `verifyDistIsolation` → **147 个**非 client 类无一引用客户端类型；
    `verifyServiceFiles` → 16 个类全部存在
 4. 资源树与 `main` 逐文件比对：除了数据包目录的单复数、`mods.toml`/`pack.mcmeta`
    与新加的那份 `camera_blur.json`，**一个文件都不差**
+5. `./gradlew compileJava -Pforge_version=47.4.0` 通过。这一刀用上了
+   `KeyModifier.getValues(boolean)`、`PostChain.addPass`、`PostPass.getEffect()`
+   三个新面孔，**声明的 Forge 下限仍然站得住**（发版 workflow 也会再跑一遍）
 
 **验不到的还是界面，而且这一刀欠得比前几刀多。** 发图、表情、GIF 播放、快捷键绑定、
 界面大小这五样全是要点着看的东西，眼下只有编译器与断言测试担保。

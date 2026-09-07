@@ -179,6 +179,12 @@ public final class CameraFlash {
                 // 两遍高斯：先横后竖，中间过一张与屏幕同尺寸的 swap。
                 // 走向与原版 blur.json 逐字相同，只是这里由代码加而不是由 json 声明
                 var swap = chain.getTempTarget(SWAP_TARGET);
+                // 取不到只有一个可能：资源包换掉了我们那份 json 又删了 targets。
+                // 不拦的话崩在 addPass 里面，报的是一句与 swap 毫无关系的 NPE
+                if (swap == null) {
+                    throw new IllegalStateException(
+                            "后处理链里没有名为 " + SWAP_TARGET + " 的中转贴图");
+                }
                 passH = chain.addPass(BLUR_PROGRAM, target, swap);
                 passV = chain.addPass(BLUR_PROGRAM, swap, target);
 

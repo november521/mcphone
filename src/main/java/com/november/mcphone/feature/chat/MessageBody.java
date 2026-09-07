@@ -14,13 +14,18 @@ import net.minecraft.network.chat.Component;
  * （分享物品、坐标……）又要再加几个。抽成正文之后，加一种消息＝加一个实现类，
  * 已有的两种一个字节都不必动。
  *
- * 本接口刻意【不写 default 方法】
+ * 本接口刻意【不写 default 方法】——下面那两个 encode / decode 是 static 而不是
+ * default，正是为了这一条
  *
  * 类初始化的时序：初始化一个类会连带初始化它那些【声明了 default 方法】的父接口。
  * 只要这里出现一个 default 方法，TextBody 的初始化就会拽着 MessageBody 一起初始化，
  * 而 MessageBody 的 CODEC 又要去问 MessageKind、MessageKind 的常量又要回头拿
  * TextBody.MAP_CODEC —— 绕成一个环，谁先被碰到谁就拿到一个还没赋值的 null。
  * 全部写成抽象方法则没有这个环。
+ *
+ * 所以【别把 encode 改写成实例方法】。写成 {@code body.encode(buf)} 更顺眼，但那是一个
+ * default 方法，加上去这个环就成立了：TextBody 一初始化就拽着 MessageBody 一起初始化。
+ * 症状是某个 CODEC 拿到 null，而且看哪个类先被碰到——也就是看运气。
  */
 public sealed interface MessageBody permits TextBody, ImageBody {
 

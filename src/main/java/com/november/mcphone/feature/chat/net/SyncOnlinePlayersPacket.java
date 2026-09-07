@@ -1,6 +1,6 @@
 package com.november.mcphone.feature.chat.net;
 
-import io.netty.handler.codec.DecoderException;
+import com.november.mcphone.core.net.Wire;
 import net.minecraft.network.FriendlyByteBuf;
 
 import java.util.List;
@@ -11,16 +11,13 @@ public record SyncOnlinePlayersPacket(List<OnlinePlayer> players, int totalOnlin
     public static final int MAX_PLAYERS = 200;
 
     public static void encode(SyncOnlinePlayersPacket msg, FriendlyByteBuf buf) {
-        buf.writeCollection(msg.players(), (b, v) -> OnlinePlayer.encode(v, buf));
+        Wire.writeList(buf, msg.players(), MAX_PLAYERS, OnlinePlayer::encode);
         buf.writeVarInt(msg.totalOnline());
     }
 
     public static SyncOnlinePlayersPacket decode(FriendlyByteBuf buf) {
         return new SyncOnlinePlayersPacket(
-                buf.readCollection(n -> {
-            if (n > MAX_PLAYERS) throw new DecoderException("列表超过上限 MAX_PLAYERS: " + n);
-            return new java.util.ArrayList<>(n);
-        }, b -> OnlinePlayer.decode(buf)),
+                Wire.readList(buf, MAX_PLAYERS, OnlinePlayer::decode),
                 buf.readVarInt());
     }
 

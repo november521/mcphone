@@ -1,6 +1,6 @@
 package com.november.mcphone.feature.chat.net;
 
-import io.netty.handler.codec.DecoderException;
+import com.november.mcphone.core.net.Wire;
 import net.minecraft.network.FriendlyByteBuf;
 
 import java.util.List;
@@ -25,23 +25,23 @@ public record RequestChatImagePacket(UUID peer, List<UUID> images) {
     /** 一次最多要几张。四张已经比一屏能显示的图还多 */
     public static final int MAX_IDS = 4;
 
+    /**
+     * 张数上限两侧都封死，见 {@link Wire}。
+     *
+     * 1.21.1 那边一句 ByteBufCodecs.list(MAX_IDS) 就带着两侧的上限；1.20.1 的
+     * readCollection / writeCollection 都没有上限参数，交给 Wire 补上。
+     *
+     * 发的那一侧尤其要拦：这是个 C2S 包，超量的话服务端会在解码时抛，而 netty 的
+     * 解码异常等于断开连接——症状是"点开一屏图就被踢下线"，而错在客户端。
+     */
     public static void encode(RequestChatImagePacket msg, FriendlyByteBuf buf) {
         buf.writeUUID(msg.peer());
-        buf.writeCollection(msg.images(), (b, v) -> b.writeUUID(v));
+        Wire.writeList(buf, msg.images(), MAX_IDS, (v, b) -> b.writeUUID(v));
     }
 
-    /**
-     * 张数上限在解码这一侧封死。
-     *
-     * 1.21.1 那边写成 ByteBufCodecs.list(MAX_IDS)，上限由组合子带着；1.20.1 的
-     * readCollection 【没有上限参数】，得自己在分配前拦一道。
-     */
     public static RequestChatImagePacket decode(FriendlyByteBuf buf) {
         UUID peer = buf.readUUID();
-        List<UUID> images = buf.readCollection(n -> {
-            if (n > MAX_IDS) throw new DecoderException("一次要的张数超过上限 " + MAX_IDS + ": " + n);
-            return new java.util.ArrayList<UUID>(n);
-        }, FriendlyByteBuf::readUUID);
+        List<UUID> images = Wire.readList(buf, MAX_IDS, FriendlyByteBuf::readUUID);
         return new RequestChatImagePacket(peer, images);
     }
 }

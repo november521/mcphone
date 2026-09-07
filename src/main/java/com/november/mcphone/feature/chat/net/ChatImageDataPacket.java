@@ -1,5 +1,6 @@
 package com.november.mcphone.feature.chat.net;
 
+import com.november.mcphone.core.net.Wire;
 import com.november.mcphone.feature.chat.ChatImage;
 import net.minecraft.network.FriendlyByteBuf;
 
@@ -14,16 +15,16 @@ import java.util.UUID;
  */
 public record ChatImageDataPacket(UUID image, byte[] data) {
 
+    /** 两侧都拦上限，理由见 {@link Wire}——漏了发的那一侧，挨罚的是收件人 */
     public static void encode(ChatImageDataPacket msg, FriendlyByteBuf buf) {
         buf.writeUUID(msg.image());
-        buf.writeByteArray(msg.data());
+        Wire.writeBytes(buf, msg.data(), ChatImage.MAX_BYTES_CEILING);
     }
 
-    /** 超量的字节在解码阶段就被拒收，轮不到业务层 */
     public static ChatImageDataPacket decode(FriendlyByteBuf buf) {
         return new ChatImageDataPacket(
                 buf.readUUID(),
-                buf.readByteArray(ChatImage.MAX_BYTES_CEILING));
+                Wire.readBytes(buf, ChatImage.MAX_BYTES_CEILING));
     }
 
     /** 没有这张图 */
