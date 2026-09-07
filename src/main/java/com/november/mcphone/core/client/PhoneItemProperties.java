@@ -28,7 +28,7 @@ public final class PhoneItemProperties {
 
     /** 模型 override 里写的那个键：{@code "mcphone:screen_on": 1} */
     public static final ResourceLocation SCREEN_ON =
-            new ResourceLocation(MCphone.MODID, "screen_on");
+            ResourceLocation.fromNamespaceAndPath(MCphone.MODID, "screen_on");
 
     /**
      * 由 {@code MCphoneClient.onClientSetup} 在 enqueueWork 里调。
