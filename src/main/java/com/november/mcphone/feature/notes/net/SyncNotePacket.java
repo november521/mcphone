@@ -2,7 +2,7 @@ package com.november.mcphone.feature.notes.net;
 
 import com.november.mcphone.MCphone;
 import com.november.mcphone.feature.notes.Note;
-import io.netty.buffer.ByteBuf;
+import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
@@ -14,11 +14,16 @@ public record SyncNotePacket(Note note) implements CustomPacketPayload {
             new CustomPacketPayload.Type<>(
                     ResourceLocation.fromNamespaceAndPath(MCphone.MODID, "sync_note"));
 
-    public static final StreamCodec<ByteBuf, SyncNotePacket> STREAM_CODEC =
-            StreamCodec.composite(
-                    Note.STREAM_CODEC, SyncNotePacket::note,
-                    SyncNotePacket::new
-            );
+    public static final StreamCodec<FriendlyByteBuf, SyncNotePacket> STREAM_CODEC =
+            StreamCodec.of((buf, msg) -> encode(msg, buf), SyncNotePacket::decode);
+
+    public static void encode(SyncNotePacket msg, FriendlyByteBuf buf) {
+        Note.encode(msg.note(), buf);
+    }
+
+    public static SyncNotePacket decode(FriendlyByteBuf buf) {
+        return new SyncNotePacket(Note.decode(buf));
+    }
 
     @Override
     public Type<? extends CustomPacketPayload> type() {

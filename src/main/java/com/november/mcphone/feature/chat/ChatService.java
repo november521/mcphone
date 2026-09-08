@@ -1,6 +1,6 @@
 package com.november.mcphone.feature.chat;
 
-import com.november.mcphone.core.ModAttachments;
+import com.november.mcphone.core.PhonePlayerData;
 import com.november.mcphone.core.ServerConfig;
 import com.november.mcphone.feature.chat.net.ConversationSummary;
 import com.november.mcphone.feature.chat.net.OnlinePlayer;
@@ -32,7 +32,7 @@ public final class ChatService {
 
         ChatData chat = ChatData.get(server);
         FriendData friends = FriendData.get(server);
-        ChatReadState read = self.getAttachedOrCreate(ModAttachments.CHAT_READ);
+        ChatReadState read = PhonePlayerData.of(self).chatRead();
 
         List<ConversationSummary> out = new ArrayList<>();
         for (UUID peer : friends.getFriends(selfId)) {
@@ -196,10 +196,11 @@ public final class ChatService {
     }
 
     private static void markReadAt(ServerPlayer self, UUID peer, long time) {
-        ChatReadState read = self.getAttachedOrCreate(ModAttachments.CHAT_READ);
+        PhonePlayerData data = PhonePlayerData.of(self);
+        ChatReadState read = data.chatRead();
         ChatReadState updated = read.withLastRead(peer, time);
         if (updated != read) {
-            self.setAttached(ModAttachments.CHAT_READ, updated);
+            data.setChatRead(updated);
         }
     }
 
@@ -273,10 +274,11 @@ public final class ChatService {
         FriendData friends = FriendData.get(self.server);
         if (!friends.removeFriendship(self.getUUID(), targetId)) return false;
 
-        ChatReadState read = self.getAttachedOrCreate(ModAttachments.CHAT_READ);
+        PhonePlayerData data = PhonePlayerData.of(self);
+        ChatReadState read = data.chatRead();
         ChatReadState updated = read.without(targetId);
         if (updated != read) {
-            self.setAttached(ModAttachments.CHAT_READ, updated);
+            data.setChatRead(updated);
         }
         return true;
     }

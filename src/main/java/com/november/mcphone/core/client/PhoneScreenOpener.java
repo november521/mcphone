@@ -48,6 +48,10 @@ public final class PhoneScreenOpener {
      *                 玩家身上不止一部时不能改错。
      */
     public static void open(PhoneLocation location) {
+        // 副手 HUD 上已经挂着一部亮着的手机，而且要开的就是它：把那一部挪到屏幕正中，
+        // 别另开。另开的话玩家身上就有了两部各记各页面的手机，见 PhoneHud.openFullscreen
+        if (PhoneHud.openFullscreen(location)) return;
+
         Minecraft.getInstance().setScreen(new PhoneScreen(location));
     }
 

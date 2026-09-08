@@ -2,8 +2,7 @@ package com.november.mcphone.feature.notes.net;
 
 import com.november.mcphone.MCphone;
 import com.november.mcphone.feature.notes.Note;
-import io.netty.buffer.ByteBuf;
-import net.minecraft.network.codec.ByteBufCodecs;
+import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
@@ -18,12 +17,19 @@ public record SaveNotePacket(int id, String body) implements CustomPacketPayload
             new CustomPacketPayload.Type<>(
                     ResourceLocation.fromNamespaceAndPath(MCphone.MODID, "save_note"));
 
-    public static final StreamCodec<ByteBuf, SaveNotePacket> STREAM_CODEC =
-            StreamCodec.composite(
-                    ByteBufCodecs.VAR_INT, SaveNotePacket::id,
-                    ByteBufCodecs.stringUtf8(Note.MAX_BODY_LENGTH), SaveNotePacket::body,
-                    SaveNotePacket::new
-            );
+    public static final StreamCodec<FriendlyByteBuf, SaveNotePacket> STREAM_CODEC =
+            StreamCodec.of((buf, msg) -> encode(msg, buf), SaveNotePacket::decode);
+
+    public static void encode(SaveNotePacket msg, FriendlyByteBuf buf) {
+        buf.writeVarInt(msg.id());
+        buf.writeUtf(msg.body(), Note.MAX_BODY_LENGTH);
+    }
+
+    public static SaveNotePacket decode(FriendlyByteBuf buf) {
+        return new SaveNotePacket(
+                buf.readVarInt(),
+                buf.readUtf(Note.MAX_BODY_LENGTH));
+    }
 
     @Override
     public Type<? extends CustomPacketPayload> type() {

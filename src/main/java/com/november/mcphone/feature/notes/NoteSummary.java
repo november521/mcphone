@@ -1,7 +1,6 @@
 package com.november.mcphone.feature.notes;
 
-import io.netty.buffer.ByteBuf;
-import net.minecraft.network.codec.ByteBufCodecs;
+import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 
 /**
@@ -14,13 +13,23 @@ public record NoteSummary(int id, String title, String preview, long modified) {
     public static final int MAX_TITLE_LENGTH = 40;
     public static final int MAX_PREVIEW_LENGTH = 60;
 
-    public static final StreamCodec<ByteBuf, NoteSummary> STREAM_CODEC = StreamCodec.composite(
-            ByteBufCodecs.VAR_INT, NoteSummary::id,
-            ByteBufCodecs.stringUtf8(MAX_TITLE_LENGTH), NoteSummary::title,
-            ByteBufCodecs.stringUtf8(MAX_PREVIEW_LENGTH), NoteSummary::preview,
-            ByteBufCodecs.VAR_LONG, NoteSummary::modified,
-            NoteSummary::new
-    );
+    public static final StreamCodec<FriendlyByteBuf, NoteSummary> STREAM_CODEC =
+            StreamCodec.of((buf, msg) -> encode(msg, buf), NoteSummary::decode);
+
+    public static void encode(NoteSummary msg, FriendlyByteBuf buf) {
+        buf.writeVarInt(msg.id());
+        buf.writeUtf(msg.title(), MAX_TITLE_LENGTH);
+        buf.writeUtf(msg.preview(), MAX_PREVIEW_LENGTH);
+        buf.writeVarLong(msg.modified());
+    }
+
+    public static NoteSummary decode(FriendlyByteBuf buf) {
+        return new NoteSummary(
+                buf.readVarInt(),
+                buf.readUtf(MAX_TITLE_LENGTH),
+                buf.readUtf(MAX_PREVIEW_LENGTH),
+                buf.readVarLong());
+    }
 
     public static NoteSummary of(Note note) {
         return new NoteSummary(

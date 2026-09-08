@@ -40,8 +40,25 @@ public final class ModDataComponents {
             .networkSynchronized(ByteBufCodecs.STRING_UTF8)
             .build();
 
+    /**
+     * 这部手机的屏幕正亮着 —— 物品模型据此在黑屏与白屏之间切（见 PhoneItemProperties）。
+     *
+     * <b>只同步、不落盘</b>，这是刻意的：它描述的是"此刻有人正开着它"，不是手机自身的属性。
+     * 给了 persistent 的话，玩家在开着手机时崩溃/退出，那部手机就会带着"亮着"存进存档，
+     * 下次进来永远亮着，而且谁也想不到要去关它。不落盘则重进世界自动回到黑屏。
+     *
+     * 由服务端在收到 {@code PhoneScreenOnPacket} 时写，客户端只读。写在物品堆上而不是玩家
+     * 附件上，是因为要给<b>别人</b>看：手持物品的同步走的是这个 ItemStack，附件是玩家私有的。
+     */
+    public static final DataComponentType<Boolean> SCREEN_ON = DataComponentType.<Boolean>builder()
+            .networkSynchronized(ByteBufCodecs.BOOL)
+            .build();
+
     /** 由 MCphone.onInitialize 调用 */
     public static void register() {
+        Registry.register(BuiltInRegistries.DATA_COMPONENT_TYPE,
+                ResourceLocation.fromNamespaceAndPath(MCphone.MODID, "screen_on"),
+                SCREEN_ON);
         Registry.register(BuiltInRegistries.DATA_COMPONENT_TYPE,
                 ResourceLocation.fromNamespaceAndPath(MCphone.MODID, "device_name"),
                 DEVICE_NAME);

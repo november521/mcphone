@@ -30,7 +30,7 @@ import java.util.List;
  *
  * 原来的「模组列表 → 配置」按钮（NeoForge 的 ConfigurationScreen）在 Fabric
  * 上不复存在：客户端配置改由游戏内的「设置 → 字体颜色 / App 管理器 / 音乐
- * 音量」等入口写回，路径与原来一致。
+ * 音量 / 界面大小 / 副手 HUD」等入口写回，路径与原来一致。
  */
 public final class ClientConfig {
 
@@ -46,6 +46,13 @@ public final class ClientConfig {
     private static int musicVolume = 100;
     private static List<String> appHotkeys = new ArrayList<>();
     private static boolean cameraSoftFlash = false;
+    private static int uiScale = PhoneScale.DEFAULT_PERCENT;
+    private static boolean uiScaleSnap = true;
+    private static boolean hudEnabled = true;
+    private static PhoneHudPlacement.Anchor hudAnchor = PhoneHudPlacement.DEFAULT_ANCHOR;
+    private static int hudOffsetX = 0;
+    private static int hudOffsetY = 0;
+    private static int hudScale = PhoneHudPlacement.DEFAULT_PERCENT;
 
     /** 客户端启动时读一次；文件不存在就写默认值 */
     public static void load() {
@@ -58,6 +65,13 @@ public final class ClientConfig {
                 musicVolume = Math.max(0, Math.min(100, getInt(obj, "musicVolume", 100)));
                 appHotkeys = new ArrayList<>(getStrings(obj, "appHotkeys"));
                 cameraSoftFlash = getBool(obj, "cameraSoftFlash", false);
+                uiScale = PhoneScale.clamp(getInt(obj, "uiScale", PhoneScale.DEFAULT_PERCENT));
+                uiScaleSnap = getBool(obj, "uiScaleSnap", true);
+                hudEnabled = getBool(obj, "hudEnabled", true);
+                hudAnchor = parseAnchor(getString(obj, "hudAnchor", PhoneHudPlacement.DEFAULT_ANCHOR.name()));
+                hudOffsetX = PhoneHudPlacement.clampOffset(getInt(obj, "hudOffsetX", 0));
+                hudOffsetY = PhoneHudPlacement.clampOffset(getInt(obj, "hudOffsetY", 0));
+                hudScale = PhoneHudPlacement.clampPercent(getInt(obj, "hudScale", PhoneHudPlacement.DEFAULT_PERCENT));
             } else {
                 Files.createDirectories(path.getParent());
                 save();
@@ -71,6 +85,13 @@ public final class ClientConfig {
             musicVolume = 100;
             appHotkeys = new ArrayList<>();
             cameraSoftFlash = false;
+            uiScale = PhoneScale.DEFAULT_PERCENT;
+            uiScaleSnap = true;
+            hudEnabled = true;
+            hudAnchor = PhoneHudPlacement.DEFAULT_ANCHOR;
+            hudOffsetX = 0;
+            hudOffsetY = 0;
+            hudScale = PhoneHudPlacement.DEFAULT_PERCENT;
             loaded = true;
             apply();
         }
@@ -90,6 +111,13 @@ public final class ClientConfig {
 
         // 快门闪光也一样：闪光那 220 毫秒里每帧都要问一次用哪种
         CameraFlash.setSoft(cameraSoftFlash);
+
+        // 界面倍数更甚：每一帧、每一次鼠标换算都要用
+        PhoneScale.load(uiScale);
+        PhoneScale.loadSnap(uiScaleSnap);
+
+        // HUD 同理：它每帧都要问位置与倍数，那是渲染路径上最热的地方
+        PhoneHudPlacement.load(hudEnabled, hudAnchor, hudOffsetX, hudOffsetY, hudScale);
     }
 
     private static void save() {
@@ -101,6 +129,13 @@ public final class ClientConfig {
         for (String s : appHotkeys) arr.add(s);
         obj.add("appHotkeys", arr);
         obj.addProperty("cameraSoftFlash", cameraSoftFlash);
+        obj.addProperty("uiScale", uiScale);
+        obj.addProperty("uiScaleSnap", uiScaleSnap);
+        obj.addProperty("hudEnabled", hudEnabled);
+        obj.addProperty("hudAnchor", hudAnchor.name());
+        obj.addProperty("hudOffsetX", hudOffsetX);
+        obj.addProperty("hudOffsetY", hudOffsetY);
+        obj.addProperty("hudScale", hudScale);
         try {
             Files.writeString(file(), new com.google.gson.GsonBuilder().setPrettyPrinting().create().toJson(obj),
                     StandardCharsets.UTF_8);
@@ -146,6 +181,14 @@ public final class ClientConfig {
         }
     }
 
+    private static PhoneHudPlacement.Anchor parseAnchor(String name) {
+        try {
+            return PhoneHudPlacement.Anchor.valueOf(name);
+        } catch (IllegalArgumentException e) {
+            return PhoneHudPlacement.DEFAULT_ANCHOR;
+        }
+    }
+
     //  手机界面 → 配置
 
     /**
@@ -182,6 +225,54 @@ public final class ClientConfig {
     public static void saveCameraSoftFlash(boolean soft) {
         if (!loaded) return;
         cameraSoftFlash = soft;
+        save();
+    }
+
+    /**
+     * 玩家在「设置 → 界面大小」里改了倍数。
+     *
+     * 与上面几项同一套路数：{@link PhoneScale} 那边已经用上新值了（下一帧就变），
+     * 这里只负责落盘。
+     */
+    public static void saveUiScale(int percent) {
+        if (!loaded) return;
+        uiScale = PhoneScale.clamp(percent);
+        save();
+    }
+
+    /** 「贴合清晰倍数」那个开关翻了面 */
+    public static void saveUiScaleSnap(boolean value) {
+        if (!loaded) return;
+        uiScaleSnap = value;
+        save();
+    }
+
+    /**
+     * 副手 HUD 的开关。与上面几项同一套路数：{@link PhoneHudPlacement} 那边
+     * 已经用上新值了（下一帧就变），这里只负责落盘。
+     */
+    public static void saveHudEnabled(boolean value) {
+        if (!loaded) return;
+        hudEnabled = value;
+        save();
+    }
+
+    /**
+     * 位置分成一个方法而不是三个：锚点与两个偏移是【一起】算出来的一份结果
+     * （见 {@link PhoneHudPlacement#derive}），分三次写会在中途存出一个
+     * 「新锚点配旧偏移」的组合——那一瞬间落盘失败的话，手机就摆到了谁也没要的地方。
+     */
+    public static void saveHudPlacement(PhoneHudPlacement.Anchor anchor, int offsetX, int offsetY) {
+        if (!loaded) return;
+        hudAnchor = anchor;
+        hudOffsetX = PhoneHudPlacement.clampOffset(offsetX);
+        hudOffsetY = PhoneHudPlacement.clampOffset(offsetY);
+        save();
+    }
+
+    public static void saveHudScale(int percent) {
+        if (!loaded) return;
+        hudScale = PhoneHudPlacement.clampPercent(percent);
         save();
     }
 

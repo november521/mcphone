@@ -4,7 +4,7 @@ import com.november.mcphone.feature.store.PurchasedApps;
 import com.november.mcphone.feature.store.net.PurchaseAppPacket;
 import com.november.mcphone.feature.store.net.RequestPurchasedAppsPacket;
 import net.minecraft.resources.ResourceLocation;
-import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
+import com.november.mcphone.core.net.MCphoneNetwork;
 
 /**
  * 客户端这一侧记着"我买过哪些 App"。
@@ -46,7 +46,7 @@ public final class StoreClientCache {
     }
 
     /** 由 S2C 同步包调用 */
-    static void set(PurchasedApps value) {
+    public static void set(PurchasedApps value) {
         purchased = value == null ? PurchasedApps.EMPTY : value;
         synced = true;
         if (syncListener != null) syncListener.run();
@@ -62,13 +62,13 @@ public final class StoreClientCache {
 
     /** 向服务端要一份最新的。进商店时调 */
     public static void request() {
-        ClientPlayNetworking.send(new RequestPurchasedAppsPacket());
+        MCphoneNetwork.sendToServer(new RequestPurchasedAppsPacket());
     }
 
     /** 发起一次购买。结果会以同步包的形式回来 */
     public static void purchase(ResourceLocation appId) {
         if (appId == null) return;
-        ClientPlayNetworking.send(new PurchaseAppPacket(appId));
+        MCphoneNetwork.sendToServer(new PurchaseAppPacket(appId));
     }
 
     /**

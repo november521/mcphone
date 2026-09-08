@@ -27,8 +27,8 @@ import java.util.List;
  *
  * 判断"装没装"只算一次
  *
- * ModList 在运行期不会变，而 {@link #rewrite} 是每次重扫书架都要对每本书调一遍的。
- * 几十本书 × 几条特例，每条都去查一次 ModList 没有必要。
+ * 模组列表在运行期不会变，而 {@link #rewrite} 是每次重扫书架都要对每本书调一遍的。
+ * 几十本书 × 几条特例，每条都去查一次 ModPresence 没有必要。
  */
 public final class BookQuirks {
 

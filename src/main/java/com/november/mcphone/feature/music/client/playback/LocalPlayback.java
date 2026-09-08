@@ -6,6 +6,7 @@ import com.november.mcphone.MCphone;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.sounds.AudioStream;
 import net.minecraft.sounds.SoundSource;
+import net.minecraft.util.Mth;
 import org.lwjgl.openal.AL;
 import org.lwjgl.openal.ALC10;
 import org.lwjgl.openal.ALCapabilities;
@@ -163,7 +164,7 @@ public final class LocalPlayback {
 
     /** App 里的音量，0..1，下一 tick 生效 */
     public static void setVolume(float v) {
-        volume = Math.clamp(v, 0.0F, 1.0F);
+        volume = Mth.clamp(v, 0.0F, 1.0F);
     }
 
     public static float getVolume() {

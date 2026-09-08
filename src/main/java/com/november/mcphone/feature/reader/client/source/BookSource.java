@@ -1,8 +1,8 @@
 package com.november.mcphone.feature.reader.client.source;
 
 import com.november.mcphone.feature.reader.BookRef;
+import com.november.mcphone.platform.ModPresence;
 import net.minecraft.client.gui.GuiGraphics;
-import net.fabricmc.loader.api.FabricLoader;
 
 import java.util.List;
 
@@ -75,15 +75,8 @@ public interface BookSource {
         return false;
     }
 
-    /**
-     * 一个模组的显示名，列表第二行写的就是它。
-     *
-     * 从 ModList 现拿而不是写死：这种名字对方自己会改，有的模组还会本地化它。
-     * 查不到就退回 modid——总比空着强，至少玩家还认得出是哪一个。
-     */
+    /** 一个模组的显示名，列表第二行写的就是它。为什么现拿、查不到怎么办，见 {@link ModPresence#displayName}。 */
     static String modName(String modId) {
-        return FabricLoader.getInstance().getModContainer(modId)
-                .map(container -> container.getMetadata().getName())
-                .orElse(modId);
+        return ModPresence.displayName(modId);
     }
 }

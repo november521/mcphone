@@ -3,9 +3,9 @@ package com.november.mcphone.feature.waystone.client;
 import com.november.mcphone.api.client.app.RequiredMod;
 import com.november.mcphone.compat.WaystonesCompat;
 import com.november.mcphone.core.client.PhoneApp;
+import com.november.mcphone.core.net.MCphoneNetwork;
 import com.november.mcphone.feature.waystone.net.OpenWaystoneSelectionPacket;
 import net.minecraft.network.chat.Component;
-import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 
 import java.util.List;
 
@@ -54,6 +54,13 @@ public final class WaystoneApp extends PhoneApp {
     @Override
     public void onPress() {
         // 只发包不自己开界面：菜单与传送的校验都只有服务端说了算
-        ClientPlayNetworking.send(new OpenWaystoneSelectionPacket());
+        MCphoneNetwork.sendToServer(new OpenWaystoneSelectionPacket());
     }
+
+    /**
+     * 界面不在手机里：开的是 Waystones 自己那张传送点列表。快捷键因此不先开机，
+     * 理由与末影箱那一格相同。
+     */
+    @Override
+    public boolean opensInsidePhone() { return false; }
 }

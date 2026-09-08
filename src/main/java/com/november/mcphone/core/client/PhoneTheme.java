@@ -71,7 +71,7 @@ public final class PhoneTheme {
      * 导航栏三个键【用贴图时】悬停提亮的倍数。字符符号走上面那个颜色，贴图改不了颜色只能整张乘一下。
      * 1.8 让自带的 #828282 亮到 #EAEAEA，与字符版 #888→#FFF 的观感相当；再高会把浅色贴图压成一片白。
      */
-    public static final float NAV_ICON_HOVER_BRIGHTNESS = 1.8f;
+    public static final float SKIN_HOVER_BRIGHTNESS = 1.8f;
 
     /** 通知里的发信人名字与右上角条数。底是 COLOR_TOAST_BG */
     public static final int FONT_COLOR_TOAST_TITLE = 0xFFFFFFFF;
@@ -197,6 +197,23 @@ public final class PhoneTheme {
      * 输入框的底，沉下去更合适。
      */
     public static final int COLOR_READER_TAB = 0xFF3A3A52;
+
+    // ---- 滑条（设置里的界面大小，将来的音量条也用这一组）----
+
+    /** 滑条的槽。比搜索栏再暗一档，让填充那段跳出来 */
+    public static final int COLOR_SLIDER_TRACK = 0xFF23233A;
+
+    /** 已填充的那一段 */
+    public static final int COLOR_SLIDER_FILL = 0xFF43A047;
+
+    /** 滑块本身。近白，是这一页上最亮的东西——手要抓的就是它 */
+    public static final int COLOR_SLIDER_KNOB = 0xFFE8E8F0;
+
+    /** 加减键的底 */
+    public static final int COLOR_STEP_BUTTON = 0xFF3A3A52;
+
+    /** 加减键悬停时的底。没有贴图时靠换颜色，有贴图时由 PhoneSkin 整张提亮 */
+    public static final int COLOR_STEP_BUTTON_HOVER = 0xFF4E4E6E;
 
     public static final int COLOR_VIEWFINDER = 0xCCFFFFFF;
 

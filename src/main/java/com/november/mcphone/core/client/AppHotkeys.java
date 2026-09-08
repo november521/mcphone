@@ -213,12 +213,17 @@ public final class AppHotkeys {
         if (binding == null || binding.key().equals(InputConstants.UNKNOWN)) return;
         BOUND.entrySet().removeIf(e -> e.getValue().equals(binding));
         BOUND.put(appId, binding);
+        // 留一行日志：绑键是玩家一次一次做的事，不会刷屏；而"按了没反应"这类问题，
+        // 有没有这一行就是"没绑上"与"绑上了但按下去没认出来"的分界线
+        MCphone.LOGGER.info("[MCphone] 快捷键：{} 绑到 {}", appId, binding.serialize());
         ClientConfig.saveAppHotkeys(serialize());
     }
 
     /** 解绑并存盘。本来就没绑就什么都不做，省一次无谓的写盘 */
     public static void clear(ResourceLocation appId) {
-        if (BOUND.remove(appId) != null) ClientConfig.saveAppHotkeys(serialize());
+        if (BOUND.remove(appId) == null) return;
+        MCphone.LOGGER.info("[MCphone] 快捷键：{} 解绑", appId);
+        ClientConfig.saveAppHotkeys(serialize());
     }
 
     //  配置 ←→ 这张表

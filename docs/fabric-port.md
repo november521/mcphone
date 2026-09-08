@@ -66,3 +66,23 @@ java -cp /tmp/animtest AnimMotionTest
   load `ClientPlayNetworking`.
 - Mixins (`KeyboardHandlerMixin`, `KeyMappingAccessor`, `SoundEngineMixin`) are client-only,
   declared under `client` in `mcphone.mixins.json`.
+
+## 1.10.1-beta.1 同步（2026-09-08，merge 6f4947a）
+
+上游 v1.9.3→v1.10.1-beta.1 已合入（终端 App、副手 HUD、3D 模型、快捷键直达、界面大小页）。
+上游 1.10.1 的加载器隔离重构（MCphoneNetwork / PhoneItemData / PhonePlayerData /
+ModPresence 门面）把 1.9.2 移植时的接缝补丁收编了：调用面代码逐字取上游，Fabric 差异
+只剩门面实现——
+
+- `MCphoneNetwork.registerToClient`：候车室模式（共享阶段登记编解码 + 挂起接收器，
+  `core/client/ClientNetworking` 在客户端启动时领走注册）。S2C 处理函数回到共享
+  `*Networking` 类，四个 feature `*NetworkingClient` 类删除。
+- `PhonePlayerData`：Fabric 附件直转（getAttachedOrCreate / setAttached）；
+  PHONE_TERMINAL 的客户端同步 NeoForge 靠附件 sync()，这里手工补
+  `SyncPhoneTerminalPacket`（写入时发 + JOIN 推初值）。
+- 终端 App 的 Fabric 真实后端是 **RS 与 Tom's Storage**（AE2/ae2wtlib 在 1.21.1
+  没有 Fabric 构建，其集成只是 compileOnly 死代码）；TR Energy 4.1.0 取自 RS 发布包
+  内嵌 jar（libs/energy-4.1.0.jar）。
+- 断言测试挂进 check（上游做法原样采纳，11 份随 build 跑）。
+
+完整决策与遗留见 `D:\Claude_ds\mcphone-fabric-handoff-1.10.1-beta.1-fabric.1.md`。

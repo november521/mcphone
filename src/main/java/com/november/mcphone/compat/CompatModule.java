@@ -1,6 +1,6 @@
 package com.november.mcphone.compat;
 
-import net.fabricmc.loader.api.FabricLoader;
+import com.november.mcphone.platform.ModPresence;
 
 /**
  * 一个针对某个外部模组的兼容模块。
@@ -32,7 +32,7 @@ public interface CompatModule {
      * 的版本上还去动人家的东西。
      */
     default boolean isNeeded() {
-        return FabricLoader.getInstance().isModLoaded(targetModId());
+        return ModPresence.isLoaded(targetModId());
     }
 
     /**

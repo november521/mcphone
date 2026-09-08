@@ -2,8 +2,8 @@ package com.november.mcphone.feature.notes;
 
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
-import io.netty.buffer.ByteBuf;
-import net.minecraft.network.codec.ByteBufCodecs;
+import com.november.mcphone.core.net.Wire;
+import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 
 import java.util.ArrayList;
@@ -31,12 +31,27 @@ public record NoteList(List<Note> notes) {
 
     public static final int MAX_COUNT = 50;
 
-    /** 条数上限在编解码器层面封死，伪造客户端塞不进更多 */
-    public static final StreamCodec<ByteBuf, NoteList> STREAM_CODEC = StreamCodec.composite(
-            Note.STREAM_CODEC.apply(ByteBufCodecs.list(MAX_COUNT)),
-            NoteList::notes,
-            NoteList::new
-    );
+    /**
+     * 条数上限在编解码器层面封死，伪造客户端塞不进更多；两侧都拦，见 {@link Wire}。
+     *
+     * ⚠ <b>这三个成员（本字段与下面的 encode/decode）眼下全仓零使用者。</b>笔记走线的是
+     * {@code SyncNoteListPacket(List&lt;NoteSummary&gt;)} 与 {@code SyncNotePacket(Note)}，
+     * 从来不是 NoteList 本身；玩家数据那一侧走的是 {@link #CODEC}（存档用的那个），
+     * 不是这个。
+     *
+     * 留着而不是删掉，是因为"删不删"与"换编解码写法"是两件事，混在一起做会让这次改动
+     * 的范围说不清。<b>真要动它，请单独一次提交。</b>
+     */
+    public static final StreamCodec<FriendlyByteBuf, NoteList> STREAM_CODEC =
+            StreamCodec.of((buf, msg) -> encode(msg, buf), NoteList::decode);
+
+    public static void encode(NoteList msg, FriendlyByteBuf buf) {
+        Wire.writeList(buf, msg.notes(), MAX_COUNT, Note::encode);
+    }
+
+    public static NoteList decode(FriendlyByteBuf buf) {
+        return new NoteList(Wire.readList(buf, MAX_COUNT, Note::decode));
+    }
 
     public boolean isEmpty() {
         return notes.isEmpty();

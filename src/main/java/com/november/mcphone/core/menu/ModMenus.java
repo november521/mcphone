@@ -2,6 +2,7 @@ package com.november.mcphone.core.menu;
 
 import com.november.mcphone.MCphone;
 import com.november.mcphone.feature.music.menu.DiscBayMenu;
+import com.november.mcphone.feature.terminal.menu.TerminalSlotMenu;
 import net.minecraft.core.Registry;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
@@ -37,6 +38,19 @@ public final class ModMenus {
             FeatureFlags.DEFAULT_FLAGS);
 
     /**
+     * 手机终端卡槽 —— 一个终端格 ＋ 玩家背包，形状和下面的唱片仓一样。
+     *
+     * 客户端与服务端共用同一个构造，不像下面两个要占位容器：卡槽的内容是
+     * 玩家附件（见 {@link com.november.mcphone.feature.terminal.TerminalSlot}），
+     * 服务端在写入与登录时都会把值推给客户端（Fabric 1.21.1 的附件没有自动
+     * 同步，走的是手工的 {@code SyncPhoneTerminalPacket}），客户端本来就读得到，
+     * 不必等原版的容器同步包。
+     */
+    public static final MenuType<TerminalSlotMenu> TERMINAL_SLOT = new MenuType<>(
+            TerminalSlotMenu::new,
+            FeatureFlags.DEFAULT_FLAGS);
+
+    /**
      * 唱片仓 —— 一个唱片格 ＋ 玩家背包。
      *
      * 存在的理由是手机界面里没有背包：不开这个界面的话，玩家想把一张唱片
@@ -51,6 +65,9 @@ public final class ModMenus {
         Registry.register(BuiltInRegistries.MENU,
                 ResourceLocation.fromNamespaceAndPath(MCphone.MODID, "ender_chest"),
                 ENDER_CHEST);
+        Registry.register(BuiltInRegistries.MENU,
+                ResourceLocation.fromNamespaceAndPath(MCphone.MODID, "terminal_slot"),
+                TERMINAL_SLOT);
         Registry.register(BuiltInRegistries.MENU,
                 ResourceLocation.fromNamespaceAndPath(MCphone.MODID, "disc_bay"),
                 DISC_BAY);

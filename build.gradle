@@ -28,6 +28,14 @@ repositories {
             includeGroup "maven.modrinth"
         }
     }
+    // ae2wtlib 的 api 模块（de.mari_023）只发布在 modmaven
+    maven {
+        name = "modmaven"
+        url = "https://modmaven.dev"
+        content {
+            includeGroup "de.mari_023"
+        }
+    }
 }
 
 dependencies {
@@ -50,6 +58,26 @@ dependencies {
     modCompileOnly "maven.modrinth:mcef:2.1.6-1.21.1"
     modCompileOnly "maven.modrinth:net-music:1.5.2-fabric+mc1.21.1"
     modCompileOnly "maven.modrinth:patchouli:1.21.1-93-fabric"
+
+    // === 「终端」App：三家存储模组（上游 1.10.0 新增，1.10.1 同步进来） ===
+    //
+    // AE2 与 ae2wtlib 在 1.21.1 上【只有 NeoForge 构建】（AE2 官方 Fabric 移植
+    // 到 19.x 没有出），所以这两家取 NeoForge jar 只为 javac——它已经是 Mojang
+    // 名，正是我们的编译名，用 plain compileOnly 而不是 modCompileOnly：
+    // NeoForge jar 没有 intermediary 映射，交给 Loom remap 反而会炸。
+    // 运行期 Fabric 上它们不存在，对应集成永远不会激活 —— 是死代码但无害。
+    compileOnly "maven.modrinth:ae2:${ae2_version}"
+    compileOnly "de.mari_023:ae2wtlib_api:${ae2wtlib_api_version}"
+    //
+    // RS 与 Tom's：都有 Fabric 构建，是 Fabric 版「终端」的两家真实后端。
+    // modCompileOnly：这两个 jar 是 intermediary 名，要 Loom remap 成 Mojang 名
+    modCompileOnly "maven.modrinth:refined-storage:${refinedstorage_version}"
+    modCompileOnly "maven.modrinth:toms-storage:${toms_version}"
+    //
+    // TR Energy —— TerminalCharger 给卡槽里的终端补电用（RS Fabric 版用它）。
+    // teamreborn 的 maven 本机网络不可达，jar 取自 RS 发布包里嵌的那份
+    // （META-INF/jars/energy-4.1.0.jar，MIT），放进 libs/ 交给 Loom remap
+    modCompileOnly files("libs/energy-4.1.0.jar")
 }
 
 loom {
@@ -189,6 +217,80 @@ tasks.register('verifyDistIsolation') {
 }
 
 tasks.named('check').configure { dependsOn tasks.named('verifyDistIsolation') }
+
+// ============================================================
+//  断言测试（上游 1.10.1 同步：把 docs/ 下的测试挂进 check）
+// ============================================================
+//
+// docs/ 下那几份 *Test.java 是带 main() 的独立断言测试，守的是线格式与
+// 编解码这类"坏了也不报错"的地方。上游 1.10.1 起把它们挂进 check 跟着
+// 每次 build 跑；这套发现/挂载逻辑与加载器无关，Fabric 侧原样可用。
+// docs/AddonApiExamples.java 没有 main()，只编不跑——"编得过"本身就是它的校验。
+
+def assertTestsClasses = layout.buildDirectory.dir('classes/assert-tests')
+// 递归而不是只扫顶层：把测试挪进子目录是个再自然不过的整理动作，而顶层写死的
+// '*.java' 遇上它是【静默少跑几份】，不是报错。
+def assertTestsSource = fileTree('docs') { include '**/*.java' }
+def projectToolchain = java.toolchain
+
+// 哪几份带 main()：读文件头现判，【不要】在这里维护一张手写清单。
+// 加了一份测试却忘了往清单里补，症状是"构建绿的，但那份根本没跑"。
+def assertTestMains = assertTestsSource.files.toSorted { it.name }.findResults { f ->
+    def text = f.getText('UTF-8')
+    // 修饰符顺序不固定（static public void main 一样合法），所以两个词分开断言。
+    // 用单引号字符串写正则而不是 /…/ 字面量：斜杠字面量里的 \b 会被某些
+    // 生成链路转义坏，字符串形式跨工具链都稳定
+    def mainDecl = text.find(/(?m)^[ \t]*public[ \t]+static[ \t]+void[ \t]+main[ \t]*\(/)
+        ?: text.find(/(?m)^[ \t]*static[ \t]+public[ \t]+void[ \t]+main[ \t]*\(/)
+    if (mainDecl == null) return null
+    def pkg = (text =~ /(?m)^[ \t]*package[ \t]+([\w.]+)[ \t]*;/)
+    def simple = f.name - '.java'
+    (pkg ? "${pkg[0][1]}.${simple}" : simple).toString()
+}
+
+tasks.register('compileAssertTests', JavaCompile) {
+    description = '编译 docs/ 下的断言测试与 API 示例'
+    group = 'verification'
+
+    source = assertTestsSource
+    classpath = files(sourceSets.main.output, sourceSets.main.compileClasspath)
+    destinationDirectory = assertTestsClasses
+    javaCompiler = javaToolchains.compilerFor(projectToolchain)
+}
+
+def assertTestTasks = assertTestMains.collect { fqcn ->
+    def simple = fqcn.substring(fqcn.lastIndexOf('.') + 1)
+    tasks.register("assertTest${simple}", JavaExec) {
+        description = "跑 ${simple}"
+        group = 'verification'
+        dependsOn tasks.named('compileAssertTests')
+        classpath = files(assertTestsClasses, sourceSets.main.output, sourceSets.main.compileClasspath)
+        mainClass = fqcn
+        javaLauncher = javaToolchains.launcherFor(projectToolchain)
+    }
+}
+
+tasks.register('assertTests') {
+    description = '跑 docs/ 下所有带 main() 的断言测试'
+    group = 'verification'
+    dependsOn assertTestTasks
+
+    def names = assertTestMains.collect { it.substring(it.lastIndexOf('.') + 1) }
+
+    // 一份都没发现，绝不能当成"没有测试"就放行：那意味着发现逻辑坏了
+    // （文件被挪走、正则被格式化打断），而 check 会照样全绿。
+    doFirst {
+        if (names.isEmpty()) {
+            throw new GradleException(
+                    'docs/ 下一份带 main() 的断言测试都没找到。' +
+                    '这不是"没有测试"，是发现逻辑坏了。')
+        }
+    }
+
+    doLast { logger.lifecycle("断言测试 ${names.size()} 份跑完：${names.join('、')}") }
+}
+
+tasks.named('check').configure { dependsOn tasks.named('assertTests') }
 
 publishing {
     publications {

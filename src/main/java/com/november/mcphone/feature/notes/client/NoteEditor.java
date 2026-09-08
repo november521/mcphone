@@ -1,5 +1,6 @@
 package com.november.mcphone.feature.notes.client;
 
+import com.november.mcphone.core.net.MCphoneNetwork;
 import com.november.mcphone.feature.notes.Note;
 import com.november.mcphone.feature.notes.NoteService;
 import com.november.mcphone.feature.notes.net.DeleteNotePacket;
@@ -7,15 +8,15 @@ import com.november.mcphone.feature.notes.net.NotesClientCache;
 import com.november.mcphone.feature.notes.net.RequestNotePacket;
 import com.november.mcphone.feature.notes.net.SaveNotePacket;
 import com.november.mcphone.core.client.FontPalette;
+import com.november.mcphone.api.client.ui.PhoneMultiLineEditBox;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.MultiLineEditBox;
 import net.minecraft.network.chat.Component;
-import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 
 /**
- * 笔记编辑界面，多行输入用原版 MultiLineEditBox。本界面下所有按键都必须被
- * PhoneScreen 吞掉，否则打拼音按到 e 会命中背包键。正文异步到达，只填一次。
+ * 笔记编辑界面，多行输入用 {@link PhoneMultiLineEditBox}（原版 MultiLineEditBox 只换掉了
+ * 它自己那句裁剪——直接用原版的，界面放大后正文顶上几行会整行不见）。本界面下所有按键
+ * 都必须被 PhoneScreen 吞掉，否则打拼音按到 e 会命中背包键。正文异步到达，只填一次。
  */
 public final class NoteEditor {
 
@@ -36,7 +37,7 @@ public final class NoteEditor {
 
     private static int colorArmed() { return FontPalette.armed(); }
 
-    private MultiLineEditBox box;
+    private PhoneMultiLineEditBox box;
 
     /** 正在编辑哪一条；{@link NoteService#NEW_NOTE_ID} 表示新建 */
     private int noteId = NoteService.NEW_NOTE_ID;
@@ -61,7 +62,7 @@ public final class NoteEditor {
         resetBox();
 
         NotesClientCache.openNote(id);
-        ClientPlayNetworking.send(new RequestNotePacket(id));
+        MCphoneNetwork.sendToServer(new RequestNotePacket(id));
     }
 
     public void openNew() {
@@ -109,7 +110,7 @@ public final class NoteEditor {
 
         // 首次渲染才创建，之后每帧同步位置：手机居中的位置随窗口大小变化
         if (box == null) {
-            box = new MultiLineEditBox(font, x, top, boxW, boxH,
+            box = new PhoneMultiLineEditBox(font, x, top, boxW, boxH,
                     Component.translatable("mcphone.notes.placeholder"),
                     Component.translatable("mcphone.app.notes"));
             box.setCharacterLimit(Note.MAX_BODY_LENGTH);
@@ -192,7 +193,7 @@ public final class NoteEditor {
     private void save() {
         if (box == null) return;
         deleteArmed = false;
-        ClientPlayNetworking.send(new SaveNotePacket(noteId, box.getValue()));
+        MCphoneNetwork.sendToServer(new SaveNotePacket(noteId, box.getValue()));
         backRequested = true;
     }
 
@@ -202,7 +203,7 @@ public final class NoteEditor {
             return;
         }
         deleteArmed = false;
-        ClientPlayNetworking.send(new DeleteNotePacket(noteId));
+        MCphoneNetwork.sendToServer(new DeleteNotePacket(noteId));
         backRequested = true;
     }
 }

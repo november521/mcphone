@@ -2,7 +2,7 @@ package com.november.mcphone.api.client.app;
 
 import com.november.mcphone.api.client.ui.IPhonePage;
 import com.november.mcphone.core.client.GuiUtil;
-import net.fabricmc.loader.api.FabricLoader;
+import com.november.mcphone.platform.ModPresence;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
@@ -10,7 +10,7 @@ import net.minecraft.resources.ResourceLocation;
 import java.util.List;
 
 /**
- * MCphone 的 App 接口——实现它并用 Java SPI 注册，你的 App 就会出现在手机里。上手步骤见 {@code docs/addon-api.md}。
+ * MCphone 的 App 接口——实现它并用 Java SPI 注册，你的 App 就会出现在手机里。上手步骤见 wiki 的{@code Addon-Quickstart}。
  *
  * <b>本接口是客户端专用的</b>：{@link #renderIcon} 的签名里有 GuiGraphics，实现类只能在客户端加载，
  * 被物品或网络包顺带引用到会让专用服务器启动即崩。实现类请放在 {@code yourmod.client} 包下。
@@ -54,6 +54,28 @@ public interface IPhoneApp {
      * @return 要显示的页面；null 表示走 {@link #onPress()}
      */
     default IPhonePage openPage() { return null; }
+
+    /**
+     * 你这个 App 的界面在不在手机里。只有【快捷键】那条路看这个数。
+     *
+     * true（默认）＝ 在手机里：{@link #openPage()} 那一页，或者 {@link #onPress()} 里
+     * 靠手机界面完成的跳转。快捷键先开机，再把玩家送进你这一页——和点图标完全同一条路。
+     *
+     * false ＝ 不在：{@link #onPress()} 自己 {@code setScreen} 一个别的界面，或者只发个包
+     * 让服务端开容器（内建的「终端」「末影箱」「传送石」「任务书」「浏览器」「相机」都是
+     * 这一种）。声明成 false 之后，快捷键<b>不再先把手机开出来</b>，直接调你的
+     * {@link #onPress()}——手机仍然要在玩家身上，否则这一下什么都不做。
+     *
+     * 为什么要你自己说，而不是我们看出来
+     *
+     * 从外面看不出来。只发包的那种，{@code onPress()} 返回的那一刻界面还没变（要等服务端
+     * 把容器开回来），和"什么都没做"分不出；而先开机再被你的界面顶掉，玩家是看得见手机
+     * 闪一下的——快捷键的全部意义正是省掉中间那一步。
+     *
+     * 默认 true 是为了不动老附属的行为：{@code onPress()} 里那句
+     * {@code if (screen instanceof PhoneScreen ps)} 照样成立。
+     */
+    default boolean opensInsidePhone() { return true; }
 
     /**
      * 主屏图标右上角的角标数，0（默认）表示不画。像手机上的未读红点：有几条没看的就显几。
@@ -125,7 +147,7 @@ public interface IPhoneApp {
      */
     default boolean isAvailable() {
         for (RequiredMod required : requiredMods()) {
-            if (!FabricLoader.getInstance().isModLoaded(required.modId())) return false;
+            if (!ModPresence.isLoaded(required.modId())) return false;
         }
         return true;
     }

@@ -1,8 +1,7 @@
 package com.november.mcphone.feature.notes.net;
 
 import com.november.mcphone.MCphone;
-import io.netty.buffer.ByteBuf;
-import net.minecraft.network.codec.ByteBufCodecs;
+import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
@@ -14,11 +13,16 @@ public record DeleteNotePacket(int id) implements CustomPacketPayload {
             new CustomPacketPayload.Type<>(
                     ResourceLocation.fromNamespaceAndPath(MCphone.MODID, "delete_note"));
 
-    public static final StreamCodec<ByteBuf, DeleteNotePacket> STREAM_CODEC =
-            StreamCodec.composite(
-                    ByteBufCodecs.VAR_INT, DeleteNotePacket::id,
-                    DeleteNotePacket::new
-            );
+    public static final StreamCodec<FriendlyByteBuf, DeleteNotePacket> STREAM_CODEC =
+            StreamCodec.of((buf, msg) -> encode(msg, buf), DeleteNotePacket::decode);
+
+    public static void encode(DeleteNotePacket msg, FriendlyByteBuf buf) {
+        buf.writeVarInt(msg.id());
+    }
+
+    public static DeleteNotePacket decode(FriendlyByteBuf buf) {
+        return new DeleteNotePacket(buf.readVarInt());
+    }
 
     @Override
     public Type<? extends CustomPacketPayload> type() {

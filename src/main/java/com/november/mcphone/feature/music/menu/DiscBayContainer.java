@@ -1,6 +1,6 @@
 package com.november.mcphone.feature.music.menu;
 
-import com.november.mcphone.core.ModAttachments;
+import com.november.mcphone.core.PhonePlayerData;
 import com.november.mcphone.feature.music.DiscService;
 import com.november.mcphone.feature.music.DiscState;
 import net.minecraft.server.level.ServerPlayer;
@@ -9,8 +9,8 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 
 /**
- * 把玩家的 {@link ModAttachments#DISC} 附件包装成只有一格的 {@link Container}，给 {@link DiscBayMenu} 用。
- * 不存任何东西，读写都直接落到附件，避免两份数据要同步。
+ * 把玩家的唱片仓（{@link PhonePlayerData#disc()}）包装成只有一格的 {@link Container}，给 {@link DiscBayMenu} 用。
+ * 不存任何东西，读写都直接落到那份数据上，避免两份要同步。
  * 换碟必须先掐掉正在放的：停止包按那张唱片的音效 ID 发，得趁旧唱片还在时算。
  * 本类会被专用服务器加载，不许出现客户端类。
  */
@@ -25,13 +25,14 @@ public final class DiscBayContainer implements Container {
     }
 
     private DiscState state() {
-        return player.getAttachedOrCreate(ModAttachments.DISC);
+        return PhonePlayerData.of(player).disc();
     }
 
     /** 先掐声音再换碟：停止包要靠旧唱片的音效 ID */
     private void setDisc(ItemStack stack) {
         DiscService.stopPlayback(player);
-        player.setAttached(ModAttachments.DISC, state().withDisc(stack));
+        PhonePlayerData data = PhonePlayerData.of(player);
+        data.setDisc(data.disc().withDisc(stack));
     }
 
     @Override

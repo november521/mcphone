@@ -1,9 +1,11 @@
 package com.november.mcphone.core.client;
 
+import com.google.gson.JsonObject;
 import com.november.mcphone.MCphone;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.packs.metadata.MetadataSectionSerializer;
 import net.minecraft.server.packs.resources.Resource;
 
 import java.io.InputStream;
@@ -60,7 +62,7 @@ public final class PhoneSkin {
         /** 拖图标停在屏幕边上时的翻页提示条。建议 10×176（竖条），整张按透明度淡入，画实心即可；兜底色 {@link PhoneTheme#COLOR_PAGE_EDGE} */
         HOME_PAGE_EDGE("phone/page_edge", "home_page_edge"),
 
-        /** 自己发出的聊天气泡底。整张拉伸（无九宫格），纯色或纵向渐变最稳妥 */
+        /** 自己发出的聊天气泡底。默认整张拉伸；mcphone_skin.border 元数据可启用固定边角 */
         CHAT_BUBBLE_SELF("chat/bubble_self", "chat_bubble_self"),
 
         /** 对方发来的聊天气泡底。拉伸方式同 {@link #CHAT_BUBBLE_SELF} */
@@ -129,6 +131,15 @@ public final class PhoneSkin {
         /** 浏览器工具条底（后退/前进/刷新 + 地址栏）。建议 320×22；在面板外面，浮在上方留白里 */
         BROWSER_BAR("browser/bar", "browser_bar"),
 
+        /** 工具条上的「后退」。建议 22×18（整个键框，不是居中的小图标）；缺图时画 ◀ 字符 */
+        BROWSER_BACK("browser/back"),
+
+        /** 「前进」。建议 22×18；缺图时画 ▶ 字符 */
+        BROWSER_FORWARD("browser/forward"),
+
+        /** 「刷新」。建议 22×18；缺图时画 ↻ 字符。三个键点不动时整张按透明度压暗 */
+        BROWSER_RELOAD("browser/reload"),
+
         /**
          * 书架列表里那本兜底的书。建议 16×16，按实际绘制尺寸画（不做平滑缩放）；
          * 兜底色 {@link PhoneTheme#COLOR_BOOK_SPINE}。
@@ -146,13 +157,39 @@ public final class PhoneSkin {
         READER_UNSHELVED("reader/unshelved", "reader_unshelved"),
 
         /** 底部「书架 / 书城」当前那一页的底。建议 54×12，整张拉伸；兜底色 {@link PhoneTheme#COLOR_READER_TAB}。另一页不画底 */
-        READER_TAB("reader/tab", "reader_tab");
+        READER_TAB("reader/tab", "reader_tab"),
+
+        /**
+         * 滑条的槽（「设置 → 界面大小」那一条）。建议 100×6，整张横向拉伸；
+         * 兜底色 {@link PhoneTheme#COLOR_SLIDER_TRACK}。
+         * 这一组四件是【通用滑条】，不是界面大小专用——将来音量条之类的也走它们。
+         */
+        SLIDER_TRACK("settings/slider_track"),
+
+        /** 滑条已填充的那一段。建议 100×6，按当前值裁宽后拉伸；兜底色 {@link PhoneTheme#COLOR_SLIDER_FILL} */
+        SLIDER_FILL("settings/slider_fill"),
+
+        /** 滑块。建议 4×14（比槽高，压在槽上）；兜底色 {@link PhoneTheme#COLOR_SLIDER_KNOB} */
+        SLIDER_KNOB("settings/slider_knob"),
+
+        /** 加减键的底。建议 14×14；兜底色 {@link PhoneTheme#COLOR_STEP_BUTTON}，悬停时整张提亮 */
+        STEP_BUTTON("settings/step_button");
 
         /** 现在的路径，按功能分目录 */
         private final ResourceLocation texture;
 
         /** 1.2.7 之前 textures/gui/ 下的老路径，为兼容已发布的资源包保留；新路径找不到才回退 */
         private final ResourceLocation legacyTexture;
+
+        /**
+         * 1.2.7 之后才有的元素。那次改路径之前不存在，也就没有老路径要兼容——
+         * 给它编一个 textures/gui/ 下的名字只会让人以为那儿曾经有过东西。
+         */
+        Element(String path) {
+            this.texture = ResourceLocation.fromNamespaceAndPath(
+                    MCphone.MODID, "textures/" + path + ".png");
+            this.legacyTexture = null;
+        }
 
         Element(String path, String legacyFileName) {
             this.texture = ResourceLocation.fromNamespaceAndPath(
@@ -171,7 +208,18 @@ public final class PhoneSkin {
     }
 
     /** 一张已确认存在的贴图及其真实尺寸 */
-    private record SkinTexture(ResourceLocation location, int width, int height) {}
+    private record SkinTexture(ResourceLocation location, int width, int height, int border) {}
+
+    /** 可选的源像素边宽；未声明时沿用旧资源包的整张拉伸行为。 */
+    private static final MetadataSectionSerializer<Integer> SKIN_METADATA = new MetadataSectionSerializer<>() {
+        @Override
+        public String getMetadataSectionName() { return "mcphone_skin"; }
+
+        @Override
+        public Integer fromJson(JsonObject json) {
+            return json.has("border") ? json.get("border").getAsInt() : 0;
+        }
+    };
 
     /** 探测结果缓存；empty（没有这张贴图）也要缓存，否则缺贴图的元素每帧都要查一次资源管理器 */
     private static final Map<Element, Optional<SkinTexture>> CACHE = new HashMap<>();
@@ -193,7 +241,11 @@ public final class PhoneSkin {
         if (tex == null) return false;
 
         // 走 GuiUtil 而不是 g.blit：原版那条 blit 不开混合，半透明贴图会被当成不透明画
-        GuiUtil.drawTexture(g, tex.location(), x, y, w, h, tex.width(), tex.height());
+        if (tex.border() > 0) {
+            GuiUtil.drawNineSlice(g, tex.location(), x, y, w, h, tex.width(), tex.height(), tex.border());
+        } else {
+            GuiUtil.drawTexture(g, tex.location(), x, y, w, h, tex.width(), tex.height());
+        }
         return true;
     }
 
@@ -205,9 +257,30 @@ public final class PhoneSkin {
     /** 画贴图；没有贴图则用兜底色填满同一区域 */
     public static void drawOrFill(GuiGraphics g, Element element,
                                   int x, int y, int w, int h, int fallbackColor) {
-        if (!draw(g, element, x, y, w, h)) {
-            g.fill(x, y, x + w, y + h, fallbackColor);
+        drawOrFill(g, element, x, y, w, h, fallbackColor, false);
+    }
+
+    /**
+     * 与上面那个一样，外加"这一下要不要提亮"。
+     *
+     * 【贴图改不了颜色】。悬停、按下这类状态，在只有兜底色的年代是换一个颜色画出来的，
+     * 一旦这个位上真有了贴图，那个颜色就再也没人看得见——状态跟着一起消失，而且不报错。
+     * 有贴图时只能整张按倍数提亮：资源包画的是什么颜色，亮起来还是那个颜色。
+     *
+     * 兜底色那条路【不】跟着提亮：调用方给的颜色本来就是按状态挑的，再亮一次就过了。
+     */
+    public static void drawOrFill(GuiGraphics g, Element element,
+                                  int x, int y, int w, int h, int fallbackColor,
+                                  boolean highlight) {
+        if (highlight) {
+            float b = PhoneTheme.SKIN_HOVER_BRIGHTNESS;
+            g.setColor(b, b, b, 1.0F);
         }
+        boolean drawn = draw(g, element, x, y, w, h);
+        // 必须在画兜底色之前还原：setColor 会一路乘到后面画的每一样东西上
+        if (highlight) g.setColor(1.0F, 1.0F, 1.0F, 1.0F);
+
+        if (!drawn) g.fill(x, y, x + w, y + h, fallbackColor);
     }
 
     private static Optional<SkinTexture> resolve(Element element) {
@@ -221,6 +294,8 @@ public final class PhoneSkin {
 
         Optional<SkinTexture> found = read(mc, element.texture());
         if (found.isPresent()) return found;
+
+        if (element.legacyTexture() == null) return Optional.empty();
 
         found = read(mc, element.legacyTexture());
         if (found.isPresent()) {
@@ -243,7 +318,16 @@ public final class PhoneSkin {
                 MCphone.LOGGER.warn("[MCphone] {} 不是有效的 PNG，忽略", loc);
                 return Optional.empty();
             }
-            return Optional.of(new SkinTexture(loc, size[0], size[1]));
+            int border = 0;
+            try {
+                int requested = res.get().metadata().getSection(SKIN_METADATA).orElse(0);
+                if (requested > 0 && requested <= (Math.min(size[0], size[1]) - 1) / 2) {
+                    border = requested;
+                }
+            } catch (Exception e) {
+                MCphone.LOGGER.warn("[MCphone] {} 的圆角元数据无效，使用整张拉伸: {}", loc, e.toString());
+            }
+            return Optional.of(new SkinTexture(loc, size[0], size[1], border));
         } catch (Exception e) {
             MCphone.LOGGER.warn("[MCphone] 读取贴图 {} 失败: {}", loc, e.toString());
             return Optional.empty();

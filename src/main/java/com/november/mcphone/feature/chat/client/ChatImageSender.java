@@ -3,6 +3,7 @@ package com.november.mcphone.feature.chat.client;
 import com.november.mcphone.MCphone;
 import com.november.mcphone.core.client.GifCodec;
 import com.november.mcphone.core.client.ImageCodec;
+import com.november.mcphone.core.net.MCphoneNetwork;
 import com.november.mcphone.feature.chat.ChatImage;
 import com.november.mcphone.feature.chat.ChatMessage;
 import com.november.mcphone.feature.chat.ImageBody;
@@ -10,7 +11,6 @@ import com.november.mcphone.feature.chat.net.SendChatImagePacket;
 import net.minecraft.Util;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
-import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 
 import java.awt.AlphaComposite;
 import java.awt.Graphics2D;
@@ -404,7 +404,7 @@ public final class ChatImageSender {
             byte[] chunk = new byte[to - from];
             System.arraycopy(png, from, chunk, 0, chunk.length);
 
-            ClientPlayNetworking.send(new SendChatImagePacket(
+            MCphoneNetwork.sendToServer(new SendChatImagePacket(
                     peer, encoded.width(), encoded.height(), encoded.frames(), encoded.frameMs(),
                     index, chunkCount, chunk));
         }

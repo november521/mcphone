@@ -44,6 +44,9 @@ public final class BrowserScreen extends Screen {
 
     private static final float NAV_GLYPH_SCALE = 1.6f;
 
+    /** 点不动时贴图压到多透明。字符那一档是换成灰色，贴图只能这么表达 */
+    private static final float DISABLED_ALPHA = 0.35f;
+
     // 修饰键掩码用 GLFW 那一套，不是 AWT 的：MCEF 把它原样塞进 Cef 事件并按 GLFW 值判断，
     // 混用不报错，只会让快捷键永远不触发
     private static final int MOD_SHIFT = 1;   // GLFW_MOD_SHIFT
@@ -245,9 +248,12 @@ public final class BrowserScreen extends Screen {
         PhoneSkin.drawOrFill(g, PhoneSkin.Element.BROWSER_BAR,
                 panelX, barY, panelW, BAR_H, PhoneTheme.COLOR_STATUS_BAR);
 
-        drawNavButton(g, 0, "◀", mouseX, mouseY, browser != null && browser.canGoBack());
-        drawNavButton(g, 1, "▶", mouseX, mouseY, browser != null && browser.canGoForward());
-        drawNavButton(g, 2, "↻", mouseX, mouseY, browser != null);
+        drawNavButton(g, 0, PhoneSkin.Element.BROWSER_BACK, "◀",
+                mouseX, mouseY, browser != null && browser.canGoBack());
+        drawNavButton(g, 1, PhoneSkin.Element.BROWSER_FORWARD, "▶",
+                mouseX, mouseY, browser != null && browser.canGoForward());
+        drawNavButton(g, 2, PhoneSkin.Element.BROWSER_RELOAD, "↻",
+                mouseX, mouseY, browser != null);
         drawLoadingDot(g);
 
         // 玩家没在编辑时，地址栏跟着网页走；正在编辑时不覆盖，否则打字打到一半会被刷掉
@@ -262,17 +268,28 @@ public final class BrowserScreen extends Screen {
     }
 
     /**
-     * 一个导航键。图标放大画：先 translate 到目标位置再 scale、在原点画——
+     * 一个导航键。贴图优先、字符兜底，与音乐播放器那几个键同一套。
+     *
+     * 悬停的高亮块画在【底下】，所以贴图不必自己表达悬停。点不动那一档不一样：
+     * 兜底字符是换颜色，贴图改不了颜色，只能整张压暗——不压的话三个键长得一模一样，
+     * 玩家看不出后退是不是还点得动。
+     *
+     * 字符那一档要放大画：先 translate 到目标位置再 scale、在原点画——
      * 缩放一个非原点坐标会让图标越大偏得越多。
      */
-    private void drawNavButton(GuiGraphics g, int index, String glyph,
-                               int mouseX, int mouseY, boolean enabled) {
+    private void drawNavButton(GuiGraphics g, int index, PhoneSkin.Element element,
+                               String glyph, int mouseX, int mouseY, boolean enabled) {
         int x = panelX + 2 + index * NAV_BTN_W;
         int y = barY + 2;
         int h = BAR_H - 4;
         boolean hovered = enabled && GuiUtil.hit(mouseX, mouseY, x, y, NAV_BTN_W, h);
 
         if (hovered) g.fill(x, y, x + NAV_BTN_W, y + h, PhoneTheme.COLOR_APP_PRESSED);
+
+        if (!enabled) g.setColor(1.0F, 1.0F, 1.0F, DISABLED_ALPHA);
+        boolean drawn = PhoneSkin.draw(g, element, x, y, NAV_BTN_W, h);
+        if (!enabled) g.setColor(1.0F, 1.0F, 1.0F, 1.0F);
+        if (drawn) return;
 
         int color = !enabled ? PhoneTheme.COLOR_BUTTON_DISABLED
                 : hovered ? FontPalette.title()

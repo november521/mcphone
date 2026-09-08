@@ -40,7 +40,6 @@ public class PhoneItem extends Item {
      * 发消息、凭空开末影箱，而那种客户端同样变不出一部手机来。
      *
      * 原版的 contains 会连主背包、盔甲栏、副手一起扫，手上那只自然也在内。
-     *
      * （原 NeoForge 版还会扫 Curios 饰品槽，见 CuriosCompat；Curios 在
      * 1.21.1 的 Fabric 上没有构建，故 Fabric 版只查手上与背包。）
      */
@@ -77,7 +76,7 @@ public class PhoneItem extends Item {
      */
     @Override
     public Component getName(ItemStack stack) {
-        String deviceName = stack.get(ModDataComponents.DEVICE_NAME);
+        String deviceName = PhoneItemData.getDeviceName(stack);
         if (deviceName != null && !deviceName.isBlank()) {
             return Component.literal(deviceName);
         }

@@ -21,6 +21,6 @@ public abstract class KeyboardHandlerMixin {
     @Inject(method = "keyPress", at = @At("HEAD"))
     private void mcphone$onKeyPress(long window, int key, int scancode, int action,
                                     int modifiers, CallbackInfo ci) {
-        AppHotkeyHandler.onKeyInput(key, scancode, action, modifiers);
+        AppHotkeyHandler.onKeyInput(key, scancode, action);
     }
 }

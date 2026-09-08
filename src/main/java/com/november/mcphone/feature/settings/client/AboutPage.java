@@ -8,11 +8,12 @@ import com.november.mcphone.core.client.FontPalette;
 import com.november.mcphone.core.client.GuiUtil;
 import com.november.mcphone.core.client.PhoneScreenRegistry;
 import com.november.mcphone.core.client.PhoneTheme;
+import com.november.mcphone.platform.ModPresence;
 import net.minecraft.SharedConstants;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
-import net.fabricmc.loader.api.FabricLoader;
+import net.minecraft.util.Mth;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -83,11 +84,11 @@ public final class AboutPage {
         final int top = y;
         final int bottom = phoneTop + screenH - navH;
 
-        scrollPx = Math.clamp(scrollPx, 0, maxScroll);
+        scrollPx = Mth.clamp(scrollPx, 0, maxScroll);
         y -= scrollPx;
 
         // 裁掉滚出去的部分，否则正文会画到状态栏和导航栏上
-        g.enableScissor(x, top, x + w, bottom);
+        GuiUtil.enableScissor(g, x, top, x + w, bottom);
 
         // ---- 名字与版本 ----
         g.drawString(font, "MCphone", x, y, FontPalette.title(), false);
@@ -112,9 +113,8 @@ public final class AboutPage {
                 x, y, FontPalette.subtle(), false);
         y += font.lineHeight + 2;
 
-        // NetMusic 是"能力型"联动：装了多点东西，但都不对应任何
+        // Curios 与 NetMusic 都是"能力型"联动：装了多点东西，但都不对应任何
         // 一个 App，所以从 App 的前置声明里汇总不出来，只能单独写在这儿。
-        // （原 NeoForge 版还列了 Curios；Curios 在 1.21.1 Fabric 上没有构建，故不列。）
         // 这一页存在的理由就是回答玩家"我怎么没有这个"，漏一条他就会把
         // "功能不见了"当成 bug 来报
         y = compatRow(g, font, x, y, w,
@@ -129,10 +129,10 @@ public final class AboutPage {
         // 玩家往下滚就能看到。截断是那个 bug 本身，不是它的兜底。
         for (RequiredMod mod : companionMods()) {
             y = compatRow(g, font, x, y, w, mod.displayName(),
-                    FabricLoader.getInstance().isModLoaded(mod.modId()));
+                    ModPresence.isLoaded(mod.modId()));
         }
 
-        g.disableScissor();
+        GuiUtil.disableScissor(g);
 
         // 这一帧画到哪儿，就是内容有多高；下一帧的滚动上限按它来
         maxScroll = Math.max(0, (y + scrollPx) - bottom);
@@ -142,7 +142,7 @@ public final class AboutPage {
     public boolean mouseScrolled(double scrollY, Font font) {
         int step = font.lineHeight * 3;
         int before = scrollPx;
-        scrollPx = Math.clamp(scrollPx - (int) (scrollY * step), 0, maxScroll);
+        scrollPx = Mth.clamp(scrollPx - (int) (scrollY * step), 0, maxScroll);
         return scrollPx != before;
     }
 

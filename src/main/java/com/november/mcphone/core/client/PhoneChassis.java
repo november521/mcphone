@@ -238,7 +238,7 @@ public final class PhoneChassis {
             // 用倍数而不是换成白色：资源包画的是什么颜色，亮起来还是那个颜色。
             // 设了就必须还原，否则后面画的东西跟着变亮
             if (isHovered) {
-                float b = PhoneTheme.NAV_ICON_HOVER_BRIGHTNESS;
+                float b = PhoneTheme.SKIN_HOVER_BRIGHTNESS;
                 g.setColor(b, b, b, 1f);
             }
             // 按键图标可换肤；没有贴图就画原来的字符符号

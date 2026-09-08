@@ -62,7 +62,7 @@ public final class BookSources {
      * 「阅读」App 靠它决定自己在不在（见 ReaderApp.isAvailable）：一个只装了
      * 沉浸工程、没装 Patchouli 的整合包里，书城照样有东西可看，App 就不该藏起来。
      *
-     * 只问各书源的 isAvailable()，那几个方法只碰 ModList，不会把别人的类拖进来。
+     * 只问各书源的 isAvailable()，那几个方法只碰 ModPresence，不会把别人的类拖进来。
      */
     public static boolean anyAvailable() {
         for (BookSource source : SOURCES) {

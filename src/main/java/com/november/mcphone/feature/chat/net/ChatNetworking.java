@@ -1,5 +1,6 @@
 package com.november.mcphone.feature.chat.net;
 
+import com.november.mcphone.core.net.MCphoneNetwork;
 import com.november.mcphone.feature.chat.ChatImage;
 import com.november.mcphone.feature.chat.ChatImageStore;
 import com.november.mcphone.feature.chat.ConversationKey;
@@ -10,8 +11,6 @@ import com.november.mcphone.feature.chat.ChatOutcome;
 import com.november.mcphone.feature.chat.ImageOutcome;
 import com.november.mcphone.feature.chat.TeleportService;
 import com.november.mcphone.core.net.RequestThrottle;
-import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
-import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.Util;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
@@ -21,76 +20,129 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
-/**
- * 聊天相关网络包（服务端一半）。只做传输层的事；业务规则在 {@link ChatService}。
- *
- * S2C 的注册与客户端接收在 {@code feature/chat/client/ChatNetworkingClient}——
- * ClientPlayNetworking 是客户端专用类，不能出现在会被专用服务器加载的本类里。
- * Fabric 的服务端回调跑在主线程，原来的 enqueueWork 去掉。
- */
+/** 聊天相关网络包的注册与处理，只做传输层的事；业务规则在 {@link ChatService}。 */
 public final class ChatNetworking {
 
     private ChatNetworking() {}
 
-    /** 由 NetworkHandler.registerServer 调用 */
-    public static void registerServer() {
-        PayloadTypeRegistry.playC2S().register(RequestConversationsPacket.TYPE, RequestConversationsPacket.STREAM_CODEC);
-        ServerPlayNetworking.registerGlobalReceiver(RequestConversationsPacket.TYPE, ChatNetworking::handleRequestConversations);
+    /** 由 NetworkHandler.register 调用 */
+    public static void register() {
+        MCphoneNetwork.registerToServer(
+                RequestConversationsPacket.TYPE,
+                RequestConversationsPacket.STREAM_CODEC,
+                ChatNetworking::handleRequestConversations
+        );
 
-        PayloadTypeRegistry.playC2S().register(RequestMessagesPacket.TYPE, RequestMessagesPacket.STREAM_CODEC);
-        ServerPlayNetworking.registerGlobalReceiver(RequestMessagesPacket.TYPE, ChatNetworking::handleRequestMessages);
+        MCphoneNetwork.registerToClient(
+                SyncConversationsPacket.TYPE,
+                SyncConversationsPacket.STREAM_CODEC,
+                ChatNetworking::handleSyncConversations
+        );
 
-        PayloadTypeRegistry.playC2S().register(MarkReadPacket.TYPE, MarkReadPacket.STREAM_CODEC);
-        ServerPlayNetworking.registerGlobalReceiver(MarkReadPacket.TYPE, ChatNetworking::handleMarkRead);
+        MCphoneNetwork.registerToServer(
+                RequestMessagesPacket.TYPE,
+                RequestMessagesPacket.STREAM_CODEC,
+                ChatNetworking::handleRequestMessages
+        );
 
-        PayloadTypeRegistry.playC2S().register(SendChatMessagePacket.TYPE, SendChatMessagePacket.STREAM_CODEC);
-        ServerPlayNetworking.registerGlobalReceiver(SendChatMessagePacket.TYPE, ChatNetworking::handleSendMessage);
+        MCphoneNetwork.registerToClient(
+                SyncMessagesPacket.TYPE,
+                SyncMessagesPacket.STREAM_CODEC,
+                ChatNetworking::handleSyncMessages
+        );
 
-        PayloadTypeRegistry.playC2S().register(SendChatImagePacket.TYPE, SendChatImagePacket.STREAM_CODEC);
-        ServerPlayNetworking.registerGlobalReceiver(SendChatImagePacket.TYPE, ChatNetworking::handleSendImage);
+        MCphoneNetwork.registerToServer(
+                MarkReadPacket.TYPE,
+                MarkReadPacket.STREAM_CODEC,
+                ChatNetworking::handleMarkRead
+        );
 
-        PayloadTypeRegistry.playC2S().register(RequestChatImagePacket.TYPE, RequestChatImagePacket.STREAM_CODEC);
-        ServerPlayNetworking.registerGlobalReceiver(RequestChatImagePacket.TYPE, ChatNetworking::handleRequestImage);
+        MCphoneNetwork.registerToServer(
+                SendChatMessagePacket.TYPE,
+                SendChatMessagePacket.STREAM_CODEC,
+                ChatNetworking::handleSendMessage
+        );
 
-        PayloadTypeRegistry.playC2S().register(RequestOnlinePlayersPacket.TYPE, RequestOnlinePlayersPacket.STREAM_CODEC);
-        ServerPlayNetworking.registerGlobalReceiver(RequestOnlinePlayersPacket.TYPE, ChatNetworking::handleRequestOnlinePlayers);
+        MCphoneNetwork.registerToClient(
+                NewMessagePacket.TYPE,
+                NewMessagePacket.STREAM_CODEC,
+                ChatNetworking::handleNewMessage
+        );
 
-        PayloadTypeRegistry.playC2S().register(FriendRequestPacket.TYPE, FriendRequestPacket.STREAM_CODEC);
-        ServerPlayNetworking.registerGlobalReceiver(FriendRequestPacket.TYPE, ChatNetworking::handleFriendRequest);
+        MCphoneNetwork.registerToServer(
+                SendChatImagePacket.TYPE,
+                SendChatImagePacket.STREAM_CODEC,
+                ChatNetworking::handleSendImage
+        );
 
-        PayloadTypeRegistry.playC2S().register(RespondFriendRequestPacket.TYPE, RespondFriendRequestPacket.STREAM_CODEC);
-        ServerPlayNetworking.registerGlobalReceiver(RespondFriendRequestPacket.TYPE, ChatNetworking::handleRespondFriendRequest);
+        MCphoneNetwork.registerToServer(
+                RequestChatImagePacket.TYPE,
+                RequestChatImagePacket.STREAM_CODEC,
+                ChatNetworking::handleRequestImage
+        );
 
-        PayloadTypeRegistry.playC2S().register(RemoveFriendPacket.TYPE, RemoveFriendPacket.STREAM_CODEC);
-        ServerPlayNetworking.registerGlobalReceiver(RemoveFriendPacket.TYPE, ChatNetworking::handleRemoveFriend);
+        MCphoneNetwork.registerToClient(
+                ChatImageDataPacket.TYPE,
+                ChatImageDataPacket.STREAM_CODEC,
+                ChatNetworking::handleImageData
+        );
 
-        PayloadTypeRegistry.playC2S().register(TeleportToFriendPacket.TYPE, TeleportToFriendPacket.STREAM_CODEC);
-        ServerPlayNetworking.registerGlobalReceiver(TeleportToFriendPacket.TYPE, ChatNetworking::handleTeleportToFriend);
+        MCphoneNetwork.registerToServer(
+                RequestOnlinePlayersPacket.TYPE,
+                RequestOnlinePlayersPacket.STREAM_CODEC,
+                ChatNetworking::handleRequestOnlinePlayers
+        );
+
+        MCphoneNetwork.registerToClient(
+                SyncOnlinePlayersPacket.TYPE,
+                SyncOnlinePlayersPacket.STREAM_CODEC,
+                ChatNetworking::handleSyncOnlinePlayers
+        );
+
+        MCphoneNetwork.registerToServer(
+                FriendRequestPacket.TYPE,
+                FriendRequestPacket.STREAM_CODEC,
+                ChatNetworking::handleFriendRequest
+        );
+
+        MCphoneNetwork.registerToServer(
+                RespondFriendRequestPacket.TYPE,
+                RespondFriendRequestPacket.STREAM_CODEC,
+                ChatNetworking::handleRespondFriendRequest
+        );
+
+        MCphoneNetwork.registerToServer(
+                RemoveFriendPacket.TYPE,
+                RemoveFriendPacket.STREAM_CODEC,
+                ChatNetworking::handleRemoveFriend
+        );
+
+        MCphoneNetwork.registerToServer(
+                TeleportToFriendPacket.TYPE,
+                TeleportToFriendPacket.STREAM_CODEC,
+                ChatNetworking::handleTeleportToFriend
+        );
     }
 
     /** 读操作故意不校验手机：只是读自己的数据，加检查只会在玩家边走边收消息时误伤 */
-    private static void handleRequestConversations(RequestConversationsPacket packet,
-                                                   ServerPlayNetworking.Context ctx) {
-        ServerPlayer player = ctx.player();
+    private static void handleRequestConversations(RequestConversationsPacket packet, ServerPlayer player) {
         if (!RequestThrottle.allow(player, RequestThrottle.Kind.CONVERSATIONS)) return;
 
         List<ConversationSummary> conversations = ChatService.buildConversations(player);
-        ServerPlayNetworking.send(player, new SyncConversationsPacket(conversations));
+        MCphoneNetwork.sendToPlayer(player, new SyncConversationsPacket(conversations));
     }
 
     /** 顺带标已读：玩家看到了，未读数就该清零 */
-    private static void handleRequestMessages(RequestMessagesPacket packet, ServerPlayNetworking.Context ctx) {
-        ServerPlayer player = ctx.player();
+    private static void handleRequestMessages(RequestMessagesPacket packet, ServerPlayer player) {
         if (!RequestThrottle.allow(player, RequestThrottle.Kind.MESSAGES)) return;
 
         List<ChatMessage> messages = ChatService.getMessages(player, packet.peer());
         ChatService.markRead(player, packet.peer());
-        ServerPlayNetworking.send(player, new SyncMessagesPacket(packet.peer(), messages));
+        MCphoneNetwork.sendToPlayer(player, new SyncMessagesPacket(packet.peer(), messages));
     }
 
     /** 不回包：未读数随下一轮会话列表下发。不校验好友：写的只是自己的已读进度，构不成滥用 */
-    private static void handleMarkRead(MarkReadPacket packet, ServerPlayNetworking.Context ctx) {
-        ServerPlayer player = ctx.player();
+    private static void handleMarkRead(MarkReadPacket packet, ServerPlayer player) {
         if (!RequestThrottle.allow(player, RequestThrottle.Kind.MARK_READ)) return;
         ChatService.markRead(player, packet.peer());
     }
@@ -99,19 +151,17 @@ public final class ChatNetworking {
      * 校验没过时静默丢弃：能触发的只有伪造客户端。
      * 发件人也要收到回声才显示自己那条——客户端不做乐观插入，免得被丢弃的消息留在界面上。
      */
-    private static void handleSendMessage(SendChatMessagePacket packet, ServerPlayNetworking.Context ctx) {
-        ServerPlayer sender = ctx.player();
-
+    private static void handleSendMessage(SendChatMessagePacket packet, ServerPlayer sender) {
         ChatMessage message = ChatService.sendMessage(sender, packet.target(), packet.text());
         if (message == null) return;
 
         // 回声给发件人：站在他的角度，对端是收件人
-        ServerPlayNetworking.send(sender, new NewMessagePacket(packet.target(), message));
+        MCphoneNetwork.sendToPlayer(sender, new NewMessagePacket(packet.target(), message));
 
         // 收件人在线才推送；离线的话消息已落库，上线拉列表时会看到
         ServerPlayer receiver = sender.server.getPlayerList().getPlayer(packet.target());
         if (receiver != null) {
-            ServerPlayNetworking.send(receiver,
+            MCphoneNetwork.sendToPlayer(receiver,
                     new NewMessagePacket(sender.getUUID(), message));
         }
     }
@@ -122,9 +172,7 @@ public final class ChatNetworking {
      * 门禁与限流都只在第一片上做：中间几片被拦掉的话这次上传横竖也拼不齐，而每一片都
      * 查一遍好友关系、每一片都占一次限流额度，等于把一次正常的发图判成"发得太快"。
      */
-    private static void handleSendImage(SendChatImagePacket packet, ServerPlayNetworking.Context ctx) {
-        ServerPlayer sender = ctx.player();
-
+    private static void handleSendImage(SendChatImagePacket packet, ServerPlayer sender) {
         if (packet.chunkIndex() == 0) {
             ImageOutcome gate = ChatService.maySendImage(sender, packet.target());
             if (gate != ImageOutcome.OK) {
@@ -193,13 +241,13 @@ public final class ChatNetworking {
                 // 与文本消息同一条路：发件人也靠回声显示自己那条。
                 // 写盘期间他可能已经退出去了，那就只落消息不回声——下次上线拉历史照样看得见
                 if (!sender.hasDisconnected()) {
-                    ServerPlayNetworking.send(sender,
+                    MCphoneNetwork.sendToPlayer(sender,
                             new NewMessagePacket(upload.target(), message));
                 }
 
                 ServerPlayer receiver = server.getPlayerList().getPlayer(upload.target());
                 if (receiver != null) {
-                    ServerPlayNetworking.send(receiver,
+                    MCphoneNetwork.sendToPlayer(receiver,
                             new NewMessagePacket(sender.getUUID(), message));
                 }
             });
@@ -212,8 +260,7 @@ public final class ChatNetworking {
      * 要不到的（不是好友、这张图不在你们的记录里）静默丢弃：正常客户端只会问它自己
      * 刚收到的那些 id，问了别的说明客户端被改过，回一句只是帮它试探。
      */
-    private static void handleRequestImage(RequestChatImagePacket packet, ServerPlayNetworking.Context ctx) {
-        ServerPlayer player = ctx.player();
+    private static void handleRequestImage(RequestChatImagePacket packet, ServerPlayer player) {
         if (!RequestThrottle.allow(player, RequestThrottle.Kind.CHAT_IMAGE_DATA)) return;
 
         List<UUID> allowed = new ArrayList<>();
@@ -231,32 +278,25 @@ public final class ChatNetworking {
                         : new ChatImageDataPacket(id, data);
                 server.execute(() -> {
                     // 读盘期间他可能已经下线，发给一条死连接没有意义
-                    if (!player.hasDisconnected()) ServerPlayNetworking.send(player, reply);
+                    if (!player.hasDisconnected()) MCphoneNetwork.sendToPlayer(player, reply);
                 });
             }
         });
     }
 
-    private static void handleRequestOnlinePlayers(RequestOnlinePlayersPacket packet,
-                                                   ServerPlayNetworking.Context ctx) {
-        ServerPlayer player = ctx.player();
+    private static void handleRequestOnlinePlayers(RequestOnlinePlayersPacket packet, ServerPlayer player) {
         if (!RequestThrottle.allow(player, RequestThrottle.Kind.ONLINE_PLAYERS)) return;
 
-        ServerPlayNetworking.send(player, buildOnlinePlayersPacket(player));
+        MCphoneNetwork.sendToPlayer(player, buildOnlinePlayersPacket(player));
     }
 
     /** 成功与否都回发最新状态，失败时界面不会显示成功的假象 */
-    private static void handleFriendRequest(FriendRequestPacket packet, ServerPlayNetworking.Context ctx) {
-        ServerPlayer player = ctx.player();
-
+    private static void handleFriendRequest(FriendRequestPacket packet, ServerPlayer player) {
         tell(player, ChatService.sendFriendRequest(player, packet.target()));
         replyState(player);
     }
 
-    private static void handleRespondFriendRequest(RespondFriendRequestPacket packet,
-                                                   ServerPlayNetworking.Context ctx) {
-        ServerPlayer player = ctx.player();
-
+    private static void handleRespondFriendRequest(RespondFriendRequestPacket packet, ServerPlayer player) {
         tell(player, ChatService.respondFriendRequest(
                 player, packet.requester(), packet.accept()));
         replyState(player);
@@ -270,17 +310,13 @@ public final class ChatNetworking {
         player.displayClientMessage(message, true);
     }
 
-    private static void handleRemoveFriend(RemoveFriendPacket packet, ServerPlayNetworking.Context ctx) {
-        ServerPlayer player = ctx.player();
-
+    private static void handleRemoveFriend(RemoveFriendPacket packet, ServerPlayer player) {
         ChatService.removeFriend(player, packet.target());
         replyState(player);
     }
 
     /** 不回发列表：客户端点下按钮的同一帧就关机了，没有界面会读它 */
-    private static void handleTeleportToFriend(TeleportToFriendPacket packet,
-                                               ServerPlayNetworking.Context ctx) {
-        ServerPlayer player = ctx.player();
+    private static void handleTeleportToFriend(TeleportToFriendPacket packet, ServerPlayer player) {
         if (!RequestThrottle.allow(player, RequestThrottle.Kind.TELEPORT)) return;
 
         tell(player, TeleportService.teleportToFriend(player, packet.target()));
@@ -288,8 +324,9 @@ public final class ChatNetworking {
 
     /** 关系变化后统一回发两份列表，抽出来免得漏发其中一份 */
     private static void replyState(ServerPlayer player) {
-        ServerPlayNetworking.send(player, buildOnlinePlayersPacket(player));
-        ServerPlayNetworking.send(player, new SyncConversationsPacket(ChatService.buildConversations(player)));
+        MCphoneNetwork.sendToPlayer(player, buildOnlinePlayersPacket(player));
+        MCphoneNetwork.sendToPlayer(player,
+                new SyncConversationsPacket(ChatService.buildConversations(player)));
     }
 
     /** 截断到上限，并带上真实总数供界面提示 */
@@ -297,5 +334,26 @@ public final class ChatNetworking {
         return new SyncOnlinePlayersPacket(
                 ChatService.listOnlinePlayers(player, SyncOnlinePlayersPacket.MAX_PLAYERS),
                 ChatService.countOnlineExcludingSelf(player));
+    }
+
+    private static void handleSyncConversations(SyncConversationsPacket packet) {
+        ChatClientCache.setConversations(packet.conversations());
+    }
+
+    private static void handleSyncMessages(SyncMessagesPacket packet) {
+        ChatClientCache.setMessages(packet.peer(), packet.messages());
+    }
+
+    private static void handleNewMessage(NewMessagePacket packet) {
+        ChatClientCache.onNewMessage(packet.peer(), packet.message());
+    }
+
+    private static void handleImageData(ChatImageDataPacket packet) {
+        ChatClientCache.onImageData(packet.image(), packet.data());
+    }
+
+    private static void handleSyncOnlinePlayers(SyncOnlinePlayersPacket packet) {
+        ChatClientCache.setOnlinePlayers(
+                packet.players(), packet.totalOnline());
     }
 }

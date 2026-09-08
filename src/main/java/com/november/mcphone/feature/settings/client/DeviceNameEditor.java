@@ -1,9 +1,10 @@
 package com.november.mcphone.feature.settings.client;
 
-import com.november.mcphone.core.ModDataComponents;
+import com.november.mcphone.core.PhoneItemData;
 import com.november.mcphone.core.PhoneLocation;
 import com.november.mcphone.core.client.FontPalette;
 import com.november.mcphone.core.client.PhoneTheme;
+import com.november.mcphone.core.net.MCphoneNetwork;
 import com.november.mcphone.feature.settings.net.SetDeviceNamePacket;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
@@ -12,7 +13,6 @@ import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.item.ItemStack;
-import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 
 /**
  * 设备名称编辑界面 —— 由 PhoneScreen 嵌入渲染。
@@ -49,8 +49,8 @@ import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
  *
  * 名字存在哪
  *
- * 存在【正打开的那一部】手机的数据组件里，见
- * {@link ModDataComponents#DEVICE_NAME}。哪一部由 {@link PhoneLocation}
+ * 存在【正打开的那一部】手机上，读写都走 {@link PhoneItemData}（这边落在数据组件上，
+ * 1.20.1 那一支落在裸 NBT 上，调用点因此两边一样）。哪一部由 {@link PhoneLocation}
  * 指明——玩家身上可能不止一部手机，手上的、背包里的、挂在饰品槽的，
  * 改错了就改到别人头上。
  *
@@ -99,7 +99,7 @@ public final class DeviceNameEditor {
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null) return "";
         ItemStack stack = location.resolve(mc.player);
-        String name = stack.get(ModDataComponents.DEVICE_NAME);
+        String name = PhoneItemData.getDeviceName(stack);
         return name == null ? "" : name;
     }
 
@@ -221,7 +221,7 @@ public final class DeviceNameEditor {
     private void save() {
         if (box == null) return;
         String name = SetDeviceNamePacket.sanitize(box.getValue());
-        ClientPlayNetworking.send(
+        MCphoneNetwork.sendToServer(
                 new SetDeviceNamePacket(name, location));
     }
 }

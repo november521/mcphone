@@ -1,10 +1,10 @@
 package com.november.mcphone.feature.chat.client;
 
+import com.november.mcphone.core.net.MCphoneNetwork;
 import com.november.mcphone.feature.chat.net.ChatClientCache;
 import com.november.mcphone.feature.chat.net.ConversationSummary;
 import com.november.mcphone.feature.chat.net.RequestConversationsPacket;
 import net.minecraft.client.Minecraft;
-import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 
 /**
  * 主屏上美西螈图标右上角那个角标的数——所有会话的未读之和。
@@ -48,6 +48,6 @@ public final class ChatBadge {
         if (now - lastRequestMs < REFRESH_INTERVAL_MS) return;
 
         lastRequestMs = now;
-        ClientPlayNetworking.send(new RequestConversationsPacket());
+        MCphoneNetwork.sendToServer(new RequestConversationsPacket());
     }
 }

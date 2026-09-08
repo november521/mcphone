@@ -2,8 +2,7 @@ package com.november.mcphone.feature.notes;
 
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
-import io.netty.buffer.ByteBuf;
-import net.minecraft.network.codec.ByteBufCodecs;
+import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 
 /**
@@ -25,12 +24,21 @@ public record Note(int id, String body, long modified) {
             ).apply(instance, Note::new)
     );
 
-    public static final StreamCodec<ByteBuf, Note> STREAM_CODEC = StreamCodec.composite(
-            ByteBufCodecs.VAR_INT, Note::id,
-            ByteBufCodecs.stringUtf8(MAX_BODY_LENGTH), Note::body,
-            ByteBufCodecs.VAR_LONG, Note::modified,
-            Note::new
-    );
+    public static final StreamCodec<FriendlyByteBuf, Note> STREAM_CODEC =
+            StreamCodec.of((buf, msg) -> encode(msg, buf), Note::decode);
+
+    public static void encode(Note msg, FriendlyByteBuf buf) {
+        buf.writeVarInt(msg.id());
+        buf.writeUtf(msg.body(), MAX_BODY_LENGTH);
+        buf.writeVarLong(msg.modified());
+    }
+
+    public static Note decode(FriendlyByteBuf buf) {
+        return new Note(
+                buf.readVarInt(),
+                buf.readUtf(MAX_BODY_LENGTH),
+                buf.readVarLong());
+    }
 
     /** 正文第一行；空白笔记返回空串，显示什么由界面决定 */
     public String title() {

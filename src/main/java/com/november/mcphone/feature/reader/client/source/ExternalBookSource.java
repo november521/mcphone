@@ -53,7 +53,7 @@ public final class ExternalBookSource implements BookSource {
     /**
      * 白名单里有任何一条在场就算可用。
      *
-     * 这个方法只碰 ModList，不碰任何外部模组的类型——{@link ExternalBook#isAvailable()}
+     * 这个方法只碰 ModPresence，不碰任何外部模组的类型——{@link ExternalBook#isAvailable()}
      * 的默认实现同样如此。
      */
     @Override

@@ -1,14 +1,14 @@
 package com.november.mcphone.feature.notes;
 
-import com.november.mcphone.core.ModAttachments;
 import com.november.mcphone.core.PhoneItem;
+import com.november.mcphone.core.PhonePlayerData;
 import com.november.mcphone.util.TextSanitizer;
 import net.minecraft.server.level.ServerPlayer;
 
 import java.util.List;
 import java.util.Optional;
 
-/** 记事本的服务端业务逻辑，与网络包分开；数据存在玩家附件 {@link ModAttachments#NOTES} */
+/** 记事本的服务端业务逻辑，与网络包分开；数据跟着玩家走，读写走 {@link PhonePlayerData#notes()} */
 public final class NoteService {
 
     private NoteService() {}
@@ -47,7 +47,7 @@ public final class NoteService {
         NoteList updated = current.save(new Note(targetId, body, System.currentTimeMillis()));
         if (updated == current) return false;   // 条数满了，save 原样返回
 
-        player.setAttached(ModAttachments.NOTES, updated);
+        PhonePlayerData.of(player).setNotes(updated);
         return true;
     }
 
@@ -59,7 +59,7 @@ public final class NoteService {
         NoteList updated = current.delete(id);
         if (updated == current) return false;
 
-        player.setAttached(ModAttachments.NOTES, updated);
+        PhonePlayerData.of(player).setNotes(updated);
         return true;
     }
 
@@ -68,6 +68,6 @@ public final class NoteService {
     }
 
     private static NoteList notes(ServerPlayer player) {
-        return player.getAttachedOrCreate(ModAttachments.NOTES);
+        return PhonePlayerData.of(player).notes();
     }
 }

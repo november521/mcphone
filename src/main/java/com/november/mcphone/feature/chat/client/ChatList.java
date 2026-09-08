@@ -5,6 +5,7 @@ import com.november.mcphone.core.client.FontPalette;
 import com.november.mcphone.core.client.PhoneSkin;
 import com.november.mcphone.core.client.PhoneTheme;
 import com.november.mcphone.core.client.PlayerAvatar;
+import com.november.mcphone.core.net.MCphoneNetwork;
 import com.november.mcphone.feature.chat.net.ChatClientCache;
 import com.november.mcphone.feature.chat.net.ConversationSummary;
 import com.november.mcphone.feature.chat.net.RequestConversationsPacket;
@@ -13,7 +14,6 @@ import com.november.mcphone.core.client.GuiUtil;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
-import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 
 import java.util.List;
 import java.util.UUID;
@@ -248,7 +248,7 @@ public final class ChatList {
 
         // 必须先判传送：图标的点击区整个落在那一行里面，后判会连带打开会话
         if (teleportHoveredPeer != null) {
-            ClientPlayNetworking.send(new TeleportToFriendPacket(teleportHoveredPeer));
+            MCphoneNetwork.sendToServer(new TeleportToFriendPacket(teleportHoveredPeer));
             pendingClose = true;
             return true;
         }
@@ -296,7 +296,7 @@ public final class ChatList {
         if (now - lastRequestMs < REFRESH_INTERVAL_MS) return;
 
         lastRequestMs = now;
-        ClientPlayNetworking.send(new RequestConversationsPacket());
+        MCphoneNetwork.sendToServer(new RequestConversationsPacket());
     }
 
     private static int rowHeight(Font font) {

@@ -7,11 +7,11 @@ import com.november.mcphone.core.client.FontPalette;
 import com.november.mcphone.core.client.PhoneScreenRegistry;
 import com.november.mcphone.core.client.PhoneTheme;
 import com.november.mcphone.core.client.GuiUtil;
+import com.november.mcphone.platform.ModPresence;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
-import net.fabricmc.loader.api.FabricLoader;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -71,7 +71,7 @@ public final class CompanionApps {
             for (RequiredMod mod : required) {
                 if (!names.isEmpty()) names.append("、");
                 names.append(mod.displayName());
-                if (!FabricLoader.getInstance().isModLoaded(mod.modId())) satisfied = false;
+                if (!ModPresence.isLoaded(mod.modId())) satisfied = false;
             }
 
             // 已经可用、却不是每个都装齐的，不画。

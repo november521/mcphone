@@ -46,6 +46,7 @@ public final class ServerConfig {
     private static boolean allowFriendTeleport = true;
     private static boolean allowChatImages = true;
     private static int chatImageMaxKb = DEFAULT_IMAGE_MAX_KB;
+    private static boolean terminalKeepPowered = true;
 
     //  客户端那份（从同步包收的；收到之后优先于本地）
     private static boolean synced = false;
@@ -53,7 +54,13 @@ public final class ServerConfig {
     private static boolean syncedAllowChatImages = true;
     private static int syncedChatImageMaxKb = DEFAULT_IMAGE_MAX_KB;
 
-    /** 允不允许好友之间互相传送。没加载时返回 true，理由见类注释 */
+    /**
+     * 允不允许好友传送。
+     *
+     * 配置没加载时返回 true：那只发生在主菜单或连上服务器之前，而那时
+     * 谁也传送不了。返回 false 反而会让界面在刚进世界的一瞬间闪一下
+     * ——图标先没有、配置到了又冒出来。
+     */
     public static boolean allowFriendTeleport() {
         if (synced) return syncedAllowFriendTeleport;
         return !loaded || allowFriendTeleport;
@@ -74,6 +81,16 @@ public final class ServerConfig {
     public static int chatImageMaxBytes() {
         int kb = synced ? syncedChatImageMaxKb : (loaded ? chatImageMaxKb : DEFAULT_IMAGE_MAX_KB);
         return kb * 1024;
+    }
+
+    /**
+     * 手机替卡槽里的终端供电吗。没加载时返回 true，理由同 {@link #allowFriendTeleport()}
+     * ——那只发生在还没进世界的时候，那时卡槽里的东西也不会被 tick 到。
+     *
+     * 只在服务端读（TerminalCharger 在服务端 tick），不进 SyncServerConfigPacket。
+     */
+    public static boolean terminalKeepPowered() {
+        return !loaded || terminalKeepPowered;
     }
 
     /** 客户端收到同步包后写入 */
@@ -101,18 +118,20 @@ public final class ServerConfig {
                 allowFriendTeleport = getBool(obj, "allowFriendTeleport", true);
                 allowChatImages = getBool(obj, "allowChatImages", true);
                 chatImageMaxKb = clampKb(getInt(obj, "chatImageMaxKb", DEFAULT_IMAGE_MAX_KB));
+                terminalKeepPowered = getBool(obj, "terminalKeepPowered", true);
             } else {
                 Files.createDirectories(file.getParent());
                 save(file);
             }
             loaded = true;
-            MCphone.LOGGER.info("服务端配置已加载：{}（允许好友传送={}, 允许发图={}, 图片上限={}KB）",
-                    file, allowFriendTeleport, allowChatImages, chatImageMaxKb);
+            MCphone.LOGGER.info("服务端配置已加载：{}（允许好友传送={}, 允许发图={}, 图片上限={}KB, 终端由手机供电={}）",
+                    file, allowFriendTeleport, allowChatImages, chatImageMaxKb, terminalKeepPowered);
         } catch (Throwable t) {
             MCphone.LOGGER.error("读取服务端配置失败，使用默认值", t);
             allowFriendTeleport = true;
             allowChatImages = true;
             chatImageMaxKb = DEFAULT_IMAGE_MAX_KB;
+            terminalKeepPowered = true;
             loaded = true;
         }
     }
@@ -122,6 +141,7 @@ public final class ServerConfig {
         obj.addProperty("allowFriendTeleport", allowFriendTeleport);
         obj.addProperty("allowChatImages", allowChatImages);
         obj.addProperty("chatImageMaxKb", chatImageMaxKb);
+        obj.addProperty("terminalKeepPowered", terminalKeepPowered);
         try {
             Files.writeString(file, new com.google.gson.GsonBuilder().setPrettyPrinting().create().toJson(obj),
                     StandardCharsets.UTF_8);

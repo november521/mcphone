@@ -69,3 +69,70 @@ jobs:
           name: ${{ steps.find-jar.outputs.jar_name }}
           path: ${{ steps.find-jar.outputs.jar_path }}
           retention-days: 30
+
+  # ============================================================
+  #  版本号只能由 CI 改
+  # ============================================================
+  #
+  # mod_version 归 release.yml 管：发版时它算出新号、写进 gradle.properties、
+  # 以 github-actions[bot] 的身份提交并打 tag。平时任何人都不该动它。
+  #
+  # 为什么要一道闸而不是只写在注释里
+  #
+  # 原先那套规矩就写在 gradle.properties 里，写得很细，照样没挡住：每个 commit
+  # 随手 +1，攒出一串谁也没见过的号，还因为分支合并往回走过 —— 1.10.1 到 1.10.4
+  # 之间出现过两个内容不同、mod_version 都写 1.10.1 的 commit。而这个字段是要
+  # 烧进 jar、在游戏内模组列表里显示的：两个不同的包自称同一个版本，比不升号糟。
+  #
+  # 判据是【提交人】不是【改了什么】：bot 改得，人改不得。所以 release.yml 里
+  # 那两行 git config 是这道闸的一半，改掉那个身份等于把闸拆了。
+  guard-version:
+    name: 版本号只能由 CI 改
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: 检查 mod_version 有没有被人手改
+        env:
+          BEFORE: ${{ github.event.before }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          BOT: 'github-actions[bot]@users.noreply.github.com'
+        run: |
+          set -uo pipefail
+
+          # 这次推送 / 这个 PR 引入了哪些 commit
+          if [ -n "${BASE:-}" ]; then
+            RANGE="${BASE}..HEAD"
+          elif [ -n "${BEFORE:-}" ] \
+               && [ "$BEFORE" != "0000000000000000000000000000000000000000" ] \
+               && git cat-file -e "${BEFORE}^{commit}" 2>/dev/null; then
+            RANGE="${BEFORE}..HEAD"
+          else
+            # 新分支、强推、或者基准 commit 已经不在了：退回只查最新这一个。
+            # 宁可少查也不要因为算不出范围就整个跳过——跳过是静默的
+            echo "::notice::拿不到对比基准（新分支或强推），只检查最新这一个 commit"
+            RANGE="HEAD~1..HEAD"
+          fi
+          echo "检查范围：$RANGE"
+
+          OFFENDERS=""
+          for SHA in $(git rev-list "$RANGE"); do
+            git show "$SHA" -- gradle.properties | grep -qE '^[+-]mod_version=' || continue
+            EMAIL=$(git show -s --format='%ae' "$SHA")
+            [ "$EMAIL" = "$BOT" ] && continue
+            OFFENDERS="${OFFENDERS}$(git show -s --format='  %h  %an <%ae>  %s' "$SHA")"$'\n'
+          done
+
+          if [ -n "$OFFENDERS" ]; then
+            echo "::error::下面这些 commit 手动改了 mod_version："
+            printf '%s' "$OFFENDERS"
+            echo ""
+            echo "mod_version 只能由 release.yml 改。要发版就去 Actions → Release 手动触发，"
+            echo "选 patch / minor / major，CI 会自己算号、提交、打 tag。"
+            echo "把那行改动撤掉再推即可（git revert 或者改回原值）。"
+            exit 1
+          fi
+          echo "没有人手动改过 mod_version"

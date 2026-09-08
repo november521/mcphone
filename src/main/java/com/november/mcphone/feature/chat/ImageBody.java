@@ -7,6 +7,7 @@ import net.minecraft.core.UUIDUtil;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
+import net.minecraft.util.Mth;
 
 import java.util.UUID;
 
@@ -37,10 +38,10 @@ public record ImageBody(UUID image, int width, int height, int frames, int frame
         implements MessageBody {
 
     public ImageBody {
-        width = Math.clamp(width, 1, ChatImage.MAX_SIDE);
-        height = Math.clamp(height, 1, ChatImage.MAX_SIDE);
-        frames = Math.clamp(frames, 1, ChatImage.MAX_FRAMES);
-        frameMs = frames > 1 ? Math.clamp(frameMs, 20, 5000) : 0;
+        width = Mth.clamp(width, 1, ChatImage.MAX_SIDE);
+        height = Mth.clamp(height, 1, ChatImage.MAX_SIDE);
+        frames = Mth.clamp(frames, 1, ChatImage.MAX_FRAMES);
+        frameMs = frames > 1 ? Mth.clamp(frameMs, 20, 5000) : 0;
     }
 
     /** 一张普通静态图 */
