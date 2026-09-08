@@ -35,8 +35,9 @@ public final class CameraOverlay {
 
     /**
      * 三层的顺序是有讲究的：模糊那一版的闪光【必须最先】，它糊的是这一帧已经画完的
-     * 画面（世界），卡尺与准星要留在清楚的一层上；白闪那一版反过来，得盖在最上面，
-     * 不然取景框浮在白幕上，看着不像闪了一下。
+     * 画面（世界，以及印在世界上的坐标戳——那一行属于照片，跟着一起糊才对），卡尺与
+     * 准星要留在清楚的一层上；白闪那一版反过来，得盖在最上面，不然取景框浮在白幕上，
+     * 看着不像闪了一下。
      */
     public static void render(GuiGraphics g, Font font, int w, int h, long nowMs, float partialTick) {
         CameraFlash.renderBlur(g, partialTick, nowMs);
@@ -45,10 +46,18 @@ public final class CameraOverlay {
         CameraFlash.renderWhite(g, w, h, nowMs);
     }
 
+    /**
+     * 取景框离屏幕边缘留多少。{@link CameraStamp} 也要这个数——坐标戳贴着同一条线
+     * 往里让，看着才像被取景框框住的一行字。留白按屏幕短边算，所以它得是个方法。
+     */
+    static int margin(int w, int h) {
+        return Math.max(4, (int) (Math.min(w, h) * BRACKET_MARGIN_RATIO));
+    }
+
     private static void renderViewfinder(GuiGraphics g, int w, int h) {
         int shortSide = Math.min(w, h);
         int len = Math.max(8, (int) (shortSide * BRACKET_LEN_RATIO));
-        int margin = Math.max(4, (int) (shortSide * BRACKET_MARGIN_RATIO));
+        int margin = margin(w, h);
         int t = BRACKET_THICKNESS;
 
         int l = margin, r = w - margin, top = margin, bot = h - margin;

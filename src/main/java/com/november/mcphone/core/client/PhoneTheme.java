@@ -218,6 +218,13 @@ public final class PhoneTheme {
     /** 正中的准星 */
     public static final int COLOR_RETICLE = 0x99FFFFFF;
 
+    /**
+     * 照片右下角那行坐标。与上面两个不同，它是【不透明】的：那两个是浮在画面上的
+     * 辅助线，拍照那一帧会被跳过；这一行却要留在照片里当内容，半透明的话底下那块
+     * 世界会渗上来，雪地与天空前几乎读不出来。见 {@code CameraStamp}
+     */
+    public static final int COLOR_CAMERA_STAMP = 0xFFFFFFFF;
+
     /** 状态栏高度 */
     public static final int STATUS_BAR_HEIGHT = 10;
 
