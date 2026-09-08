@@ -27,6 +27,18 @@ import java.util.List;
  * 与所有阅读软件一致。而滚轮与方向键是给"手已经在键盘上"的人留的——这块屏幕不小，
  * 但每次翻页都要把光标移到某个角上点一下，读一晚上就受不了了。
  *
+ * <h2>全屏：把整块窗口让给这本书</h2>
+ *
+ * 手机屏幕只有 120×176（平板 226×158），一页装二百来字——一章要翻十来次，读一晚上就是
+ * 几百次点击。而游戏窗口在常见缩放下有六百多个逻辑像素宽，手机只占了其中一小块。
+ *
+ * 所以这一页多一个「全屏」：<b>还是这一页，只是收到的矩形变成了整个窗口</b>
+ * （由 {@code PhoneScreen} 决定给多大，见那边的 render）。本类不需要为此改任何排版代码——
+ * 它从来就是照给进来的宽高排的，这也正是当初把宽高做成参数而不是常量的原因。
+ *
+ * 宽的时候正文<b>不铺满</b>，而是居中一栏（{@link #MAX_TEXT_W}）：一行三十多个汉字是
+ * 读起来最省力的长度，六十多个字一行的话，眼睛每次回到行首都要找一下。
+ *
  * <h2>目录盖在正文上，不另开一页</h2>
  *
  * 目录是"看一眼就走"的东西：找到那一章、点进去、接着读。做成另一个 Mode 的话，返回键
@@ -49,6 +61,14 @@ public final class TxtReaderPage {
     /** 深色字预设（配浅色壁纸的那几个）下垫在正文底下的那一层。与 COLOR_SCRIM 同浓度，反过来压 */
     private static final int SCRIM_LIGHT = 0x66FFFFFF;
 
+    /**
+     * 正文一栏最宽多少。
+     *
+     * 320 约合 35 个汉字一行 —— 排版上公认最省力的区间是三十到四十个字。手机与平板本来就
+     * 比这窄，所以这个上限只在全屏时起作用：窗口再宽，正文也只占中间这一栏。
+     */
+    private static final int MAX_TEXT_W = 320;
+
     /** 正在读的那本，null 表示没打开或者打不开 */
     private TxtBook book;
 
@@ -60,6 +80,22 @@ public final class TxtReaderPage {
 
     /** 目录开着没有 */
     private boolean toc;
+
+    /**
+     * 全屏读没有。
+     *
+     * 这是个<b>偏好</b>而不是某本书的状态：换一本书接着全屏，是玩家上次选的那个样子。
+     * 所以 {@link #close} 不清它。
+     */
+    private boolean fullscreen;
+
+    /**
+     * 换过宽度之后该停在这一章的百分之几，-1 表示没有待办。
+     *
+     * 页数是按宽度算出来的，而切全屏的那一刻还不知道新宽度下有几页——那要等下一帧
+     * 重新折行之后才知道。所以这里只记比例，由 {@link #renderPage} 落成页码。
+     */
+    private double pendingProgress = -1;
 
     /** 目录的滚动位置（第一行是第几章） */
     private int tocScroll;
@@ -78,6 +114,10 @@ public final class TxtReaderPage {
 
     /** 「目录」两个字画在哪儿（命中区里居中的那一小块） */
     private int tocTextX, tocTextY;
+
+    /** 「全屏 / 退出全屏」那个键的命中区与字的位置，规矩同上 */
+    private int fullHitX, fullHitY, fullHitW, fullHitH;
+    private int fullTextX;
 
     /**
      * 打开一本书。
@@ -116,6 +156,26 @@ public final class TxtReaderPage {
         tocScroll = 0;
     }
 
+    /** 全屏读没有。{@code PhoneScreen} 靠它决定这一帧把整个窗口给这一页，还是照常画在手机里 */
+    public boolean isFullscreen() {
+        return fullscreen;
+    }
+
+    /**
+     * 切换全屏。
+     *
+     * 切换会换一个宽度，于是同一章重新折行、页数跟着变——按<b>读到这一章的百分之几</b>
+     * 换算回新的页码，而不是留着旧页码。留着的话，从全屏（一章 3 页）退回手机（一章 12 页）
+     * 会停在第 3 页，玩家眼里是"往回跳了一大截"。
+     */
+    private void toggleFullscreen(Font font) {
+        int pages = pageCount(font);
+        // 新的页数要等下一帧按新宽度排完才知道，所以这里只记比例，落到哪一页由 renderPage 收尾
+        pendingProgress = pages <= 1 ? 0 : (double) page / pages;
+
+        fullscreen = !fullscreen;
+    }
+
     /** 返回键：目录开着就先收目录。返回 false 表示"这一层没什么可退的"，由外面退回书架 */
     public boolean back() {
         if (!toc) return false;
@@ -127,8 +187,10 @@ public final class TxtReaderPage {
                        int screenW, int screenH, int statusH, int navH,
                        int mouseX, int mouseY, Font font) {
 
-        final int x = phoneLeft + PAD;
-        final int w = screenW - PAD * 2;
+        // 窗口再宽，正文也只占中间一栏。头尾两行跟着这一栏对齐，整页才是一条竖直的轴
+        final int full = screenW - PAD * 2;
+        final int w = Math.min(full, MAX_TEXT_W);
+        final int x = phoneLeft + PAD + (full - w) / 2;
         final int top = phoneTop + statusH + 2;
         final int bottom = phoneTop + screenH - navH - 2;
 
@@ -170,17 +232,39 @@ public final class TxtReaderPage {
         tocHitW = labelW + HIT_PAD * 2;
         tocHitH = BAR_H;
 
-        boolean hovered = GuiUtil.hit(mouseX, mouseY, tocHitX, tocHitY, tocHitW, tocHitH);
+        boolean tocHovered = GuiUtil.hit(mouseX, mouseY, tocHitX, tocHitY, tocHitW, tocHitH);
+
+        // 「全屏」排在「目录」左边。两个键都靠右：右上角是这一页唯一不放正文的地方
+        String fullLabel = Component.translatable(fullscreen
+                ? "mcphone.reader.txt.exit_fullscreen"
+                : "mcphone.reader.txt.fullscreen").getString();
+
+        int fullW = font.width(fullLabel);
+        fullTextX = tocTextX - labelGap() - fullW;
+        fullHitX = fullTextX - HIT_PAD;
+        fullHitY = y;
+        fullHitW = fullW + HIT_PAD * 2;
+        fullHitH = BAR_H;
+
+        boolean fullHovered = GuiUtil.hit(mouseX, mouseY, fullHitX, fullHitY, fullHitW, fullHitH);
 
         String title = book == null && fileName != null ? fileName
                 : (book == null ? "" : book.entry().title());
-        g.drawString(font, GuiUtil.truncate(font, title, w - labelW - 6),
+        g.drawString(font, GuiUtil.truncate(font, title, fullTextX - x - 6),
                 x, tocTextY, FontPalette.title(), false);
 
+        g.drawString(font, fullLabel, fullTextX, tocTextY,
+                fullHovered || fullscreen ? FontPalette.link() : FontPalette.dim(), false);
+
         g.drawString(font, label, tocTextX, tocTextY,
-                hovered || toc ? FontPalette.link() : FontPalette.dim(), false);
+                tocHovered || toc ? FontPalette.link() : FontPalette.dim(), false);
 
         g.fill(x, y + BAR_H, x + w, y + BAR_H + 1, PhoneTheme.COLOR_DIVIDER);
+    }
+
+    /** 顶栏两个键之间留多少。够点得开，又不至于把书名挤没 */
+    private static int labelGap() {
+        return 6;
     }
 
     /**
@@ -195,6 +279,14 @@ public final class TxtReaderPage {
     private void renderPage(GuiGraphics g, Font font) {
         List<FormattedCharSequence> lines = book.lines(chapter, font, textW);
         int perPage = linesPerPage();
+        int pages = Math.max(1, (lines.size() + perPage - 1) / perPage);
+
+        // 切过全屏：这时候才知道新宽度下一共几页，把记下的比例落成页码
+        if (pendingProgress >= 0) {
+            page = (int) Math.round(pendingProgress * pages);
+            pendingProgress = -1;
+            saveProgress();
+        }
 
         clampPage(lines.size(), perPage);
 
@@ -285,6 +377,11 @@ public final class TxtReaderPage {
      * 玩家的意思是"点这一章"，不是"翻页"。
      */
     public boolean mouseClicked(double mx, double my, Font font) {
+        if (GuiUtil.hit(mx, my, fullHitX, fullHitY, fullHitW, fullHitH)) {
+            toggleFullscreen(font);
+            return true;
+        }
+
         if (GuiUtil.hit(mx, my, tocHitX, tocHitY, tocHitW, tocHitH)) {
             toc = !toc;
             if (toc) tocScroll = Math.max(0, chapter - 1);   // 打开就停在正在读的这一章上
@@ -337,6 +434,29 @@ public final class TxtReaderPage {
     }
 
     //  翻页
+
+    /**
+     * 翻一页。给 HUD 上那条快捷键路用（见 {@code ReaderKeyHandler}）。
+     *
+     * 目录开着时翻的是目录，不是正文——那时候玩家眼睛在目录上，翻正文他看不见。
+     *
+     * @return 真的翻了才 true。书没打开、或者已经到头了都算没翻
+     */
+    public boolean turnPage(int direction, Font font) {
+        if (book == null || direction == 0) return false;
+
+        if (toc) {
+            tocScroll = Math.max(0, tocScroll + (direction > 0 ? 1 : -1));
+            return true;
+        }
+
+        int beforeChapter = chapter;
+        int beforePage = page;
+        if (direction > 0) nextPage(font);
+        else previousPage(font);
+
+        return chapter != beforeChapter || page != beforePage;
+    }
 
     /**
      * 往后一页；这一章翻完了就进下一章。

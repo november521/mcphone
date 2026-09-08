@@ -185,6 +185,9 @@ public final class PhoneScreen extends Screen {
      */
     private static final int NO_MOUSE = -10_000;
 
+    /** 全屏读书时四周留多少。留一圈是为了不贴着窗口边，不是为了好看 */
+    private static final int READING_MARGIN = 10;
+
     public PhoneScreen(PhoneLocation location) {
         super(Component.translatable("mcphone.gui.home"));
         this.location = location;
@@ -317,6 +320,13 @@ public final class PhoneScreen extends Screen {
             return;
         }
 
+        // 书架/书城/正在看书时拖进来 txt ＝ 收进小说目录。与表情同一个道理：那一页的语境
+        // 就是"我的书"，而这是除了自己去翻文件夹之外唯一的导入方式
+        if (mode == Mode.READER || mode == Mode.TXT_BOOK) {
+            importBooks(files);
+            return;
+        }
+
         UUID target = switch (mode) {
             case CHAT_CONVERSATION -> chatConversation.peer();
             // 选照片那一页也收：人已经在"挑一张"的语境里了，拖进来是同一个意思
@@ -337,6 +347,36 @@ public final class PhoneScreen extends Screen {
 
         ChatImageSender.send(target, picture);
         if (mode == Mode.CHAT_PHOTO_PICKER) navigateTo(Mode.CHAT_CONVERSATION);
+    }
+
+    /**
+     * 把拖进来的 txt 收进小说目录。
+     *
+     * 与表情一样<b>收全部</b>：拖一整包小说进来是常事。收完刷新书城，玩家松手就能看见它们。
+     * 不是 txt 的说一句就算了——玩家多半是拖错了窗口。
+     */
+    private void importBooks(List<Path> files) {
+        int added = 0;
+        String last = null;
+        for (Path file : files) {
+            String name = com.november.mcphone.feature.reader.client.TxtLibrary.importFrom(file);
+            if (name != null) {
+                added++;
+                last = name;
+            }
+        }
+
+        if (added == 0) {
+            tellPlayer("mcphone.reader.txt.drop_not_txt");
+            return;
+        }
+
+        // 书城那张表是缓存的，不刷新的话玩家要退出去再进来才看得见
+        BookSources.refreshAll();
+        bookList.open();
+
+        tellPlayer("mcphone.reader.txt.imported",
+                added == 1 ? last : String.valueOf(added));
     }
 
     /**
@@ -562,6 +602,19 @@ public final class PhoneScreen extends Screen {
         navigateTo(Mode.TXT_BOOK);
     }
 
+    /**
+     * 翻一页 —— 给 {@code ReaderKeyHandler} 用，那是"挂在 HUD 上边走边看"的唯一入口。
+     *
+     * 这一部手机没在看书就什么都不做（返回 false），由调用方决定要不要做别的。
+     *
+     * @param direction 正数往后翻，负数往前翻
+     * @return 真的翻了才 true
+     */
+    public boolean turnReadingPage(int direction) {
+        if (mode != Mode.TXT_BOOK) return false;
+        return txtReader.turnPage(direction, font);
+    }
+
     /** 导航栏 ◁ 走这里；ESC 不退层而是直接关机，见 {@link #keyPressed}。真的退了一层才 true */
     private boolean goBackOneLevel() {
         if (mode == Mode.GALLERY && gallery.backToGrid()) return true;
@@ -710,7 +763,25 @@ public final class PhoneScreen extends Screen {
         // HUD 那副面孔不铺背景。铺了就把世界糊成一片，而它存在的全部意义正是"边玩边看"
         if (!hudMode) renderBackground(g, rawMouseX, rawMouseY, partialTick);
 
+        // 全屏读书：这一帧整块窗口都给那本书，机身、壁纸、状态栏、导航栏一概不画
+        if (fullscreenReading()) {
+            txtReader.render(g, READING_MARGIN, READING_MARGIN,
+                    this.width - READING_MARGIN * 2, this.height - READING_MARGIN * 2,
+                    0, 0, rawMouseX, rawMouseY, font);
+            return;
+        }
+
         drawPhone(g, rawMouseX, rawMouseY, partialTick);
+    }
+
+    /**
+     * 这一帧是不是"整块窗口都给这本书"。
+     *
+     * HUD 上那副面孔永远不是：它挂在角上就该是小的，那正是它存在的理由。所以这里带上
+     * {@code !hudMode}——同一个 PhoneScreen 实例既可能是全屏那副，也可能是 HUD 那副。
+     */
+    private boolean fullscreenReading() {
+        return mode == Mode.TXT_BOOK && !hudMode && txtReader.isFullscreen();
     }
 
     /**
@@ -1029,6 +1100,13 @@ public final class PhoneScreen extends Screen {
 
         if (button != 0) return super.mouseClicked(rawX, rawY, button);
 
+        // 全屏读书这一帧没有机身，也就没有"点机身外＝关机"这回事；坐标也不必换算
+        // （那一层 pose 缩放没有加上去）。必须排在下面 isInsidePhone 那一句之前
+        if (fullscreenReading()) {
+            txtReader.mouseClicked(rawX, rawY, font);
+            return true;
+        }
+
         // 换算一次，下面全用它。super 那几句仍然给原始坐标：原版控件是按屏幕坐标摆的
         final double mx = unscaledX(rawX);
         final double my = unscaledY(rawY);
@@ -1294,6 +1372,9 @@ public final class PhoneScreen extends Screen {
 
     @Override
     public boolean mouseScrolled(double rawX, double rawY, double scrollX, double scrollY) {
+        // 全屏读书：翻页，与坐标无关
+        if (fullscreenReading() && txtReader.mouseScrolled(scrollY, font)) return true;
+
         final double mx = unscaledX(rawX);
         final double my = unscaledY(rawY);
 

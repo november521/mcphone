@@ -12,6 +12,7 @@ import com.november.mcphone.feature.reader.client.source.BookSources;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.EditBox;
+import net.minecraft.Util;
 import net.minecraft.network.chat.Component;
 
 import java.util.ArrayList;
@@ -107,6 +108,9 @@ public final class BookList {
     /** 悬停在底部哪个页签上，null 表示没有 */
     private Tab hoveredTab;
 
+    /** 本帧鼠标是否停在右上角那个「文件夹」上。只有书城页有它，见 renderSearchBar */
+    private boolean folderHovered;
+
     /** 待消费的"打开这本"请求，null 表示没有。与记事本一致：页面不自己跳转，交给 PhoneScreen */
     private BookRef pendingOpen;
 
@@ -173,6 +177,7 @@ public final class BookList {
         hoveredIdx = -1;
         starHoveredIdx = -1;
         hoveredTab = null;
+        folderHovered = false;
         pendingOpen = null;
         cancelDrag();
 
@@ -281,7 +286,15 @@ public final class BookList {
                                 int total, int matched,
                                 int mouseX, int mouseY, float partialTick) {
 
-        String count = countText(total, matched);
+        // 右端那一小块：书架页放"共几本"，书城页放「文件夹」。
+        //
+        // 为什么是换而不是并排：这一行只有一百来像素，两样都放就没地方打字了。而换掉的是
+        // 书城页的本数——那一页的本数是"这个整合包里有多少"，看一眼就够；「文件夹」则是
+        // 玩家往里加书的唯一入口，恰恰是站在书城页时最需要的东西
+        boolean folderSlot = tab == Tab.STORE;
+        String count = folderSlot
+                ? Component.translatable("mcphone.reader.txt.folder").getString()
+                : countText(total, matched);
         int countW = font.width(count);
         int barW = Math.max(SEARCH_H, w - countW - 4);
 
@@ -316,7 +329,14 @@ public final class BookList {
                 : null);
         search.render(g, mouseX, mouseY, partialTick);
 
-        g.drawString(font, count, x + w - countW, textY, FontPalette.subtle(), false);
+        folderHovered = folderSlot
+                && GuiUtil.hit(mouseX, mouseY, x + w - countW - HIT_PAD, y,
+                        countW + HIT_PAD * 2, SEARCH_H);
+
+        int countColor = folderSlot
+                ? (folderHovered ? FontPalette.title() : FontPalette.link())
+                : FontPalette.subtle();
+        g.drawString(font, count, x + w - countW, textY, countColor, false);
 
         y += SEARCH_H + 3;
         g.fill(x, y, x + w, y + 1, PhoneTheme.COLOR_DIVIDER);
@@ -545,7 +565,15 @@ public final class BookList {
     public boolean mouseClicked(double mx, double my, int button) {
         if (button != 0) return false;
 
-        // 先给搜索框：点栏里是移光标，不该被下面的行判定吃掉
+        // 「文件夹」画在搜索行右端，必须先判它——那一块也在搜索框的命中区里
+        if (folderHovered) {
+            // 交给系统自己的文件管理器开，不弹任何 Java 的窗口：AWT 的选择器在 macOS 上
+            // 要与游戏抢主线程。目录不存在时 directory() 会先建出来
+            Util.getPlatform().openPath(TxtLibrary.directory());
+            return true;
+        }
+
+        // 再给搜索框：点栏里是移光标，不该被下面的行判定吃掉
         if (search != null && search.mouseClicked(mx, my, button)) return true;
 
         if (hoveredTab != null) {

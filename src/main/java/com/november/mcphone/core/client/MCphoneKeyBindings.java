@@ -57,6 +57,33 @@ public final class MCphoneKeyBindings {
             CATEGORY);
 
     /**
+     * 挂在 HUD 上看书时往前/往后翻一页。默认 PageUp / PageDown —— 原版 1.21.1 未占用。
+     *
+     * <b>为什么非有这两个键不可</b>：手机一旦成了 mc.screen，人就走不动路了（原版界面
+     * 一开就不吃移动键）。而"看小说"最想要的恰恰是边走边看、挂机时看——那种时候手机是挂在
+     * 副手 HUD 上的，而 HUD 上那副面孔<b>收不到任何输入</b>（它不是 mc.screen）。
+     *
+     * 没有这两个键，边走边看就等于"每翻一页停下来一次"。翻页是看书时唯一的高频操作，
+     * 单给它开一条不经过界面的路，值。
+     *
+     * 手机界面开着时这两个键不管事——那时候方向键、翻页键、点屏幕左右两半都在，
+     * 见 {@code TxtReaderPage.keyPressed}。
+     */
+    public static final KeyMapping READER_PREV = new KeyMapping(
+            "key.mcphone.reader_prev",
+            KeyConflictContext.IN_GAME,
+            InputConstants.Type.KEYSYM,
+            GLFW.GLFW_KEY_PAGE_UP,
+            CATEGORY);
+
+    public static final KeyMapping READER_NEXT = new KeyMapping(
+            "key.mcphone.reader_next",
+            KeyConflictContext.IN_GAME,
+            InputConstants.Type.KEYSYM,
+            GLFW.GLFW_KEY_PAGE_DOWN,
+            CATEGORY);
+
+    /**
      * 按一下唤出鼠标操作副手 HUD 上那部手机，再按一下收起。默认左 Alt —— 原版 1.21.1 未占用。
      *
      * 【这个键不能用 consumeClick / isDown 判断。】它要答的是"此刻按着没有"，
@@ -101,5 +128,7 @@ public final class MCphoneKeyBindings {
         event.register(OPEN_PHONE);
         event.register(HUD_INTERACT);
         event.register(HUD_TOGGLE);
+        event.register(READER_PREV);
+        event.register(READER_NEXT);
     }
 }

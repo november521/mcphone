@@ -153,9 +153,52 @@ public final class TxtLibrary {
         }
     }
 
-    /** 小说目录本身，「打开文件夹」那个键用得上 */
+    /**
+     * 小说目录本身，并且<b>保证它存在</b>——「打开文件夹」那个键要用。
+     *
+     * 目录不在就先建出来：交给系统的文件管理器打开一个不存在的路径，多半是弹一句"路径不存在"，
+     * 而玩家点它的目的恰恰是"我还没有书，想放几本进去"。与相册那边同一条规矩。
+     */
     public static Path directory() {
+        try {
+            Files.createDirectories(DIR);
+        } catch (IOException e) {
+            MCphone.LOGGER.warn("[MCphone] 建不出小说目录 {}：{}", DIR, e.toString());
+        }
         return DIR;
+    }
+
+    /**
+     * 把一个外部 txt 收进小说目录 —— 拖进游戏窗口那条路用（见 {@code PhoneScreen.onFilesDrop}）。
+     *
+     * 重名的加后缀而不是覆盖：玩家拖进来的多半是新下的一本，覆盖掉同名的那本等于把他
+     * 读了一半的书连同进度一起换掉（进度是按文件名记的）。
+     *
+     * @return 收进来之后的文件名，失败返回 null（已经记过日志）
+     */
+    public static String importFrom(Path source) {
+        if (source == null || !Files.isRegularFile(source) || !isTxt(source)) return null;
+
+        try {
+            if (Files.size(source) > MAX_BYTES) {
+                MCphone.LOGGER.warn("[MCphone] {} 超过 {} MB 的上限，不收",
+                        source.getFileName(), MAX_BYTES / 1024 / 1024);
+                return null;
+            }
+
+            Files.createDirectories(DIR);
+
+            String fileName = uniqueName(source.getFileName().toString(),
+                    name -> Files.exists(DIR.resolve(name)));
+
+            Files.copy(source, DIR.resolve(fileName));
+            refresh();
+            MCphone.LOGGER.info("[MCphone] 收下一本小说：{}", fileName);
+            return fileName;
+        } catch (IOException e) {
+            MCphone.LOGGER.warn("[MCphone] 收 {} 失败：{}", source, e.toString());
+            return null;
+        }
     }
 
     /**
@@ -173,6 +216,30 @@ public final class TxtLibrary {
             // SHA-256 是 JDK 必备的，走不到这儿；真走到了就退回一个还算稳定的数
             return Integer.toHexString(fileName.hashCode());
         }
+    }
+
+    /**
+     * 重名时该叫什么：{@code 书.txt} → {@code 书 (2).txt} → {@code 书 (3).txt}。
+     *
+     * 单拎出来是因为这段"加后缀"的算术最容易差一位——后缀加到 {@code .txt} 后面
+     * （{@code 书.txt (2)}）就不再是文本文件，扫描时直接看不见；而症状是"我拖进去的书
+     * 不见了"，玩家不会想到是文件名的事。
+     *
+     * @param taken 这个名字被占了没有。传进来而不是直接查磁盘，是为了这段能单独验证
+     */
+    static String uniqueName(String fileName, java.util.function.Predicate<String> taken) {
+        if (!taken.test(fileName)) return fileName;
+
+        String base = fileName.toLowerCase(Locale.ROOT).endsWith(EXTENSION)
+                ? fileName.substring(0, fileName.length() - EXTENSION.length())
+                : fileName;
+
+        for (int n = 2; n < 1000; n++) {
+            String candidate = base + " (" + n + ")" + EXTENSION;
+            if (!taken.test(candidate)) return candidate;
+        }
+        // 同一本拖进来一千次。到这一步就别再试了，覆盖比无限循环强
+        return fileName;
     }
 
     private static boolean isTxt(Path path) {

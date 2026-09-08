@@ -123,10 +123,15 @@ public final class PhoneHud {
     /**
      * HUD 上现在挂着的那部，null ＝ 没挂。
      *
-     * 给 {@link PhoneItemProperties} 判"手上这部亮不亮"用：挂在 HUD 上的那部屏幕是亮着的，
-     * 哪怕玩家没按 Alt。
+     * 两个调用方，都是"这部手机虽然不是 mc.screen，但它确实开着"这件事的下游：
+     *
+     *   {@code PhoneScreenOnSync}  判屏幕在别人眼里亮不亮——挂在 HUD 上的那部是亮着的，
+     *                              哪怕玩家没按 Alt
+     *   {@code ReaderKeyHandler}   边走边看时的翻页键要找到正在看的那本书
+     *
+     * 只读，拿到之后别去改它的状态——HUD 那部的生死归本类管（见 {@link #dismiss}）。
      */
-    static PhoneScreen hudPhone() { return phone; }
+    public static PhoneScreen hudPhone() { return phone; }
 
     /** 由 MCphoneClient 构造函数挂到模组总线 */
     public static void onRegisterLayers(RegisterGuiLayersEvent event) {
