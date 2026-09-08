@@ -9,6 +9,7 @@ import com.november.mcphone.feature.reader.BookSearch;
 import com.november.mcphone.feature.reader.ShelfOrder;
 import com.november.mcphone.feature.reader.client.compat.BookQuirks;
 import com.november.mcphone.feature.reader.client.source.BookSources;
+import com.november.mcphone.feature.reader.client.source.TxtBookSource;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.EditBox;
@@ -87,8 +88,6 @@ public final class BookList {
     /** 拖到列表上下边缘之外时，每隔这么久自动滚一行 */
     private static final int DRAG_SCROLL_MS = 120;
 
-    /** 行右端那个"可以拖"的把手有多宽。只是提示，真正能拖的是整行 */
-    private static final int GRIP_W = 5;
 
     /** 两页 */
     public enum Tab { SHELF, STORE }
@@ -286,12 +285,12 @@ public final class BookList {
                                 int total, int matched,
                                 int mouseX, int mouseY, float partialTick) {
 
-        // 右端那一小块：书架页放"共几本"，书城页放「文件夹」。
+        // 右端那一小块：书架页放「文件夹」，书城页放"共几本"。
         //
-        // 为什么是换而不是并排：这一行只有一百来像素，两样都放就没地方打字了。而换掉的是
-        // 书城页的本数——那一页的本数是"这个整合包里有多少"，看一眼就够；「文件夹」则是
-        // 玩家往里加书的唯一入口，恰恰是站在书城页时最需要的东西
-        boolean folderSlot = tab == Tab.STORE;
+        // 为什么是换而不是并排：这一行只有一百来像素，两样都放就没地方打字了。放弃的是
+        // 书架页的本数——架上有几本，一眼扫过去就数得出来；而本地小说是直接进书架的
+        // （不再经过书城），所以"往里加书"这件事的入口就该在书架这一页
+        boolean folderSlot = tab == Tab.SHELF;
         String count = folderSlot
                 ? Component.translatable("mcphone.reader.txt.folder").getString()
                 : countText(total, matched);
@@ -385,8 +384,7 @@ public final class BookList {
         final int rowH = rowHeight(font);
         final int textX = x + ICON + 4;
         final int starX = x + w - STAR;
-        // 文字先给把手让出位置：长书名不让位的话会顶在把手上，看着像一行乱码
-        final int textW = starX - textX - 3 - (canReorder(books.size()) ? GRIP_W + 3 : 0);
+        final int textW = starX - textX - 3;
         hoveredIdx = -1;
         starHoveredIdx = -1;
 
@@ -408,29 +406,31 @@ public final class BookList {
                 g.fill(x, y, x + w, y + rowH, PhoneTheme.COLOR_HOVER_STRONG);
             }
 
+            // 本地小说没有 ☆：它在不在架上由目录里有没有这个文件决定，不是玩家点出来的
+            // （见 ShelfStore.ensureShelved）。画一颗点不动的星只会让人反复去点它
+            boolean local = isLocal(book);
+
             // ☆ 的命中区落在整行里面，所以两个都要记，点击时先问星那个
-            boolean onStar = !dragging
+            boolean onStar = !dragging && !local
                     && mouseX >= starX - HIT_PAD && mouseX <= x + w
                     && mouseY >= y && mouseY < y + rowH;
             if (onStar) starHoveredIdx = i;
 
             renderIcon(g, book, x, y + (rowH - ICON) / 2);
-            renderStar(g, font, starX, y + (rowH - STAR) / 2,
-                    ShelfStore.contains(book), onStar);
-
-            // 能拖的时候，鼠标停在哪一行就在哪一行右端亮出把手——不常驻是因为这块屏幕
-            // 一行只有两句话的宽度，多一个常驻符号就少几个字；而"能不能拖"这件事
-            // 只在手已经放上去的时候才需要回答
-            if (canReorder(books.size()) && (hovered || picked)) {
-                renderGrip(g, font, starX - GRIP_W - 3, y + (rowH - font.lineHeight) / 2);
+            if (!local) {
+                renderStar(g, font, starX, y + (rowH - STAR) / 2,
+                        ShelfStore.contains(book), onStar);
             }
 
-            g.drawString(font, GuiUtil.truncate(font, book.title().getString(), textW),
+            // 没有星的那几行，书名可以一直写到最右边
+            int rowTextW = local ? x + w - textX : textW;
+
+            g.drawString(font, GuiUtil.truncate(font, book.title().getString(), rowTextW),
                     textX, y + 1, FontPalette.title(), false);
 
             String owner = book.owner() == null ? "" : book.owner();
             if (!owner.isEmpty()) {
-                g.drawString(font, GuiUtil.truncate(font, owner, textW),
+                g.drawString(font, GuiUtil.truncate(font, owner, rowTextW),
                         textX, y + font.lineHeight + 2, FontPalette.dim(), false);
             }
 
@@ -474,21 +474,6 @@ public final class BookList {
         int color = shelved ? FontPalette.armed()
                 : (hovered ? FontPalette.title() : FontPalette.dim());
         g.drawString(font, glyph, x + (STAR - font.width(glyph)) / 2, y, color, false);
-    }
-
-    /**
-     * 行右端那个"可以拖"的把手。
-     *
-     * 画三条短横而不是一个字符：≡ 这类字形在原版字体里各语言粗细不一，而这三条是自己
-     * 填出来的，任何语言下都一样；也不必再为它准备一张贴图。
-     */
-    private static void renderGrip(GuiGraphics g, Font font, int x, int y) {
-        int color = FontPalette.dim();
-        int h = Math.max(3, font.lineHeight - 4);
-        for (int i = 0; i < 3; i++) {
-            int ly = y + 1 + i * (h / 2);
-            g.fill(x, ly, x + GRIP_W, ly + 1, color);
-        }
     }
 
     /** 光标停在这儿，松手会插到第几位。算术在 {@link ShelfOrder#dropIndex} 里 */
@@ -710,11 +695,29 @@ public final class BookList {
         baseFrom = all;
         baseTab = tab;
         baseRevision = revision;
-        baseBooks = tab == Tab.SHELF ? ShelfStore.shelved(all) : all;
+
+        // 书城只列模组手册。本地小说不在这儿——它一被扫到就直接上了书架
+        // （见 ShelfStore.ensureShelved），再在书城里列一遍，玩家会以为是两本不同的书
+        baseBooks = tab == Tab.SHELF ? ShelfStore.shelved(all) : withoutLocal(all);
 
         // 底表换了，筛选结果当然作废
         forgetFiltered();
         return baseBooks;
+    }
+
+    /** 去掉本地小说的那张表。全是模组手册时原样返回，不白拷一遍 */
+    private static List<BookRef> withoutLocal(List<BookRef> all) {
+        boolean any = false;
+        for (BookRef book : all) {
+            if (isLocal(book)) { any = true; break; }
+        }
+        if (!any) return all;
+
+        List<BookRef> out = new ArrayList<>(all.size());
+        for (BookRef book : all) {
+            if (!isLocal(book)) out.add(book);
+        }
+        return List.copyOf(out);
     }
 
     //  搜索
@@ -777,6 +780,11 @@ public final class BookList {
         filteredFrom = null;
         filteredQuery = null;
         filteredBooks = List.of();
+    }
+
+    /** 这本是玩家自己放进目录的小说吗。本地书的规矩与模组手册不一样，见 base 与 renderRows */
+    private static boolean isLocal(BookRef book) {
+        return TxtBookSource.SOURCE_ID.equals(book.sourceId());
     }
 
     /** 两行字与一张 16 的图，取高的那个 */

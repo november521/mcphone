@@ -307,7 +307,7 @@
   "mcphone.terminal.list_sep": ", ",
   "mcphone.reader.count": "%s",
   "mcphone.reader.empty": "No books found",
-  "mcphone.reader.empty_hint": "Mods that ship a guide book show up here on their own. None at all usually means this pack has no mod using them - you can also drop your own .txt novels into config/mcphone/reader/books/ and they will show up here.",
+  "mcphone.reader.empty_hint": "Mods that ship a guide book show up here on their own. None at all usually means this pack has no mod using them.",
   "mcphone.compat.patchouli": "Patchouli (guide books)",
   "mcphone.compat.guideme": "GuideME (AE2 & MI guidebooks)",
   "mcphone.compat.immersiveengineering": "Immersive Engineering",
@@ -330,5 +330,5 @@
   "mcphone.reader.txt.broken_hint": "The file may be too large (over 32 MB), locked by another program, or not text at all. The reason is in the game log (latest.log, search for MCphone).",
   "mcphone.reader.tab_store": "All books",
   "mcphone.reader.shelf_empty": "Your shelf is empty",
-  "mcphone.reader.shelf_empty_hint": "Tap the star on a row under \"All books\" to put it here. Keep the few you actually read on the shelf."
+  "mcphone.reader.shelf_empty_hint": "Drop .txt novels into config/mcphone/reader/books/ (the \"Folder\" link above opens it), or drag the files onto the game window - they land here directly, no need to star them. Mod guide books live under \"All books\"; tap the star to bring one here."
 }

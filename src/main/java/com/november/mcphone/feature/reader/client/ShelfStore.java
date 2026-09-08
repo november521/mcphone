@@ -147,6 +147,35 @@ public final class ShelfStore {
     }
 
     /**
+     * 把这些书都放上架（已经在架上的不动）—— 本地小说走这一条。
+     *
+     * <b>为什么本地书不必点 ☆</b>：玩家往 {@code config/mcphone/reader/books/} 里放一本书，
+     * 这个动作本身就是"我要看它"。再要求他去书城找一遍、点一下星，是在为一个已经表达过的
+     * 意愿再收一次费。模组手册不一样——那是整合包塞给他的几十本，从里面挑几本才需要 ☆。
+     *
+     * 加在末尾、保持先后：新放进去的书排在他已经排好的那些后面，不插队。
+     *
+     * 取消不了：本地书的 ☆ 不画（见 {@code BookList}），要它离开书架就把文件从目录里挪走。
+     * 这是唯一说得通的规矩——只要文件还在，下一次刷新也会把它放回来。
+     */
+    public static void ensureShelved(List<BookRef> books) {
+        if (books == null || books.isEmpty()) return;
+
+        List<Key> shelved = load();
+        boolean changed = false;
+        for (BookRef book : books) {
+            Key key = keyOf(book);
+            if (shelved.contains(key)) continue;
+            shelved.add(key);
+            changed = true;
+        }
+
+        if (!changed) return;
+        revision++;
+        save();
+    }
+
+    /**
      * 架上那些书，按收藏顺序，且只包含【当前书城里还在】的。
      *
      * 认不出的条目原样留在磁盘上，理由见类注释。

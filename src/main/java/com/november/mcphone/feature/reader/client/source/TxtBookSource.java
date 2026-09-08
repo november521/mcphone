@@ -3,6 +3,7 @@ package com.november.mcphone.feature.reader.client.source;
 import com.november.mcphone.MCphone;
 import com.november.mcphone.core.client.PhoneScreen;
 import com.november.mcphone.feature.reader.BookRef;
+import com.november.mcphone.feature.reader.client.ShelfStore;
 import com.november.mcphone.feature.reader.client.TxtLibrary;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
@@ -73,6 +74,10 @@ public final class TxtBookSource implements BookSource {
                     ownerLine(entry)));
         }
         books = List.copyOf(out);
+
+        // 扫到的本地书一律上架：玩家把文件放进目录，这个动作本身就是"我要看它"，
+        // 不该再要求他去书城点一次 ☆，见 ShelfStore.ensureShelved
+        ShelfStore.ensureShelved(books);
 
         if (books.size() != loggedCount) {
             loggedCount = books.size();
