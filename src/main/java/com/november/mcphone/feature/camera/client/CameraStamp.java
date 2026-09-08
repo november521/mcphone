@@ -49,6 +49,21 @@ public final class CameraStamp {
      */
     private static final int COLOR = PhoneTheme.COLOR_CAMERA_STAMP;
 
+    /** 描边色。纯黑不透明——它要在雪地和夜空上都把白字圈出来 */
+    private static final int OUTLINE = 0xFF000000;
+
+    /**
+     * 字高占画面高度的目标比例。
+     *
+     * 2% 是照着手机相机的日期水印定的：小到不抢画面，大到缩掉一半仍读得出。
+     * 只是<b>目标</b>——真正用的倍数取整（见 {@link #scaleOf}），位图字体放大到非整数倍会糊，
+     * 而这一行的全部意义就是"看得清"。
+     */
+    private static final double TARGET_HEIGHT = 0.02;
+
+    /** 最多放大到几倍。再大就从"水印"变成"标语"了 */
+    private static final int MAX_SCALE = 4;
+
     /** true = 印坐标。值的真身在配置里，这里是渲染每帧要读的那一份 */
     private static boolean enabled = true;
 
@@ -95,14 +110,50 @@ public final class CameraStamp {
         if (player == null) return;   // 相机模式下不该发生，真发生了也只是这一帧没有戳
 
         String text = text(player);
+        int scale = scaleOf(h);
         int margin = CameraOverlay.margin(w, h);
 
-        int x = w - margin - INSET - font.width(text);
-        int y = h - margin - INSET - font.lineHeight;
+        int x = w - margin - INSET - font.width(text) * scale;
+        int y = h - margin - INSET - font.lineHeight * scale;
 
-        // 带阴影：照片的底是任意一块世界，纯白的字落在雪地、沙漠、夕阳上都会糊掉，
-        // 而一圈暗边在什么底上都读得出来。这也是原版给世界上的字一律带阴影的理由
-        g.drawString(font, text, x, y, COLOR, true);
+        g.pose().pushPose();
+        g.pose().translate(x, y, 0);
+        g.pose().scale(scale, scale, 1);
+
+        // 描边而不是阴影。阴影只往右下偏一像素，白字压在雪地、沙漠、夕阳上时，
+        // 左上那两条边仍然与底色糊在一起；照片的底是任意一块世界，只能四面都圈住。
+        // 八次 drawString 的代价在一个满屏渲染世界的地方可以忽略
+        for (int dx = -1; dx <= 1; dx++) {
+            for (int dy = -1; dy <= 1; dy++) {
+                if (dx != 0 || dy != 0) g.drawString(font, text, dx, dy, OUTLINE, false);
+            }
+        }
+        g.drawString(font, text, 0, 0, COLOR, false);
+
+        g.pose().popPose();
+    }
+
+    /**
+     * 这一行画多大 —— 按<b>画面高度</b>算，不跟着 GUI 缩放走。
+     *
+     * 为什么不能就用字体本来的大小：照片是按<b>物理像素</b>抓的（{@code Screenshot.grab} 抓的是
+     * 主渲染目标），而界面上一个字有多少物理像素，取决于玩家的 GUI 缩放。同一台 1080p：
+     *
+     * <pre>
+     *   GUI 缩放 3   字高 27 物理像素 ＝ 画面高的 2.5%   看得清
+     *   GUI 缩放 1   字高  9 物理像素 ＝ 画面高的 0.8%   照片放到 100% 才勉强认得出
+     * </pre>
+     *
+     * 也就是说，同样一张照片，戳有多大取决于一个与拍照毫无关系的设置。这里把它掰回来：
+     * 按比例算出倍数，<b>取整</b>之后再放大。取整是因为原版字体是位图字体，1.7 倍这种
+     * 放大会把每个笔画糊成两像素灰边——而这一行要的恰恰是清楚。
+     *
+     * 结果是常见配置（GUI 缩放 2、3）下与从前一模一样，只有把 GUI 缩到很小的那些人
+     * 会看到戳被放大——那正是从前看不清的那一档。
+     */
+    static int scaleOf(int guiScaledHeight) {
+        int scale = (int) Math.round(guiScaledHeight * TARGET_HEIGHT / 9.0);
+        return Math.max(1, Math.min(MAX_SCALE, scale));
     }
 
     /**
