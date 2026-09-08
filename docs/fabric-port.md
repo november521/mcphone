@@ -117,3 +117,18 @@ ModPresence 门面）把 1.9.2 移植时的接缝补丁收编了：调用面代�
 
 同类排查：`ChatMediaPicker` 的空分支只清 `hoveredIdx`、不动 `openFolderHovered`；
 `Gallery` 在空分支之前就完成了 hover 判定——两者都没有这个 bug，只有壁纸页有。
+
+## PR 已提交（2026-09-08）
+
+- **PR**：https://github.com/november521/mcphone/pull/2
+- **分支**：`1.21.1-Fabric`（fork `E33EPUS/mcphone`），base `main`
+- **规模**：+3044/-2474，92 个文件
+- **提交邮箱**：`1683427466@qq.com`（已验证关联 E33EPUS 账号，能进贡献表）
+- **重建说明**：PR 分支是用 `commit-tree` 从上游 `main` 线性重建的（保留上游 SHA），
+  只含我们的 10 个提交；`git filter-branch` 会级联重写上游 20 个提交的 SHA，不要用它做这个仓库的作者修正。
+- **CI**：`action_required` —— 首次贡献者需维护者批准后才跑，不是失败。
+  批准后会触发 `guard-version`（上游禁止人手改 `mod_version`）；PR 正文已说明移植分支
+  需要独立版本号（同 `1.20.1-forge` 的 `0.12.0-beta.1`），建议合并后由 CI 接管。
+- **正文要点**：移植工作 / 修的三个上游 bug（Windows 打开文件夹、空目录按钮失效、
+  NetMusic 1.2.x 播放）/ 新增图片选择器 / 联动 mod 差异（Curios 与 AE2 在 1.21.1 Fabric
+  无构建）/ FlatLaf Apache-2.0 声明 / 分支命名。
