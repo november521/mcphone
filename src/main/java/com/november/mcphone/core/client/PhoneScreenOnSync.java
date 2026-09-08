@@ -4,34 +4,36 @@ import com.november.mcphone.core.PhoneLocation;
 import com.november.mcphone.core.net.MCphoneNetwork;
 import com.november.mcphone.core.net.PhoneScreenOnPacket;
 import net.minecraft.client.Minecraft;
+import net.neoforged.neoforge.client.event.ClientTickEvent;
 
 import java.util.Optional;
 
 /**
- * 把"我手上那部手机亮着"报给服务端 —— 别人看到的模型才会跟着切成白屏。
+ * 把"我这会儿开着的是哪一台设备"报给服务端 —— 别人看到的模型才会跟着切成白屏。
  *
- * 为什么要经过服务端
+ * <h2>为什么要经过服务端</h2>
  *
  * 手机界面是纯客户端的，只有本机知道自己开着它。物品模型要在<b>别人</b>屏幕上也是亮的，
  * 判断依据就得放在同步得出去的地方——物品堆上的组件，而组件只有服务端写得了。这个类是那条
- * 链的第一环：开机/关机时报一次；服务端写组件；组件随手持物品同步给所有看得见这只手的人；
- * {@link PhoneItemProperties} 在渲染时读它。
+ * 链的第一环：本机每 tick 报一次（只在变了的时候）；服务端写组件；组件随手持物品同步给所有
+ * 看得见这只手的人；{@link PhoneItemProperties} 在渲染时读它。
  *
- * 只在开关机那一下发，不轮询
+ * <h2>每 tick 算一次，而不是开关机时各报一次</h2>
  *
- * 手机的"生"与"死"各只有一个收口，所以不必每 tick 去算：
+ * 从前是边沿触发的：开机报一次、关机报一次、挪位再报一次。那要求<b>每一处</b>让设备生或死的
+ * 地方都记得报一句——全屏开、HUD 挂上、ESC、点机身外、被别的界面顶掉、手机离开副手、按 G
+ * 收起 HUD……漏掉任何一处，玩家身上就会出现一台"界面开着、屏幕却黑着"的机器，而且不报错。
+ * 收起 HUD 那一处就漏过：手里全屏开着平板时把副手的手机收起来，平板的屏幕跟着一起灭了。
  *
- *   开机  {@code new PhoneScreen(...)} —— 全屏开的、HUD 挂上的，都从这儿来
- *   关机  {@code PhoneScreen.shutdown()} —— 它自己的注释写着"只该有两个调用方"，
- *         被别的界面顶掉、ESC、点机身外、手机离开副手，最后都汇到这一句
- *   挪位  {@code PhoneScreen.relocate(...)} —— 手机在身上换了个地方，人还开着它
+ * 而"这会儿亮的是哪一台"本来就是个<b>纯查询</b>：全屏那台、HUD 那台，谁拿在手上谁亮
+ * （见 {@link #litNow()}）。每 tick 问一遍，谁都不必记得报告，也就没有"漏报"这回事。
  *
- * 关机那一下是<b>重新算一次</b>而不是直接报灭：全屏开着的那部关掉之后，副手 HUD 上可能还
- * 挂着另一部亮着的（玩家身上带两部时会这样），那时候该把亮的换成它，而不是全灭。
+ * 代价只是最多晚一 tick（50 毫秒）—— 而收益是这一类 bug 不会再出现。发包仍然只在<b>答案变了</b>
+ * 的时候（{@link #send}），开关手机是很低频的事，这条线上一分钟也走不了几个包。
  *
- * 只管拿在手上的那部
+ * <h2>只管拿在手上的那台</h2>
  *
- * 手机在背包里、饰品栏里的时候，那件物品在别人眼里根本不渲染，点亮它没有任何人看得见，
+ * 设备在背包里、饰品栏里的时候，那件物品在别人眼里根本不渲染，点亮它没有任何人看得见，
  * 只是白发一个包、白占一个组件。所以位置不是"在手上"就当没亮——包也不发。
  */
 public final class PhoneScreenOnSync {
@@ -41,38 +43,45 @@ public final class PhoneScreenOnSync {
     /** 上一次报给服务端的状态，用来去重：不变就不发 */
     private static Optional<PhoneLocation> lastSent = Optional.empty();
 
-    /** 有手机开机了，或者开着的那部换了地方 */
-    static void turnedOn(PhoneLocation location) {
-        send(litNow(location, null));
+    /**
+     * 由 MCphoneClient 构造函数挂到游戏总线。
+     *
+     * 排在 {@link PhoneHud#onClientTick} 之后只是为了同一 tick 内就能报上，早一 tick 晚一 tick
+     * 都不影响正确性——下一 tick 照样会算出同一个答案。
+     */
+    public static void onClientTick(ClientTickEvent.Post event) {
+        send(litNow());
     }
 
     /**
-     * 有手机关机了 —— 重新算一次谁还亮着。
+     * 这会儿该亮的是哪一件 —— 两处开着的设备，谁拿在手上算谁。
      *
-     * @param closing 正在关的那部，算的时候要把它排除掉：这一句是在它真正拆完之前调的，
-     *                那时它可能还挂在 {@link PhoneHud} 的字段上
+     * 一台设备的屏幕能在两个地方亮着，而且可以<b>同时</b>亮：
+     *
+     *   全屏那一台  {@code mc.screen} 就是它（右键设备、快捷键、Alt 唤出鼠标）
+     *   HUD 那一台  {@link PhoneHud#hudPhone()}（副手挂着的，或者按 G 叫出来的）
+     *
+     * 玩家身上带两台时（副手挂手机、手里拿平板）这是两台不同的机器，两台的界面可以同时开着。
+     * 而服务端那个组件一次只记一台，所以这里要挑一台：全屏那台优先——玩家正盯着的是它。
+     *
+     * 两处都不在手上就是"没亮"：那件物品在别人眼里根本不渲染，点亮它谁也看不见。
      */
-    static void turnedOff(PhoneScreen closing) {
-        send(litNow(null, closing));
+    private static Optional<PhoneLocation> litNow() {
+        Optional<PhoneLocation> fullscreen = inHandOf(fullscreenPhone());
+        return fullscreen.isPresent() ? fullscreen : inHandOf(PhoneHud.hudPhone());
     }
 
-    /**
-     * 这会儿该亮的是哪一件：先看给的那个位置，再看副手 HUD 上那部。
-     *
-     * 为什么关机、开机都要回头看 HUD 一眼：玩家身上可以有两部——副手挂着一部（HUD 上一直
-     * 亮着），手里/背包里另开一部。关掉后开的那部时，亮的该换回 HUD 那部而不是全灭；反过来
-     * 开了一部在背包里的（点亮不了，别人看不见背包），也不该把 HUD 那部的光顺手灭掉。
-     *
-     * 两个位置都不在手上就是"没亮"：那件物品在别人眼里根本不渲染，点亮它谁也看不见。
-     */
-    private static Optional<PhoneLocation> litNow(PhoneLocation preferred, PhoneScreen exclude) {
-        if (preferred instanceof PhoneLocation.InHand) return Optional.of(preferred);
+    /** 全屏开着的那一台，没有就 null。容器界面（末影箱、唱片仓）不算——那不是一台设备的屏幕 */
+    private static PhoneScreen fullscreenPhone() {
+        return Minecraft.getInstance().screen instanceof PhoneScreen screen ? screen : null;
+    }
 
-        PhoneScreen hud = PhoneHud.hudPhone();
-        if (hud == null || hud == exclude) return Optional.empty();
+    /** 这台开着的设备拿在手上吗；是就把位置给出来。没有这台、或者它不在手上，都算没亮 */
+    private static Optional<PhoneLocation> inHandOf(PhoneScreen screen) {
+        if (screen == null) return Optional.empty();
 
-        PhoneLocation onHud = hud.location();
-        return onHud instanceof PhoneLocation.InHand ? Optional.of(onHud) : Optional.empty();
+        PhoneLocation location = screen.location();
+        return location instanceof PhoneLocation.InHand ? Optional.of(location) : Optional.empty();
     }
 
     /**

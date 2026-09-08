@@ -6,6 +6,7 @@ import com.november.mcphone.core.client.MCphoneKeyBindings;
 import com.november.mcphone.core.client.PhoneHud;
 import com.november.mcphone.core.client.PhoneContainerScreen;
 import com.november.mcphone.core.client.PhoneKeyHandler;
+import com.november.mcphone.core.client.PhoneScreenOnSync;
 import com.november.mcphone.core.client.PhoneScreenRegistry;
 import com.november.mcphone.core.client.PhoneSession;
 import com.november.mcphone.core.client.PhoneSkin;
@@ -66,6 +67,10 @@ public class MCphoneClient {
         // 手机进出副手、Alt 按下松开都在这条 tick 里判，见 PhoneHud
         NeoForge.EVENT_BUS.addListener(PhoneHud::onClientTick);
 
+        // 「这会儿开着的是哪一台」每 tick 算一次，变了才发包。排在 PhoneHud 之后：
+        // 同一 tick 里挂上的那台立刻就能报上去
+        NeoForge.EVENT_BUS.addListener(PhoneScreenOnSync::onClientTick);
+
 
         // 每个 App 自己的快捷键。它不是 KeyMapping，只能听按下事件，理由见 AppHotkeys。
         // 鼠标键单独一条：那类事件与键盘的不是同一个类，而且它可以取消
@@ -90,7 +95,7 @@ public class MCphoneClient {
                     // 排在最前：它要在下面那些缓存被清掉之前把会话存下来。
                     // 这条路上不能碰 setScreen，理由见 PhoneHud.onWorldLeave
                     PhoneHud.onWorldLeave();
-                    com.november.mcphone.core.client.PhoneScreenOnSync.forget();
+                    PhoneScreenOnSync.forget();
 
                     ChatClientCache.clear();
                     ChatImageCache.clear();

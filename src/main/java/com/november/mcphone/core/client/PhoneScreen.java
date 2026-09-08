@@ -181,9 +181,6 @@ public final class PhoneScreen extends Screen {
         this.metrics = metricsAt(location);
         this.openTimeMs = System.currentTimeMillis();
         this.animationDone = PhoneTheme.OPEN_ANIMATION_MS <= 0;
-
-        // 开机了：手上那部的屏幕该亮起来，而且要让【别人】也看得见，见 PhoneScreenOnSync
-        PhoneScreenOnSync.turnedOn(location);
     }
 
     /**
@@ -1380,8 +1377,8 @@ public final class PhoneScreen extends Screen {
      * （手机离开副手）。它不是幂等的，重复调会把已经清过的状态再清一遍。
      */
     void shutdown() {
-        // 关机了：屏幕灭掉。放在最前面，下面那串 close() 与这件事无关
-        PhoneScreenOnSync.turnedOff(this);
+        // 屏幕在别人眼里亮不亮不必在这儿管：那是 PhoneScreenOnSync 每 tick 自己算的，
+        // 这部手机从 mc.screen / PhoneHud 上消失，下一 tick 它自然就灭了
 
         // 先记再关：下面这几个 close() 会把页面状态清掉
         PhoneSession.save(mode, pendingConversationPeer);
@@ -1437,8 +1434,8 @@ public final class PhoneScreen extends Screen {
         // 换了位置就可能换了机器：收进背包的是手机，饰品栏里接着用的是平板
         syncDevice();
 
-        // 从背包挪到手上（或者反过来）时，亮着的那件物品跟着换，见 PhoneScreenOnSync
-        PhoneScreenOnSync.turnedOn(moved);
+        // 从背包挪到手上（或者反过来）时亮着的那件物品跟着换 —— 这儿不必通知谁，
+        // PhoneScreenOnSync 每 tick 读的就是上面这个 location 字段
     }
 
     /**
