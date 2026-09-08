@@ -1,6 +1,7 @@
 package com.november.mcphone.feature.gallery.client;
 
 import com.november.mcphone.core.client.FontPalette;
+import com.november.mcphone.feature.camera.client.CameraStamp;
 import com.november.mcphone.core.client.PhoneSkin;
 import com.november.mcphone.core.client.PhoneTheme;
 import com.november.mcphone.core.client.GuiUtil;
@@ -86,6 +87,10 @@ public final class Gallery {
 
     /** 正在查看的照片下标，-1 表示当前是网格 */
     private int viewing = -1;
+
+    /** 上一次算过标题的那张照片，以及算出来的那一行。见 captionOf */
+    private String captionFile;
+    private String caption = "";
 
     /** 本帧鼠标是否停在右上角那个「打开文件夹」上 */
     private boolean openFolderHovered;
@@ -314,8 +319,10 @@ public final class Gallery {
         int imgBottom = nameRowY - 2;
         renderPhoto(g, font, photo, phoneLeft, imgTop, screenW, imgBottom - imgTop);
 
-        // 文件名过长就截断，手机屏幕放不下完整的时间戳文件名
-        String name = photo.fileName();
+        // 这一行优先显示坐标：文件名是时间戳，而"这张是在哪儿拍的"才是玩家看照片时想问的。
+        // 坐标在拍照时写进了文件名（见 CameraStamp），认不出来的（F2 截的图、老照片）
+        // 照旧显示文件名
+        String name = captionOf(photo.fileName());
         if (font.width(name) > w) name = font.plainSubstrByWidth(name, w - 6) + "…";
         g.drawString(font, name, x + (w - font.width(name)) / 2, nameRowY, colorHint(), false);
 
@@ -343,6 +350,21 @@ public final class Gallery {
                     deleteArmed ? FontPalette.dangerArmed()
                             : (onDelete ? FontPalette.danger() : colorPager()), false);
         }
+    }
+
+    /**
+     * 大图下面那一行写什么：认得出坐标就写坐标，否则写文件名。
+     *
+     * 按文件名缓存：这一句每帧都会被问到，而答案只在换一张照片时才变——正则一帧跑一次
+     * 不算什么，但它是这一页上唯一每帧都在做的"计算"，顺手记住比留着强。
+     */
+    private String captionOf(String fileName) {
+        if (!fileName.equals(captionFile)) {
+            captionFile = fileName;
+            String coords = CameraStamp.coordsIn(fileName);
+            caption = coords != null ? coords : fileName;
+        }
+        return caption;
     }
 
     /** 大图区域：黑底 + 等比居中的照片 */

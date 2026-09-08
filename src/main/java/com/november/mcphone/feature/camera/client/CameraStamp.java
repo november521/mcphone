@@ -7,8 +7,14 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
+import net.minecraft.Util;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.player.Player;
+import org.jetbrains.annotations.Nullable;
+
+import java.io.File;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * 照片右下角那一行坐标 —— 在哪儿拍的，印在照片里。
@@ -31,6 +37,20 @@ import net.minecraft.world.entity.player.Player;
  * 二、**坐标是烧进像素的**，不是照片的一份附带数据。相册、截图文件夹里那张 png、
  * 发给别人的那一份，看到的是同一行字，不依赖任何人装着本模组。代价是拍完不能反悔：
  * 这一版之前拍的照片不会凭空长出坐标，关掉开关也擦不掉已经拍下的那些。
+ *
+ * 同一组坐标还写进【文件名】
+ *
+ * 烧进像素那一行是给"发出去给别人看"用的，而在游戏里它读不出来：手机相册把整张照片塞进
+ * 一百来像素宽，那行字只剩一两个像素高。所以拍照时顺手把坐标写进文件名
+ * （{@link #fileName}），相册看大图时把它解回来、用<b>界面文字</b>显示（{@link #coordsIn}）——
+ * 界面文字多小的照片都清清楚楚。
+ *
+ * 为什么是文件名，不是 png 元数据或另存一份索引：文件名<b>不花任何额外代价</b>。原版
+ * {@code Screenshot.grab} 本来就收一个文件名，写元数据要把几 MB 的文件读回来再写一遍，
+ * 而另存一份索引意味着又多一份会与磁盘对不上的状态。文件名还有个附赠的好处：在文件管理器
+ * 里排一眼就看得见"这张是在哪儿拍的"。
+ *
+ * 代价是改名就没了。这与阅读进度按文件名记是同一个取舍（见 {@code TxtProgress}）。
  */
 public final class CameraStamp {
 
@@ -154,6 +174,60 @@ public final class CameraStamp {
     static int scaleOf(int guiScaledHeight) {
         int scale = (int) Math.round(guiScaledHeight * TARGET_HEIGHT / 9.0);
         return Math.max(1, Math.min(MAX_SCALE, scale));
+    }
+
+    //  文件名
+
+    /**
+     * 从文件名里认坐标的模式。
+     *
+     * 不锚在结尾：重名时后面还会缀 {@code _1}（与原版截图同一套规矩），锚死就认不出来了。
+     */
+    private static final Pattern COORDS = Pattern.compile("_X(-?\\d+)_Y(-?\\d+)_Z(-?\\d+)");
+
+    /**
+     * 这张照片该叫什么 —— 原版那个时间戳文件名后面缀上坐标。
+     *
+     * 返回 {@code null} 表示"按原版的规矩起名"：水印关着、或者玩家不在时就是这样，
+     * 而 {@code Screenshot.grab} 收到 null 正是这个意思，调用方不必判。
+     *
+     * 重名时缀 {@code _1}、{@code _2}，与原版 {@code Screenshot.getFile} 一模一样——
+     * 指定了文件名之后原版不再自己让路，同一秒里在同一格上连拍两张就会互相覆盖。
+     */
+    @Nullable
+    public static String fileName(File gameDirectory, @Nullable Player player) {
+        if (!enabled || player == null) return null;
+
+        String base = Util.getFilenameFormattedDateTime()
+                + "_X" + Mth.floor(player.getX())
+                + "_Y" + Mth.floor(player.getY())
+                + "_Z" + Mth.floor(player.getZ());
+
+        File dir = new File(gameDirectory, "screenshots");
+        String name = base + ".png";
+        for (int n = 1; new File(dir, name).exists(); n++) {
+            name = base + "_" + n + ".png";
+        }
+        return name;
+    }
+
+    /**
+     * 文件名里记着的坐标，认不出来就 {@code null}（F2 截的图、这一版之前拍的照片都是）。
+     *
+     * 格式与烧在照片上那一行走<b>同一个翻译键</b>：同一张照片，界面上显示的和印在像素里的
+     * 是同一行字，不会让人以为是两个数。
+     *
+     * 调用方记得<b>按文件名缓存</b>结果：这一句会被每帧问一次，而答案只在换一张照片时才变。
+     */
+    @Nullable
+    public static String coordsIn(String fileName) {
+        if (fileName == null) return null;
+
+        Matcher m = COORDS.matcher(fileName);
+        if (!m.find()) return null;
+
+        return Component.translatable("mcphone.camera.stamp",
+                m.group(1), m.group(2), m.group(3)).getString();
     }
 
     /**
