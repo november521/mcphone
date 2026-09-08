@@ -1,45 +1,60 @@
 package com.november.mcphone.compat.client;
 
-import com.github.tartaricacid.netmusic.client.audio.MusicPlayManager;
-import com.github.tartaricacid.netmusic.client.audio.NetMusicAudioStream;
 import com.november.mcphone.MCphone;
 import com.november.mcphone.compat.NetMusicCompat;
 import com.november.mcphone.feature.music.NetSong;
 import net.minecraft.client.resources.sounds.SoundInstance;
 import net.minecraft.client.sounds.AudioStream;
 
+import java.lang.reflect.Method;
 import java.net.URL;
 import java.util.function.Function;
 
 /**
  * NetMusic 兼容层的【客户端】那一半 —— 拉流与起播。
  *
- * 为什么与 NetMusicCompat 分成两个文件
+ * <h2>为什么与 NetMusicCompat 分成两个文件</h2>
  *
  * 那边读的是 CD 上的数据组件，两端都要用（服务端要判"这张能不能放"、
- * 要算时长）。这边碰的 {@link MusicPlayManager}、{@link NetMusicAudioStream}
- * 都在 NetMusic 的 client 包里，专用服务器上一碰就崩。
+ * 要算时长）。这边碰的 {@code MusicPlayManager}、{@code NetMusicAudioStream}
+ * 都在 NetMusic 的客户端包里，专用服务器上一碰就崩。
  *
  * 所以按端分开，本类放在含 {@code /client/} 的包里，与 MCEF 那边的做法一致
  * （见 build.gradle 里那段注释：所有引用都关在 client 包里，服务端一个字节
  * 都不会碰到）。
  *
- * 整个模组里只有这两个文件允许出现 NetMusic 的类型
+ * <h2>为什么这里是反射，而 NetMusicCompat 是直接 import</h2>
  *
- * 理由见 {@link NetMusicCompat} 的类注释：对方没有对外的 API 包，我们用的
- * 全是它的内部类。接触面越小，它改版时断的地方越少，而且断在哪儿一目了然。
+ * <b>因为这两个类改过包名。</b>NetMusic 1.2.x 把它们放在
+ * {@code com.github.tartaricacid.netmusic.audio}，1.5.x 挪到了
+ * {@code ...netmusic.client.audio}。写死任一个包名，另一个版本就是
+ * {@code NoClassDefFoundError} —— 玩家看到的是"唱片放进槽位、点了播放没反应"，
+ * 日志之外看不出是版本不对。
  *
- * 这里用到的只有两样：
+ * 反射能把两代都认下来：按候选包名依次找类，找到哪个用哪个，都找不到就
+ * 返回 false（外面本来就有"没装/不兼容"的分支）。
  *
- *   MusicPlayManager.play      解析最终地址（VIP、本地文件、404 都它处理），
- *                              然后在主线程上把我们给的声源交给 SoundManager
- *   new NetMusicAudioStream    把一个地址变成 Minecraft 认的 PCM 流。
- *                              m3u8、分块 http、各种编码都是它在扛，
- *                              我们自己那套 AudioDecoders 只认本地文件
+ * <h2>代价：编译期不再校验</h2>
+ *
+ * 直接 import 时对方改签名我们编不过，当场发现；改成反射后这件事挪到了运行期。
+ * 这是为跨版本兼容付的税。两代的方法签名与构造器完全一致
+ * （{@code play(String, String, Function<URL, SoundInstance>)}、
+ * {@code new NetMusicAudioStream(URL)}），所以一次查找两边通用。
+ *
+ * 找不到时只报一次日志：这条路每张网络 CD 都会走到，逐张刷"不兼容"会把日志淹掉。
  */
 public final class NetMusicPlayback {
 
     private NetMusicPlayback() {}
+
+    /** 1.5.x 起的包名 */
+    private static final String PKG_NEW = "com.github.tartaricacid.netmusic.client.audio.";
+    /** 1.2.x 的包名 */
+    private static final String PKG_OLD = "com.github.tartaricacid.netmusic.audio.";
+
+    private static volatile Method playMethod;
+    private static volatile Class<?> streamClass;
+    private static volatile boolean resolved;
 
     /**
      * 放一首网络歌。
@@ -53,25 +68,15 @@ public final class NetMusicPlayback {
         if (!NetMusicCompat.isLoaded()) return false;
 
         try {
-            playInternal(song, soundMaker);
+            Method play = playMethod();
+            if (play == null) return false;
+            play.invoke(null, song.url(), song.title(), soundMaker);
             return true;
         } catch (Throwable t) {
             // 兜 Throwable：对方改了类名或签名时抛的是 Error，见 NetMusicCompat
             MCphone.LOGGER.error("[MCphone] 交给 NetMusic 播放失败（版本可能不兼容）", t);
             return false;
         }
-    }
-
-    /**
-     * 真正碰 NetMusic 的地方。单独一个方法，只在确认装了之后才可能被调到。
-     *
-     * play 是异步的：它内部先去解析最终地址（可能要发网络请求），拿到之后
-     * 才回到主线程 new 出声源并交给 SoundManager。所以这一句返回时歌还没响，
-     * 失败（404、地址解析不出来）也不会从这里抛出来 —— 对方会自己给玩家发
-     * 一句聊天提示。这是它的行为，不是我们能改的，也不必改。
-     */
-    private static void playInternal(NetSong song, Function<URL, SoundInstance> soundMaker) {
-        MusicPlayManager.play(song.url(), song.title(), soundMaker);
     }
 
     /**
@@ -83,6 +88,47 @@ public final class NetMusicPlayback {
      * @throws Exception 连不上、格式不认识都从这里抛，由调用方兜住
      */
     public static AudioStream openStream(URL url) throws Exception {
-        return new NetMusicAudioStream(url);
+        Class<?> clazz = streamClass();
+        if (clazz == null) {
+            throw new IllegalStateException("NetMusic 的音频流类没找到（版本可能不兼容）");
+        }
+        return (AudioStream) clazz.getConstructor(URL.class).newInstance(url);
+    }
+
+    // ---- 反射解析：两代包名依次试 ----
+
+    private static Method playMethod() {
+        resolve();
+        return playMethod;
+    }
+
+    private static Class<?> streamClass() {
+        resolve();
+        return streamClass;
+    }
+
+    private static synchronized void resolve() {
+        if (resolved) return;
+        resolved = true;
+
+        for (String pkg : new String[]{PKG_NEW, PKG_OLD}) {
+            try {
+                Class<?> manager = Class.forName(pkg + "MusicPlayManager");
+                Method m = manager.getMethod("play", String.class, String.class, Function.class);
+                Class<?> stream = Class.forName(pkg + "NetMusicAudioStream");
+
+                playMethod = m;
+                streamClass = stream;
+                MCphone.LOGGER.info("[MCphone] NetMusic 兼容层就绪（{}）", pkg);
+                return;
+            } catch (ClassNotFoundException | NoSuchMethodException ignored) {
+                // 试下一代
+            } catch (Throwable t) {
+                MCphone.LOGGER.error("[MCphone] 解析 NetMusic 播放 API 出错（{}）", pkg, t);
+            }
+        }
+
+        MCphone.LOGGER.warn("[MCphone] NetMusic 已装，但没找到认识的播放 API（试过 {} 与 {}）"
+                + " —— 手机里的网络 CD 会放不出来", PKG_NEW, PKG_OLD);
     }
 }

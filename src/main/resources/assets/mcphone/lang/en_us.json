@@ -316,5 +316,10 @@
   "mcphone.reader.shelf_empty_hint": "Tap the star on a row under \"All books\" to put it here. Keep the few you actually read on the shelf.",
   "key.mcphone.modifier.control": "Ctrl + %s",
   "key.mcphone.modifier.shift": "Shift + %s",
-  "key.mcphone.modifier.alt": "Alt + %s"
+  "key.mcphone.modifier.alt": "Alt + %s",
+  "mcphone.gui.pick_image": "Pick image",
+  "mcphone.picker.title": "Choose an image",
+  "mcphone.picker.filter.image": "Image files",
+  "mcphone.picker.preview.none": "No selection",
+  "mcphone.picker.preview.loading": "Loading…"
 }

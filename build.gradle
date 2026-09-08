@@ -50,6 +50,10 @@ dependencies {
     // 玩家不必单独装库。
     include implementation("fr.delthas:javamp3:${javamp3_version}")
 
+    // FlatLaf —— 文件选择器的观感（见 gradle.properties 那段注释）。
+    // 与 javamp3 同样 include 内嵌，不增加玩家的安装步骤。
+    include implementation("com.formdev:flatlaf:${flatlaf_version}")
+
     // === 可选联动依赖（编译期）—— 装了的就多一个 App/功能，没装则不出现 ===
     // 原 NeoForge 版的 Curios 在 1.21.1 Fabric 上没有构建，故不列（手机"挂腰"功能
     // 在 Fabric 版暂缺）。FTB Quests 走反射（FtbQuestsBook），无需编译依赖。

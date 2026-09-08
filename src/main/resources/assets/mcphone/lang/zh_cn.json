@@ -316,5 +316,10 @@
   "mcphone.reader.shelf_empty_hint": "去「书城」点书右边的 ☆，它就放到这儿了。常翻的那几本收进来，以后不用每次从几十本里翻。",
   "key.mcphone.modifier.control": "Ctrl + %s",
   "key.mcphone.modifier.shift": "Shift + %s",
-  "key.mcphone.modifier.alt": "Alt + %s"
+  "key.mcphone.modifier.alt": "Alt + %s",
+  "mcphone.gui.pick_image": "选择图片",
+  "mcphone.picker.title": "选择一张图片",
+  "mcphone.picker.filter.image": "图片文件",
+  "mcphone.picker.preview.none": "未选择",
+  "mcphone.picker.preview.loading": "载入中…"
 }

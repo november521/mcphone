@@ -5,7 +5,6 @@ import com.november.mcphone.core.client.GuiUtil;
 import com.november.mcphone.core.client.ImageFolder;
 import com.november.mcphone.core.client.PhoneTheme;
 import com.november.mcphone.feature.gallery.client.PhotoGridPainter;
-import net.minecraft.Util;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
@@ -184,7 +183,7 @@ public final class ChatMediaPicker {
         if (openFolderHovered) {
             // 交给系统的文件管理器开，不弹任何 Java 自己的窗口：
             // AWT 的选择器在 macOS 上要与游戏抢主线程，而这条走的是 xdg-open / explorer / open
-            Util.getPlatform().openPath(folder.ensureDirectory());
+            com.november.mcphone.core.client.FolderOpener.open(folder.ensureDirectory());
             return true;
         }
 

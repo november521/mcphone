@@ -5,13 +5,16 @@ import com.november.mcphone.core.client.PhoneTheme;
 import com.november.mcphone.core.net.MCphoneNetwork;
 import com.november.mcphone.feature.settings.net.SetWallpaperPacket;
 import com.november.mcphone.core.client.GuiUtil;
+import com.november.mcphone.core.client.ImagePicker;
 import net.minecraft.Util;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
 
 import java.util.List;
+import java.util.Locale;
 
 /**
  * 壁纸选择器 —— 在手机屏幕区域内展示壁纸缩略图列表。
@@ -38,7 +41,7 @@ public final class WallpaperPicker {
     /** 右上角那个键的点击判定往外放宽一点，字太小不好点 */
     private static final int HIT_PAD = 2;
 
-    private int hoveredIdx = -1;     // -3 = "打开文件夹", -2 = "恢复默认", -1 = 无hover, 0..N = 壁纸索引
+    private int hoveredIdx = -1;     // -4 = "选择图片", -3 = "打开文件夹", -2 = "恢复默认", -1 = 无hover, 0..N = 壁纸索引
 
     /**
      * 网格从第几【行】开始画。
@@ -125,15 +128,32 @@ public final class WallpaperPicker {
         g.drawString(font, title, contentX, contentY, FontPalette.title(), true);
         contentY += font.lineHeight + 4;
 
-        // ---- "恢复默认" 按钮 ----
+        // ---- 两个按钮并排：「选择图片」+「恢复默认」 ----
+        //
+        // 挤在一行是因为这一页的垂直空间要留给壁纸网格：多占一行就少一行缩略图。
+        // 左边那个是新增的入口（移植自 AtomChat 的文件选择器），比让玩家自己翻文件夹、
+        // 拖一张图进去再切回游戏友好得多。
         int btnY = contentY;
-        if (GuiUtil.hit(mouseX, mouseY, contentX, btnY, contentW, font.lineHeight + 4)) {
-            hovered = -2;
-            g.fill(contentX, btnY, contentX + contentW, btnY + font.lineHeight + 4, PhoneTheme.COLOR_HOVER_STRONG);
+        int btnH = font.lineHeight + 4;
+        int halfW = (contentW - GAP) / 2;
+
+        if (GuiUtil.hit(mouseX, mouseY, contentX, btnY, halfW, btnH)) {
+            hovered = -4;
+            g.fill(contentX, btnY, contentX + halfW, btnY + btnH, PhoneTheme.COLOR_HOVER_STRONG);
         }
-        g.drawString(font, Component.translatable("mcphone.gui.wallpaper_default").getString(),
+        g.drawString(font, GuiUtil.truncate(font,
+                        Component.translatable("mcphone.gui.pick_image").getString(), halfW - 4),
                 contentX + 2, btnY + 2, FontPalette.body(), false);
-        contentY = btnY + font.lineHeight + 6;
+
+        int rightX = contentX + halfW + GAP;
+        if (GuiUtil.hit(mouseX, mouseY, rightX, btnY, halfW, btnH)) {
+            hovered = -2;
+            g.fill(rightX, btnY, rightX + halfW, btnY + btnH, PhoneTheme.COLOR_HOVER_STRONG);
+        }
+        g.drawString(font, GuiUtil.truncate(font,
+                        Component.translatable("mcphone.gui.wallpaper_default").getString(), halfW - 4),
+                rightX + 2, btnY + 2, FontPalette.body(), false);
+        contentY = btnY + btnH + 2;
 
         // ---- 分割线 ----
         g.fill(contentX, contentY, contentX + contentW, contentY + 1, PhoneTheme.COLOR_DIVIDER);
@@ -255,12 +275,28 @@ public final class WallpaperPicker {
         if (button != 0) return false;
 
         if (hoveredIdx == -3) {
-            // 交给系统自己的文件管理器，不弹任何 Java 的窗口——AWT 的选择器在 macOS 上
-            // 要与游戏抢主线程。开完【留在这一页】：玩家接下来要做的是拖一张图进去再回来，
-            // 把他踢回设置列表等于让他再点两下进来
-            Util.getPlatform().openPath(WallpaperStore.directory());
+            // 交给系统自己的文件管理器（Windows 上走 explorer.exe，理由见 FolderOpener：
+            // 原版的 rundll32 对目录静默失败）。开完【留在这一页】：玩家接下来要做的是
+            // 拖一张图进去再回来，把他踢回设置列表等于让他再点两下进来
+            com.november.mcphone.core.client.FolderOpener.open(WallpaperStore.directory());
             watchingFolder = true;
             return false;
+        }
+
+        if (hoveredIdx == -4) {
+            // 弹窗必须在【后台线程】上开：pickImage 会一直等到玩家选完，
+            // 放在渲染线程上会把游戏整个冻住（连窗口都不重绘）。
+            // 选完再回主线程导入并刷新列表——importFile 是写盘，刷新要碰贴图。
+            Util.backgroundExecutor().execute(() -> {
+                java.nio.file.Path picked = ImagePicker.pickImage(
+                        name -> name.toLowerCase(Locale.ROOT).endsWith(".png"));
+                if (picked == null) return;
+                Minecraft.getInstance().execute(() -> {
+                    WallpaperStore.importFile(picked);
+                    WallpaperStore.refresh();
+                });
+            });
+            return false;   // 留在这一页：导入完成后新图就在眼前
         }
 
         if (hoveredIdx == -2) {

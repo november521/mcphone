@@ -6,7 +6,6 @@ import com.november.mcphone.core.client.PhoneTheme;
 import com.november.mcphone.core.client.GuiUtil;
 import com.november.mcphone.core.client.ImageCodec;
 import com.november.mcphone.core.client.ImageFolder;
-import net.minecraft.Util;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
@@ -409,7 +408,7 @@ public final class Gallery {
         if (openFolderHovered) {
             // 交给系统自己的文件管理器开，不弹任何 Java 的窗口：AWT 的选择器在 macOS 上
             // 要与游戏抢主线程。目录不存在时先建出来——玩家点它的时候相册多半正是空的
-            Util.getPlatform().openPath(PhotoLibrary.folder().ensureDirectory());
+            com.november.mcphone.core.client.FolderOpener.open(PhotoLibrary.folder().ensureDirectory());
             return true;
         }
 
