@@ -5,6 +5,7 @@ import com.november.mcphone.feature.settings.client.WallpaperStore;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.world.inventory.Slot;
+import org.jetbrains.annotations.Nullable;
 
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
@@ -19,29 +20,16 @@ import java.time.format.DateTimeFormatter;
  *
  * 所有坐标参数都是"屏幕内区域左上角"，即不含边框。边框由本类自己往
  * 外扩，调用方不必关心。
+ *
+ * 尺寸一律由调用方给，本类不假设"手机就是 120×200"：状态栏与导航栏收一份
+ * {@link DeviceMetrics}（手机还是平板），壁纸与外壳收一对宽高（容器界面按自己的
+ * 格子数定尺寸，那不是一台设备，见 {@link #drawContainerBackdrop}）。
  */
 public final class PhoneChassis {
 
     private PhoneChassis() {}
 
     private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
-
-    /**
-     * 画外壳与屏幕背景（壁纸或纯色），尺寸为标准竖屏机身。
-     *
-     * @param phoneLeft 屏幕内区域左上角 X（不含边框）
-     * @param phoneTop  屏幕内区域左上角 Y（不含边框）
-     */
-    public static void drawScreenBackground(GuiGraphics g, int phoneLeft, int phoneTop) {
-        drawScreenBackground(g, phoneLeft, phoneTop,
-                PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT);
-    }
-
-    /** 标准竖屏机身的外壳。画在最上层，理由见 {@link #drawFrame} */
-    public static void drawFrame(GuiGraphics g, int phoneLeft, int phoneTop) {
-        drawFrame(g, phoneLeft, phoneTop,
-                PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT);
-    }
 
     /**
      * 容器界面的整块底 —— 外壳与壁纸、压暗的蒙版、每个格子的底板。
@@ -131,15 +119,40 @@ public final class PhoneChassis {
      * 同一条也落在兜底路径上：没有贴图时只画四条边组成的那一圈，不能像
      * 以前那样填满整个机身。
      */
+    /**
+     * 外壳四角留多少像素不参与拉伸。
+     *
+     * 24 是这么来的：可见的一圈是外侧 8 像素，圆角半径建议不超过 11
+     * （见 {@link PhoneSkin.Element#FRAME}），24 把两者都包住还富余。再大就会把四条边
+     * 上本该拉伸的那一段也钉住，长边上的花纹会挤在两头
+     */
+    private static final int FRAME_CORNER = 24;
+
+    /**
+     * 容器界面（末影箱、唱片仓、终端卡槽）那一版：它们自己定尺寸，不是一台设备，
+     * 一律用手机那张外壳。
+     */
     public static void drawFrame(GuiGraphics g, int phoneLeft, int phoneTop,
                                  int screenW, int screenH) {
+        drawFrame(g, phoneLeft, phoneTop, screenW, screenH, null);
+    }
+
+    /**
+     * @param device 这一圈框的是哪台设备。平板有自己的外壳贴图（键在上下），
+     *               资源包没做那张时退回手机那张，见 {@link PhoneSkin.Element#FRAME_TABLET}
+     */
+    public static void drawFrame(GuiGraphics g, int phoneLeft, int phoneTop,
+                                 int screenW, int screenH,
+                                 @Nullable DeviceMetrics device) {
         final int b = PhoneTheme.PHONE_BORDER;
         final int fl = phoneLeft - b;
         final int ft = phoneTop - b;
         final int fw = screenW + b * 2;
         final int fh = screenH + b * 2;
 
-        if (PhoneSkin.draw(g, PhoneSkin.Element.FRAME, fl, ft, fw, fh)) return;
+        // 按机身形状切九宫格，而不是整张拉伸：平板机身宽一倍矮一截，抻上去那一圈边会
+        // 变成左右粗、上下细，还会盖住屏幕内容。手机上切出来与从前逐像素相同
+        if (PhoneSkin.drawFrame(g, fl, ft, fw, fh, FRAME_CORNER, device)) return;
 
         // 兜底：只画那一圈，理由见方法注释
         g.fill(fl, ft, fl + fw, ft + b, PhoneTheme.COLOR_FRAME);                 // 上
@@ -152,15 +165,21 @@ public final class PhoneChassis {
     /** 状态栏没有贴图时的兜底底色（半透明黑，压在壁纸上仍看得清） */
     private static final int COLOR_STATUS_BAR_FALLBACK = PhoneTheme.COLOR_SCRIM;
 
-    /** 画顶部状态栏：左侧信号、右侧时钟。背景可换肤 */
-    public static void drawStatusBar(GuiGraphics g, Font font, int phoneLeft, int phoneTop) {
+    /**
+     * 画顶部状态栏：左侧信号、右侧时钟。背景可换肤。
+     *
+     * 高度不随设备变（{@link PhoneTheme#STATUS_BAR_HEIGHT}）：这一条的高矮由字号定，
+     * 屏幕宽一倍不该让它跟着变粗。变的只有宽度与时钟靠的那条右边界。
+     */
+    public static void drawStatusBar(GuiGraphics g, Font font, int phoneLeft, int phoneTop,
+                                     DeviceMetrics metrics) {
         PhoneSkin.drawOrFill(g, PhoneSkin.Element.STATUS_BAR,
                 phoneLeft, phoneTop,
-                PhoneTheme.PHONE_WIDTH, PhoneTheme.STATUS_BAR_HEIGHT,
+                metrics.screenW(), PhoneTheme.STATUS_BAR_HEIGHT,
                 COLOR_STATUS_BAR_FALLBACK);
 
         String time = LocalTime.now().format(TIME_FORMATTER);
-        int tx = phoneLeft + PhoneTheme.PHONE_WIDTH - 6 - font.width(time);
+        int tx = phoneLeft + metrics.screenW() - 6 - font.width(time);
         g.drawString(font, time, tx, phoneTop + 1, PhoneTheme.FONT_COLOR_STATUS, true);
         g.drawString(font, "●●●●", phoneLeft + 4, phoneTop + 1, PhoneTheme.FONT_COLOR_STATUS, true);
     }
@@ -179,7 +198,10 @@ public final class PhoneChassis {
         TASKS
     }
 
-    /** 三个按键各占屏幕宽度的三分之一 */
+    /**
+     * 三个键沿导航条的【长边】等分：横在底下时分的是屏幕宽，立在右边时分的是屏幕高。
+     * 条摆在哪儿、每个键占哪一段，全在 {@link NavBarLayout} —— 画与判命中取的是同一份
+     */
     private static final NavButton[] NAV_ORDER =
             {NavButton.BACK, NavButton.HOME, NavButton.TASKS};
 
@@ -197,42 +219,54 @@ public final class PhoneChassis {
      * 分开写迟早会出现"看得见点不到"或"点得到看不见"。
      */
     public static NavButton hitTestNavBar(double mouseX, double mouseY,
-                                          int phoneLeft, int phoneTop) {
-        int ny = phoneTop + PhoneTheme.PHONE_HEIGHT - PhoneTheme.NAV_BAR_HEIGHT;
-        if (mouseY < ny || mouseY >= phoneTop + PhoneTheme.PHONE_HEIGHT) return NavButton.NONE;
-        if (mouseX < phoneLeft || mouseX >= phoneLeft + PhoneTheme.PHONE_WIDTH) return NavButton.NONE;
-
-        int tw = PhoneTheme.PHONE_WIDTH / 3;
-        int idx = (int) ((mouseX - phoneLeft) / tw);
-        // 宽度除不尽时最右侧可能算出 3，夹回最后一个按键
-        if (idx >= NAV_ORDER.length) idx = NAV_ORDER.length - 1;
-        return NAV_ORDER[idx];
+                                          int phoneLeft, int phoneTop, DeviceMetrics metrics) {
+        int idx = NavBarLayout.of(phoneLeft, phoneTop, metrics)
+                .cellAt(mouseX, mouseY, NAV_ORDER.length);
+        return idx < 0 ? NavButton.NONE : NAV_ORDER[idx];
     }
 
     /**
-     * 画底部导航栏：三个虚拟按键，悬停时高亮。
+     * 画导航栏：三个虚拟按键，悬停时高亮。竖屏横在底下，横屏立在右边。
      *
      * 高亮不只是好看：这三个键此前是纯装饰，玩家没有理由认为它们可点。
      * 鼠标移上去有反馈，才看得出是按钮。
      */
     public static void drawNavBar(GuiGraphics g, Font font, int phoneLeft, int phoneTop,
-                                  int mouseX, int mouseY) {
-        int ny = phoneTop + PhoneTheme.PHONE_HEIGHT - PhoneTheme.NAV_BAR_HEIGHT;
+                                  DeviceMetrics metrics, int mouseX, int mouseY) {
+        NavBarLayout bar = NavBarLayout.of(phoneLeft, phoneTop, metrics);
         PhoneSkin.drawOrFill(g, PhoneSkin.Element.NAV_BAR,
-                phoneLeft, ny,
-                PhoneTheme.PHONE_WIDTH, PhoneTheme.NAV_BAR_HEIGHT,
+                bar.x(), bar.y(), bar.w(), bar.h(),
                 PhoneTheme.COLOR_NAV_BAR);
 
-        NavButton hovered = hitTestNavBar(mouseX, mouseY, phoneLeft, phoneTop);
+        NavButton hovered = hitTestNavBar(mouseX, mouseY, phoneLeft, phoneTop, metrics);
 
-        int cy = ny + PhoneTheme.NAV_BAR_HEIGHT / 2 - font.lineHeight / 2;
-        int tw = PhoneTheme.PHONE_WIDTH / 3;
+        if (!bar.vertical()) {
+            drawNavKeys(g, font, bar, hovered, metrics);
+            return;
+        }
+
+        // 立着的条只有 14 宽，而图标按 40×14 的设计尺寸画（理由见 drawNavKeys）。
+        // 裁在条里：自带的三个图案只占正中那一小块，裁不到；资源包要是把 40×14 画满了，
+        // 露出来的也只有中间那 14，不会糊到页面上
+        GuiUtil.clipped(g, bar.x(), bar.y(), bar.x() + bar.w(), bar.y() + bar.h(),
+                () -> drawNavKeys(g, font, bar, hovered, metrics));
+    }
+
+    private static void drawNavKeys(GuiGraphics g, Font font, NavBarLayout bar,
+                                    NavButton hovered, DeviceMetrics metrics) {
         for (int i = 0; i < NAV_GLYPHS.length; i++) {
+            int from = bar.cellFrom(i, NAV_ORDER.length);
+            int to = bar.cellTo(i, NAV_ORDER.length);
+
+            // 这一格的矩形。立着的条上三个键上下排，横着的条上左右排
+            int cx = bar.vertical() ? bar.x() : bar.x() + from;
+            int cy = bar.vertical() ? bar.y() + from : bar.y();
+            int cw = bar.vertical() ? bar.w() : to - from;
+            int ch = bar.vertical() ? to - from : bar.h();
+
             boolean isHovered = hovered == NAV_ORDER[i];
             if (isHovered) {
-                g.fill(phoneLeft + tw * i, ny,
-                        phoneLeft + tw * (i + 1), phoneTop + PhoneTheme.PHONE_HEIGHT,
-                        PhoneTheme.COLOR_ROW_HOVER);
+                g.fill(cx, cy, cx + cw, cy + ch, PhoneTheme.COLOR_ROW_HOVER);
             }
             // 悬停时整张贴图按倍数提亮。贴图改不了颜色，只能这么亮——
             // 用倍数而不是换成白色：资源包画的是什么颜色，亮起来还是那个颜色。
@@ -241,15 +275,24 @@ public final class PhoneChassis {
                 float b = PhoneTheme.SKIN_HOVER_BRIGHTNESS;
                 g.setColor(b, b, b, 1f);
             }
-            // 按键图标可换肤；没有贴图就画原来的字符符号
-            boolean drawn = PhoneSkin.draw(g, NAV_ICONS[i],
-                    phoneLeft + tw * i, ny, tw, PhoneTheme.NAV_BAR_HEIGHT);
+            // 按键图标可换肤；没有贴图就画原来的字符符号。
+            //
+            // 图标按它自己的【设计尺寸 40×14】画、在这一格里居中，而不是撑满整格：手机上
+            // 一格正好 40×14，画出来与从前一模一样；平板横着一格 80、立着一格 14×52，撑满
+            // 就等于把 ◁ 抻长。可点的仍然是整格，见 hitTestNavBar
+            int iconW = bar.vertical()
+                    ? PhoneTheme.NAV_ICON_WIDTH
+                    : Math.min(cw, PhoneTheme.NAV_ICON_WIDTH);
+            int iconH = metrics.navThickness();
+            int iconX = cx + (cw - iconW) / 2;
+            int iconY = cy + (ch - iconH) / 2;
+            boolean drawn = PhoneSkin.draw(g, NAV_ICONS[i], iconX, iconY, iconW, iconH);
             if (isHovered) g.setColor(1f, 1f, 1f, 1f);
 
             if (!drawn) {
                 int bw = font.width(NAV_GLYPHS[i]);
-                int bx = phoneLeft + tw * i + (tw - bw) / 2;
-                g.drawString(font, NAV_GLYPHS[i], bx, cy,
+                g.drawString(font, NAV_GLYPHS[i],
+                        cx + (cw - bw) / 2, cy + (ch - font.lineHeight) / 2,
                         isHovered ? PhoneTheme.FONT_COLOR_NAV_HOVER : PhoneTheme.FONT_COLOR_NAV, false);
             }
         }

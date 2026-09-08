@@ -18,6 +18,7 @@ public class ModCreativeTabs {
                     .icon(() -> MCphone.PHONE.get().getDefaultInstance())
                     .displayItems((params, output) -> {
                         output.accept(MCphone.PHONE.get());
+                        output.accept(MCphone.TABLET.get());
                     })
                     .build());
 }

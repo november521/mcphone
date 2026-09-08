@@ -233,7 +233,7 @@ public final class PhoneHud {
         // 界面开着就开着，不会因为物品没了自己合上
         if (phone != null && mc.screen == phone && !phone.isHudMode()) return phone.location();
 
-        boolean auto = PhoneHudPlacement.enabled() && PhoneItem.isPhone(player.getOffhandItem());
+        boolean auto = PhoneHudPlacement.enabled() && PhoneItem.isDevice(player.getOffhandItem());
 
         // 自动那条翻了面就把手动那份作废，理由见 Override 的注释
         if (auto != lastAuto) {
@@ -249,8 +249,12 @@ public final class PhoneHud {
         if (!want) return null;
 
         if (phone != null) {
-            // 还在记着的那个位置上，最常见的情形，什么都不用做
-            if (PhoneItem.isPhone(phone.location().resolve(player))) return phone.location();
+            // 还在记着的那个位置上，最常见的情形。位置没变不等于机器没换——玩家可能刚把
+            // 副手上的平板与主手的手机对调了，那一下要让屏幕尺寸跟上，见 syncDevice
+            if (PhoneItem.isDevice(phone.location().resolve(player))) {
+                phone.syncDevice();
+                return phone.location();
+            }
 
             // 不在了。自动那条盯的就是副手那一格，那儿空了就是空了
             if (manual != Override.SHOW) return null;
@@ -374,10 +378,13 @@ public final class PhoneHud {
         int guiH = window.getGuiScaledHeight();
         if (guiW <= 0 || guiH <= 0) return;
 
-        double centerX = PhoneHudPlacement.originX(guiW, guiH)
-                + PhoneHudPlacement.width(guiW, guiH) / 2.0;
-        double centerY = PhoneHudPlacement.originY(guiW, guiH)
-                + PhoneHudPlacement.height(guiW, guiH) / 2.0;
+        // 挂着的那台自己知道多大（手机还是平板），拿它算中心
+        DeviceMetrics metrics = phone != null ? phone.metrics() : DeviceMetrics.PHONE;
+
+        double centerX = PhoneHudPlacement.originX(metrics, guiW, guiH)
+                + PhoneHudPlacement.width(metrics, guiW, guiH) / 2.0;
+        double centerY = PhoneHudPlacement.originY(metrics, guiW, guiH)
+                + PhoneHudPlacement.height(metrics, guiW, guiH) / 2.0;
 
         GLFW.glfwSetCursorPos(window.getWindow(),
                 centerX * window.getScreenWidth() / guiW,

@@ -1,5 +1,6 @@
 package com.november.mcphone.feature.settings.client;
 
+import com.november.mcphone.core.client.DeviceMetrics;
 import com.november.mcphone.core.client.FontPalette;
 import com.november.mcphone.core.client.GuiUtil;
 import com.november.mcphone.core.client.PhoneScale;
@@ -76,7 +77,7 @@ public final class UiScalePage {
     public void render(GuiGraphics g, int phoneLeft, int phoneTop,
                        int screenW, int screenH, int statusH, int navH,
                        int mouseX, int mouseY, Font font,
-                       int windowW, int windowH) {
+                       DeviceMetrics metrics, int windowW, int windowH) {
 
         final int x = phoneLeft + PAD_X;
         final int w = screenW - PAD_X * 2;
@@ -127,8 +128,8 @@ public final class UiScalePage {
         y = rowY + BTN + 4;
 
         //  被窗口夹住时说一声 
-        if (PhoneScale.clampedByWindow(windowW, windowH)) {
-            int real = Math.round(PhoneScale.fit(windowW, windowH) * 100);
+        if (PhoneScale.clampedByWindow(metrics, windowW, windowH)) {
+            int real = Math.round(PhoneScale.fit(metrics, windowW, windowH) * 100);
             g.drawString(font, GuiUtil.truncate(font,
                             Component.translatable("mcphone.settings.ui_scale_clamped", real + "%").getString(), w),
                     x, y, FontPalette.notice(), false);

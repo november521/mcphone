@@ -2,15 +2,17 @@ package com.november.mcphone.core.client;
 
 import com.november.mcphone.MCphone;
 import com.november.mcphone.core.PhoneItemData;
+import net.minecraft.client.renderer.item.ClampedItemPropertyFunction;
 import net.minecraft.client.renderer.item.ItemProperties;
 import net.minecraft.resources.ResourceLocation;
 
 /**
- * 手上那部手机亮不亮 —— 物品模型按这个数在黑屏与白屏之间切。
+ * 手上那台设备亮不亮 —— 物品模型按这个数在黑屏与白屏之间切。手机与平板同一套做法。
  *
  * 界面开着的时候屏幕是亮的，这在物品上也该看得见：{@code models/item/phone.json} 挂着一条
  * override，{@code mcphone:screen_on} 到 1 就换成 {@code item/phone_white}（白屏那份模型），
  * 否则用父模型 {@code item/phone_black}。两份模型的几何完全一样，只差贴图里屏幕那一块。
+ * 平板是 {@code models/item/tablet.json} 与那两份 {@code tablet_*}，一模一样的结构。
  *
  * 亮不亮读的是<b>物品堆上的组件</b>，不是本机的界面状态
  *
@@ -36,7 +38,13 @@ public final class PhoneItemProperties {
      * 别的模组并行跑的。
      */
     public static void register() {
-        ItemProperties.register(MCphone.PHONE.get(), SCREEN_ON,
-                (stack, level, entity, seed) -> PhoneItemData.isScreenOn(stack) ? 1f : 0f);
+        // 手机与平板各挂一份：物品属性是【按物品】注册的，漏了平板那一件，
+        // 它的模型 override 永远问不到这个值，屏幕就一直是黑的
+        ItemProperties.register(MCphone.PHONE.get(), SCREEN_ON, SCREEN_ON_VALUE);
+        ItemProperties.register(MCphone.TABLET.get(), SCREEN_ON, SCREEN_ON_VALUE);
     }
+
+    /** 两件物品共用同一个函数：亮不亮只看物品堆上的组件，与是哪一台无关 */
+    private static final ClampedItemPropertyFunction SCREEN_ON_VALUE =
+            (stack, level, entity, seed) -> PhoneItemData.isScreenOn(stack) ? 1f : 0f;
 }

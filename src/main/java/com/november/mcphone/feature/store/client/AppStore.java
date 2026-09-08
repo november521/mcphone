@@ -3,6 +3,7 @@ package com.november.mcphone.feature.store.client;
 import com.november.mcphone.api.client.store.AppInfo;
 import com.november.mcphone.api.client.store.IAppSource;
 import com.november.mcphone.core.client.FontPalette;
+import com.november.mcphone.core.client.HomeLayout;
 import com.november.mcphone.core.client.PhoneScreenRegistry;
 import com.november.mcphone.core.client.PhoneSkin;
 import com.november.mcphone.core.client.PhoneTheme;
@@ -79,8 +80,9 @@ public final class AppStore {
     /** 错误提示，显示在标题下方 */
     private Component message = null;
 
-    // 上一帧算出来的网格几何。命中判定要用同一套数字，重算一遍迟早会算歪
-    private int gridX, gridY, cellW, cellH, rowsPerPage;
+    // 上一帧算出来的网格几何。命中判定要用同一套数字，重算一遍迟早会算歪。
+    // 列数也在其中：屏幕多宽就排几个（手机 4 个、平板 8 个），不再是个定值
+    private int gridX, gridY, cellW, cellH, cols, rowsPerPage;
     private int pagerY;
 
     /**
@@ -136,7 +138,7 @@ public final class AppStore {
     //  分页
 
     private int perPage() {
-        return PhoneTheme.APP_COLUMNS * Math.max(1, rowsPerPage);
+        return Math.max(1, cols) * Math.max(1, rowsPerPage);
     }
 
     private int pageCount() {
@@ -223,7 +225,9 @@ public final class AppStore {
         final int is = PhoneTheme.APP_ICON_SIZE;
         cellW = is + PhoneTheme.APP_GRID_SPACING_X;
         cellH = is + (int) (font.lineHeight * PhoneTheme.APP_NAME_SCALE) + 6;
-        gridX = phoneLeft + PhoneTheme.APP_GRID_PADDING_LEFT;
+        // 与主屏同一套算术：能排几个就排几个，整排居中。手机上算出来仍是 4 个、左边 8
+        cols = HomeLayout.cellsThatFit(screenW, cellW, PhoneTheme.APP_COLUMNS_MAX);
+        gridX = phoneLeft + HomeLayout.gridInset(screenW, cols, cellW, PhoneTheme.APP_GRID_SPACING_X);
         gridY = y + 2;
 
         // 先按"要不要翻页条"留出下边界。多算一次是为了避免鸡生蛋：
@@ -243,8 +247,8 @@ public final class AppStore {
         hoveredIdx = -1;
         for (int i = from; i < to; i++) {
             int slot = i - from;
-            int ix = gridX + (slot % PhoneTheme.APP_COLUMNS) * cellW;
-            int iy = gridY + (slot / PhoneTheme.APP_COLUMNS) * cellH;
+            int ix = gridX + (slot % cols) * cellW;
+            int iy = gridY + (slot / cols) * cellH;
 
             boolean hovered = mouseX >= ix && mouseX <= ix + is
                     && mouseY >= iy && mouseY <= iy + is;

@@ -30,7 +30,13 @@ public final class WallpaperPicker {
     private static final int GAP = 4;
     private static final int PAD_X = 6;
     private static final int PAD_Y = 2;
-    private static final int COLS = 2;
+    /**
+     * 一行几张 —— 由内容区宽度算，不是定值。手机上算出来是 2（与从前写死的一样），
+     * 平板上是 4。末尾那道间隙不存在，所以先加一个 GAP 再除，与相册那边同一个写法。
+     */
+    private static int colsFor(int contentW) {
+        return Math.max(1, (contentW + GAP) / (THUMB_W + GAP));
+    }
 
     /** 标题与右上角那个键之间至少留的空隙 */
     private static final int HEADER_GAP = 4;
@@ -161,7 +167,8 @@ public final class WallpaperPicker {
 
         final int availH = contentBottom - contentY;
         final int visibleRows = availH < cellNeed ? 1 : (availH - cellNeed) / cellH + 1;
-        final int totalRows = (wallpapers.size() + COLS - 1) / COLS;
+        final int cols = colsFor(contentW);
+        final int totalRows = (wallpapers.size() + cols - 1) / cols;
         // 删掉几张图之后行数会变少，不夹一下就会停在空白处
         maxScrollRow = Math.max(0, totalRows - visibleRows);
         scrollRow = Mth.clamp(scrollRow, 0, maxScrollRow);
@@ -170,7 +177,7 @@ public final class WallpaperPicker {
         int y = contentY;
         int col = 0;
 
-        for (int i = scrollRow * COLS; i < wallpapers.size(); i++) {
+        for (int i = scrollRow * cols; i < wallpapers.size(); i++) {
             WallpaperStore.WallpaperEntry wp = wallpapers.get(i);
 
             if (y + cellNeed > contentBottom) break;
@@ -193,7 +200,7 @@ public final class WallpaperPicker {
                     x + THUMB_W / 2, y + THUMB_H + 1, FontPalette.appName());
 
             col++;
-            if (col >= COLS) {
+            if (col >= cols) {
                 x = contentX;
                 y += THUMB_H + font.lineHeight + 4 + 2;
                 col = 0;
