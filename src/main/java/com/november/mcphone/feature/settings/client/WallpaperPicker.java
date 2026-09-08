@@ -169,7 +169,14 @@ public final class WallpaperPicker {
                     contentX, contentY + (font.lineHeight + 2) * 2, FontPalette.subtle(), false);
             g.drawString(font, Component.translatable("mcphone.gui.wallpaper_hint3").getString(),
                     contentX, contentY + (font.lineHeight + 2) * 3, FontPalette.subtle(), false);
-            this.hoveredIdx = -1;
+
+            // ⚠ 这里【不能】写 this.hoveredIdx = -1。
+            //
+            // 标题行与上面两个按钮的命中判定在 early return 之前就算完了，结果在 hovered 里。
+            // 覆盖成 -1 的话，空目录时那两个键（尤其「打开文件夹」「选择图片」）的点击永远
+            // 不成立 —— 而"目录是空的"恰恰是玩家最想点它们的时刻：他就是来放第一张图的。
+            // 症状是点了毫无反应、日志里一行都没有，2026-09-08 实机就是这么报的。
+            this.hoveredIdx = hovered;
             return;
         }
 
