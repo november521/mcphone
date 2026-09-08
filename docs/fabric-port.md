@@ -86,3 +86,21 @@ ModPresence 门面）把 1.9.2 移植时的接缝补丁收编了：调用面代�
 - 断言测试挂进 check（上游做法原样采纳，11 份随 build 跑）。
 
 完整决策与遗留见 `D:\Claude_ds\mcphone-fabric-handoff-1.10.1-beta.1-fabric.1.md`。
+
+## 1.10.1-beta.1-fabric.2：两处修复 + 文件选择器
+
+- **NetMusic 1.2.x 放不出声**：1.2.x 的客户端播放类在 `netmusic.audio`，1.5.x 挪到了
+  `netmusic.client.audio`；我们按 1.5.2 编译，写死了新包名，于是 1.2.x 上
+  `MusicPlayManager` 抛 NoClassDefFoundError（只有日志里看得见）。`NetMusicPlayback`
+  改为反射依次探测两代包名（两代签名一致）。服务端的 `ItemMusicCD` 两代同路径，
+  所以 CD 认得出、只是不响——这条差异正好解释了症状。
+- **Windows 上「打开文件夹」无反应**：`Util.getPlatform().openPath` 走
+  `rundll32 url.dll,FileProtocolHandler`，对目录静默失败（实测：0 个资源管理器窗口，
+  而 `explorer.exe` 打开 1 个）。上游同一行代码，非移植引入。新增 `FolderOpener`
+  在 Windows 走 explorer.exe、其他平台保留 openPath、兜底 AWT Desktop；
+  壁纸/相册/表情三处统一走它。
+- **新功能：文件选择器**（移植 AtomChat）：系统原生选择器抬不到 Minecraft 全屏窗口之上，
+  所以用 `JFileChooser` + 自带 always-on-top `JFrame` + FlatLaf（内嵌 jar-in-jar），
+  带行内缩略图与右侧实时预览。接在壁纸页的「选择图片」上，
+  `WallpaperStore.importFile` 复制进目录且不覆盖同名文件。
+  `docs/ImagePickerTest.java`（19 项）钉住后缀白名单与"不放大"两条静默规则。
