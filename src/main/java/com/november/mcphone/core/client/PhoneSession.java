@@ -51,8 +51,15 @@ public final class PhoneSession {
         }
 
         // 加好友是个临时页，它的搜索框每次 open 都清空，续开会停在一个空搜索页上，
-        // 看着像坏了。记成它的上一级——会话列表
-        savedMode = mode == PhoneScreen.Mode.CHAT_ADD_CONTACT ? PhoneScreen.Mode.CHAT : mode;
+        // 看着像坏了。记成它的上一级——会话列表。
+        //
+        // 正在读的那本 txt 同理记成书架：那一页攥着整本书的文本，关机时必须放掉
+        // （见 TxtReaderPage.close），下次开机没有可续的东西，停在书架上最贴近
+        savedMode = switch (mode) {
+            case CHAT_ADD_CONTACT -> PhoneScreen.Mode.CHAT;
+            case TXT_BOOK -> PhoneScreen.Mode.READER;
+            default -> mode;
+        };
         savedPeer = savedMode == PhoneScreen.Mode.CHAT_CONVERSATION ? conversationPeer : null;
     }
 
@@ -91,7 +98,7 @@ public final class PhoneSession {
     private static ResourceLocation appOf(PhoneScreen.Mode mode) {
         return switch (mode) {
             case CHAT, CHAT_ADD_CONTACT, CHAT_CONVERSATION -> CHAT_APP;
-            case READER -> READER_APP;
+            case READER, TXT_BOOK -> READER_APP;
             default -> null;
         };
     }

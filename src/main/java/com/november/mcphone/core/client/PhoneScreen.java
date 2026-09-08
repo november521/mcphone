@@ -23,6 +23,8 @@ import com.november.mcphone.feature.notes.client.NoteEditor;
 import com.november.mcphone.feature.notes.client.NotesList;
 import com.november.mcphone.feature.reader.BookRef;
 import com.november.mcphone.feature.reader.client.BookList;
+import com.november.mcphone.feature.reader.client.TxtLibrary;
+import com.november.mcphone.feature.reader.client.TxtReaderPage;
 import com.november.mcphone.feature.reader.client.source.BookSources;
 import com.november.mcphone.feature.settings.client.AboutPage;
 import com.november.mcphone.feature.settings.client.AppManagerDetail;
@@ -54,7 +56,7 @@ import java.util.UUID;
 /** 手机主屏幕 GUI：管理各页面之间的导航（{@link Mode}）、分发输入、兜住附属页面的异常 */
 public final class PhoneScreen extends Screen {
 
-    public enum Mode { MAIN, SETTINGS, WALLPAPER_PICKER, FONT_COLOR_PICKER, UI_SCALE, HUD, APP_MANAGER, APP_MANAGER_DETAIL, MUSIC_PLAYER, APP_STORE, APP_DETAIL, COMPANION_APPS, ADDON_PAGE, ABOUT, GALLERY, DEVICE_NAME, CHAT, CHAT_ADD_CONTACT, CHAT_CONVERSATION, CHAT_PHOTO_PICKER, CHAT_STICKER_PICKER, NOTES, NOTE_EDIT, CLOCK, WEATHER, READER }
+    public enum Mode { MAIN, SETTINGS, WALLPAPER_PICKER, FONT_COLOR_PICKER, UI_SCALE, HUD, APP_MANAGER, APP_MANAGER_DETAIL, MUSIC_PLAYER, APP_STORE, APP_DETAIL, COMPANION_APPS, ADDON_PAGE, ABOUT, GALLERY, DEVICE_NAME, CHAT, CHAT_ADD_CONTACT, CHAT_CONVERSATION, CHAT_PHOTO_PICKER, CHAT_STICKER_PICKER, NOTES, NOTE_EDIT, CLOCK, WEATHER, READER, TXT_BOOK }
 
     private final long openTimeMs;
     private boolean animationDone;
@@ -111,6 +113,14 @@ public final class PhoneScreen extends Screen {
     private final NoteEditor noteEditor = new NoteEditor();
 
     private final BookList bookList = new BookList();
+
+    /**
+     * 正在读的那本本地 txt。
+     *
+     * 与别的书不同：模组的手册点开之后是那个模组自己的界面，这一部手机就退下去了；
+     * 本地小说没有别人可以还给，翻书的界面是我们自己的一页，见 {@link TxtReaderPage}
+     */
+    private final TxtReaderPage txtReader = new TxtReaderPage();
 
     /** 待打开的会话对端：navigateTo 不带参数，进会话前先存这里 */
     private UUID pendingConversationPeer;
@@ -248,6 +258,9 @@ public final class PhoneScreen extends Screen {
         // 每次进书架都重扫一遍书源，理由见 BookList.open()
         if (this.mode == Mode.READER) bookList.close();
         if (target == Mode.READER) bookList.open();
+
+        // 离开阅读页就把书放掉：那里面攥着整本书的文本，几 MB
+        if (this.mode == Mode.TXT_BOOK && target != Mode.TXT_BOOK) txtReader.close();
         if (target == Mode.APP_MANAGER) appManagerPage.open();
 
         if (this.mode == Mode.APP_MANAGER_DETAIL) appManagerDetail.close();
@@ -538,6 +551,17 @@ public final class PhoneScreen extends Screen {
         }
     }
 
+    /**
+     * 打开一本本地 txt —— 由 {@code TxtBookSource.open} 调，那是点开书架上一本本地小说的落点。
+     *
+     * 公开是因为书源在另一个包里，而这件事只有手机自己做得了：翻书的是手机里的一页，
+     * 不是另开的 Screen（与时钟、记事本一致，退出去还是手机）。
+     */
+    public void openTxtBook(TxtLibrary.Entry entry) {
+        txtReader.open(entry);
+        navigateTo(Mode.TXT_BOOK);
+    }
+
     /** 导航栏 ◁ 走这里；ESC 不退层而是直接关机，见 {@link #keyPressed}。真的退了一层才 true */
     private boolean goBackOneLevel() {
         if (mode == Mode.GALLERY && gallery.backToGrid()) return true;
@@ -563,6 +587,13 @@ public final class PhoneScreen extends Screen {
 
         if (mode == Mode.NOTE_EDIT) {
             navigateTo(Mode.NOTES);
+            return true;
+        }
+
+        // 目录盖在正文上，返回键先收它；正文里再按才回书架
+        if (mode == Mode.TXT_BOOK) {
+            if (txtReader.back()) return true;
+            navigateTo(Mode.READER);
             return true;
         }
 
@@ -804,6 +835,9 @@ public final class PhoneScreen extends Screen {
             case READER            -> bookList.render(g, phoneLeft, phoneTop,
                     sw, sh, statusH, navH,
                     mouseX, mouseY, partialTick, font);
+            case TXT_BOOK          -> txtReader.render(g, phoneLeft, phoneTop,
+                    sw, sh, statusH, navH,
+                    mouseX, mouseY, font);
             case NOTE_EDIT         -> noteEditor.render(g, phoneLeft, phoneTop,
                     sw, sh, statusH, navH,
                     mouseX, mouseY, partialTick, font);
@@ -1111,10 +1145,13 @@ public final class PhoneScreen extends Screen {
                 yield true;
             }
             case READER -> {
+                // 按下只是按下：书架页上这一下可能是"打开这本"，也可能是"拖着排"，
+                // 由 mouseReleased 定性，见 BookList.mouseReleased
                 bookList.mouseClicked(mx, my, button);
-                BookRef book = bookList.consumeOpenRequest();
-                // 打开之后接管屏幕的是那本书自己的界面，这一部手机就退下去了
-                if (book != null) BookSources.open(book);
+                yield true;
+            }
+            case TXT_BOOK -> {
+                txtReader.mouseClicked(mx, my, font);
                 yield true;
             }
             case APP_DETAIL -> {
@@ -1218,6 +1255,9 @@ public final class PhoneScreen extends Screen {
         if (mode == Mode.UI_SCALE && uiScalePage.mouseDragged(mx)) return true;
         if (mode == Mode.HUD && hudPage.mouseDragged(mx)) return true;
 
+        // 书架页靠拖动排书
+        if (mode == Mode.READER && bookList.mouseDragged(mx, my)) return true;
+
         // 多行输入框靠拖动选中文本，不转发的话选不了
         if (mode == Mode.NOTE_EDIT && noteEditor.mouseDragged(mx, my, button, ldx, ldy)) return true;
         return super.mouseDragged(rawX, rawY, button, dx, dy);
@@ -1239,6 +1279,14 @@ public final class PhoneScreen extends Screen {
                 && homeGrid.mouseReleased(unscaledX(rawX), unscaledY(rawY))) {
             IPhoneApp launch = homeGrid.consumeLaunchRequest();
             if (launch != null) launchApp(launch);
+            return true;
+        }
+
+        // 书架页同理：拖过就是排序，没拖过才是"打开这本"
+        if (mode == Mode.READER && button == 0 && bookList.mouseReleased()) {
+            BookRef book = bookList.consumeOpenRequest();
+            // 打开之后接管屏幕的是那本书自己的界面，这一部手机就退下去了
+            if (book != null) BookSources.open(book);
             return true;
         }
         return super.mouseReleased(rawX, rawY, button);
@@ -1279,6 +1327,7 @@ public final class PhoneScreen extends Screen {
         if (mode == Mode.CHAT_STICKER_PICKER && chatStickerPicker.mouseScrolled(scrollY)) return true;
         if (mode == Mode.NOTES && notesList.mouseScrolled(scrollY)) return true;
         if (mode == Mode.READER && bookList.mouseScrolled(scrollY)) return true;
+        if (mode == Mode.TXT_BOOK && txtReader.mouseScrolled(scrollY, font)) return true;
         if (mode == Mode.MUSIC_PLAYER && musicPage.mouseScrolled(scrollY, my)) return true;
         if (mode == Mode.NOTE_EDIT && noteEditor.mouseScrolled(mx, my, scrollX, scrollY)) return true;
         // 设置那几页：1.9.1 之前一页都滚不动，内容超出一屏就再也看不到
@@ -1319,6 +1368,8 @@ public final class PhoneScreen extends Screen {
             return true;
         }
         // 书架顶上那条搜索栏一直握着焦点，这一页同样要整个吃掉按键
+        if (mode == Mode.TXT_BOOK && txtReader.keyPressed(keyCode, font)) return true;
+
         if (mode == Mode.READER) {
             bookList.keyPressed(keyCode, scanCode, modifiers);
             return true;
@@ -1392,6 +1443,7 @@ public final class PhoneScreen extends Screen {
         // 是常有的来回，每次都放掉等于每次回来重下一遍
         ChatImageCache.clear();
         if (mode == Mode.NOTE_EDIT) noteEditor.close();
+        if (mode == Mode.TXT_BOOK) txtReader.close();
 
         // 关手机、被顶掉、退出世界都不经过 navigateTo，IPhonePage.onClose() "一定会被调用"靠这一行兑现
         closeAddonPage();
