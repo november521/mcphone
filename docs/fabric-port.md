@@ -104,3 +104,16 @@ ModPresence 门面）把 1.9.2 移植时的接缝补丁收编了：调用面代�
   带行内缩略图与右侧实时预览。接在壁纸页的「选择图片」上，
   `WallpaperStore.importFile` 复制进目录且不覆盖同名文件。
   `docs/ImagePickerTest.java`（19 项）钉住后缀白名单与"不放大"两条静默规则。
+
+### fabric.3：壁纸页按钮失效的真根因
+
+`WallpaperPicker.render()` 先算好标题行与按钮的命中（局部 `hovered`），随后"目录为空"
+分支在 `return` 前写了 `this.hoveredIdx = -1`，把本帧的命中结果覆盖掉了。壁纸目录为空时
+（玩家还没放图），「打开文件夹」与「选择图片」的点击判定永远不成立——不弹窗、不打日志。
+已改为 `this.hoveredIdx = hovered`。
+
+注意 `FolderOpener` 本身没问题：实测 Java 进程启动 `explorer.exe` 会让资源管理器窗口数 +1，
+之前的验证只看了退出码（explorer 对已存在的窗口会返回 1），那是盲区。
+
+同类排查：`ChatMediaPicker` 的空分支只清 `hoveredIdx`、不动 `openFolderHovered`；
+`Gallery` 在空分支之前就完成了 hover 判定——两者都没有这个 bug，只有壁纸页有。
