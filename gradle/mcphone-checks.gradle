@@ -685,8 +685,8 @@ abstract class SharedNeutralityTask extends DefaultTask {
      *
      * 【不是「允不允许为空」】。层可以先声明后填，但"空"要是显式声明的状态：
      * 声明了有内容却扫不到文件要红，声明了没内容却扫到了也要红（声明过期了）。
-     * 默认容忍空的话，本该有内容的层被清空、或者 dir 写错指到一个恰好存在的
-     * 空目录，都只会在日志里留一行，而这个文件里别处（assertTests、
+     * 默认容忍空的话，本该有内容的层被清空、或者层名与目录名对不上而指到一个恰好
+     * 存在的空目录，都只会在日志里留一行，而这个文件里别处（assertTests、
      * verifyServiceFiles、shared/）对同一个问题给的答案都是"抛"。
      */
     @Input          abstract Property<Boolean> getPopulated()

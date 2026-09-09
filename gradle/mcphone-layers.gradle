@@ -236,7 +236,7 @@ ext.mcphoneLayers = (myEntry.value.layers ?: []).collect { name ->
     // 【目录在不在，由 populated 说了算】
     //
     // populated: true  —— java 与 resources 至少要有一个在，两个都没有就是内容丢了
-    //                     或者 dir 写错，必须红。
+    //                     或者层名与目录名对不上（目录由层名推出），必须红。
     // populated: false —— 两个都不在是【正常的】：git 不跟踪空目录，一个还没开始填的
     //                     层在克隆下来的仓库里本来就没有这些目录。
     //

@@ -493,7 +493,7 @@ jobs:
           # 这一条跟 gradle/mcphone-layers.gradle 里那一条是同一个模型，两边必须一致：
           #
           #   populated: true   java 与 resources 至少要有一个在，都不在就是内容丢了
-          #                     或者 dir 写错
+          #                     或者层名与目录名对不上（目录由层名推出）
           #   populated: false  两个都不在是【正常的】—— git 不跟踪空目录，一个还没
           #                     开始填的层在克隆下来的仓库里本来就没有这些目录；
           #                     反过来，声明了没内容却有内容，是声明过期
