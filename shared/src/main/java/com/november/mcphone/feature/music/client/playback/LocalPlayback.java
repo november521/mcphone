@@ -12,7 +12,6 @@ import org.lwjgl.openal.ALC10;
 import org.lwjgl.openal.ALCapabilities;
 
 import javax.sound.sampled.AudioFormat;
-import net.neoforged.neoforge.client.event.ClientTickEvent;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -202,7 +201,13 @@ public final class LocalPlayback {
     }
 
     /** 每 tick 泵一次流、跟上音量变化、发现停了就收尾 */
-    public static void onClientTick(ClientTickEvent.Post event) {
+    /**
+     * 每个客户端刻结束时调一次，由 {@code MCphoneClient} 通过
+     * {@link com.november.mcphone.platform.client.ClientTicks#onEndTick} 挂上。
+     *
+     * <p>不收事件参数：两支的「刻结束」不是同一个事件，分辨的活在那个门面里做完了。
+     */
+    public static void tick() {
         if (state != State.PLAYING || channel == null) return;
 
         Ending ending;

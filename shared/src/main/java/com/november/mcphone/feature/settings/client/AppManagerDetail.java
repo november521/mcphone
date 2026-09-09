@@ -11,13 +11,13 @@ import com.november.mcphone.core.client.GuiUtil;
 import com.november.mcphone.core.client.PhoneScreenRegistry;
 import com.november.mcphone.core.client.PhoneTheme;
 import com.november.mcphone.platform.ModPresence;
+import com.november.mcphone.platform.client.KeyModifiers;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
-import net.neoforged.neoforge.client.settings.KeyModifier;
 import org.lwjgl.glfw.GLFW;
 
 import java.util.List;
@@ -400,7 +400,7 @@ public final class AppManagerDetail {
         InputConstants.Key key = InputConstants.getKey(keyCode, scanCode);
 
         // 修饰键本身不成一条绑定：还按着呢，等主键
-        if (KeyModifier.isKeyCodeModifier(key)) return;
+        if (KeyModifiers.isModifierKey(key)) return;
         if (key.equals(InputConstants.UNKNOWN)) return;
 
         applyCapture(key);

@@ -220,7 +220,7 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 
 （无）
 
-#### 仅加载器轴（25）
+#### 仅加载器轴（24）
 
 同一加载器的各个 Minecraft 版本可共用；三个加载器之间必然分叉。
 
@@ -239,16 +239,15 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 - `core.menu.ModMenus` —— 加载器导入　**★ 被共用代码引用**
 - `core.net.NetworkHandler` —— 加载器导入　**★ 被共用代码引用**
 - `feature.camera.client.CameraHandler` —— 加载器导入
-- `feature.chat.client.ChatImageSender` —— 加载器导入　**★ 被共用代码引用**
 - `feature.chat.net.ChatNetworking` —— 加载器导入
-- `feature.music.client.playback.LocalPlayback` —— 加载器导入　**★ 被共用代码引用**
 - `feature.music.net.MusicNetworking` —— 加载器导入　**★ 被共用代码引用**
 - `feature.notes.net.NotesNetworking` —— 加载器导入
-- `feature.settings.client.AppManagerDetail` —— 加载器导入　**★ 被共用代码引用**
 - `feature.store.net.StoreNetworking` —— 加载器导入
 - `feature.terminal.integration.Terminals` —— 加载器导入　**★ 被共用代码引用**
 - `feature.terminal.net.TerminalNetworking` —— 加载器导入
 - `platform.ModPresence` —— 加载器导入　**★ 被共用代码引用**
+- `platform.client.ClientTicks` —— 加载器导入
+- `platform.client.KeyModifiers` —— 加载器导入　**★ 被共用代码引用**
 
 #### 两轴都有（5）
 
@@ -331,7 +330,7 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 
 （无）
 
-#### 仅加载器轴（25）
+#### 仅加载器轴（24）
 
 同一加载器的各个 Minecraft 版本可共用；三个加载器之间必然分叉。
 
@@ -353,13 +352,12 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 - `core.menu.ModMenus` —— 加载器导入　**★ 被共用代码引用**
 - `core.net.MCphoneNetwork` —— 加载器导入　**★ 被共用代码引用**
 - `feature.camera.client.CameraHandler` —— 加载器导入
-- `feature.chat.client.ChatImageSender` —— 加载器导入　**★ 被共用代码引用**
 - `feature.music.DiscService` —— 加载器导入　**★ 被共用代码引用**
-- `feature.music.client.playback.LocalPlayback` —— 加载器导入　**★ 被共用代码引用**
-- `feature.settings.client.AppManagerDetail` —— 加载器导入　**★ 被共用代码引用**
 - `feature.terminal.TerminalSlotSync` —— 加载器导入
 - `feature.terminal.integration.Terminals` —— 加载器导入　**★ 被共用代码引用**
 - `platform.ModPresence` —— 加载器导入　**★ 被共用代码引用**
+- `platform.client.ClientTicks` —— 加载器导入
+- `platform.client.KeyModifiers` —— 加载器导入　**★ 被共用代码引用**
 
 #### 两轴都有（2）
 
@@ -405,7 +403,7 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 - `feature.chat.net.RequestMessagesPacket`　**★ 被共用代码引用**
 - `feature.chat.net.RequestOnlinePlayersPacket`　**★ 被共用代码引用**
 - `feature.chat.net.RespondFriendRequestPacket`　**★ 被共用代码引用**
-- `feature.chat.net.SendChatImagePacket`
+- `feature.chat.net.SendChatImagePacket`　**★ 被共用代码引用**
 - `feature.chat.net.SendChatMessagePacket`　**★ 被共用代码引用**
 - `feature.chat.net.SyncConversationsPacket`
 - `feature.chat.net.SyncMessagesPacket`

@@ -1,5 +1,6 @@
 package com.november.mcphone;
 
+import com.november.mcphone.platform.client.ClientTicks;
 import com.november.mcphone.core.client.AppHotkeyHandler;
 import com.november.mcphone.core.client.ClientConfig;
 import com.november.mcphone.core.client.MCphoneKeyBindings;
@@ -73,10 +74,10 @@ public class MCphoneClient {
         NeoForge.EVENT_BUS.addListener(AppHotkeyHandler::onMouseInput);
 
         // 每 tick 泵一次音频流；没在放的时候第一行就返回
-        NeoForge.EVENT_BUS.addListener(LocalPlayback::onClientTick);
+        ClientTicks.onEndTick(LocalPlayback::tick);
 
         // 冷却期里点的那几张图排着，每 tick 看一眼闸开了没有；队伍空的时候第一行就返回
-        NeoForge.EVENT_BUS.addListener(ChatImageSender::onClientTick);
+        ClientTicks.onEndTick(ChatImageSender::tick);
 
         // 一首停下来时带停止原因通知控制器，见 LocalPlayback.Ending
         LocalPlayback.setEndListener(MusicController::onTrackEnded);

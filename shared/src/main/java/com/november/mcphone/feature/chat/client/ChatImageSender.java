@@ -11,7 +11,6 @@ import com.november.mcphone.feature.chat.net.SendChatImagePacket;
 import net.minecraft.Util;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
-import net.neoforged.neoforge.client.event.ClientTickEvent;
 
 import java.awt.AlphaComposite;
 import java.awt.Graphics2D;
@@ -189,7 +188,13 @@ public final class ChatImageSender {
      *
      * 挂 tick 而不是挂会话界面的每帧：玩家点完表情就退出手机是常事，那一张照样该发出去。
      */
-    public static void onClientTick(ClientTickEvent.Post event) {
+    /**
+     * 每个客户端刻结束时调一次，由 {@code MCphoneClient} 通过
+     * {@link com.november.mcphone.platform.client.ClientTicks#onEndTick} 挂上。
+     *
+     * <p>不收事件参数：两支的「刻结束」不是同一个事件，分辨的活在那个门面里做完了。
+     */
+    public static void tick() {
         if (QUEUE.isEmpty() || isBusy()) return;
 
         Queued next = QUEUE.poll();
