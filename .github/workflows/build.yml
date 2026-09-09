@@ -418,40 +418,32 @@ jobs:
             FAIL=1
           fi
 
-          # 六点五、【每一层必须二选一写 since 或 loader；加载器层要挂对】
+          # 六点五、【每一层至少要写 since 或 loader 之一】
           #
-          # 写 since 的是版本层（同版本、三个加载器共用），写 loader 的是加载器层
-          # （同加载器、各版本共用）。两个都没有，构建就不知道该禁哪个轴 ——
-          # 而"不知道禁哪个轴"的层等于一道不设防的门。
+          # 层是对目标的谓词：since 钉住版本、loader 钉住加载器，而【禁哪个轴 = 哪个轴
+          # 没被钉住】。两个都不写就是「全部目标」，构建不知道该禁哪个轴 —— 那种层
+          # 等于一道不设防的门。
+          #
+          # 【两个都写是合法的】：那是交集层（该加载器 × 该批版本），两个轴都钉住了。
+          # 原先这里判的是"二选一"，与 gradle/mcphone-layers.gradle 的谓词模型对不上，
+          # 后果是交集层声明得出来却过不了 CI —— 规则说得通，构建不认。
           BADKIND=$(jq -r '
             to_entries[] | select((.value|type)=="object")
-            | select((.value.since == null) == (.value.loader == null))
-            | "  \(.key)  since=\(.value.since // "无")  loader=\(.value.loader // "无")"
+            | select(.value.since == null and .value.loader == null)
+            | "  \(.key)  since=无  loader=无"
           ' "$L"); RC=$?
           [ "$RC" = "0" ] || { echo "::error::查层类型的 jq 跑挂了（退出码 $RC）"; exit 1; }
           if [ -n "$BADKIND" ]; then
-            echo "::error::这些层没有二选一写 since 或 loader："
+            echo "::error::这些层既没写 since 也没写 loader："
             printf '%s\n' "$BADKIND"
-            echo "写 since 是版本层，写 loader 是加载器层。都不写就不知道该禁哪个轴，都写是两件事挤在一层。"
+            echo "两个都不写就是「全部目标」，那是 shared/，不是层。"
             FAIL=1
           fi
 
-          # 两种层分开放：dir 要落在与层的种类相符的那一支下
-          WRONGSUB=$(jq -r '
-            to_entries[] | select((.value|type)=="object")
-            | select(.value.since != null or .value.loader != null)
-            | . as $e
-            | (if $e.value.since != null then "layers/version/" else "layers/loader/" end) as $want
-            | select(($e.value.dir | startswith($want)) | not)
-            | "  \($e.key)  是\(if $e.value.since != null then "版本层" else "加载器层" end)，dir 应在 \($want) 下，实际是 \($e.value.dir)"
-          ' "$L"); RC=$?
-          [ "$RC" = "0" ] || { echo "::error::查层目录的 jq 跑挂了（退出码 $RC）"; exit 1; }
-          if [ -n "$WRONGSUB" ]; then
-            echo "::error::有层的目录放错了支："
-            printf '%s\n' "$WRONGSUB"
-            echo "版本层放 layers/version/，加载器层放 layers/loader/ —— 两种层禁的轴正好相反，混在一起看不出来。"
-            FAIL=1
-          fi
+          # 【这里原先还有一道「dir 要落在与层的种类相符的那一支下」】。已经删掉：
+          # layers.json 不再声明 dir，目录由层的种类与层名推出（layers/<种类>/<层名>），
+          # 放错这个状态压根表达不出来。留着那道闸的代价是它与 Gradle 那份各写各的 ——
+          # 实际发生过：Gradle 认三种层、这里认两种，交集层于是无处可放。
 
           WRONGLOADER=$(jq -r --slurpfile L "$L" '
             to_entries[] | select((.value|type)=="object")
@@ -482,7 +474,7 @@ jobs:
             | . as $used
             | $layers | to_entries[] | select((.value|type)=="object")
             | select(.key as $k | ($used | index($k)) == null)
-            | "  \(.key)  （目录 \(.value.dir)）"
+            | "  \(.key)"
           ' "$L"); RC=$?
           if [ "$RC" != "0" ]; then
             echo "::error::查孤儿层的 jq 跑挂了（退出码 $RC），这道检查没能跑起来"
@@ -508,9 +500,19 @@ jobs:
           #
           # 这道检查跑在 CI 的干净检出上，正好是本地永远复现不出来的那个环境：
           # 本地那些目录是 mkdir 出来的，一直都在。
+          # 目录不是声明的，是推出来的：layers/<种类>/<层名>。
+          # 【CI 侧只有这一处推它】—— 另一处在 gradle/mcphone-layers.gradle 的
+          # layerDirOf。两处要是推得不一样，后果只会是"目录找不到"，
+          # 而那正好被下面 populated: true 那一支当场拦住，不会静默放行。
           LAYERROWS=$(q_layers '
+            def layerdir:
+              "layers/"
+              + (if .value.since != null and .value.loader != null then "both"
+                 elif .value.since != null then "version"
+                 else "loader" end)
+              + "/" + .key;
             to_entries[] | select((.value|type)=="object")
-            | "\(.key)\t\(.value.dir)\t\(.value.populated)"
+            | "\(.key)\t\(layerdir)\t\(.value.populated)"
           ') || exit 1
           while IFS=$'\t' read -r NAME DIR POP; do
             [ -n "$NAME" ] || continue
@@ -520,7 +522,7 @@ jobs:
             [ -d "$DIR/docs" ] && HAS=1        # 一个层可以只有 docs/（断言测试按被测对象分层）
             if [ "$POP" = "true" ] && [ "$HAS" = "0" ]; then
               echo "::error::共享层 $NAME 声明了 populated: true，但 $DIR 下 src/main/java、src/main/resources 与 docs 都不存在（在这次干净检出里）。"
-              echo "要么内容丢了，要么 layers.json 里的 dir 写错了。这一层确实还没开始填的话，把 populated 改成 false。"
+              echo "要么内容丢了，要么层名与目录名对不上（目录由层名推出：layers/<种类>/<层名>）。这一层确实还没开始填的话，把 populated 改成 false。"
               FAIL=1
             fi
             if [ "$POP" = "false" ] && [ "$HAS" = "1" ]; then

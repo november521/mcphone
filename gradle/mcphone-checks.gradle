@@ -659,7 +659,7 @@ abstract class SharedNeutralityTask extends DefaultTask {
             throw new GradleException(
                     "${layer}声明了 populated: true，但它的 src/main 下" +
                     "一个文件都没有（java 0 个、资源 0 个、docs 0 个）。\n" +
-                    "要么内容丢了、要么 layers.json 里的 dir 写错指到了别处 —— " +
+                    "要么内容丢了、要么层名与目录名对不上（目录由层名推出）—— " +
                     "'一个都没扫到' 不等于 '没有问题'。\n" +
                     "这一层确实还没开始填的话，把 layers.json 里的 populated 改成 false。")
         }

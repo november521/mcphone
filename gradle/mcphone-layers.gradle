@@ -131,10 +131,42 @@ ext.mcphoneTargetDatapackSingular = McphoneVersions.datapackSingular(myEntry.val
 //
 // 这些信息全都能从 JSON 与文件系统读出来，跟"当前是哪个平台"无关。所以任何一个
 // 平台都能把整份清单刷全。
+// ============================================================
+//  层的种类与目录 —— 【全脚本只此一处】
+// ============================================================
+//
+// 层是对目标的一个谓词：since 钉住版本、loader 钉住加载器，【禁哪个轴 = 哪个轴没被
+// 钉住】。三种组合对应三种层，目录按种类分开放。
+//
+// 【目录是推出来的，不是 layers.json 声明的】。原先 layers.json 有个 dir 字段，
+// 于是「哪一种层该放哪儿」这条规则在三个地方各存了一份：这个脚本、build.yml 的
+// guard-version、以及 layers.json 自己的注释。改了这个脚本、另外两份没跟上，
+// 结果是交集层声明得出来却编不过 CI —— 规则说得通，构建不认。
+//
+// 推出来之后那条规则只剩下面这一个函数，没有第二份可以与它作对。目录推错的唯一
+// 后果是找不到，而「找不到」由 populated 那道闸拦住（见下面）。
+def layerKindOf = { String name, Map spec ->
+    boolean pinsVersion = spec.since != null
+    boolean pinsLoader  = spec.loader != null
+    if (!pinsVersion && !pinsLoader) {
+        throw new GradleException(
+                "versions/layers.json 里的层 \"${name}\" 既没有 since 也没有 loader。\n" +
+                "层是对目标的谓词，两个都没有就是「全部目标」—— 那是 shared/，不是层。")
+    }
+    if (pinsVersion && pinsLoader) return [sub: 'both',    label: '交集层']
+    if (pinsVersion)               return [sub: 'version', label: '版本层']
+    return [sub: 'loader', label: '加载器层']
+}
+
+/** 层的目录，相对仓库根。层名同时是目录名，所以层名必须是个合法的目录名。 */
+def layerDirOf = { String name, Map spec -> "layers/${layerKindOf(name, spec).sub}/${name}" }
+
 // 全部加载器层的 java 根 —— 孪生校验要看的是【所有】加载器层，不只是当前目标挂的那个。
 ext.mcphoneAllLoaderLayerDirs = layersJson.findAll { k, v ->
-    v instanceof Map && v.loader != null
-}.collect { k, v -> [name: k, dir: new File(layersRepoRoot, "${v.dir}/src/main/java")] }
+    // 【只要纯加载器层】：交集层也写了 loader，但它同时钉住了版本，跨版本根本没有
+    // 孪生可比 —— 把它算进来，孪生闸会去比两个本就该不同的东西。
+    v instanceof Map && v.loader != null && v.since == null
+}.collect { k, v -> [name: k, dir: new File(layersRepoRoot, "${layerDirOf(k, v)}/src/main/java")] }
         .toSorted { it.name }
 
 ext.mcphoneAllTargets = targetsJson.findAll { k, v ->
@@ -145,7 +177,7 @@ ext.mcphoneAllTargets = targetsJson.findAll { k, v ->
         if (s == null) {
             throw new GradleException("目标 ${k} 挂了 versions/layers.json 里没有的层 \"${name}\"。")
         }
-        new File(layersRepoRoot, "${s.dir}/src/main/java")
+        new File(layersRepoRoot, "${layerDirOf(name, s)}/src/main/java")
     }
     [key: k,
      projectJavaDir: new File(layersRepoRoot, "${v.project}/src/main/java"),
@@ -176,29 +208,12 @@ ext.mcphoneLayers = (myEntry.value.layers ?: []).collect { name ->
     //   两个都有     该加载器 × 该批版本      → 都不禁（两个轴都钉住了）
     //   都没有       全部目标                → 都禁，那就是 shared/，不是层
     //
-    // 【原先禁掉"两个都写"是定窄了】。那不是"两件事挤在一层"，那是【交集层】：
-    // 既绑加载器又绑版本的代码，眼下只能各平台各写一份 —— 而 NeoForge 1.21.1 与
-    // 将来的 NeoForge 1.21.x 之间，那批东西是一样的。第二个同加载器同版本档的目标
-    // 一进来就要复制，正是层要消掉的那种复制。
-    //
-    // 交集层今天【一个都没有】，因为现有两个目标不共用加载器，也不共用版本档。
-    // 规则先放开，目录到有第一个占用者时再建 —— 不预先造空目录。
-    if (spec.since == null && spec.loader == null) {
-        throw new GradleException(
-                "versions/layers.json 里的层 \"${name}\" 既没有 since 也没有 loader。\n" +
-                "层是对目标的谓词，两个都没有就是「全部目标」—— 那是 shared/，不是层。")
-    }
+    // 两个都不写在 layerKindOf 里就抛了。种类与目录都由它一处说了算，
+    // 【这里不再自己判一遍】——原先判过，判法与 CI 那份不一致，交集层因此不可达。
+    def kind = layerKindOf(name, spec)
+    def layerDir = layerDirOf(name, spec)
     boolean pinsVersion = spec.since != null
     boolean pinsLoader  = spec.loader != null
-
-    // 三种层分开放，光看目录树就该分得出是哪一种
-    def wantSub = (pinsVersion && pinsLoader) ? 'layers/both/'
-                : pinsVersion ? 'layers/version/' : 'layers/loader/'
-    if (!spec.dir.startsWith(wantSub)) {
-        throw new GradleException(
-                "共享层 \"${name}\" 是${(pinsVersion && pinsLoader) ? '交集层' : (pinsVersion ? '版本层' : '加载器层')}，" +
-                "它的 dir 应当在 ${wantSub} 下，实际是 ${spec.dir}。")
-    }
     if (pinsLoader && spec.loader != myEntry.value.loader) {
         throw new GradleException(
                 "目标 ${myEntry.key} 的加载器是 ${myEntry.value.loader}，" +
@@ -213,11 +228,11 @@ ext.mcphoneLayers = (myEntry.value.layers ?: []).collect { name ->
                 "把这一层从该目标的 layers 里去掉，或者确认 layers.json 里的 since 写对了。")
     }
 
-    def javaDir = new File(layersRepoRoot, "${spec.dir}/src/main/java")
-    def resDir  = new File(layersRepoRoot, "${spec.dir}/src/main/resources")
+    def javaDir = new File(layersRepoRoot, "${layerDir}/src/main/java")
+    def resDir  = new File(layersRepoRoot, "${layerDir}/src/main/resources")
     // docs/ 也算这一层的内容：带 main() 的断言测试按「被测对象住在哪一层」分层放，
     // 一个层可以只有 docs/（neoforge 层眼下就是这样）
-    def docsDir = new File(layersRepoRoot, "${spec.dir}/docs")
+    def docsDir = new File(layersRepoRoot, "${layerDir}/docs")
     // 【目录在不在，由 populated 说了算】
     //
     // populated: true  —— java 与 resources 至少要有一个在，两个都没有就是内容丢了
@@ -233,17 +248,22 @@ ext.mcphoneLayers = (myEntry.value.layers ?: []).collect { name ->
     // 跨语言（Groovy 与 shell）合不成一份，改这里就要改那里。那一份跑在 CI 的干净
     // 检出上 —— 本地这些目录是 mkdir 出来的一直都在，只有那儿才验得到"克隆下来
     // 有没有"。实测踩过：这里放宽了、那里没跟上，本地全绿而 CI 红。
+    //
+    // 【这行警告救不了它旁边那条规则】。「哪一种层放哪个目录」原先也是这么两份，
+    // 上面这段话就写在它隔壁，照样改了一边漏了一边，交集层因此在 CI 上不可达。
+    // 那条已经改成推导（见 layerDirOf），不再是两份。这一条留着两份，是因为它问的
+    // 是文件系统而不是 JSON —— 而两个环境里的文件系统本来就不一样，那正是它要验的。
     if (spec.populated && !javaDir.isDirectory() && !resDir.isDirectory() && !docsDir.isDirectory()) {
         throw new GradleException(
-                "共享层 \"${name}\" 声明了 populated: true，但 ${spec.dir} 下" +
+                "共享层 \"${name}\" 声明了 populated: true，但 ${layerDir} 下的 " +
                 "src/main/java、src/main/resources 与 docs 都不存在。\n" +
-                "要么内容丢了，要么 layers.json 里的 dir 写错了（写的是 ${spec.dir}）。\n" +
+                "内容丢了，或者层名与目录名对不上（目录由层名推出：${layerDir}）。\n" +
                 "这一层确实还没开始填的话，把 populated 改成 false。")
     }
 
     [
             name            : name,
-            kind            : (pinsVersion && pinsLoader) ? '交集层' : (pinsVersion ? '版本层' : '加载器层'),
+            kind            : kind.label,
             // 禁的是【没被钉住】的那些轴
             forbiddenAxes   : ((pinsVersion ? [] : ['版本']) + (pinsLoader ? [] : ['加载器'])).asImmutable(),
             javaDir         : javaDir,
