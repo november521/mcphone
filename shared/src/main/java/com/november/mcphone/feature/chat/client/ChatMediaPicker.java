@@ -48,7 +48,7 @@ public final class ChatMediaPicker {
     private int page;
 
     /** 上一帧算出的每页容量，供点击与翻页复用 */
-    private int perPage = PhotoGridPainter.COLS * 4;
+    private int perPage = 3 * 4;   // 首帧之前按手机那套估一个，下一帧就按可用宽度重算
 
     /** 本帧鼠标悬停的下标（全局下标，非页内），-1 为无 */
     private int hoveredIdx = -1;
@@ -120,7 +120,8 @@ public final class ChatMediaPicker {
         final int gridTop = y;
         final int gridBottom = phoneTop + screenH - navH - pagerH - 2;
 
-        perPage = PhotoGridPainter.COLS * PhotoGridPainter.rowsFor(gridBottom - gridTop);
+        int cols = PhotoGridPainter.colsFor(w);
+        perPage = cols * PhotoGridPainter.rowsFor(gridBottom - gridTop);
 
         // 缓存必须装得下一整页，否则同页内先加载的会被后加载的挤掉，下一帧又重新加载，画面持续闪烁
         folder.ensureCacheFor(perPage);
@@ -128,7 +129,7 @@ public final class ChatMediaPicker {
         int pageCount = Math.max(1, (items.size() + perPage - 1) / perPage);
         page = Mth.clamp(page, 0, pageCount - 1);
 
-        int gridX = x + (w - PhotoGridPainter.gridWidth()) / 2;
+        int gridX = x + (w - PhotoGridPainter.gridWidth(cols)) / 2;
 
         hoveredIdx = -1;
         int first = page * perPage;
@@ -136,8 +137,8 @@ public final class ChatMediaPicker {
 
         for (int i = first; i < last; i++) {
             int slot = i - first;
-            int cx = PhotoGridPainter.cellX(gridX, slot);
-            int cy = PhotoGridPainter.cellY(gridTop, slot);
+            int cx = PhotoGridPainter.cellX(gridX, slot, cols);
+            int cy = PhotoGridPainter.cellY(gridTop, slot, cols);
 
             boolean hovered = PhotoGridPainter.cellHit(cx, cy, mouseX, mouseY);
             if (hovered) hoveredIdx = i;

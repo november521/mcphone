@@ -7,15 +7,15 @@ import net.minecraft.util.Mth;
  *
  * 为什么需要它
  *
- * 手机的每一处尺寸都是按 120×200 这个屏幕写死的（{@link PhoneTheme}），画出来是
- * GUI 单位 1:1。这在 1080p、GUI 缩放 3 上正好，但换到 4K + GUI 缩放 2 就成了一块
- * 邮票——而 GUI 缩放是【全局】设置，为看清手机把它调大，聊天框和物品栏跟着一起变大。
- * 所以这一档得是手机自己的。
+ * 界面里的每一处尺寸都是按设备那块屏幕（手机 120×200、平板 240×168，见
+ * {@link DeviceMetrics}）算的，画出来是 GUI 单位 1:1。这在 1080p、GUI 缩放 3 上正好，
+ * 但换到 4K + GUI 缩放 2 就成了一块邮票——而 GUI 缩放是【全局】设置，为看清手机把它
+ * 调大，聊天框和物品栏跟着一起变大。所以这一档得是手机自己的。
  *
  * 它不是"改布局"，是【整体缩放】
  *
- * 界面里没有一个数需要跟着变：渲染时把整个手机套进一层 pose 缩放，鼠标坐标反过来
- * 除掉同一个倍数。各页照旧按 120×200 算自己的行高和命中，一行代码都不用改。
+ * 界面里没有一个数需要跟着变：渲染时把整个机身套进一层 pose 缩放，鼠标坐标反过来
+ * 除掉同一个倍数。各页照旧按自己收到的屏幕宽高算行高和命中，一行代码都不用改。
  * 代价是非整数倍时字会稍软——字体是位图，2.5 倍下每个字模跨不满整数个屏幕像素。
  * 所以步进给的是 25%，而不是 1%：让"整数倍"落得到（GUI 缩放 2 配 150% 正好是 3 倍）。
  *
@@ -165,24 +165,28 @@ public final class PhoneScale {
     }
 
     /**
-     * 窗口放得下多大 —— 手机连边框一起，不能比窗口还高还宽。
+     * 窗口放得下多大 —— 机身连边框一起，不能比窗口还高还宽。
      *
      * 夹在这里而不是夹在设置里：窗口是随时会变的（拖窗口、切全屏、改 GUI 缩放），
      * 存进配置的那个数是玩家的意愿，不该被一次临时的小窗口永久改小。
+     *
+     * 要收一份 {@link DeviceMetrics}：平板机身 256×184，比手机的 136×216 宽了一大截，
+     * 同一个窗口能给它的倍数自然不一样。倍数本身（玩家定的那个百分比）两台设备共用一份
+     * ——它说的是"这块显示器上多大合适"，与手上拿的是哪一台无关。
      */
-    public static float fit(int windowWidth, int windowHeight) {
-        float byWidth = (float) windowWidth / PhoneTheme.PHONE_TOTAL_WIDTH;
-        float byHeight = (float) windowHeight / PhoneTheme.PHONE_TOTAL_HEIGHT;
+    public static float fit(DeviceMetrics metrics, int windowWidth, int windowHeight) {
+        float byWidth = (float) windowWidth / metrics.totalWidth();
+        float byHeight = (float) windowHeight / metrics.totalHeight();
         return Math.max(0.1F, Math.min(byWidth, byHeight));
     }
 
     /** 这一帧真正用的倍数：玩家要的，与窗口放得下的，取小 */
-    public static float effective(int windowWidth, int windowHeight) {
-        return Math.min(get(), fit(windowWidth, windowHeight));
+    public static float effective(DeviceMetrics metrics, int windowWidth, int windowHeight) {
+        return Math.min(get(), fit(metrics, windowWidth, windowHeight));
     }
 
     /** 现在是不是被窗口夹着——设置页据此说一句"窗口放不下" */
-    public static boolean clampedByWindow(int windowWidth, int windowHeight) {
-        return fit(windowWidth, windowHeight) < get() - 0.001F;
+    public static boolean clampedByWindow(DeviceMetrics metrics, int windowWidth, int windowHeight) {
+        return fit(metrics, windowWidth, windowHeight) < get() - 0.001F;
     }
 }

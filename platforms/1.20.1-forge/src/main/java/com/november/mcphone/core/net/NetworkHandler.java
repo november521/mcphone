@@ -233,7 +233,7 @@ public final class NetworkHandler {
 
         // 那个位置上不是手机就什么都不做：位置由客户端给出，可能已经失效
         // （手机被丢掉了），也可能是伪造的
-        if (!PhoneItem.isPhone(stack)) return;
+        if (!PhoneItem.isDevice(stack)) return;
 
         String name = SetDeviceNamePacket.sanitize(packet.name());
         if (name.isEmpty()) {
@@ -282,7 +282,7 @@ public final class NetworkHandler {
         ItemStack lit = packet.lit()
                 .filter(location -> location instanceof PhoneLocation.InHand)
                 .map(location -> location.resolve(player))
-                .filter(PhoneItem::isPhone)
+                .filter(PhoneItem::isDevice)
                 .orElse(ItemStack.EMPTY);
 
         for (InteractionHand hand : InteractionHand.values()) {

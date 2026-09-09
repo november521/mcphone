@@ -3,6 +3,7 @@ package com.november.mcphone.core.client;
 import net.minecraft.util.Mth;
 import com.november.mcphone.MCphone;
 import com.november.mcphone.feature.camera.client.CameraFlash;
+import com.november.mcphone.feature.camera.client.CameraStamp;
 import com.november.mcphone.feature.music.PlayMode;
 import com.november.mcphone.feature.music.client.MusicController;
 import com.november.mcphone.feature.music.client.playback.LocalPlayback;
@@ -54,6 +55,9 @@ public final class ClientConfig {
 
     /** 拍照那一下用模糊代替满屏白闪 */
     public static final ForgeConfigSpec.BooleanValue CAMERA_SOFT_FLASH;
+
+    /** 照片右下角印上拍摄地的坐标。默认开着，见 {@link CameraStamp} */
+    public static final ForgeConfigSpec.BooleanValue CAMERA_COORD_STAMP;
 
     /** 手机界面开多大，整数百分比。解析与夹取见 {@link PhoneScale} */
     public static final ForgeConfigSpec.IntValue UI_SCALE;
@@ -130,6 +134,17 @@ public final class ClientConfig {
                         "In-game: Settings -> App Manager -> Camera -> Shutter flash.")
                 .translation("mcphone.config.camera_soft_flash")
                 .define("cameraSoftFlash", false);
+
+        CAMERA_COORD_STAMP = builder
+                .comment("在照片右下角印上拍照那一刻的坐标。",
+                        "true 是默认。坐标是【画进照片里】的，相册与截图文件夹里那张 png 都带着，",
+                        "发给没装本模组的人也看得到；关掉之后拍的照片不再有，已经拍下的擦不掉。",
+                        "在游戏里改：设置 → App 管理器 → 相机 → 坐标水印。",
+                        "Stamp the capture coordinates onto the bottom-right of each photo.",
+                        "The text is baked into the image, so it survives sharing the png.",
+                        "In-game: Settings -> App Manager -> Camera -> Coordinate stamp.")
+                .translation("mcphone.config.camera_coord_stamp")
+                .define("cameraCoordStamp", true);
 
         UI_SCALE = builder
                 .comment("手机界面开多大，百分比。100 是原样，150 就是放大一半。",
@@ -234,6 +249,9 @@ public final class ClientConfig {
         // 快门闪光也一样：闪光那 220 毫秒里每帧都要问一次用哪种
         CameraFlash.setSoft(CAMERA_SOFT_FLASH.get());
 
+        // 坐标水印更是每一帧都要问：相机模式下它一直画着（取景看到的就是照片上的样子）
+        CameraStamp.setEnabled(CAMERA_COORD_STAMP.get());
+
         // 界面倍数更甚：每一帧、每一次鼠标换算都要用
         PhoneScale.load(UI_SCALE.get());
         PhoneScale.loadSnap(UI_SCALE_SNAP.get());
@@ -300,6 +318,16 @@ public final class ClientConfig {
     public static void saveCameraSoftFlash(boolean soft) {
         if (!SPEC.isLoaded()) return;
         CAMERA_SOFT_FLASH.set(soft);
+        SPEC.save();
+    }
+
+    /**
+     * 玩家在相机那一页上开关了坐标水印。与上面几项同一套路数：{@link CameraStamp}
+     * 那边已经用上新值了（下一帧就变），这里只负责落盘。
+     */
+    public static void saveCameraCoordStamp(boolean value) {
+        if (!SPEC.isLoaded()) return;
+        CAMERA_COORD_STAMP.set(value);
         SPEC.save();
     }
 

@@ -5,6 +5,7 @@ import com.november.mcphone.api.client.app.IPhoneApp;
 import com.november.mcphone.api.client.store.AppInfo;
 import com.november.mcphone.api.client.ui.IPhonePage;
 import com.november.mcphone.api.client.ui.PhoneCanvas;
+import com.november.mcphone.core.PhoneItem;
 import com.november.mcphone.core.PhoneItemData;
 import com.november.mcphone.core.PhoneLocation;
 import com.november.mcphone.platform.client.Draw;
@@ -23,6 +24,8 @@ import com.november.mcphone.feature.notes.client.NoteEditor;
 import com.november.mcphone.feature.notes.client.NotesList;
 import com.november.mcphone.feature.reader.BookRef;
 import com.november.mcphone.feature.reader.client.BookList;
+import com.november.mcphone.feature.reader.client.TxtLibrary;
+import com.november.mcphone.feature.reader.client.TxtReaderPage;
 import com.november.mcphone.feature.reader.client.source.BookSources;
 import com.november.mcphone.feature.settings.client.AboutPage;
 import com.november.mcphone.feature.settings.client.AppManagerDetail;
@@ -45,6 +48,7 @@ import net.minecraft.client.gui.GuiGraphics;
 import com.november.mcphone.platform.client.PhoneScreenBase;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
+import net.minecraft.world.entity.player.Player;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -54,7 +58,7 @@ import java.util.UUID;
 /** 手机主屏幕 GUI：管理各页面之间的导航（{@link Mode}）、分发输入、兜住附属页面的异常 */
 public final class PhoneScreen extends PhoneScreenBase {
 
-    public enum Mode { MAIN, SETTINGS, WALLPAPER_PICKER, FONT_COLOR_PICKER, UI_SCALE, HUD, APP_MANAGER, APP_MANAGER_DETAIL, MUSIC_PLAYER, APP_STORE, APP_DETAIL, COMPANION_APPS, ADDON_PAGE, ABOUT, GALLERY, DEVICE_NAME, CHAT, CHAT_ADD_CONTACT, CHAT_CONVERSATION, CHAT_PHOTO_PICKER, CHAT_STICKER_PICKER, NOTES, NOTE_EDIT, CLOCK, WEATHER, READER }
+    public enum Mode { MAIN, SETTINGS, WALLPAPER_PICKER, FONT_COLOR_PICKER, UI_SCALE, HUD, APP_MANAGER, APP_MANAGER_DETAIL, MUSIC_PLAYER, APP_STORE, APP_DETAIL, COMPANION_APPS, ADDON_PAGE, ABOUT, GALLERY, DEVICE_NAME, CHAT, CHAT_ADD_CONTACT, CHAT_CONVERSATION, CHAT_PHOTO_PICKER, CHAT_STICKER_PICKER, NOTES, NOTE_EDIT, CLOCK, WEATHER, READER, TXT_BOOK }
 
     private final long openTimeMs;
     private boolean animationDone;
@@ -112,6 +116,14 @@ public final class PhoneScreen extends PhoneScreenBase {
 
     private final BookList bookList = new BookList();
 
+    /**
+     * 正在读的那本本地 txt。
+     *
+     * 与别的书不同：模组的手册点开之后是那个模组自己的界面，这一部手机就退下去了；
+     * 本地小说没有别人可以还给，翻书的界面是我们自己的一页，见 {@link TxtReaderPage}
+     */
+    private final TxtReaderPage txtReader = new TxtReaderPage();
+
     /** 待打开的会话对端：navigateTo 不带参数，进会话前先存这里 */
     private UUID pendingConversationPeer;
 
@@ -126,6 +138,17 @@ public final class PhoneScreen extends PhoneScreenBase {
     private final HomeGrid homeGrid = new HomeGrid();
 
     private int phoneLeft, phoneTop;
+
+    /**
+     * 这一台是手机还是平板 —— 屏幕多大全看它，见 {@link DeviceMetrics}。
+     *
+     * <b>开机那一刻定下来，之后只在 {@link #relocate} 时重算</b>，不是每帧去问物品堆。
+     * 每帧问也不贵（就是取一格物品），但那意味着尺寸可以在任意一帧变：玩家在背包里
+     * 把平板换成手机，界面会在半路上换一套布局，而各页的滚动位置、拖动状态都是按
+     * 旧尺寸记的。位置换了才重算，是唯一一处"手上这台确实换了"的地方。
+     */
+    private DeviceMetrics metrics;
+
     private boolean layoutDirty = true;
     private long nowMs;
 
@@ -164,14 +187,32 @@ public final class PhoneScreen extends PhoneScreenBase {
      */
     private static final int NO_MOUSE = -10_000;
 
+    /** 全屏读书时四周留多少。留一圈是为了不贴着窗口边，不是为了好看 */
+    private static final int READING_MARGIN = 10;
+
     public PhoneScreen(PhoneLocation location) {
         super(Component.translatable("mcphone.gui.home"));
         this.location = location;
+        this.metrics = metricsAt(location);
         this.openTimeMs = System.currentTimeMillis();
         this.animationDone = PhoneTheme.OPEN_ANIMATION_MS <= 0;
+    }
 
-        // 开机了：手上那部的屏幕该亮起来，而且要让【别人】也看得见，见 PhoneScreenOnSync
-        PhoneScreenOnSync.turnedOn(location);
+    /**
+     * 这个位置上放着的是哪种设备，按它取屏幕尺寸。
+     *
+     * 玩家不在（刚断线、还没进世界）或那儿已经空了，就按手机那套画 —— 这一帧多半正要
+     * 关掉，但在关掉之前总得有一套尺寸能用，见 {@link DeviceMetrics#of}。
+     */
+    private static DeviceMetrics metricsAt(PhoneLocation location) {
+        Player player = Minecraft.getInstance().player;
+        if (player == null) return DeviceMetrics.PHONE;
+        return DeviceMetrics.of(PhoneItem.kindOf(location.resolve(player)));
+    }
+
+    /** 这一台的屏幕尺寸。{@link PhoneHud} 摆位置时要按它算机身多大 */
+    public DeviceMetrics metrics() {
+        return metrics;
     }
 
     public void navigateTo(Mode target) {
@@ -222,6 +263,9 @@ public final class PhoneScreen extends PhoneScreenBase {
         // 每次进书架都重扫一遍书源，理由见 BookList.open()
         if (this.mode == Mode.READER) bookList.close();
         if (target == Mode.READER) bookList.open();
+
+        // 离开阅读页就把书放掉：那里面攥着整本书的文本，几 MB
+        if (this.mode == Mode.TXT_BOOK && target != Mode.TXT_BOOK) txtReader.close();
         if (target == Mode.APP_MANAGER) appManagerPage.open();
 
         if (this.mode == Mode.APP_MANAGER_DETAIL) appManagerDetail.close();
@@ -278,6 +322,13 @@ public final class PhoneScreen extends PhoneScreenBase {
             return;
         }
 
+        // 书架/书城/正在看书时拖进来 txt ＝ 收进小说目录。与表情同一个道理：那一页的语境
+        // 就是"我的书"，而这是除了自己去翻文件夹之外唯一的导入方式
+        if (mode == Mode.READER || mode == Mode.TXT_BOOK) {
+            importBooks(files);
+            return;
+        }
+
         UUID target = switch (mode) {
             case CHAT_CONVERSATION -> chatConversation.peer();
             // 选照片那一页也收：人已经在"挑一张"的语境里了，拖进来是同一个意思
@@ -298,6 +349,36 @@ public final class PhoneScreen extends PhoneScreenBase {
 
         ChatImageSender.send(target, picture);
         if (mode == Mode.CHAT_PHOTO_PICKER) navigateTo(Mode.CHAT_CONVERSATION);
+    }
+
+    /**
+     * 把拖进来的 txt 收进小说目录。
+     *
+     * 与表情一样<b>收全部</b>：拖一整包小说进来是常事。收完刷新书城，玩家松手就能看见它们。
+     * 不是 txt 的说一句就算了——玩家多半是拖错了窗口。
+     */
+    private void importBooks(List<Path> files) {
+        int added = 0;
+        String last = null;
+        for (Path file : files) {
+            String name = com.november.mcphone.feature.reader.client.TxtLibrary.importFrom(file);
+            if (name != null) {
+                added++;
+                last = name;
+            }
+        }
+
+        if (added == 0) {
+            tellPlayer("mcphone.reader.txt.drop_not_txt");
+            return;
+        }
+
+        // 书城那张表是缓存的，不刷新的话玩家要退出去再进来才看得见
+        BookSources.refreshAll();
+        bookList.open();
+
+        tellPlayer("mcphone.reader.txt.imported",
+                added == 1 ? last : String.valueOf(added));
     }
 
     /**
@@ -452,11 +533,11 @@ public final class PhoneScreen extends PhoneScreenBase {
         }
 
         int contentY = phoneTop + PhoneTheme.STATUS_BAR_HEIGHT;
-        int contentH = PhoneTheme.PHONE_HEIGHT
-                - PhoneTheme.STATUS_BAR_HEIGHT - PhoneTheme.NAV_BAR_HEIGHT;
 
+        // 附属那一侧从来只认画布给的这个矩形，所以平板的宽高直接送进去就行，
+        // 它们一行代码都不用改 —— 这正是 PhoneCanvas 当初不摊开成十个参数的原因
         PhoneCanvas canvas = new PhoneCanvas(g, font,
-                phoneLeft, contentY, PhoneTheme.PHONE_WIDTH, contentH,
+                phoneLeft, contentY, metrics.contentWidth(), metrics.contentHeight(),
                 mouseX, mouseY, partialTick, ThemeStyle.INSTANCE);
 
         try {
@@ -513,6 +594,30 @@ public final class PhoneScreen extends PhoneScreenBase {
         }
     }
 
+    /**
+     * 打开一本本地 txt —— 由 {@code TxtBookSource.open} 调，那是点开书架上一本本地小说的落点。
+     *
+     * 公开是因为书源在另一个包里，而这件事只有手机自己做得了：翻书的是手机里的一页，
+     * 不是另开的 Screen（与时钟、记事本一致，退出去还是手机）。
+     */
+    public void openTxtBook(TxtLibrary.Entry entry) {
+        txtReader.open(entry);
+        navigateTo(Mode.TXT_BOOK);
+    }
+
+    /**
+     * 翻一页 —— 给 {@code ReaderKeyHandler} 用，那是"挂在 HUD 上边走边看"的唯一入口。
+     *
+     * 这一部手机没在看书就什么都不做（返回 false），由调用方决定要不要做别的。
+     *
+     * @param direction 正数往后翻，负数往前翻
+     * @return 真的翻了才 true
+     */
+    public boolean turnReadingPage(int direction) {
+        if (mode != Mode.TXT_BOOK) return false;
+        return txtReader.turnPage(direction, font);
+    }
+
     /** 导航栏 ◁ 走这里；ESC 不退层而是直接关机，见 {@link #keyPressed}。真的退了一层才 true */
     private boolean goBackOneLevel() {
         if (mode == Mode.GALLERY && gallery.backToGrid()) return true;
@@ -538,6 +643,13 @@ public final class PhoneScreen extends PhoneScreenBase {
 
         if (mode == Mode.NOTE_EDIT) {
             navigateTo(Mode.NOTES);
+            return true;
+        }
+
+        // 目录盖在正文上，返回键先收它；正文里再按才回书架
+        if (mode == Mode.TXT_BOOK) {
+            if (txtReader.back()) return true;
+            navigateTo(Mode.READER);
             return true;
         }
 
@@ -585,8 +697,8 @@ public final class PhoneScreen extends PhoneScreenBase {
 
         if (!layoutDirty) return;
 
-        final int phoneW = PhoneTheme.PHONE_TOTAL_WIDTH;
-        final int phoneH = PhoneTheme.PHONE_TOTAL_HEIGHT;
+        final int phoneW = metrics.totalWidth();
+        final int phoneH = metrics.totalHeight();
 
         this.phoneLeft = (this.width - phoneW) / 2 + PhoneTheme.PHONE_BORDER;
         this.phoneTop = (this.height - phoneH) / 2 + PhoneTheme.PHONE_BORDER + PhoneTheme.SCREEN_Y_OFFSET;
@@ -609,13 +721,13 @@ public final class PhoneScreen extends PhoneScreenBase {
      * 它绕的是同一个中心，于是手机从中心长大，框的位置不动。
      */
     private void layoutHud() {
-        final float s = PhoneHudPlacement.effectiveScale(this.width, this.height);
+        final float s = PhoneHudPlacement.effectiveScale(metrics, this.width, this.height);
         final int b = PhoneTheme.PHONE_BORDER;
-        final float halfW = PhoneTheme.PHONE_WIDTH / 2.0F;
-        final float halfH = PhoneTheme.PHONE_HEIGHT / 2.0F;
+        final float halfW = metrics.screenW() / 2.0F;
+        final float halfH = metrics.screenH() / 2.0F;
 
-        int originX = PhoneHudPlacement.originX(this.width, this.height);
-        int originY = PhoneHudPlacement.originY(this.width, this.height);
+        int originX = PhoneHudPlacement.originX(metrics, this.width, this.height);
+        int originY = PhoneHudPlacement.originY(metrics, this.width, this.height);
 
         this.phoneLeft = Math.round(originX - halfW + (b + halfW) * s);
         this.phoneTop = Math.round(originY - halfH + (b + halfH) * s) + PhoneTheme.SCREEN_Y_OFFSET;
@@ -654,7 +766,25 @@ public final class PhoneScreen extends PhoneScreenBase {
         // HUD 那副面孔不铺背景。铺了就把世界糊成一片，而它存在的全部意义正是"边玩边看"
         if (!hudMode) Draw.screenBackground(this, g, rawMouseX, rawMouseY, partialTick);
 
+        // 全屏读书：这一帧整块窗口都给那本书，机身、壁纸、状态栏、导航栏一概不画
+        if (fullscreenReading()) {
+            txtReader.render(g, READING_MARGIN, READING_MARGIN,
+                    this.width - READING_MARGIN * 2, this.height - READING_MARGIN * 2,
+                    0, 0, rawMouseX, rawMouseY, font);
+            return;
+        }
+
         drawPhone(g, rawMouseX, rawMouseY, partialTick);
+    }
+
+    /**
+     * 这一帧是不是"整块窗口都给这本书"。
+     *
+     * HUD 上那副面孔永远不是：它挂在角上就该是小的，那正是它存在的理由。所以这里带上
+     * {@code !hudMode}——同一个 PhoneScreen 实例既可能是全屏那副，也可能是 HUD 那副。
+     */
+    private boolean fullscreenReading() {
+        return mode == Mode.TXT_BOOK && !hudMode && txtReader.isFullscreen();
     }
 
     /**
@@ -682,9 +812,22 @@ public final class PhoneScreen extends PhoneScreenBase {
         final int mouseX = (int) Math.round(unscaledX(rawMouseX));
         final int mouseY = (int) Math.round(unscaledY(rawMouseY));
 
+        // 下面每一页都要这四个数。取成局部量是为了让分派那一长串看得见页面之间的差别
+        // （谁多收一个 partialTick、谁要窗口尺寸），而不是被四个一模一样的常量名淹掉
+        //
+        // 【sw 是页面能用的宽，不是屏幕宽】：各页都按"左边 phoneLeft、宽 sw、上下扣掉
+        // statusH 与 navH"算版面，把导航条占掉的地方从这两个数里扣掉，页面就自动让开了，
+        // 一页的代码都不用改。平板上导航条立在右边，于是 sw 少 14、navH 变 0
+        final int sw = metrics.contentWidth();
+        final int sh = metrics.screenH();
+        final int statusH = PhoneTheme.STATUS_BAR_HEIGHT;
+        final int navH = metrics.bottomNavHeight();
+
+        // 缩放的支点是【整块屏幕】的正中，与鼠标那两个反变换（unscaledX/Y）必须同一个点，
+        // 所以这儿用 screenW/screenH 而不是上面那两个
         float scale = renderScale();
-        int cx = phoneLeft + PhoneTheme.PHONE_WIDTH / 2;
-        int cy = phoneTop + PhoneTheme.PHONE_HEIGHT / 2;
+        int cx = phoneLeft + metrics.screenW() / 2;
+        int cy = phoneTop + metrics.screenH() / 2;
 
         g.pose().pushPose();
         g.pose().translate(cx, cy, 0);
@@ -695,121 +838,102 @@ public final class PhoneScreen extends PhoneScreenBase {
         renderStatusBar(g);
 
         switch (mode) {
-            case MAIN              -> homeGrid.render(g, phoneLeft, phoneTop, font,
+            case MAIN              -> homeGrid.render(g, phoneLeft, phoneTop, metrics, font,
                     nowMs, mouseX, mouseY, partialTick);
             case SETTINGS          -> {
                 buildSettingItems();
                 settingsList.render(g, phoneLeft, phoneTop,
-                        PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
-                        PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT,
+                        sw, sh, statusH, navH,
                         mouseX, mouseY, font);
             }
             case WALLPAPER_PICKER  -> wallpaperPicker.render(g, phoneLeft, phoneTop,
-                    PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
-                    PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT,
+                    sw, sh, statusH, navH,
                     mouseX, mouseY, font);
             case FONT_COLOR_PICKER -> fontColorPicker.render(g, phoneLeft, phoneTop,
-                    PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
-                    PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT,
+                    sw, sh, statusH, navH,
                     mouseX, mouseY, font);
             case UI_SCALE          -> uiScalePage.render(g, phoneLeft, phoneTop,
-                    PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
-                    PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT,
-                    mouseX, mouseY, font, this.width, this.height);
+                    sw, sh, statusH, navH,
+                    mouseX, mouseY, font, metrics, this.width, this.height);
             case HUD               -> hudPage.render(g, phoneLeft, phoneTop,
-                    PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
-                    PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT,
+                    sw, sh, statusH, navH,
                     mouseX, mouseY, font);
             case APP_MANAGER       -> appManagerPage.render(g, phoneLeft, phoneTop,
-                    PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
-                    PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT,
+                    sw, sh, statusH, navH,
                     mouseX, mouseY, partialTick, font);
             case APP_MANAGER_DETAIL -> appManagerDetail.render(g, phoneLeft, phoneTop,
-                    PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
-                    PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT,
+                    sw, sh, statusH, navH,
                     mouseX, mouseY, partialTick, font);
             case MUSIC_PLAYER      -> musicPage.render(g, phoneLeft, phoneTop,
-                    PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
-                    PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT,
+                    sw, sh, statusH, navH,
                     mouseX, mouseY, font);
             case APP_STORE         -> appStore.render(g, phoneLeft, phoneTop,
-                    PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
-                    PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT,
+                    sw, sh, statusH, navH,
                     mouseX, mouseY, font);
             case APP_DETAIL        -> appDetail.render(g, phoneLeft, phoneTop,
-                    PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
-                    PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT,
+                    sw, sh, statusH, navH,
                     mouseX, mouseY, font);
             case ADDON_PAGE        -> renderAddonPage(g, mouseX, mouseY, partialTick);
             case COMPANION_APPS    -> companionApps.render(g, phoneLeft, phoneTop,
-                    PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
-                    PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT,
+                    sw, sh, statusH, navH,
                     mouseX, mouseY, font);
             case ABOUT             -> aboutPage.render(g, phoneLeft, phoneTop,
-                    PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
-                    PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT, font);
+                    sw, sh, statusH, navH, font);
             case GALLERY           -> gallery.render(g, phoneLeft, phoneTop,
-                    PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
-                    PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT,
+                    sw, sh, statusH, navH,
                     mouseX, mouseY, font);
             case DEVICE_NAME       -> deviceNameEditor.render(g, phoneLeft, phoneTop,
-                    PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
-                    PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT,
+                    sw, sh, statusH, navH,
                     mouseX, mouseY, partialTick, font);
             case CHAT              -> chatList.render(g, phoneLeft, phoneTop,
-                    PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
-                    PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT,
+                    sw, sh, statusH, navH,
                     mouseX, mouseY, font);
             case CHAT_ADD_CONTACT  -> chatAddContact.render(g, phoneLeft, phoneTop,
-                    PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
-                    PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT,
+                    sw, sh, statusH, navH,
                     mouseX, mouseY, font);
             case CHAT_CONVERSATION -> chatConversation.render(g, phoneLeft, phoneTop,
-                    PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
-                    PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT,
+                    sw, sh, statusH, navH,
                     mouseX, mouseY, partialTick, font);
             case CHAT_PHOTO_PICKER -> chatPhotoPicker.render(g, phoneLeft, phoneTop,
-                    PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
-                    PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT,
+                    sw, sh, statusH, navH,
                     mouseX, mouseY, font);
             case CHAT_STICKER_PICKER -> chatStickerPicker.render(g, phoneLeft, phoneTop,
-                    PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
-                    PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT,
+                    sw, sh, statusH, navH,
                     mouseX, mouseY, font);
             case NOTES             -> notesList.render(g, phoneLeft, phoneTop,
-                    PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
-                    PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT, mouseX, mouseY, font);
+                    sw, sh, statusH, navH, mouseX, mouseY, font);
             case CLOCK             -> ClockPage.render(g, phoneLeft, phoneTop,
-                    PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
-                    PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT, font);
+                    sw, sh, statusH, navH, font);
             case WEATHER           -> WeatherPage.render(g, phoneLeft, phoneTop,
-                    PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
-                    PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT, font);
+                    sw, sh, statusH, navH, font);
             case READER            -> bookList.render(g, phoneLeft, phoneTop,
-                    PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
-                    PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT,
+                    sw, sh, statusH, navH,
                     mouseX, mouseY, partialTick, font);
+            case TXT_BOOK          -> txtReader.render(g, phoneLeft, phoneTop,
+                    sw, sh, statusH, navH,
+                    mouseX, mouseY, font);
             case NOTE_EDIT         -> noteEditor.render(g, phoneLeft, phoneTop,
-                    PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
-                    PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT,
+                    sw, sh, statusH, navH,
                     mouseX, mouseY, partialTick, font);
         }
 
         renderNavBar(g, mouseX, mouseY);
 
-        // 外壳最后画，盖在不透明的状态栏与导航栏之上；仍在 pushPose 内，开机动画要一起缩放
-        PhoneChassis.drawFrame(g, phoneLeft, phoneTop);
+        // 外壳最后画，盖在不透明的状态栏与导航栏之上；仍在 pushPose 内，开机动画要一起缩放。
+        // 外壳圈的是【整块屏幕】，不是页面能用的那块，所以这里也不能用上面的 sw
+        PhoneChassis.drawFrame(g, phoneLeft, phoneTop, metrics.screenW(), sh, metrics);
 
         g.pose().popPose();
 
     }
 
     private void renderScreenBackground(GuiGraphics g) {
-        PhoneChassis.drawScreenBackground(g, phoneLeft, phoneTop);
+        PhoneChassis.drawScreenBackground(g, phoneLeft, phoneTop,
+                metrics.screenW(), metrics.screenH());
     }
 
     private void renderStatusBar(GuiGraphics g) {
-        PhoneChassis.drawStatusBar(g, font, phoneLeft, phoneTop);
+        PhoneChassis.drawStatusBar(g, font, phoneLeft, phoneTop, metrics);
     }
 
     /** 建一次就够。标签在这一刻定死；PhoneScreen 每次开机都是新造的，换语言重开就跟上 */
@@ -860,7 +984,7 @@ public final class PhoneScreen extends PhoneScreenBase {
     }
 
     private void renderNavBar(GuiGraphics g, int mouseX, int mouseY) {
-        PhoneChassis.drawNavBar(g, font, phoneLeft, phoneTop, mouseX, mouseY);
+        PhoneChassis.drawNavBar(g, font, phoneLeft, phoneTop, metrics, mouseX, mouseY);
     }
 
     /**
@@ -873,8 +997,8 @@ public final class PhoneScreen extends PhoneScreenBase {
      */
     private float renderScale() {
         float base = hudMode
-                ? PhoneHudPlacement.effectiveScale(this.width, this.height)
-                : PhoneScale.effective(this.width, this.height);
+                ? PhoneHudPlacement.effectiveScale(metrics, this.width, this.height)
+                : PhoneScale.effective(metrics, this.width, this.height);
         return getAnimationScale() * base;
     }
 
@@ -896,12 +1020,12 @@ public final class PhoneScreen extends PhoneScreenBase {
      * 界面放大之后画面变了、它们算命中的那套数没变，不换算的话点哪儿都不对。
      */
     private double unscaledX(double mx) {
-        int cx = phoneLeft + PhoneTheme.PHONE_WIDTH / 2;
+        int cx = phoneLeft + metrics.screenW() / 2;
         return (mx - cx) / renderScale() + cx;
     }
 
     private double unscaledY(double my) {
-        int cy = phoneTop + PhoneTheme.PHONE_HEIGHT / 2;
+        int cy = phoneTop + metrics.screenH() / 2;
         return (my - cy) / renderScale() + cy;
     }
 
@@ -909,8 +1033,8 @@ public final class PhoneScreen extends PhoneScreenBase {
     private boolean isInsidePhone(double lx, double ly) {
         int fl = phoneLeft - PhoneTheme.PHONE_BORDER;
         int ft = phoneTop - PhoneTheme.PHONE_BORDER;
-        return lx >= fl && lx < fl + PhoneTheme.PHONE_TOTAL_WIDTH
-            && ly >= ft && ly < ft + PhoneTheme.PHONE_TOTAL_HEIGHT;
+        return lx >= fl && lx < fl + metrics.totalWidth()
+            && ly >= ft && ly < ft + metrics.totalHeight();
     }
 
     /**
@@ -929,8 +1053,8 @@ public final class PhoneScreen extends PhoneScreenBase {
     private boolean isOnHudHandle(double lx, double ly) {
         if (!hudMode || !isInsidePhone(lx, ly)) return false;
 
-        boolean inScreen = lx >= phoneLeft && lx < phoneLeft + PhoneTheme.PHONE_WIDTH
-                && ly >= phoneTop && ly < phoneTop + PhoneTheme.PHONE_HEIGHT;
+        boolean inScreen = lx >= phoneLeft && lx < phoneLeft + metrics.screenW()
+                && ly >= phoneTop && ly < phoneTop + metrics.screenH();
 
         // 边框那一圈；或者屏幕里最上面那条状态栏
         return !inScreen || ly < phoneTop + PhoneTheme.STATUS_BAR_HEIGHT;
@@ -945,7 +1069,7 @@ public final class PhoneScreen extends PhoneScreenBase {
      * @param commit 松手了没有。拖的过程中只改不落盘，几十步拖动只对应一次写盘
      */
     private void dragHudTo(double rawX, double rawY, boolean commit) {
-        PhoneHudPlacement.Placement p = PhoneHudPlacement.place(
+        PhoneHudPlacement.Placement p = PhoneHudPlacement.place(metrics,
                 (int) Math.round(rawX) - hudGrabX,
                 (int) Math.round(rawY) - hudGrabY,
                 this.width, this.height);
@@ -979,6 +1103,13 @@ public final class PhoneScreen extends PhoneScreenBase {
 
         if (button != 0) return super.mouseClicked(rawX, rawY, button);
 
+        // 全屏读书这一帧没有机身，也就没有"点机身外＝关机"这回事；坐标也不必换算
+        // （那一层 pose 缩放没有加上去）。必须排在下面 isInsidePhone 那一句之前
+        if (fullscreenReading()) {
+            txtReader.mouseClicked(rawX, rawY, font);
+            return true;
+        }
+
         // 换算一次，下面全用它。super 那几句仍然给原始坐标：原版控件是按屏幕坐标摆的
         final double mx = unscaledX(rawX);
         final double my = unscaledY(rawY);
@@ -994,12 +1125,12 @@ public final class PhoneScreen extends PhoneScreenBase {
         // 各页的 mouseClicked 一律把点击吞掉，放到后面就永远轮不到
         if (isOnHudHandle(mx, my)) {
             hudDragging = true;
-            hudGrabX = (int) Math.round(rawX) - PhoneHudPlacement.originX(this.width, this.height);
-            hudGrabY = (int) Math.round(rawY) - PhoneHudPlacement.originY(this.width, this.height);
+            hudGrabX = (int) Math.round(rawX) - PhoneHudPlacement.originX(metrics, this.width, this.height);
+            hudGrabY = (int) Math.round(rawY) - PhoneHudPlacement.originY(metrics, this.width, this.height);
             return true;
         }
 
-        switch (PhoneChassis.hitTestNavBar(mx, my, phoneLeft, phoneTop)) {
+        switch (PhoneChassis.hitTestNavBar(mx, my, phoneLeft, phoneTop, metrics)) {
             case BACK -> {
                 // 主屏上按返回不关机
                 goBackOneLevel();
@@ -1040,9 +1171,10 @@ public final class PhoneScreen extends PhoneScreenBase {
             }
             case HUD -> {
                 hudPage.mouseClicked(mx, my);
-                // 摆位置要占整个窗口，开不进这块 120×200 的屏幕里，见 PhoneHudEditor
+                // 摆位置要占整个窗口，开不进这块屏幕里，见 PhoneHudEditor。
+                // 把尺寸带过去：拖的那个框画的就是手上这一台，平板比手机大一圈
                 if (hudPage.consumeEditRequest() && minecraft != null) {
-                    minecraft.setScreen(new PhoneHudEditor());
+                    minecraft.setScreen(new PhoneHudEditor(metrics));
                 }
                 yield true;
             }
@@ -1094,10 +1226,13 @@ public final class PhoneScreen extends PhoneScreenBase {
                 yield true;
             }
             case READER -> {
+                // 按下只是按下：书架页上这一下可能是"打开这本"，也可能是"拖着排"，
+                // 由 mouseReleased 定性，见 BookList.mouseReleased
                 bookList.mouseClicked(mx, my, button);
-                BookRef book = bookList.consumeOpenRequest();
-                // 打开之后接管屏幕的是那本书自己的界面，这一部手机就退下去了
-                if (book != null) BookSources.open(book);
+                yield true;
+            }
+            case TXT_BOOK -> {
+                txtReader.mouseClicked(mx, my, font);
                 yield true;
             }
             case APP_DETAIL -> {
@@ -1201,6 +1336,9 @@ public final class PhoneScreen extends PhoneScreenBase {
         if (mode == Mode.UI_SCALE && uiScalePage.mouseDragged(mx)) return true;
         if (mode == Mode.HUD && hudPage.mouseDragged(mx)) return true;
 
+        // 书架页靠拖动排书
+        if (mode == Mode.READER && bookList.mouseDragged(mx, my)) return true;
+
         // 多行输入框靠拖动选中文本，不转发的话选不了
         if (mode == Mode.NOTE_EDIT && noteEditor.mouseDragged(mx, my, button, ldx, ldy)) return true;
         return super.mouseDragged(rawX, rawY, button, dx, dy);
@@ -1224,11 +1362,22 @@ public final class PhoneScreen extends PhoneScreenBase {
             if (launch != null) launchApp(launch);
             return true;
         }
+
+        // 书架页同理：拖过就是排序，没拖过才是"打开这本"
+        if (mode == Mode.READER && button == 0 && bookList.mouseReleased()) {
+            BookRef book = bookList.consumeOpenRequest();
+            // 打开之后接管屏幕的是那本书自己的界面，这一部手机就退下去了
+            if (book != null) BookSources.open(book);
+            return true;
+        }
         return super.mouseReleased(rawX, rawY, button);
     }
 
     @Override
     protected boolean onScroll(double rawX, double rawY, double scrollX, double scrollY) {
+        // 全屏读书：翻页，与坐标无关
+        if (fullscreenReading() && txtReader.mouseScrolled(scrollY, font)) return true;
+
         final double mx = unscaledX(rawX);
         final double my = unscaledY(rawY);
 
@@ -1248,7 +1397,7 @@ public final class PhoneScreen extends PhoneScreenBase {
 
             // 调大之后机身可能顶出窗口，拉回来。没顶出去时这一句不写盘，见 setPlacement
             PhoneHudPlacement.Placement p =
-                    PhoneHudPlacement.clampIntoWindow(this.width, this.height);
+                    PhoneHudPlacement.clampIntoWindow(metrics, this.width, this.height);
             PhoneHudPlacement.setPlacement(p.anchor(), p.offsetX(), p.offsetY());
             return true;
         }
@@ -1262,6 +1411,7 @@ public final class PhoneScreen extends PhoneScreenBase {
         if (mode == Mode.CHAT_STICKER_PICKER && chatStickerPicker.mouseScrolled(scrollY)) return true;
         if (mode == Mode.NOTES && notesList.mouseScrolled(scrollY)) return true;
         if (mode == Mode.READER && bookList.mouseScrolled(scrollY)) return true;
+        if (mode == Mode.TXT_BOOK && txtReader.mouseScrolled(scrollY, font)) return true;
         if (mode == Mode.MUSIC_PLAYER && musicPage.mouseScrolled(scrollY, my)) return true;
         if (mode == Mode.NOTE_EDIT && noteEditor.mouseScrolled(mx, my, scrollX, scrollY)) return true;
         // 设置那几页：1.9.1 之前一页都滚不动，内容超出一屏就再也看不到
@@ -1302,6 +1452,8 @@ public final class PhoneScreen extends PhoneScreenBase {
             return true;
         }
         // 书架顶上那条搜索栏一直握着焦点，这一页同样要整个吃掉按键
+        if (mode == Mode.TXT_BOOK && txtReader.keyPressed(keyCode, font)) return true;
+
         if (mode == Mode.READER) {
             bookList.keyPressed(keyCode, scanCode, modifiers);
             return true;
@@ -1360,11 +1512,14 @@ public final class PhoneScreen extends PhoneScreenBase {
      * （手机离开副手）。它不是幂等的，重复调会把已经清过的状态再清一遍。
      */
     void shutdown() {
-        // 关机了：屏幕灭掉。放在最前面，下面那串 close() 与这件事无关
-        PhoneScreenOnSync.turnedOff(this);
+        // 屏幕在别人眼里亮不亮不必在这儿管：那是 PhoneScreenOnSync 每 tick 自己算的，
+        // 这部手机从 mc.screen / PhoneHud 上消失，下一 tick 它自然就灭了
 
         // 先记再关：下面这几个 close() 会把页面状态清掉
-        PhoneSession.save(mode, pendingConversationPeer);
+        // 正在读的那本 txt 记成书架：那一页攥着整本书的文本，关机时必须放掉
+        // （见 TxtReaderPage.close），下次开机没有可续的东西，停在书架上最贴近。
+        // 这一步在这里做而不在 PhoneSession 里：TXT_BOOK 这个常量只有本目标有
+        PhoneSession.save(mode == Mode.TXT_BOOK ? Mode.READER : mode, pendingConversationPeer);
 
         if (mode == Mode.GALLERY) gallery.close();
         if (mode == Mode.CHAT_PHOTO_PICKER) chatPhotoPicker.close();
@@ -1375,6 +1530,7 @@ public final class PhoneScreen extends PhoneScreenBase {
         // 是常有的来回，每次都放掉等于每次回来重下一遍
         ChatImageCache.clear();
         if (mode == Mode.NOTE_EDIT) noteEditor.close();
+        if (mode == Mode.TXT_BOOK) txtReader.close();
 
         // 关手机、被顶掉、退出世界都不经过 navigateTo，IPhonePage.onClose() "一定会被调用"靠这一行兑现
         closeAddonPage();
@@ -1414,7 +1570,26 @@ public final class PhoneScreen extends PhoneScreenBase {
         if (moved == null) return;
         this.location = moved;
 
-        // 从背包挪到手上（或者反过来）时，亮着的那件物品跟着换，见 PhoneScreenOnSync
-        PhoneScreenOnSync.turnedOn(moved);
+        // 换了位置就可能换了机器：收进背包的是手机，饰品栏里接着用的是平板
+        syncDevice();
+
+        // 从背包挪到手上（或者反过来）时亮着的那件物品跟着换 —— 这儿不必通知谁，
+        // PhoneScreenOnSync 每 tick 读的就是上面这个 location 字段
+    }
+
+    /**
+     * 位置没变，但那一格里的东西可能换了 —— 把屏幕尺寸对回来。
+     *
+     * 副手上挂着平板，玩家按 F 把它与主手的手机换了个个儿：位置仍是"副手"，
+     * {@link PhoneHud} 那条路因此不会调 {@link #relocate}，而屏幕尺寸已经该变了。
+     * 由 PhoneHud 每 tick 叫一次（就是取一格物品，比维护一套失效通知便宜）。
+     *
+     * 尺寸真变了才置脏：布局本来是有缓存的，每 tick 无脑作废等于取消了那份缓存。
+     */
+    void syncDevice() {
+        DeviceMetrics now = metricsAt(location);
+        if (now.equals(this.metrics)) return;
+        this.metrics = now;
+        invalidateLayout();
     }
 }

@@ -4,6 +4,7 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.november.mcphone.MCphone;
 import com.november.mcphone.feature.reader.BookRef;
+import com.november.mcphone.feature.reader.ShelfOrder;
 
 import java.io.IOException;
 import java.io.Reader;
@@ -53,13 +54,18 @@ public final class ShelfStore {
 
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
 
-    /** 架上的书，按【放上去的顺序】。null 表示还没从磁盘读过 */
-    private static LinkedHashSet<Key> shelf;
+    /**
+     * 架上的书，<b>按玩家排的顺序</b>。null 表示还没从磁盘读过。
+     *
+     * 是 List 不是 Set：这份顺序本身就是玩家能改的东西（拖着排，见 {@link #move}），
+     * 而 Set 的"顺序"只是插入顺序，改中间一个得整个重建。去重在 {@link #load} 那一次做完。
+     */
+    private static List<Key> shelf;
 
     /**
      * 改了几次。
      *
-     * 界面每帧都要问"书架上是哪几本"，答案只在玩家收藏/取消时才变。界面拿这个
+     * 界面每帧都要问"书架上是哪几本"，答案只在玩家收藏/取消/排序时才变。界面拿这个
      * 数当缓存的凭据：数没变就不必重新拼一遍表。不用"上次改的时间"是因为同一帧
      * 内连续两次改动的时间戳可能相同。
      */
@@ -100,20 +106,73 @@ public final class ShelfStore {
      * @return 之后这本书在不在架上
      */
     public static boolean toggle(BookRef book) {
-        LinkedHashSet<Key> books = load();
+        List<Key> books = load();
         Key key = keyOf(book);
 
         boolean nowShelved;
         if (books.remove(key)) {
             nowShelved = false;
         } else {
-            books.add(key);          // 加在末尾：架上的顺序就是收藏的先后
+            books.add(key);          // 加在末尾：新收的排在自己排好的那些后面，不插队
             nowShelved = true;
         }
 
         revision++;
         save();
         return nowShelved;
+    }
+
+    /**
+     * 把界面上第 {@code from} 本挪到第 {@code to} 位，并立刻落盘。
+     *
+     * 收的是<b>界面上看得见的那张表</b>而不是下标对下标：架上可能还记着当前认不出的书
+     * （换过整合包），它们不显示、也不参与排序，但要留在原处。这份换算在
+     * {@link ShelfOrder#move} 里，那是一段纯算术，有断言钉着。
+     *
+     * @param visible 界面这一刻列出来的那些书，顺序与屏幕上一致
+     */
+    public static void move(List<BookRef> visible, int from, int to) {
+        if (visible == null || visible.size() < 2) return;
+
+        List<Key> keys = new ArrayList<>(visible.size());
+        for (BookRef book : visible) keys.add(keyOf(book));
+
+        List<Key> books = load();
+        List<Key> moved = ShelfOrder.move(books, keys, from, to);
+        if (moved.equals(books)) return;      // 没动就别写盘，也别让界面白重拼一次表
+
+        shelf = new ArrayList<>(moved);
+        revision++;
+        save();
+    }
+
+    /**
+     * 把这些书都放上架（已经在架上的不动）—— 本地小说走这一条。
+     *
+     * <b>为什么本地书不必点 ☆</b>：玩家往 {@code config/mcphone/reader/books/} 里放一本书，
+     * 这个动作本身就是"我要看它"。再要求他去书城找一遍、点一下星，是在为一个已经表达过的
+     * 意愿再收一次费。模组手册不一样——那是整合包塞给他的几十本，从里面挑几本才需要 ☆。
+     *
+     * 加在末尾、保持先后：新放进去的书排在他已经排好的那些后面，不插队。
+     *
+     * 取消不了：本地书的 ☆ 不画（见 {@code BookList}），要它离开书架就把文件从目录里挪走。
+     * 这是唯一说得通的规矩——只要文件还在，下一次刷新也会把它放回来。
+     */
+    public static void ensureShelved(List<BookRef> books) {
+        if (books == null || books.isEmpty()) return;
+
+        List<Key> shelved = load();
+        boolean changed = false;
+        for (BookRef book : books) {
+            Key key = keyOf(book);
+            if (shelved.contains(key)) continue;
+            shelved.add(key);
+            changed = true;
+        }
+
+        if (!changed) return;
+        revision++;
+        save();
     }
 
     /**
@@ -124,7 +183,7 @@ public final class ShelfStore {
      * @param all 当前书城的全部书
      */
     public static List<BookRef> shelved(List<BookRef> all) {
-        LinkedHashSet<Key> books = load();
+        List<Key> books = load();
         if (books.isEmpty() || all.isEmpty()) return List.of();
 
         // 先给书城建一张索引再按收藏顺序取，而不是两层循环：几十本 × 几本虽然
@@ -140,9 +199,14 @@ public final class ShelfStore {
         return List.copyOf(out);
     }
 
-    /** 读一次存着。读不出来就当空书架——绝不因为一个坏文件让整个 App 打不开 */
-    private static LinkedHashSet<Key> load() {
-        LinkedHashSet<Key> cached = shelf;
+    /**
+     * 读一次存着。读不出来就当空书架——绝不因为一个坏文件让整个 App 打不开。
+     *
+     * 先过一遍 LinkedHashSet 再转成 List：磁盘上那份是手改得到的，重复条目会让同一本书
+     * 在架上出现两次，而拖动排序碰上重复项就无从判断动的是哪一个。去重只在这一次做。
+     */
+    private static List<Key> load() {
+        List<Key> cached = shelf;
         if (cached != null) return cached;
 
         LinkedHashSet<Key> out = new LinkedHashSet<>();
@@ -161,8 +225,8 @@ public final class ShelfStore {
             }
         }
 
-        shelf = out;
-        return out;
+        shelf = new ArrayList<>(out);
+        return shelf;
     }
 
     private static void save() {

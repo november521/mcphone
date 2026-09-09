@@ -45,7 +45,10 @@ public final class BookSources {
     private static final List<BookSource> SOURCES = List.of(
             new PatchouliSource(),
             new GuideMeSource(),
-            new ExternalBookSource()
+            new ExternalBookSource(),
+            // 玩家自己的 txt 排在最后：模组的手册是"这个整合包里有什么"，本地小说是
+            // "我自己放了什么"，两类混排会让人以为书城里多了几本不认识的模组书
+            new TxtBookSource()
     );
 
     /**
@@ -66,6 +69,20 @@ public final class BookSources {
     public static boolean anyAvailable() {
         for (BookSource source : SOURCES) {
             if (isAvailable(source)) return true;
+        }
+        return false;
+    }
+
+    /**
+     * 某个书源在这个目标上可用吗。id 见各书源的 SOURCE_ID。
+     *
+     * 走本类的 {@link #isAvailable(BookSource)} 而不是直接问书源：那一层兜的是 Throwable，
+     * 理由见类注释。这个方法的调用点在每帧的渲染路径上，更不能让别人模组抛出来的
+     * Error 直穿过去。
+     */
+    public static boolean available(String sourceId) {
+        for (BookSource source : SOURCES) {
+            if (source.id().equals(sourceId)) return isAvailable(source);
         }
         return false;
     }

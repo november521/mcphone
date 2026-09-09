@@ -51,8 +51,16 @@ public final class PhoneSession {
         }
 
         // 加好友是个临时页，它的搜索框每次 open 都清空，续开会停在一个空搜索页上，
-        // 看着像坏了。记成它的上一级——会话列表
-        savedMode = mode == PhoneScreen.Mode.CHAT_ADD_CONTACT ? PhoneScreen.Mode.CHAT : mode;
+        // 看着像坏了。记成它的上一级——会话列表。
+        //
+        // 【子页记成它的上一级，这一步在调用方做】：不是每个目标都有同一批 Mode
+        // （正在读的那本 txt 就只有一部分目标有那一页），而"哪些 Mode 存在"是那一侧的知识。
+        // 这里点名一个别的目标没有的常量，那个目标连 shared/ 都编不过。所以调用方传进来的
+        // 已经是"能续开的那一页"，见各目标 PhoneScreen 里调 save 的那一句。
+        savedMode = switch (mode) {
+            case CHAT_ADD_CONTACT -> PhoneScreen.Mode.CHAT;
+            default -> mode;
+        };
         savedPeer = savedMode == PhoneScreen.Mode.CHAT_CONVERSATION ? conversationPeer : null;
     }
 

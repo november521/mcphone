@@ -6,6 +6,7 @@ import com.november.mcphone.core.client.ClientConfig;
 import com.november.mcphone.core.client.MCphoneKeyBindings;
 import com.november.mcphone.core.client.PhoneHud;
 import com.november.mcphone.core.client.PhoneKeyHandler;
+import com.november.mcphone.core.client.PhoneScreenOnSync;
 import com.november.mcphone.core.client.PhoneScreenRegistry;
 import com.november.mcphone.core.client.PhoneSession;
 import com.november.mcphone.core.client.PhoneSkin;
@@ -95,6 +96,16 @@ public final class MCphoneClient {
         // 手机进出副手、Alt 与 G 的按下松开都在这条 tick 里判，见 PhoneHud
         MinecraftForge.EVENT_BUS.addListener(PhoneHud::onClientTick);
 
+        // 共用侧每 tick 要做的事，全在 ClientTicks 里排队 —— 这条订阅是它们唯一的入口，
+        // 共用侧再加功能这里一行都不用改。排在 PhoneHud 之后：同一 tick 里挂上的那台
+        // 设备，本 tick 就能被报上去。
+        // 走 ClientTicks 门面：这一支的 tick 事件不分 Pre/Post，判 phase 的活在门面里做完了
+        ClientTicks.onEndTick(com.november.mcphone.core.client.ClientTicks::tick);
+
+        // 挂在 HUD 上看书时的两个翻页键。手机成了 mc.screen 就走不动路，
+        // 而边走边看正是这个功能最想要的场景，见 ReaderKeyHandler
+        ClientTicks.onEndTick(com.november.mcphone.feature.reader.client.ReaderKeyHandler::tick);
+
         MinecraftForge.EVENT_BUS.addListener(CameraHandler::onClientTick);
         MinecraftForge.EVENT_BUS.addListener(CameraHandler::onRenderGui);
         MinecraftForge.EVENT_BUS.addListener(CameraHandler::onScreenOpening);
@@ -127,7 +138,7 @@ public final class MCphoneClient {
 
                     // 去重用的记忆跟着世界走：不清的话，进新世界开手机会因为"和上次一样"
                     // 被判成没变，那部手机在别人眼里就不亮
-                    com.november.mcphone.core.client.PhoneScreenOnSync.forget();
+                    PhoneScreenOnSync.forget();
 
                     ChatClientCache.clear();
                     ChatImageCache.clear();

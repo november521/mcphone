@@ -140,7 +140,7 @@ public final class NetworkHandler {
         ItemStack lit = packet.lit()
                 .filter(location -> location instanceof PhoneLocation.InHand)
                 .map(location -> location.resolve(player))
-                .filter(PhoneItem::isPhone)
+                .filter(PhoneItem::isDevice)
                 .orElse(ItemStack.EMPTY);
 
         for (InteractionHand hand : InteractionHand.values()) {
@@ -179,7 +179,7 @@ public final class NetworkHandler {
 
         // 那个位置上不是手机就什么都不做：位置由客户端给出，可能已经
         // 失效（手机被丢掉了），也可能是伪造的
-        if (!PhoneItem.isPhone(stack)) return;
+        if (!PhoneItem.isDevice(stack)) return;
 
         // 空名字＝清除设备名，恢复默认物品名 —— 这道规范化在 setDeviceName 里，
         // 不在这儿：门面存在的理由就是收编调用点

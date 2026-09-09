@@ -30,7 +30,7 @@ import org.lwjgl.glfw.GLFW;
  *
  * 自动那条是"手机放进副手就亮"。但手机也可以挂在 Curios 的饰品槽里，那时候副手是空的
  * ——挂饰品栏的意思本来就是"腾出两只手"——自动那条规矩根本够不着它。所以另给一个键
- * （{@link MCphoneKeyBindings#HUD_TOGGLE}，默认 G）：手机收在饰品栏、背包、主手上时
+ * （{@link PhoneKeys#HUD_TOGGLE}，默认 G）：手机收在饰品栏、背包、主手上时
  * 同样叫得出来。
  *
  * 两条不是并列的，手动那条【顶掉】自动那条，见 {@link Override}。
@@ -61,7 +61,7 @@ import org.lwjgl.glfw.GLFW;
  * 因为 {@link Minecraft#setScreen} 在开界面的同时会调 {@code KeyMapping.releaseAll()}。
  * 用 {@code KeyMapping.isDown()} 判断的话，界面开起来的那一刻它就变成 false——而本类靠
  * "按下去的那一沿"来切换开关，一个永远回不到按下状态的键切不动任何东西。
- * 所以问的是 GLFW："这个键此刻按着没有"，那个答案不受界面影响。键位仍然来自 {@link MCphoneKeyBindings#HUD_INTERACT}，玩家照样
+ * 所以问的是 GLFW："这个键此刻按着没有"，那个答案不受界面影响。键位仍然来自 {@link PhoneKeys#HUD_INTERACT}，玩家照样
  * 能在原版按键设置里改。
  *
  * <h2>它什么时候不画</h2>
@@ -97,7 +97,7 @@ public final class PhoneHud {
      * 给 {@link PhoneScreenOnSync} 判"手上这部亮不亮"用：挂在 HUD 上的那部屏幕是亮着的，
      * 哪怕玩家没按 Alt。
      */
-    static PhoneScreen hudPhone() { return phone; }
+    public static PhoneScreen hudPhone() { return phone; }
 
     /** 正按着 Alt —— 此刻 phone 就是 mc.screen，且仍画在 HUD 那个角上 */
     private static boolean interacting;
@@ -154,11 +154,11 @@ public final class PhoneHud {
 
         // 按沿判定要在所有提前返回之前做完，否则在那些分支里按下的一次会被吞掉，
         // 玩家会遇到"按了一下没反应，再按一下才开"
-        boolean interactDown = keyDown(mc, MCphoneKeyBindings.HUD_INTERACT);
+        boolean interactDown = keyDown(mc, PhoneKeys.HUD_INTERACT.mapping());
         boolean interactPressed = interactDown && !interactKeyWasDown;
         interactKeyWasDown = interactDown;
 
-        boolean toggleDown = keyDown(mc, MCphoneKeyBindings.HUD_TOGGLE);
+        boolean toggleDown = keyDown(mc, PhoneKeys.HUD_TOGGLE.mapping());
         boolean togglePressed = toggleDown && !toggleKeyWasDown;
         toggleKeyWasDown = toggleDown;
 
@@ -250,7 +250,7 @@ public final class PhoneHud {
         // 界面开着就开着，不会因为物品没了自己合上
         if (phone != null && mc.screen == phone && !phone.isHudMode()) return phone.location();
 
-        boolean auto = PhoneHudPlacement.enabled() && PhoneItem.isPhone(player.getOffhandItem());
+        boolean auto = PhoneHudPlacement.enabled() && PhoneItem.isDevice(player.getOffhandItem());
 
         // 自动那条翻了面就把手动那份作废，理由见 Override 的注释
         if (auto != lastAuto) {
@@ -267,7 +267,11 @@ public final class PhoneHud {
 
         if (phone != null) {
             // 还在记着的那个位置上，最常见的情形，什么都不用做
-            if (PhoneItem.isPhone(phone.location().resolve(player))) return phone.location();
+            // 副手上的平板与主手的手机对调了，那一下要让屏幕尺寸跟上，见 syncDevice
+            if (PhoneItem.isDevice(phone.location().resolve(player))) {
+                phone.syncDevice();
+                return phone.location();
+            }
 
             // 不在了。自动那条盯的就是副手那一格，那儿空了就是空了
             if (manual != Override.SHOW) return null;
@@ -391,10 +395,11 @@ public final class PhoneHud {
         int guiH = window.getGuiScaledHeight();
         if (guiW <= 0 || guiH <= 0) return;
 
-        double centerX = PhoneHudPlacement.originX(guiW, guiH)
-                + PhoneHudPlacement.width(guiW, guiH) / 2.0;
-        double centerY = PhoneHudPlacement.originY(guiW, guiH)
-                + PhoneHudPlacement.height(guiW, guiH) / 2.0;
+        DeviceMetrics metrics = phone != null ? phone.metrics() : DeviceMetrics.PHONE;
+        double centerX = PhoneHudPlacement.originX(metrics, guiW, guiH)
+                + PhoneHudPlacement.width(metrics, guiW, guiH) / 2.0;
+        double centerY = PhoneHudPlacement.originY(metrics, guiW, guiH)
+                + PhoneHudPlacement.height(metrics, guiW, guiH) / 2.0;
 
         GLFW.glfwSetCursorPos(window.getWindow(),
                 centerX * window.getScreenWidth() / guiW,

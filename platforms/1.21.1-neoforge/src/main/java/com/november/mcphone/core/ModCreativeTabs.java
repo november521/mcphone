@@ -20,6 +20,7 @@ public final class ModCreativeTabs {
                     .icon(() -> ModItems.PHONE.get().getDefaultInstance())
                     .displayItems((params, output) -> {
                         output.accept(ModItems.PHONE.get());
+                        output.accept(ModItems.TABLET.get());
                     })
                     .build());
 }

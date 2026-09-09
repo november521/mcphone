@@ -94,19 +94,19 @@ public sealed interface PhoneLocation {
      */
     static Optional<PhoneLocation> find(Player player) {
         for (InteractionHand hand : InteractionHand.values()) {
-            if (PhoneItem.isPhone(player.getItemInHand(hand))) {
+            if (PhoneItem.isDevice(player.getItemInHand(hand))) {
                 return Optional.of(new InHand(hand));
             }
         }
 
         Inventory inventory = player.getInventory();
         for (int slot = 0; slot < inventory.getContainerSize(); slot++) {
-            if (PhoneItem.isPhone(inventory.getItem(slot))) {
+            if (PhoneItem.isDevice(inventory.getItem(slot))) {
                 return Optional.of(new InInventory(slot));
             }
         }
 
-        return CuriosCompat.findEquipped(player, PhoneItem::isPhone)
+        return CuriosCompat.findEquipped(player, PhoneItem::isDevice)
                 .map(ref -> new InCurio(ref.slotId(), ref.index()));
     }
 

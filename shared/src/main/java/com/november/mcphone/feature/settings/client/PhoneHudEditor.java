@@ -1,5 +1,6 @@
 package com.november.mcphone.feature.settings.client;
 
+import com.november.mcphone.core.client.DeviceMetrics;
 import com.november.mcphone.core.client.PhoneChassis;
 import com.november.mcphone.core.client.PhoneHud;
 import com.november.mcphone.core.client.PhoneHudPlacement;
@@ -16,7 +17,7 @@ import org.lwjgl.glfw.GLFW;
  *
  * 为什么是一整块屏幕，而不是手机设置里的一页
  *
- * 要摆的东西占的是【整个窗口】，而手机自己的屏幕只有 120×200。在那么小一块里放一个
+ * 要摆的东西占的是【整个窗口】，而设备自己的屏幕最大也就 240×168。在那么小一块里放一个
  * 窗口缩略图去拖，一像素的手抖对应到实际画面上就是十几像素，摆不准；何况玩家真正想
  * 看的是"它压不压得到我的物品栏"，那件事只有按原尺寸摆在真画面上才看得出来。
  *
@@ -58,8 +59,16 @@ public final class PhoneHudEditor extends PhoneScreenBase {
     /** 按下那一刻，光标相对机身左上角的位置。不记的话手机会"跳"到光标下 */
     private int grabX, grabY;
 
-    public PhoneHudEditor() {
+    /**
+     * 摆的是【开这一页时手上那一台】的机身尺寸，由 {@link com.november.mcphone.core.client.PhoneScreen}
+     * 传进来。平板机身比手机宽一大截，拿手机那套尺寸画框，玩家会摆出一个"看着没压到
+     * 物品栏、回去一看压住了"的位置。
+     */
+    private final DeviceMetrics metrics;
+
+    public PhoneHudEditor(DeviceMetrics metrics) {
         super(Component.translatable("mcphone.hud.place"));
+        this.metrics = metrics;
     }
 
     /** 摆位置的时候游戏该继续跑：玩家要看的是真实画面，不是一张定格 */
@@ -72,10 +81,10 @@ public final class PhoneHudEditor extends PhoneScreenBase {
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
         g.fill(0, 0, this.width, this.height, COLOR_DIM);
 
-        int x = PhoneHudPlacement.originX(this.width, this.height);
-        int y = PhoneHudPlacement.originY(this.width, this.height);
-        int w = PhoneHudPlacement.width(this.width, this.height);
-        int h = PhoneHudPlacement.height(this.width, this.height);
+        int x = PhoneHudPlacement.originX(metrics, this.width, this.height);
+        int y = PhoneHudPlacement.originY(metrics, this.width, this.height);
+        int w = PhoneHudPlacement.width(metrics, this.width, this.height);
+        int h = PhoneHudPlacement.height(metrics, this.width, this.height);
 
         drawSnapHint(g, w, h);
 
@@ -104,7 +113,7 @@ public final class PhoneHudEditor extends PhoneScreenBase {
 
     /** 手机不在副手时的占位：一部空壳，尺寸与真的一模一样，摆位置足够了 */
     private void drawStandIn(GuiGraphics g, int x, int y, int w, int h) {
-        float s = PhoneHudPlacement.effectiveScale(this.width, this.height);
+        float s = PhoneHudPlacement.effectiveScale(metrics, this.width, this.height);
         int b = PhoneTheme.PHONE_BORDER;
 
         g.pose().pushPose();
@@ -112,11 +121,11 @@ public final class PhoneHudEditor extends PhoneScreenBase {
         g.pose().scale(s, s, 1.0F);
 
         // 缩放之后原点就是机身左上角，屏幕内区域再往里缩一个边框
-        PhoneChassis.drawScreenBackground(g, b, b);
-        PhoneChassis.drawStatusBar(g, this.font, b, b);
+        PhoneChassis.drawScreenBackground(g, b, b, metrics.screenW(), metrics.screenH());
+        PhoneChassis.drawStatusBar(g, this.font, b, b, metrics);
         // 导航栏的悬停判定收一对不可能命中的坐标：这只是张预览，不该有键亮着
-        PhoneChassis.drawNavBar(g, this.font, b, b, -1, -1);
-        PhoneChassis.drawFrame(g, b, b);
+        PhoneChassis.drawNavBar(g, this.font, b, b, metrics, -1, -1);
+        PhoneChassis.drawFrame(g, b, b, metrics.screenW(), metrics.screenH(), metrics);
 
         g.pose().popPose();
     }
@@ -144,10 +153,10 @@ public final class PhoneHudEditor extends PhoneScreenBase {
     //  输入
 
     private boolean hitsPhone(double mx, double my) {
-        int x = PhoneHudPlacement.originX(this.width, this.height);
-        int y = PhoneHudPlacement.originY(this.width, this.height);
-        int w = PhoneHudPlacement.width(this.width, this.height);
-        int h = PhoneHudPlacement.height(this.width, this.height);
+        int x = PhoneHudPlacement.originX(metrics, this.width, this.height);
+        int y = PhoneHudPlacement.originY(metrics, this.width, this.height);
+        int w = PhoneHudPlacement.width(metrics, this.width, this.height);
+        int h = PhoneHudPlacement.height(metrics, this.width, this.height);
         return mx >= x && mx < x + w && my >= y && my < y + h;
     }
 
@@ -155,8 +164,8 @@ public final class PhoneHudEditor extends PhoneScreenBase {
     public boolean mouseClicked(double mx, double my, int button) {
         if (button == 0 && hitsPhone(mx, my)) {
             dragging = true;
-            grabX = (int) Math.round(mx) - PhoneHudPlacement.originX(this.width, this.height);
-            grabY = (int) Math.round(my) - PhoneHudPlacement.originY(this.width, this.height);
+            grabX = (int) Math.round(mx) - PhoneHudPlacement.originX(metrics, this.width, this.height);
+            grabY = (int) Math.round(my) - PhoneHudPlacement.originY(metrics, this.width, this.height);
             return true;
         }
         return super.mouseClicked(mx, my, button);
@@ -182,7 +191,7 @@ public final class PhoneHudEditor extends PhoneScreenBase {
 
     /** 把光标位置换算成一份锚点加偏移。夹取与推算都在 {@link PhoneHudPlacement#place} 里 */
     private void apply(double mx, double my, boolean commit) {
-        PhoneHudPlacement.Placement p = PhoneHudPlacement.place(
+        PhoneHudPlacement.Placement p = PhoneHudPlacement.place(metrics,
                 (int) Math.round(mx) - grabX,
                 (int) Math.round(my) - grabY,
                 this.width, this.height);
@@ -230,7 +239,7 @@ public final class PhoneHudEditor extends PhoneScreenBase {
      */
     private void clampIntoWindow(boolean commit) {
         PhoneHudPlacement.Placement p =
-                PhoneHudPlacement.clampIntoWindow(this.width, this.height);
+                PhoneHudPlacement.clampIntoWindow(metrics, this.width, this.height);
         if (commit) {
             PhoneHudPlacement.setPlacement(p.anchor(), p.offsetX(), p.offsetY());
         } else {

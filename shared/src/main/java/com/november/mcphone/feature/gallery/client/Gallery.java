@@ -1,6 +1,7 @@
 package com.november.mcphone.feature.gallery.client;
 
 import com.november.mcphone.core.client.FontPalette;
+import com.november.mcphone.feature.camera.client.CameraStamp;
 import com.november.mcphone.core.client.PhoneSkin;
 import com.november.mcphone.core.client.PhoneTheme;
 import com.november.mcphone.core.client.GuiUtil;
@@ -79,12 +80,16 @@ public final class Gallery {
     private int hoveredPager = 0;
 
     /** 上一帧算出的每页容量，供点击与翻页复用 */
-    private int perPage = PhotoGridPainter.COLS * 5;
+    private int perPage = 3 * 5;   // 首帧之前按手机那套估一个，下一帧就按可用宽度重算
 
     // ---- 单张查看 ----
 
     /** 正在查看的照片下标，-1 表示当前是网格 */
     private int viewing = -1;
+
+    /** 上一次算过标题的那张照片，以及算出来的那一行。见 captionOf */
+    private String captionFile;
+    private String caption = "";
 
     /** 本帧鼠标是否停在右上角那个「打开文件夹」上 */
     private boolean openFolderHovered;
@@ -186,8 +191,9 @@ public final class Gallery {
         final int gridTop = y;
         final int gridBottom = phoneTop + screenH - navH - pagerH - 2;
 
-        // 行数按可用高度算，改主题尺寸时不必回来改这里
-        this.perPage = PhotoGridPainter.COLS * PhotoGridPainter.rowsFor(gridBottom - gridTop);
+        // 行列都按可用宽高算，改主题尺寸、换台设备时都不必回来改这里
+        int cols = PhotoGridPainter.colsFor(w);
+        this.perPage = cols * PhotoGridPainter.rowsFor(gridBottom - gridTop);
 
         // 缓存必须装得下一整页，否则同页内先加载的会被后加载的挤掉，
         // 下一帧又重新加载，画面持续闪烁。行数随手机屏幕高度变，
@@ -200,7 +206,7 @@ public final class Gallery {
         if (page < 0) page = 0;
 
         // 整个网格在内容区里居中
-        int gridX = x + (w - PhotoGridPainter.gridWidth()) / 2;
+        int gridX = x + (w - PhotoGridPainter.gridWidth(cols)) / 2;
 
         hoveredIdx = -1;
         int first = page * perPage;
@@ -208,8 +214,8 @@ public final class Gallery {
 
         for (int i = first; i < last; i++) {
             int slot = i - first;
-            int cx = PhotoGridPainter.cellX(gridX, slot);
-            int cy = PhotoGridPainter.cellY(gridTop, slot);
+            int cx = PhotoGridPainter.cellX(gridX, slot, cols);
+            int cy = PhotoGridPainter.cellY(gridTop, slot, cols);
 
             boolean hovered = PhotoGridPainter.cellHit(cx, cy, mouseX, mouseY);
             if (hovered) hoveredIdx = i;
@@ -312,8 +318,10 @@ public final class Gallery {
         int imgBottom = nameRowY - 2;
         renderPhoto(g, font, photo, phoneLeft, imgTop, screenW, imgBottom - imgTop);
 
-        // 文件名过长就截断，手机屏幕放不下完整的时间戳文件名
-        String name = photo.fileName();
+        // 这一行优先显示坐标：文件名是时间戳，而"这张是在哪儿拍的"才是玩家看照片时想问的。
+        // 坐标在拍照时写进了文件名（见 CameraStamp），认不出来的（F2 截的图、老照片）
+        // 照旧显示文件名
+        String name = captionOf(photo.fileName());
         if (font.width(name) > w) name = font.plainSubstrByWidth(name, w - 6) + "…";
         g.drawString(font, name, x + (w - font.width(name)) / 2, nameRowY, colorHint(), false);
 
@@ -341,6 +349,21 @@ public final class Gallery {
                     deleteArmed ? FontPalette.dangerArmed()
                             : (onDelete ? FontPalette.danger() : colorPager()), false);
         }
+    }
+
+    /**
+     * 大图下面那一行写什么：认得出坐标就写坐标，否则写文件名。
+     *
+     * 按文件名缓存：这一句每帧都会被问到，而答案只在换一张照片时才变——正则一帧跑一次
+     * 不算什么，但它是这一页上唯一每帧都在做的"计算"，顺手记住比留着强。
+     */
+    private String captionOf(String fileName) {
+        if (!fileName.equals(captionFile)) {
+            captionFile = fileName;
+            String coords = CameraStamp.coordsIn(fileName);
+            caption = coords != null ? coords : fileName;
+        }
+        return caption;
     }
 
     /** 大图区域：黑底 + 等比居中的照片 */

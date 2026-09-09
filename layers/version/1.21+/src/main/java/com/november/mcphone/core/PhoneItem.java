@@ -11,25 +11,51 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.TooltipFlag;
 import net.minecraft.world.level.Level;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
 
 /**
- * MCphone 核心物品 —— 右键打开手机主界面
+ * MCphone 核心物品 —— 右键打开设备界面。手机与平板都是它，只差一个 {@link DeviceKind}。
  */
 public class PhoneItem extends Item {
 
-    public PhoneItem(Properties properties) {
+    private final DeviceKind kind;
+
+    public PhoneItem(Properties properties, DeviceKind kind) {
         super(properties);
+        this.kind = kind;
     }
 
-    /** 这一堆物品是不是手机。判定只写一遍，各处共用 */
-    public static boolean isPhone(ItemStack stack) {
+    /** 手机还是平板。界面按它决定屏幕多大，见 {@code DeviceMetrics} */
+    public DeviceKind kind() {
+        return kind;
+    }
+
+    /**
+     * 这一堆物品是不是本模组的设备（手机或平板）。判定只写一遍，各处共用。
+     *
+     * 叫 isDevice 而不是 isPhone：平板也要返回 true —— 揣着平板一样能收发消息、
+     * 一样能开末影箱。名字要是还叫"是不是手机"，每个调用点都得再想一遍"平板算不算"，
+     * 而答案永远是算。
+     */
+    public static boolean isDevice(ItemStack stack) {
         return stack.getItem() instanceof PhoneItem;
     }
 
     /**
-     * 这个玩家身上带着手机吗 —— 拿在手上、放在背包、挂在饰品槽都算。
+     * 这一堆是哪种设备，不是设备则为 {@code null}。
+     *
+     * 返回 null 而不是退回 {@link DeviceKind#PHONE}：位置失效（物品被丢了、格子空了）
+     * 与"手里拿的确实是手机"是两回事，调用方该自己决定拿不到时怎么办。界面那一侧的
+     * 决定写在 {@code DeviceMetrics.of}：没有设备就按手机那套尺寸画，绝不会没有尺寸可用。
+     */
+    public static @Nullable DeviceKind kindOf(ItemStack stack) {
+        return stack.getItem() instanceof PhoneItem item ? item.kind() : null;
+    }
+
+    /**
+     * 这个玩家身上带着设备吗（手机或平板）—— 拿在手上、放在背包、挂在饰品槽都算。
      *
      * 为什么不再要求"拿在手上"
      *
@@ -44,8 +70,8 @@ public class PhoneItem extends Item {
      * 没装 Curios 时 {@link CuriosCompat} 直接返回 false，不碰它的类。
      */
     public static boolean isCarriedBy(Player player) {
-        if (player.getInventory().contains(PhoneItem::isPhone)) return true;
-        return CuriosCompat.isEquipped(player, PhoneItem::isPhone);
+        if (player.getInventory().contains(PhoneItem::isDevice)) return true;
+        return CuriosCompat.isEquipped(player, PhoneItem::isDevice);
     }
 
     @Override
@@ -87,7 +113,7 @@ public class PhoneItem extends Item {
     @Override
     public void appendHoverText(ItemStack stack, TooltipContext context,
                                 List<Component> tooltip, TooltipFlag flag) {
-        tooltip.add(Component.translatable("mcphone.item.tooltip.open"));
+        tooltip.add(Component.translatable(kind.openTooltipKey()));
         // 版本号取运行时真值填进 %s，语言文件里不写死，免得升版本时漏改某一份
         tooltip.add(Component.translatable("mcphone.item.tooltip.version", MCphone.getVersion()));
     }

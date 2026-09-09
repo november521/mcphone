@@ -7,7 +7,7 @@ import net.minecraft.world.item.CreativeModeTab;
 import net.minecraftforge.registries.DeferredRegister;
 import net.minecraftforge.registries.RegistryObject;
 
-/** 创造模式物品栏。眼下只有手机一件，先占住位置 */
+/** 创造模式物品栏。手机与平板 */
 public final class ModCreativeTabs {
 
     private ModCreativeTabs() {}
@@ -21,6 +21,7 @@ public final class ModCreativeTabs {
                     .icon(() -> ModItems.PHONE.get().getDefaultInstance())
                     .displayItems((params, output) -> {
                         output.accept(ModItems.PHONE.get());
+                        output.accept(ModItems.TABLET.get());
                     })
                     .build());
 }

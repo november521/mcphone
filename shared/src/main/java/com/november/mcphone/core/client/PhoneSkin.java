@@ -7,6 +7,7 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.packs.metadata.MetadataSectionSerializer;
 import net.minecraft.server.packs.resources.Resource;
+import org.jetbrains.annotations.Nullable;
 
 import java.io.InputStream;
 import java.util.HashMap;
@@ -35,19 +36,43 @@ public final class PhoneSkin {
          */
         FRAME("phone/frame", "phone_frame"),
 
+        /**
+         * 平板的外壳边框。建议 256×184（含边框整机，也可以是它的整数倍），
+         * 中间 240×168 必须透明，规矩与 {@link #FRAME} 完全一样。
+         *
+         * <b>缺这一张时不会出错</b>：手机那张 {@link #FRAME} 会按九宫格拉到平板的形状上顶着用，
+         * 只是侧键会留在左右两边——而平板的机身是横过来的，键在上下。所以只做手机外壳的资源包
+         * 照常能用，想做全就补这一张。
+         *
+         * 自带的这张是由手机那张拼出来的（四角原样搬、直边平铺同一段剖面、按键跟着机身转 90°），
+         * 生成脚本见 {@code docs/make_tablet_frame.py}。
+         */
+        FRAME_TABLET("phone/frame_tablet", "phone_frame_tablet"),
+
         /** 顶部状态栏背景。建议 120×10 */
         STATUS_BAR("phone/status_bar", "status_bar"),
 
-        /** 底部导航栏背景。建议 120×14 */
+        /**
+         * 导航栏背景。建议 120×14。
+         *
+         * 平板上这一条<b>立在右边</b>，同一张图会被拉成 14×158，所以画纯色或沿短边的
+         * 渐变最稳；带方向的花纹在那儿会被抻长。
+         */
         NAV_BAR("phone/nav_bar", "nav_bar"),
 
-        /** 导航栏"返回"键图标。建议 40×14；没有贴图时画 ◁ 字符 */
+        /**
+         * 导航栏"返回"键图标。建议 40×14；没有贴图时画 ◁ 字符。
+         *
+         * 图标一律按这个设计尺寸在格子里<b>居中</b>画，不跟着格子拉伸。平板上那条立着，
+         * 只有 14 宽，超出条宽的部分会被裁掉 —— 图案画在正中那 14×14 里就不会被裁到
+         * （自带的三个图案约 8×8，正好）。三个键同此。
+         */
         NAV_BACK("phone/nav_back", "nav_back"),
 
-        /** 导航栏"主页"键图标。建议 40×14；没有贴图时画 ○ 字符 */
+        /** 导航栏"主页"键图标。建议 40×14；没有贴图时画 ○ 字符。摆法见 {@link #NAV_BACK} */
         NAV_HOME("phone/nav_home", "nav_home"),
 
-        /** 导航栏"多任务"键图标。建议 40×14；没有贴图时画 □ 字符 */
+        /** 导航栏"多任务"键图标。建议 40×14；没有贴图时画 □ 字符。摆法见 {@link #NAV_BACK} */
         NAV_TASKS("phone/nav_tasks", "nav_tasks"),
 
         /** 主屏拖动时"松手落这儿"的空槽。建议 20×20；兜底色 {@link PhoneTheme#COLOR_APP_DROP_SLOT} */
@@ -246,6 +271,61 @@ public final class PhoneSkin {
         } else {
             GuiUtil.drawTexture(g, tex.location(), x, y, w, h, tex.width(), tex.height());
         }
+        return true;
+    }
+
+    /**
+     * 画机身外壳 —— 与 {@link #draw} 的差别是它<b>按机身形状</b>切九宫格，而不是整张拉伸。
+     *
+     * 整张拉伸只在"目标就是手机机身"时才对。平板机身 256×184，把一张 136×216 的外壳
+     * 抻上去，那一圈边会变成左右 15 像素宽、上下 7 像素高 —— 边框不再是均匀的一圈，
+     * 左右两侧还会盖住 7 像素的屏幕内容。九宫格切开之后四条边只沿自己那个方向拉，
+     * 粗细保持 8 像素不变。
+     *
+     * 手机上目标正是设计尺寸，切出来与从前<b>逐像素相同</b>，见
+     * {@link GuiUtil#drawNineSliceScaled}。
+     *
+     * @param corner 四角在<b>目标</b>上留多少像素不拉伸。要盖得住外壳贴图的圆角
+     *               （建议半径不超过 11）。贴图自己用 {@code mcphone_skin.border} 声明过的话
+     *               以它为准，那一条按源图像素算
+     * @return 有贴图并画了才 true；没有贴图时调用方自己画兜底的那一圈
+     */
+    public static boolean drawFrame(GuiGraphics g, int x, int y, int w, int h, int corner) {
+        return drawFrame(g, x, y, w, h, corner, null);
+    }
+
+    /**
+     * 同上，但先问一句"这是哪台设备"。
+     *
+     * 平板先找 {@link Element#FRAME_TABLET}，找不到再退回手机那张 {@link Element#FRAME}。
+     * 两张图的<b>设计尺寸不一样</b>（256×184 对 136×216），而九宫格要按设计尺寸换算源图上的
+     * 边角有多大，所以选哪张与按哪个尺寸切必须一起定，不能分两处。
+     *
+     * @param device 这一圈框的是哪台设备的机身；{@code null} 表示"不是一台设备"——
+     *               末影箱、唱片仓这类容器界面自己定尺寸，一律走手机那张
+     */
+    public static boolean drawFrame(GuiGraphics g, int x, int y, int w, int h, int corner,
+                                    @Nullable DeviceMetrics device) {
+        if (w <= 0 || h <= 0) return false;
+
+        DeviceMetrics design = DeviceMetrics.PHONE;
+        SkinTexture tex = null;
+        if (device != null && device.landscape()) {
+            tex = resolve(Element.FRAME_TABLET).orElse(null);
+            if (tex != null) design = device;
+        }
+        if (tex == null) tex = resolve(Element.FRAME).orElse(null);
+        if (tex == null) return false;
+
+        // 贴图自己声明了 border 就照它来 —— 那是【源图像素】，与聊天气泡那类 1× 贴图
+        // 同一套规矩。资源包既然写了元数据，就该是它说了算，行为与从前一字不差
+        if (tex.border() > 0) {
+            GuiUtil.drawNineSlice(g, tex.location(), x, y, w, h, tex.width(), tex.height(), tex.border());
+            return true;
+        }
+
+        GuiUtil.drawNineSliceScaled(g, tex.location(), x, y, w, h, tex.width(), tex.height(),
+                design.totalWidth(), design.totalHeight(), corner);
         return true;
     }
 

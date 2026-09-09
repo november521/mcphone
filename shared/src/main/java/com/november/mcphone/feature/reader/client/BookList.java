@@ -6,11 +6,14 @@ import com.november.mcphone.core.client.PhoneSkin;
 import com.november.mcphone.core.client.PhoneTheme;
 import com.november.mcphone.feature.reader.BookRef;
 import com.november.mcphone.feature.reader.BookSearch;
+import com.november.mcphone.feature.reader.ShelfOrder;
 import com.november.mcphone.feature.reader.client.compat.BookQuirks;
 import com.november.mcphone.feature.reader.client.source.BookSources;
+import com.november.mcphone.feature.reader.client.source.TxtBookSource;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.EditBox;
+import net.minecraft.Util;
 import net.minecraft.network.chat.Component;
 
 import java.util.ArrayList;
@@ -79,6 +82,13 @@ public final class BookList {
     /** 查询长度上限。搜索是找前几个字，不是抄书名 */
     private static final int MAX_QUERY = 48;
 
+    /** 按住之后挪出这么多像素才算"在拖"，小于它松手仍是一次点击。与主屏图标同一个数 */
+    private static final int DRAG_THRESHOLD = PhoneTheme.APP_DRAG_THRESHOLD;
+
+    /** 拖到列表上下边缘之外时，每隔这么久自动滚一行 */
+    private static final int DRAG_SCROLL_MS = 120;
+
+
     /** 两页 */
     public enum Tab { SHELF, STORE }
 
@@ -97,8 +107,40 @@ public final class BookList {
     /** 悬停在底部哪个页签上，null 表示没有 */
     private Tab hoveredTab;
 
+    /** 本帧鼠标是否停在右上角那个「文件夹」上。只有书城页有它，见 renderSearchBar */
+    private boolean folderHovered;
+
     /** 待消费的"打开这本"请求，null 表示没有。与记事本一致：页面不自己跳转，交给 PhoneScreen */
     private BookRef pendingOpen;
+
+    //  拖着排书架 —— 只在书架页、且没在搜的时候。见 canReorder()
+
+    /**
+     * 按住的是第几本（当前列表里的下标），-1 表示没按住。
+     *
+     * 按下时只记着，<b>松手才定性</b>：挪出阈值就是排序，没挪就是"打开这本"。
+     * 与主屏图标同一套路数——一次按下能是两件事，只有松手时才知道是哪件。
+     */
+    private int pressedIdx = -1;
+
+    /** 按下那一刻的坐标，用来量挪了多远 */
+    private double pressX, pressY;
+
+    private boolean dragging;
+
+    /** 松手会插到第几位，-1 表示没在拖 */
+    private int dropIdx = -1;
+
+    /** 上一次自动滚动的时刻。拖到列表边缘外面时每隔一段滚一行 */
+    private long lastDragScrollMs;
+
+    /**
+     * 上一帧书目区的几何：左、上、下、行高、宽。
+     *
+     * 输入方法（拖动、松手）沿用这一份，而不是自己再算一遍——算两遍迟早会算歪，
+     * 那时的症状是"看着插在这一行，松手却排到了另一行"。与商店那张网格同一个理由。
+     */
+    private int rowsX, rowsTop, rowsBottom, rowsW, lastRowH = 12;
 
     /** 当前页该列哪些书（还没过搜索），以及算它用的三个输入。见 {@link #base} */
     private List<BookRef> baseBooks = List.of();
@@ -134,7 +176,9 @@ public final class BookList {
         hoveredIdx = -1;
         starHoveredIdx = -1;
         hoveredTab = null;
+        folderHovered = false;
         pendingOpen = null;
+        cancelDrag();
 
         // 每次进来都从"没在搜"开始。上次搜过什么是上次的事，留着它等于
         // 一进来就看见一份筛过的书目，而玩家多半以为这就是全部
@@ -149,6 +193,27 @@ public final class BookList {
         hoveredIdx = -1;
         starHoveredIdx = -1;
         hoveredTab = null;
+        cancelDrag();
+    }
+
+    /** 松手、切页、关页面都走这一句：拖到一半被打断，不能留着半个拖动状态 */
+    private void cancelDrag() {
+        pressedIdx = -1;
+        dragging = false;
+        dropIdx = -1;
+    }
+
+    /**
+     * 这一刻能不能拖着排。
+     *
+     * 只在<b>书架页</b>、<b>没在搜</b>、且不止一本时能拖：
+     *
+     *   书城页排不了 —— 那是整合包里有什么，顺序由书源定，玩家排它没有意义
+     *   搜的时候排不了 —— 屏幕上是筛过的几本，把第 3 本拖到第 1 位，
+     *                      "第 1 位"在完整的架子上是哪一位？没有一个答案是玩家预期的
+     */
+    private boolean canReorder(int count) {
+        return tab == Tab.SHELF && query().isBlank() && count > 1;
     }
 
     public BookRef consumeOpenRequest() {
@@ -181,9 +246,30 @@ public final class BookList {
             renderEmpty(g, font, x, y, w, base.isEmpty());
             hoveredIdx = -1;
             starHoveredIdx = -1;
+            cancelDrag();
         } else {
             clampScroll(books.size(), bottom - y, font);
-            renderRows(g, font, books, x, y, w, bottom, mouseX, mouseY);
+
+            // 输入方法要用同一套几何，见字段注释
+            rowsX = x;
+            rowsW = w;
+            rowsTop = y;
+            rowsBottom = bottom;
+            lastRowH = rowHeight(font);
+
+            if (dragging) {
+                autoScroll(mouseY, books.size());
+                dropIdx = dropIndexAt(mouseY, books.size());
+            }
+
+            // 拖的时候画的是【排完之后】的样子：手指底下那一本跟着走，其余的当场让位。
+            // 另画一个跟着光标的影子也行，但那要玩家自己在脑子里算"松手会插到哪儿"，
+            // 而这一版直接把答案摆出来
+            List<BookRef> shown = dragging
+                    ? ShelfOrder.move(books, books, pressedIdx, dropIdx)
+                    : books;
+
+            renderRows(g, font, shown, x, y, w, bottom, mouseX, mouseY);
         }
 
         renderTabs(g, font, x, tabY, w, mouseX, mouseY);
@@ -199,7 +285,17 @@ public final class BookList {
                                 int total, int matched,
                                 int mouseX, int mouseY, float partialTick) {
 
-        String count = countText(total, matched);
+        // 右端那一小块：书架页放「文件夹」，书城页放"共几本"。
+        //
+        // 为什么是换而不是并排：这一行只有一百来像素，两样都放就没地方打字了。放弃的是
+        // 书架页的本数——架上有几本，一眼扫过去就数得出来；而本地小说是直接进书架的
+        // （不再经过书城），所以"往里加书"这件事的入口就该在书架这一页
+        // 「文件夹」只在本地书源真的可用时才出现：书源不可用的目标上点它，
+        // 只会建出一个那个目标读不了的目录（directory() 会顺手建）
+        boolean folderSlot = tab == Tab.SHELF && BookSources.available(TxtBookSource.SOURCE_ID);
+        String count = folderSlot
+                ? Component.translatable("mcphone.reader.txt.folder").getString()
+                : countText(total, matched);
         int countW = font.width(count);
         int barW = Math.max(SEARCH_H, w - countW - 4);
 
@@ -234,7 +330,14 @@ public final class BookList {
                 : null);
         search.render(g, mouseX, mouseY, partialTick);
 
-        g.drawString(font, count, x + w - countW, textY, FontPalette.subtle(), false);
+        folderHovered = folderSlot
+                && GuiUtil.hit(mouseX, mouseY, x + w - countW - HIT_PAD, y,
+                        countW + HIT_PAD * 2, SEARCH_H);
+
+        int countColor = folderSlot
+                ? (folderHovered ? FontPalette.title() : FontPalette.link())
+                : FontPalette.subtle();
+        g.drawString(font, count, x + w - countW, textY, countColor, false);
 
         y += SEARCH_H + 3;
         g.fill(x, y, x + w, y + 1, PhoneTheme.COLOR_DIVIDER);
@@ -263,7 +366,12 @@ public final class BookList {
             hint = "mcphone.reader.no_match_hint";
         } else if (tab == Tab.SHELF) {
             title = "mcphone.reader.shelf_empty";
-            hint = "mcphone.reader.shelf_empty_hint";
+            // 提示里写着"点「文件夹」"与"把文件拖进来"，那两条路都来自本地书源。书源不在的
+            // 目标上要换一句，否则是指着两个不存在的入口。判据与「文件夹」入口用同一个，
+            // 一处改两处不会再漂
+            hint = BookSources.available(TxtBookSource.SOURCE_ID)
+                    ? "mcphone.reader.shelf_empty_hint"
+                    : "mcphone.reader.shelf_empty_hint_no_txt";
         } else {
             title = "mcphone.reader.empty";
             hint = "mcphone.reader.empty_hint";
@@ -291,27 +399,45 @@ public final class BookList {
             if (y + rowH > bottom) break;
 
             BookRef book = books.get(i);
-            boolean hovered = mouseX >= x && mouseX <= x + w && mouseY >= y && mouseY < y + rowH;
+
+            // 拖的时候整页不认悬停：手指底下那一行是"正在搬的东西"，不是"要点的东西"
+            boolean picked = dragging && i == dropIdx;
+            boolean hovered = !dragging
+                    && mouseX >= x && mouseX <= x + w && mouseY >= y && mouseY < y + rowH;
             if (hovered) {
                 hoveredIdx = i;
                 g.fill(x, y, x + w, y + rowH, PhoneTheme.COLOR_ROW_HOVER);
             }
+            if (picked) {
+                // 比悬停重一档：它此刻是被"拿起来"的那一本，得比路过的高亮显眼
+                g.fill(x, y, x + w, y + rowH, PhoneTheme.COLOR_HOVER_STRONG);
+            }
+
+            // 本地小说没有 ☆：它在不在架上由目录里有没有这个文件决定，不是玩家点出来的
+            // （见 ShelfStore.ensureShelved）。画一颗点不动的星只会让人反复去点它
+            boolean local = isLocal(book);
 
             // ☆ 的命中区落在整行里面，所以两个都要记，点击时先问星那个
-            boolean onStar = mouseX >= starX - HIT_PAD && mouseX <= x + w
-                          && mouseY >= y && mouseY < y + rowH;
+            boolean onStar = !dragging && !local
+                    && mouseX >= starX - HIT_PAD && mouseX <= x + w
+                    && mouseY >= y && mouseY < y + rowH;
             if (onStar) starHoveredIdx = i;
 
             renderIcon(g, book, x, y + (rowH - ICON) / 2);
-            renderStar(g, font, starX, y + (rowH - STAR) / 2,
-                    ShelfStore.contains(book), onStar);
+            if (!local) {
+                renderStar(g, font, starX, y + (rowH - STAR) / 2,
+                        ShelfStore.contains(book), onStar);
+            }
 
-            g.drawString(font, GuiUtil.truncate(font, book.title().getString(), textW),
+            // 没有星的那几行，书名可以一直写到最右边
+            int rowTextW = local ? x + w - textX : textW;
+
+            g.drawString(font, GuiUtil.truncate(font, book.title().getString(), rowTextW),
                     textX, y + 1, FontPalette.title(), false);
 
             String owner = book.owner() == null ? "" : book.owner();
             if (!owner.isEmpty()) {
-                g.drawString(font, GuiUtil.truncate(font, owner, textW),
+                g.drawString(font, GuiUtil.truncate(font, owner, rowTextW),
                         textX, y + font.lineHeight + 2, FontPalette.dim(), false);
             }
 
@@ -357,6 +483,40 @@ public final class BookList {
         g.drawString(font, glyph, x + (STAR - font.width(glyph)) / 2, y, color, false);
     }
 
+    /** 光标停在这儿，松手会插到第几位。算术在 {@link ShelfOrder#dropIndex} 里 */
+    private int dropIndexAt(double y, int count) {
+        // 只看得见 scrollOffset 之后那一段，落点也就从它算起
+        int visible = ShelfOrder.dropIndex(y, rowsTop, lastRowH, Math.max(1, count - scrollOffset));
+        return Math.max(0, Math.min(count - 1, scrollOffset + visible));
+    }
+
+    /**
+     * 拖到列表上下边缘之外时自动滚。
+     *
+     * 没有这一下，书架超过一屏（六本）之后就没法把最后一本拖到第一位——手指顶到边上
+     * 列表不动，玩家只能松手、滚一段、再拖一次。
+     *
+     * 每帧算一次而不是挂在拖动事件上：鼠标压在边缘不动就没有事件，滚不起来。
+     */
+    private void autoScroll(int mouseY, int count) {
+        int direction = 0;
+        if (mouseY < rowsTop) direction = -1;
+        else if (mouseY > rowsBottom) direction = 1;
+
+        if (direction == 0) {
+            lastDragScrollMs = 0;
+            return;
+        }
+
+        long now = System.currentTimeMillis();
+        if (lastDragScrollMs != 0 && now - lastDragScrollMs < DRAG_SCROLL_MS) return;
+        lastDragScrollMs = now;
+
+        int visible = Math.max(1, (rowsBottom - rowsTop) / Math.max(1, lastRowH));
+        int maxOffset = Math.max(0, count - visible);
+        scrollOffset = Math.max(0, Math.min(maxOffset, scrollOffset + direction));
+    }
+
     /**
      * 底部的两个页签。
      *
@@ -397,7 +557,17 @@ public final class BookList {
     public boolean mouseClicked(double mx, double my, int button) {
         if (button != 0) return false;
 
-        // 先给搜索框：点栏里是移光标，不该被下面的行判定吃掉
+        // 「文件夹」画在搜索行右端，必须先判它——那一块也在搜索框的命中区里
+        if (folderHovered) {
+            // 交给系统自己的文件管理器开，不弹任何 Java 的窗口：AWT 的选择器在 macOS 上
+            // 要与游戏抢主线程。目录不存在时 directory() 会先建出来
+            // 走收 File 的那个重载：openPath(Path) 是 1.20.2 才加的，最老的目标上没有
+            // （见 docs/PORTING.md 的差异表）。openFile 两档版本都在，语义相同
+            Util.getPlatform().openFile(TxtLibrary.directory().toFile());
+            return true;
+        }
+
+        // 再给搜索框：点栏里是移光标，不该被下面的行判定吃掉
         if (search != null && search.mouseClicked(mx, my, button)) return true;
 
         if (hoveredTab != null) {
@@ -413,11 +583,65 @@ public final class BookList {
             return true;
         }
 
+        // 按在某一行上：先只记着。这一下是"打开这本"还是"拖着排"，松手才定性
         if (hoveredIdx >= 0 && hoveredIdx < books.size()) {
-            pendingOpen = books.get(hoveredIdx);
+            pressedIdx = hoveredIdx;
+            pressX = mx;
+            pressY = my;
+            dragging = false;
+            dropIdx = pressedIdx;
             return true;
         }
         return false;
+    }
+
+    /**
+     * 按住一行挪出阈值就算在排序。
+     *
+     * 阈值这一道不能省：点开一本书的那一下，手多少会带一点位移，没有阈值的话
+     * 每次点开都会先把书架搅动一格。
+     */
+    public boolean mouseDragged(double mx, double my) {
+        if (pressedIdx < 0) return false;
+
+        List<BookRef> books = filtered(base(BookSources.allBooks()));
+        // 书城页、正在搜的时候排不了，按住拖也只是按住而已，见 canReorder
+        if (!canReorder(books.size())) return false;
+
+        if (!dragging) {
+            if (Math.abs(mx - pressX) < DRAG_THRESHOLD
+                    && Math.abs(my - pressY) < DRAG_THRESHOLD) {
+                return true;
+            }
+            dragging = true;
+            lastDragScrollMs = 0;
+        }
+
+        dropIdx = dropIndexAt(my, books.size());
+        return true;
+    }
+
+    /** 松手定性：拖过就把新顺序落盘，没拖过就是点开这一本 */
+    public boolean mouseReleased() {
+        int pressed = pressedIdx;
+        int drop = dropIdx;
+        boolean wasDragging = dragging;
+        cancelDrag();
+
+        if (pressed < 0) return false;
+
+        List<BookRef> books = filtered(base(BookSources.allBooks()));
+        if (pressed >= books.size()) return false;
+
+        if (wasDragging) {
+            ShelfStore.move(books, pressed, drop);
+            return true;
+        }
+
+        // 没挪过就是点开。松手时手指还得在那一行上——按下去之后滑到别处再松手，
+        // 在任何界面上都表示"算了"
+        if (hoveredIdx == pressed) pendingOpen = books.get(pressed);
+        return true;
     }
 
     /** 换一页。搜索词跟着清掉：带着"新生"这个词切到书架，看见空列表会以为书架是空的 */
@@ -428,6 +652,7 @@ public final class BookList {
         scrollOffset = 0;
         hoveredIdx = -1;
         starHoveredIdx = -1;
+        cancelDrag();
         if (search != null) search.setValue("");
         scrollQuery = "";
         forgetFiltered();
@@ -479,11 +704,29 @@ public final class BookList {
         baseFrom = all;
         baseTab = tab;
         baseRevision = revision;
-        baseBooks = tab == Tab.SHELF ? ShelfStore.shelved(all) : all;
+
+        // 书城只列模组手册。本地小说不在这儿——它一被扫到就直接上了书架
+        // （见 ShelfStore.ensureShelved），再在书城里列一遍，玩家会以为是两本不同的书
+        baseBooks = tab == Tab.SHELF ? ShelfStore.shelved(all) : withoutLocal(all);
 
         // 底表换了，筛选结果当然作废
         forgetFiltered();
         return baseBooks;
+    }
+
+    /** 去掉本地小说的那张表。全是模组手册时原样返回，不白拷一遍 */
+    private static List<BookRef> withoutLocal(List<BookRef> all) {
+        boolean any = false;
+        for (BookRef book : all) {
+            if (isLocal(book)) { any = true; break; }
+        }
+        if (!any) return all;
+
+        List<BookRef> out = new ArrayList<>(all.size());
+        for (BookRef book : all) {
+            if (!isLocal(book)) out.add(book);
+        }
+        return List.copyOf(out);
     }
 
     //  搜索
@@ -546,6 +789,11 @@ public final class BookList {
         filteredFrom = null;
         filteredQuery = null;
         filteredBooks = List.of();
+    }
+
+    /** 这本是玩家自己放进目录的小说吗。本地书的规矩与模组手册不一样，见 base 与 renderRows */
+    private static boolean isLocal(BookRef book) {
+        return TxtBookSource.SOURCE_ID.equals(book.sourceId());
     }
 
     /** 两行字与一张 16 的图，取高的那个 */

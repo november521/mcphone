@@ -19,6 +19,15 @@ public final class HomeGrid {
     private int phoneLeft, phoneTop;
 
     /**
+     * 这一帧画的是哪台设备的屏幕。与 phoneLeft/phoneTop 一样由 {@link #render} 带进来，
+     * 输入方法（点击、拖动）沿用上一帧那份——列数、页码点位置、边缘翻页的判定都要它。
+     *
+     * 有初值是因为输入有可能<b>先于</b>第一帧到（界面刚开就点了一下）。那一下算在手机
+     * 尺寸上，最坏是点空，不会空指针。
+     */
+    private DeviceMetrics metrics = DeviceMetrics.PHONE;
+
+    /**
      * 本帧的插值系数，转交给 {@link IPhoneApp#renderIcon} —— 图标是可以动的（覆盖那个方法
      * 自己画就行），而动画要平滑就得有它。
      *
@@ -61,14 +70,19 @@ public final class HomeGrid {
     private IPhoneApp pendingLaunch;
 
     /** localMouse 是已撤掉开机缩放的本地坐标；nowMs 由调用方取一次传进来，同一帧里翻页动画与边缘停留要对齐 */
-    public void render(GuiGraphics g, int phoneLeft, int phoneTop, Font font,
+    public void render(GuiGraphics g, int phoneLeft, int phoneTop, DeviceMetrics metrics, Font font,
                        long nowMs,
                        double localMouseX, double localMouseY, float partialTick) {
         this.phoneLeft = phoneLeft;
         this.phoneTop = phoneTop;
+        this.metrics = metrics;
         this.partialTick = partialTick;
 
-        this.gridStartX = phoneLeft + PhoneTheme.APP_GRID_PADDING_LEFT;
+        // 图标整排居中，而不是靠左留一道固定边距——手机上算出来仍是 8，平板上是 5。
+        // 居中的地方是【内容区】而不是整块屏幕：平板的导航条立在右边，把那 14 也算进来
+        // 的话整排图标会往右偏 7 个像素，右边那一列压在导航条底下
+        this.gridStartX = phoneLeft + HomeLayout.gridInset(
+                metrics.contentWidth(), columns(), appCellWidth(), PhoneTheme.APP_GRID_SPACING_X);
         this.gridStartY = phoneTop + PhoneTheme.STATUS_BAR_HEIGHT
                 + PhoneTheme.APP_GRID_PADDING_TOP;
 
@@ -208,7 +222,7 @@ public final class HomeGrid {
             renderPageIcons(g, ordered, homePage, 0, floatingIndex);
         } else {
             int dir = homePage > slideFromPage ? 1 : -1;
-            int w = PhoneTheme.PHONE_WIDTH;
+            int w = metrics.contentWidth();
             int inX = Math.round((1f - slide) * dir * w);
 
             GuiUtil.enableScissor(g, phoneLeft, phoneTop + PhoneTheme.STATUS_BAR_HEIGHT,
@@ -234,8 +248,8 @@ public final class HomeGrid {
     private void renderPageIcons(GuiGraphics g, List<IPhoneApp> ordered,
                                  int page, int xOffset, int floatingIndex) {
         final int is = PhoneTheme.APP_ICON_SIZE;
-        final int cols = PhoneTheme.APP_COLUMNS;
-        final int cellW = is + PhoneTheme.APP_GRID_SPACING_X;
+        final int cols = columns();
+        final int cellW = appCellWidth();
         final int cellH = appCellHeight();
         final int pageSize = pageSize();
         final int start = page * pageSize;
@@ -317,7 +331,7 @@ public final class HomeGrid {
         int side = 0;
         if (dragX < phoneLeft + PhoneTheme.PAGE_EDGE_WIDTH) {
             side = -1;
-        } else if (dragX > phoneLeft + PhoneTheme.PHONE_WIDTH - PhoneTheme.PAGE_EDGE_WIDTH) {
+        } else if (dragX > phoneLeft + metrics.contentWidth() - PhoneTheme.PAGE_EDGE_WIDTH) {
             side = 1;
         }
 
@@ -349,7 +363,7 @@ public final class HomeGrid {
                 (float) (nowMs - edgeDwellStartMs) / Math.max(1, PhoneTheme.PAGE_EDGE_DWELL_MS));
 
         final int w = PhoneTheme.PAGE_EDGE_WIDTH;
-        int x = edgeDwellSide < 0 ? phoneLeft : phoneLeft + PhoneTheme.PHONE_WIDTH - w;
+        int x = edgeDwellSide < 0 ? phoneLeft : phoneLeft + metrics.contentWidth() - w;
         int top = phoneTop + PhoneTheme.STATUS_BAR_HEIGHT;
         int h = dotsTop() - top;
 
@@ -383,7 +397,7 @@ public final class HomeGrid {
         final int size = PhoneTheme.PAGE_DOT_SIZE;
         final int gap = PhoneTheme.PAGE_DOT_SPACING;
 
-        int x = phoneLeft + (PhoneTheme.PHONE_WIDTH - (pages * size + (pages - 1) * gap)) / 2;
+        int x = phoneLeft + (metrics.contentWidth() - (pages * size + (pages - 1) * gap)) / 2;
         int y = dotsTop() + (PhoneTheme.PAGE_DOTS_HEIGHT - size) / 2;
 
         for (int p = 0; p < pages; p++) {
@@ -408,9 +422,14 @@ public final class HomeGrid {
         final int gap = PhoneTheme.PAGE_DOT_SPACING;
         final int step = size + gap;
 
-        int x = phoneLeft + (PhoneTheme.PHONE_WIDTH - (pages * size + (pages - 1) * gap)) / 2;
+        int x = phoneLeft + (metrics.contentWidth() - (pages * size + (pages - 1) * gap)) / 2;
         int idx = (int) Math.floor((lx - (x - gap / 2.0)) / step);
         return (idx >= 0 && idx < pages) ? idx : -1;
+    }
+
+    /** 主屏一格的宽度：图标加右边那道间距 */
+    private int appCellWidth() {
+        return PhoneTheme.APP_ICON_SIZE + PhoneTheme.APP_GRID_SPACING_X;
     }
 
     /** 主屏一格的高度：图标加底下那行名字 */
@@ -419,18 +438,28 @@ public final class HomeGrid {
                 + (int)(font.lineHeight * PhoneTheme.APP_NAME_SCALE) + 4;
     }
 
-    /** 页码点那一条的顶边。图标区到此为止，再往下是导航栏 */
+    /** 一行几个 —— 内容区多宽就排几个，手机 4 个、平板 8 个 */
+    private int columns() {
+        return HomeLayout.cellsThatFit(metrics.contentWidth(), appCellWidth(), PhoneTheme.APP_COLUMNS_MAX);
+    }
+
+    /**
+     * 页码点那一条的顶边。图标区到此为止。
+     *
+     * 底下还有没有导航条要问设备：手机上有（扣 14），平板上那条立在右边，屏幕底下是空的，
+     * 页码点就一直贴到最下面。
+     */
     private int dotsTop() {
-        return phoneTop + PhoneTheme.PHONE_HEIGHT
-                - PhoneTheme.NAV_BAR_HEIGHT - PhoneTheme.PAGE_DOTS_HEIGHT;
+        return phoneTop + metrics.screenH()
+                - metrics.bottomNavHeight() - PhoneTheme.PAGE_DOTS_HEIGHT;
     }
 
     private int rowsPerPage() {
-        return HomeLayout.rowsThatFit(dotsTop() - gridStartY, appCellHeight(), PhoneTheme.APP_ROWS);
+        return HomeLayout.cellsThatFit(dotsTop() - gridStartY, appCellHeight(), PhoneTheme.APP_ROWS);
     }
 
     private int pageSize() {
-        return PhoneTheme.APP_COLUMNS * rowsPerPage();
+        return columns() * rowsPerPage();
     }
 
     private int pageCount() {
@@ -460,8 +489,8 @@ public final class HomeGrid {
         if (count <= 0) return -1;
 
         int slot = HomeLayout.slotAt(lx, ly, gridStartX, gridStartY,
-                PhoneTheme.APP_ICON_SIZE + PhoneTheme.APP_GRID_SPACING_X, appCellHeight(),
-                PhoneTheme.APP_COLUMNS, rowsPerPage());
+                appCellWidth(), appCellHeight(),
+                columns(), rowsPerPage());
 
         return HomeLayout.dropIndex(homePage, slot, pageSize(), count);
     }
@@ -479,8 +508,8 @@ public final class HomeGrid {
 
         final int count = PhoneScreenRegistry.getAppCount();
         final int is = PhoneTheme.APP_ICON_SIZE;
-        final int cols = PhoneTheme.APP_COLUMNS;
-        final int cellW = is + PhoneTheme.APP_GRID_SPACING_X;
+        final int cols = columns();
+        final int cellW = appCellWidth();
         final int cellH = appCellHeight();
         final int pageSize = pageSize();
         final int start = homePage * pageSize;

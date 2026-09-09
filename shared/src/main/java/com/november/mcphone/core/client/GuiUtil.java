@@ -129,6 +129,55 @@ public final class GuiUtil {
     }
 
     /**
+     * 九宫格的另一种切法：<b>边角在目标上占多少由调用方说了算</b>，源图按设计尺寸等比换算。
+     *
+     * 与 {@link #drawNineSlice} 的差别只有一处，但很要紧：那一个把 border 当作<b>源图像素</b>，
+     * 于是贴图画成设计尺寸的 2 倍时，四角会缩成一半大。手机外壳自带的那张正是 2 倍
+     * （272×432 对 136×216），所以它走这一条。
+     *
+     * 目标与设计尺寸一致时（手机），切出来与整张拉伸<b>逐像素相同</b>：每一块的源目比例
+     * 都还是那个统一的倍数。也就是说这条路只在尺寸对不上时（平板）才真正起作用。
+     *
+     * @param designW 贴图是照着多大画的（外壳＝手机机身 136×216），贴图本身可以是它的任意倍数
+     * @param corner  四角在<b>目标</b>上留多少像素不参与拉伸
+     */
+    public static void drawNineSliceScaled(GuiGraphics g, ResourceLocation tex,
+                                           int x, int y, int w, int h, int texW, int texH,
+                                           int designW, int designH, int corner) {
+        if (w <= 0 || h <= 0) return;
+        if (corner <= 0 || designW <= 0 || designH <= 0) {
+            drawTexture(g, tex, x, y, w, h, texW, texH);
+            return;
+        }
+
+        // 源图上对应的边角有多少像素。贴图是设计尺寸的几倍，这里就是几倍
+        int sbx = Math.max(1, Math.round((float) corner * texW / designW));
+        int sby = Math.max(1, Math.round((float) corner * texH / designH));
+        if (sbx > (texW - 1) / 2 || sby > (texH - 1) / 2) {
+            drawTexture(g, tex, x, y, w, h, texW, texH);
+            return;
+        }
+
+        // 目标比两个角加起来还窄（还矮）时对半分：宁可把角挤扁，也不让两块重叠
+        int bx = Math.min(corner, w / 2);
+        int by = Math.min(corner, h / 2);
+        int[] dx = {x, x + bx, x + w - bx, x + w};
+        int[] dy = {y, y + by, y + h - by, y + h};
+        int[] sx = {0, sbx, texW - sbx, texW};
+        int[] sy = {0, sby, texH - sby, texH};
+        for (int row = 0; row < 3; row++) {
+            for (int col = 0; col < 3; col++) {
+                int dw = dx[col + 1] - dx[col];
+                int dh = dy[row + 1] - dy[row];
+                if (dw > 0 && dh > 0) {
+                    drawTexture(g, tex, dx[col], dy[row], dw, dh,
+                            sx[col], sy[row], sx[col + 1] - sx[col], sy[row + 1] - sy[row], texW, texH);
+                }
+            }
+        }
+    }
+
+    /**
      * 开裁剪 —— 收的是【手机本地坐标】，会按当前 pose 换算成窗口坐标。
      *
      * 为什么必须包一层

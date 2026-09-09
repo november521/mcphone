@@ -27,5 +27,15 @@ public final class ModItems {
 
     /** 手机本体。一次只拿得动一部——它是一件设备，不是一摞消耗品 */
     public static final DeferredItem<PhoneItem> PHONE = ITEMS.registerItem("phone",
-            props -> new PhoneItem(props.stacksTo(1).rarity(Rarity.RARE)));
+            props -> new PhoneItem(props.stacksTo(1).rarity(Rarity.RARE), DeviceKind.PHONE));
+
+    /**
+     * 平板 —— 手机外面包一圈铁锭合成，玩法上就是屏幕更大的那一台。
+     *
+     * 与手机共用 {@link PhoneItem}：App、聊天、终端卡槽全都认"是不是本模组的设备"
+     * （{@link PhoneItem#isDevice}），加这一件不需要去改那些判断。两者只差物品模型与
+     * 屏幕尺寸，后者由 {@link DeviceKind} 一路带到界面，见 {@code DeviceMetrics}。
+     */
+    public static final DeferredItem<PhoneItem> TABLET = ITEMS.registerItem("tablet",
+            props -> new PhoneItem(props.stacksTo(1).rarity(Rarity.RARE), DeviceKind.TABLET));
 }

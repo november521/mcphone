@@ -1,6 +1,7 @@
 {
   "replace": false,
   "values": [
-    "mcphone:phone"
+    "mcphone:phone",
+    "mcphone:tablet"
   ]
 }

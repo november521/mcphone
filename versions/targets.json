@@ -65,8 +65,8 @@
     "java": 17,
     "gradle": "8.8",
     "project": "platforms/1.20.1-forge",
-    "buildable": false,
-    "note": "工程已并入 platforms/1.20.1-forge/，正在让它编过。buildable 仍是 false —— CI 会编它（工程目录存在就编），但产物不进 Release。这一行的值是从 1.20.1-forge 分支上读出来的：gradle.properties 里 forge_version=47.4.23 / forge_version_range=[47.4.0,)，wrapper 是 gradle-8.8-bin.zip，build.gradle 里 toolchain 是 17，构建插件是 ForgeGradle 6（[6.0.54,6.2)）。",
+    "buildable": true,
+    "note": "本仓第二个建得起来的目标，产物进 Release。这些值由构建本身验着：gradle.properties 里 forge_version=47.4.23 / forge_version_range=[47.4.0,)，wrapper 是 gradle-8.8-bin.zip，build.gradle 里 toolchain 是 17，构建插件是 ForgeGradle 6（[6.0.54,6.2)）。",
     "layers": [
       "forge"
     ]
@@ -140,7 +140,7 @@
     "gradle": "9.2.1",
     "project": "platforms/1.21.1-neoforge",
     "buildable": true,
-    "note": "本仓唯一建得起来的目标。这些值就是它自己构建时用的，由构建本身验着。运行时接受的加载器版本范围不写在这里 —— 它是 platforms/1.21.1-neoforge/gradle.properties 里的 neo_version_range，一个值只该有一处。",
+    "note": "这些值就是它自己构建时用的，由构建本身验着。运行时接受的加载器版本范围不写在这里 —— 它是 platforms/1.21.1-neoforge/gradle.properties 里的 neo_version_range，一个值只该有一处。",
     "layers": [
       "1.20.5+",
       "1.21+",

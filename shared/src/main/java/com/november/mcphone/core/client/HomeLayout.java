@@ -3,7 +3,9 @@ package com.november.mcphone.core.client;
 import java.util.List;
 
 /**
- * 主屏的排布算术 —— 一页几行、一共几页、鼠标落在第几格、拖完之后顺序变成什么样。
+ * 图标网格的排布算术 —— 一排几格、一共几页、鼠标落在第几格、拖完之后顺序变成什么样。
+ *
+ * 主屏与应用商店那两块网格共用它：两边的格子一样大，只是一个能拖一个不能。
  *
  * 为什么单独一个类，而且【不 import 任何 Minecraft 类型】
  *
@@ -27,17 +29,38 @@ public final class HomeLayout {
     private HomeLayout() {}
 
     /**
-     * 一页放得下几行。
+     * 一排放得下几格 —— 横竖都用它。
      *
-     * @param available 图标区能用的高度（已扣掉状态栏、导航栏、页码点那一条）
-     * @param cellH     一格的高度（图标 + 底下那行名字）
-     * @param maxRows   行数上限
-     * @return 至少 1 行。一行都放不下时也返回 1——那种极端情况下画出格
+     * 行与列是同一道除法，所以只写一遍：竖着问的是"图标区这么高能摞几行"，横着问的是
+     * "屏幕这么宽能排几列"。平板来了之后列数不再是定值（手机 120 宽 4 列、平板 240 宽
+     * 8 列），这个方法才同时有了两个调用方向。
+     *
+     * @param available 这个方向上能用的长度（竖着＝扣掉状态栏、导航栏、页码点之后的高度；
+     *                  横着＝屏幕内宽）
+     * @param cellSize  一格在这个方向上占多少（含格子之间的那道间距）
+     * @param max       上限，见 {@link PhoneTheme#APP_ROWS} 与 {@link PhoneTheme#APP_COLUMNS_MAX}
+     * @return 至少 1 格。一格都放不下时也返回 1——那种极端情况下画出格
      *         也比画一片空白好懂，后者看着像"手机坏了"
      */
-    public static int rowsThatFit(int available, int cellH, int maxRows) {
-        if (cellH <= 0 || maxRows <= 0) return 1;
-        return Math.max(1, Math.min(maxRows, available / cellH));
+    public static int cellsThatFit(int available, int cellSize, int max) {
+        if (cellSize <= 0 || max <= 0) return 1;
+        return Math.max(1, Math.min(max, available / cellSize));
+    }
+
+    /**
+     * 一排格子在 {@code available} 这么长的地方居中，左边（或上边）该空多少。
+     *
+     * 最后一格右边的那道间距不算进内容长度 —— 间距是"格与格之间"的东西，末尾那一份
+     * 本来就不存在。不减它的话内容会被当成宽了一格间距，整排往左偏半个间距。
+     *
+     * 手机上算出来正好是 8，与从前写死的左边距一模一样；平板上是 12。也就是说改成居中
+     * <b>没有动手机的排布</b>，只是让同一套算术在更宽的屏幕上也讲得通。
+     *
+     * @return 至少 0。格子比地方还多时不往回缩，宁可出格也不要负的起点
+     */
+    public static int gridInset(int available, int cells, int cellSize, int spacing) {
+        int content = cells * cellSize - spacing;
+        return Math.max(0, (available - content) / 2);
     }
 
     /**

@@ -15,9 +15,11 @@ public final class CameraApp extends PhoneApp {
     public CameraApp() {
         super("camera");
 
-        // 「快门闪光：白闪 / 模糊」那一行。在这儿登记而不是在 MCphoneClient 里，
-        // 是因为这里 getId() 现成——在别处登记就得把 "mcphone:camera" 再写一遍
+        // 管理页上那两行开关。在这儿登记而不是在 MCphoneClient 里，是因为这里
+        // getId() 现成——在别处登记就得把 "mcphone:camera" 再写一遍。
+        // 顺序就是画出来的上下顺序：先「快门闪光」，再「坐标水印」
         AppOptions.register(getId(), CameraFlash.appOption());
+        AppOptions.register(getId(), CameraStamp.appOption());
     }
 
     @Override

@@ -23,8 +23,9 @@ import net.minecraft.util.Mth;
  * 另一个问题：「一直挂在画面角落里，多大才不挡路」，答案必然小得多。合用一个数的话，
  * 玩家为看清全屏界面调到 150%，HUD 就会糊住半个屏幕。
  *
- * 所以这里的范围是 40–150%，默认 60%——136×216 的机身在 60% 下是 82×130，
+ * 所以这里的范围是 40–150%，默认 60%——136×216 的手机机身在 60% 下是 82×130，
  * 在最窄的 640×360 逻辑画面上占约三分之一高，够看清状态栏和角标，也还留得下视野。
+ * 平板机身 256×184，同样 60% 下是 154×110：更宽更矮，占的高度反而少一些。
  *
  * 存哪儿
  *
@@ -204,29 +205,34 @@ public final class PhoneHudPlacement {
      * 与 {@link PhoneScale#effective} 同一套路数——夹在渲染时而不是夹在设置里，
      * 因为窗口随时会变，而配置里那个数是玩家的意愿，不该被一次临时的小窗口永久改小。
      */
-    public static float effectiveScale(int windowWidth, int windowHeight) {
-        return Math.min(scale(), PhoneScale.fit(windowWidth, windowHeight));
+    public static float effectiveScale(DeviceMetrics metrics, int windowWidth, int windowHeight) {
+        return Math.min(scale(), PhoneScale.fit(metrics, windowWidth, windowHeight));
     }
 
-    /** 机身（含边框）左上角的 X。窗口坐标，不是屏幕内区域 */
-    public static int originX(int windowWidth, int windowHeight) {
-        int phoneW = Math.round(PhoneTheme.PHONE_TOTAL_WIDTH * effectiveScale(windowWidth, windowHeight));
-        return anchor.col() * (windowWidth - phoneW) / 2 + offsetX;
+    /**
+     * 机身（含边框）左上角的 X。窗口坐标，不是屏幕内区域。
+     *
+     * 每个方法都要收一份 {@link DeviceMetrics}：锚点是"贴着哪个角"，而贴得对不对取决于
+     * 机身多大 —— 挂着的要是平板（256×184），拿手机那套尺寸算出来的左上角会让它整块
+     * 超出那个角。锚点与偏移本身两台设备共用一份，那是"我要它待在右下角"的意思，
+     * 与手上是哪一台无关。
+     */
+    public static int originX(DeviceMetrics metrics, int windowWidth, int windowHeight) {
+        return anchor.col() * (windowWidth - width(metrics, windowWidth, windowHeight)) / 2 + offsetX;
     }
 
     /** 机身（含边框）左上角的 Y */
-    public static int originY(int windowWidth, int windowHeight) {
-        int phoneH = Math.round(PhoneTheme.PHONE_TOTAL_HEIGHT * effectiveScale(windowWidth, windowHeight));
-        return anchor.row() * (windowHeight - phoneH) / 2 + offsetY;
+    public static int originY(DeviceMetrics metrics, int windowWidth, int windowHeight) {
+        return anchor.row() * (windowHeight - height(metrics, windowWidth, windowHeight)) / 2 + offsetY;
     }
 
     /** 这一帧机身占的宽（含边框），编辑器画拖动框要用 */
-    public static int width(int windowWidth, int windowHeight) {
-        return Math.round(PhoneTheme.PHONE_TOTAL_WIDTH * effectiveScale(windowWidth, windowHeight));
+    public static int width(DeviceMetrics metrics, int windowWidth, int windowHeight) {
+        return Math.round(metrics.totalWidth() * effectiveScale(metrics, windowWidth, windowHeight));
     }
 
-    public static int height(int windowWidth, int windowHeight) {
-        return Math.round(PhoneTheme.PHONE_TOTAL_HEIGHT * effectiveScale(windowWidth, windowHeight));
+    public static int height(DeviceMetrics metrics, int windowWidth, int windowHeight) {
+        return Math.round(metrics.totalHeight() * effectiveScale(metrics, windowWidth, windowHeight));
     }
 
     /**
@@ -236,9 +242,10 @@ public final class PhoneHudPlacement {
      * 也就最经得起换分辨率。按「落在屏幕的哪三分之一」来判也能用，但那会在贴边时选出
      * 一个偏移很大的锚点：手机明明贴着左边，中心却还在左三分之一之外。
      */
-    public static Placement derive(int x, int y, int windowWidth, int windowHeight) {
-        int phoneW = width(windowWidth, windowHeight);
-        int phoneH = height(windowWidth, windowHeight);
+    public static Placement derive(DeviceMetrics metrics, int x, int y,
+                                   int windowWidth, int windowHeight) {
+        int phoneW = width(metrics, windowWidth, windowHeight);
+        int phoneH = height(metrics, windowWidth, windowHeight);
 
         int bestCol = 0, bestRow = 0;
         int bestDx = Integer.MAX_VALUE, bestDy = Integer.MAX_VALUE;
@@ -264,19 +271,22 @@ public final class PhoneHudPlacement {
      * 三个调用方：HUD 上直接拖（{@link PhoneScreen}）、全屏编辑器里拖、以及手机被调大
      * 之后重新夹一次。同一套算法抄三遍迟早会出现"这儿夹了那儿没夹"。
      */
-    public static Placement place(int x, int y, int windowWidth, int windowHeight) {
-        int w = width(windowWidth, windowHeight);
-        int h = height(windowWidth, windowHeight);
-        return derive(
+    public static Placement place(DeviceMetrics metrics, int x, int y,
+                                  int windowWidth, int windowHeight) {
+        int w = width(metrics, windowWidth, windowHeight);
+        int h = height(metrics, windowWidth, windowHeight);
+        return derive(metrics,
                 Mth.clamp(x, 0, Math.max(0, windowWidth - w)),
                 Mth.clamp(y, 0, Math.max(0, windowHeight - h)),
                 windowWidth, windowHeight);
     }
 
     /** 按现在的尺寸把手机重新夹进窗口。调大之后可能顶出去，这一下把它拉回来 */
-    public static Placement clampIntoWindow(int windowWidth, int windowHeight) {
-        return place(originX(windowWidth, windowHeight),
-                originY(windowWidth, windowHeight),
+    public static Placement clampIntoWindow(DeviceMetrics metrics,
+                                            int windowWidth, int windowHeight) {
+        return place(metrics,
+                originX(metrics, windowWidth, windowHeight),
+                originY(metrics, windowWidth, windowHeight),
                 windowWidth, windowHeight);
     }
 

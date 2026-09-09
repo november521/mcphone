@@ -18,16 +18,15 @@ import net.minecraft.client.gui.GuiGraphics;
  * 那点不同不值得复制一份网格代码：格子多宽、几列、缓存要顶到多大，都是"改一处必须
  * 同时改另一处"的数，而这种成对的数迟早会对不上。
  *
- * 每页几行由调用方按自己的可用高度算（两页的头尾不一样高），列数与格子尺寸在这里定死。
+ * 每页几行几列由调用方按自己的可用宽高算（两页的头尾不一样高，屏幕也不一样宽），
+ * 格子尺寸在这里定死：缩略图放大就糊了，屏幕宽一倍该多放几张，不是把每张画大一倍。
  */
 public final class PhotoGridPainter {
 
     private PhotoGridPainter() {}
 
-    /** 每行几张 */
-    public static final int COLS = 3;
 
-    /** 缩略图格子尺寸。3 列 33 宽 + 2 道 4 间隙 = 107，正好落在 108 的内容宽里 */
+    /** 缩略图格子尺寸。手机上 3 列 33 宽 + 2 道 4 间隙 = 107，正好落在 108 的内容宽里 */
     public static final int CELL_W = 33;
     public static final int CELL_H = 24;
 
@@ -48,9 +47,19 @@ public final class PhotoGridPainter {
     private static int colorPagerOff() { return FontPalette.muted(); }
     private static int colorHint() { return FontPalette.subtle(); }
 
+    /**
+     * 给定宽度放得下几列，至少一列。
+     *
+     * 与 {@link #rowsFor} 同一道除法：末尾那道间隙不存在，所以先把可用宽度加上一个 GAP
+     * 再除。手机内容区 108 宽算出来是 3 列（与从前写死的一样），平板 228 宽是 6 列。
+     */
+    public static int colsFor(int availableWidth) {
+        return Math.max(1, (availableWidth + GAP) / (CELL_W + GAP));
+    }
+
     /** 一整个网格有多宽，用来在内容区里居中 */
-    public static int gridWidth() {
-        return COLS * CELL_W + (COLS - 1) * GAP;
+    public static int gridWidth(int cols) {
+        return cols * CELL_W + (cols - 1) * GAP;
     }
 
     /** 给定高度放得下几行，至少一行 */
@@ -59,13 +68,13 @@ public final class PhotoGridPainter {
     }
 
     /** 第 slot 格（页内序号，从 0 起）的左上角 x */
-    public static int cellX(int gridX, int slot) {
-        return gridX + (slot % COLS) * (CELL_W + GAP);
+    public static int cellX(int gridX, int slot, int cols) {
+        return gridX + (slot % Math.max(1, cols)) * (CELL_W + GAP);
     }
 
     /** 第 slot 格的左上角 y */
-    public static int cellY(int gridTop, int slot) {
-        return gridTop + (slot / COLS) * (CELL_H + GAP);
+    public static int cellY(int gridTop, int slot, int cols) {
+        return gridTop + (slot / Math.max(1, cols)) * (CELL_H + GAP);
     }
 
     public static boolean cellHit(int cx, int cy, int mouseX, int mouseY) {

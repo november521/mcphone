@@ -158,7 +158,7 @@ public class PhoneContainerMenu extends AbstractContainerMenu {
      */
     @Override
     public boolean stillValid(Player player) {
-        return PhoneItem.isPhone(getCarried()) || PhoneItem.isCarriedBy(player);
+        return PhoneItem.isDevice(getCarried()) || PhoneItem.isCarriedBy(player);
     }
 
     @Override

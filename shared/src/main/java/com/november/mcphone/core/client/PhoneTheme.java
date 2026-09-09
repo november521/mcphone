@@ -4,24 +4,22 @@ package com.november.mcphone.core.client;
  * 手机界面的尺寸与兜底颜色。
  * 贴图清单不在这里：可换肤元素的路径与建议尺寸全在 {@link PhoneSkin.Element}，
  * 本文件只管没有贴图时用什么颜色画，每个 COLOR_* 与那边的对应项配对。
- * 屏幕内区域 120×200（状态栏 10 / 导航栏 14）是所有页面排版的基准；含边框整机 136×216。
+ *
+ * <b>屏幕多大不在这里</b> —— 那随设备走（手机 120×200、平板 240×168），见
+ * {@link DeviceMetrics}。留在本文件的是<b>不随设备变</b>的那些：边框厚度、状态栏与
+ * 导航栏的高度、图标大小。它们跟着字号走，屏幕大一圈也不该跟着变粗变高。
  */
 public final class PhoneTheme {
 
     private PhoneTheme() {}
 
-    /** 手机屏幕内宽（不含边框），单位：像素 */
-    public static final int PHONE_WIDTH = 120;
-
-    /** 手机屏幕内高（不含边框），单位：像素 */
-    public static final int PHONE_HEIGHT = 200;
-
-    /** 边框厚度。8 能撑到 11px 圆角；再厚整机高会在 240 的最小逻辑高度下顶到屏幕边 */
+    /**
+     * 边框厚度。8 能撑到 11px 圆角；再厚整机高会在 240 的最小逻辑高度下顶到屏幕边。
+     *
+     * 手机与平板同一个数：边框画的是"机身那一圈"，不是屏幕的一部分，屏幕大一圈
+     * 不该让边框跟着变粗。含边框的整机尺寸见 {@link DeviceMetrics#totalWidth()}。
+     */
     public static final int PHONE_BORDER = 8;
-
-    public static final int PHONE_TOTAL_WIDTH = PHONE_WIDTH + PHONE_BORDER * 2;
-
-    public static final int PHONE_TOTAL_HEIGHT = PHONE_HEIGHT + PHONE_BORDER * 2;
 
     public static final int COLOR_FRAME = 0xFF2C2C2C;
 
@@ -220,11 +218,34 @@ public final class PhoneTheme {
     /** 正中的准星 */
     public static final int COLOR_RETICLE = 0x99FFFFFF;
 
+    /**
+     * 照片右下角那行坐标。与上面两个不同，它是【不透明】的：那两个是浮在画面上的
+     * 辅助线，拍照那一帧会被跳过；这一行却要留在照片里当内容，半透明的话底下那块
+     * 世界会渗上来，雪地与天空前几乎读不出来。见 {@code CameraStamp}
+     */
+    public static final int COLOR_CAMERA_STAMP = 0xFFFFFFFF;
+
     /** 状态栏高度 */
     public static final int STATUS_BAR_HEIGHT = 10;
 
-    /** 底部导航栏高度 */
+    /**
+     * 导航条那一条有多厚。
+     *
+     * 竖屏时它横在底下，这个数是它的<b>高</b>；横屏（平板）时它立在右边，同一个数变成它的
+     * <b>宽</b> —— 条只是立了起来，不该跟着变粗。要按设备取用 {@link DeviceMetrics#navThickness()}，
+     * 那边还答得出"底下到底还有没有这条"（{@link DeviceMetrics#bottomNavHeight()}）。
+     */
     public static final int NAV_BAR_HEIGHT = 14;
+
+    /**
+     * 导航栏三个键的图标画多宽 —— 与 {@link PhoneSkin.Element#NAV_BACK} 建议的 40×14 对齐。
+     *
+     * 一格有多大是另一回事：手机上屏幕 120 除以 3 正好一格 40×14；平板的条立在右边，一格
+     * 是 14×52。图标一律按这个设计尺寸在格子里居中画，不跟着格子拉伸，否则那三个符号会被
+     * 抻长。立着的条上图标比条还宽，超出的部分裁掉——自带的三个图案只占正中一小块，裁不到。
+     * 可点的仍然是整格。
+     */
+    public static final int NAV_ICON_WIDTH = 40;
 
     /** App 图标大小（正方形），贴图也必须为此尺寸 */
     public static final int APP_ICON_SIZE = 20;
@@ -232,19 +253,19 @@ public final class PhoneTheme {
     /** App 网格水平间距 */
     public static final int APP_GRID_SPACING_X = 8;
 
-    /** App 网格垂直间距 */
-    public static final int APP_GRID_SPACING_Y = 6;
-
-    /** App 网格左边距 */
-    public static final int APP_GRID_PADDING_LEFT = 8;
-
     /** App 网格上边距（状态栏下方） */
     public static final int APP_GRID_PADDING_TOP = 6;
 
-    /** 每行 App 数量 */
-    public static final int APP_COLUMNS = 4;
+    /**
+     * 每行最多几个 App，是上限不是定值：实际列数由 {@link HomeLayout#colsThatFit} 按屏幕
+     * 宽度算 —— 手机 120 宽正好 4 个，平板 240 宽正好 8 个。
+     *
+     * 上限取 8 是因为再多就不像"一屏图标"了：一行超过 8 个，找一个 App 得横着扫过去，
+     * 而分页本来就是为了不用扫。
+     */
+    public static final int APP_COLUMNS_MAX = 8;
 
-    /** 每页最多几行 App，是上限不是定值：实际行数由 HomeLayout.rowsThatFit 按剩余高度算 */
+    /** 每页最多几行 App，是上限不是定值：实际行数由 HomeLayout.cellsThatFit 按剩余高度算 */
     public static final int APP_ROWS = 5;
 
     /** App 名称字体缩放，1.0=原大小 */
