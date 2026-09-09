@@ -6,6 +6,7 @@ import com.november.mcphone.core.client.PhoneHudPlacement;
 import com.november.mcphone.core.client.PhoneTheme;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
+import com.november.mcphone.platform.client.PhoneScreenBase;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import org.lwjgl.glfw.GLFW;
@@ -37,7 +38,7 @@ import org.lwjgl.glfw.GLFW;
  * 手机。副手上那部有 PhoneHud 兜着（它的 removed 不拆），从背包里开的那部没有——
  * 与其为一条返回路径给两种手机各留一套规矩，不如干脆不返回。
  */
-public final class PhoneHudEditor extends Screen {
+public final class PhoneHudEditor extends PhoneScreenBase {
 
     /** 压在世界上的一层薄暗色。比手机界面那层 {@link PhoneTheme#COLOR_SCRIM} 淡得多——
      *  这一页的重点恰恰是"看清它和原版 HUD 的关系"，压太狠就白摆了 */
@@ -204,11 +205,11 @@ public final class PhoneHudEditor extends Screen {
      * 配置文件（倍数一次、夹回来的位置一次）纯属糟蹋 —— 与拖动条上那套算法同一个道理。
      */
     @Override
-    public boolean mouseScrolled(double mx, double my, double delta) {
-        if (delta == 0) return super.mouseScrolled(mx, my, delta);
+    protected boolean onScroll(double mx, double my, double scrollX, double scrollY) {
+        if (scrollY == 0) return false;
 
         PhoneHudPlacement.previewPercent(PhoneHudPlacement.percent()
-                + (delta > 0 ? PhoneHudPlacement.STEP_PERCENT : -PhoneHudPlacement.STEP_PERCENT));
+                + (scrollY > 0 ? PhoneHudPlacement.STEP_PERCENT : -PhoneHudPlacement.STEP_PERCENT));
         clampIntoWindow(false);
         return true;
     }

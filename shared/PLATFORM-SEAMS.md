@@ -244,7 +244,7 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 - `feature.music.client.playback.LocalPlayback` —— 加载器导入　**★ 被共用代码引用**
 - `feature.music.net.MusicNetworking` —— 加载器导入　**★ 被共用代码引用**
 - `feature.notes.net.NotesNetworking` —— 加载器导入
-- `feature.settings.client.AppManagerDetail` —— 加载器导入
+- `feature.settings.client.AppManagerDetail` —— 加载器导入　**★ 被共用代码引用**
 - `feature.store.net.StoreNetworking` —— 加载器导入
 - `feature.terminal.integration.Terminals` —— 加载器导入　**★ 被共用代码引用**
 - `feature.terminal.net.TerminalNetworking` —— 加载器导入
@@ -294,24 +294,22 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 - `platform.Slots`　**★ 被共用代码引用**
 - `platform.StackCodecs`　**★ 被共用代码引用**
 
-#### 客户端渲染路径（15）
+#### 客户端渲染路径（13）
 
 **判据在这批上最不可信** —— 签名漂移正集中在这里，逐个人工核过再搬。
 
 - `api.client.ui.PhoneMultiLineEditBox`
 - `core.client.PhoneItemProperties`
-- `core.client.PhoneScreen`　**★ 被共用代码引用**
 - `core.client.PlayerAvatar`　**★ 被共用代码引用**
-- `feature.browser.client.BrowserScreen`　**★ 被共用代码引用**
 - `feature.camera.client.CameraFlash`　**★ 被共用代码引用**
 - `feature.camera.client.CameraMode`　**★ 被共用代码引用**
-- `feature.music.client.MusicPage`
+- `feature.music.client.MusicPage`　**★ 被共用代码引用**
 - `feature.music.client.playback.OggDecoder`　**★ 被共用代码引用**
-- `feature.notes.client.NoteEditor`
-- `feature.settings.client.DeviceNameEditor`
-- `feature.settings.client.PhoneHudEditor`
+- `feature.notes.client.NoteEditor`　**★ 被共用代码引用**
+- `feature.settings.client.DeviceNameEditor`　**★ 被共用代码引用**
 - `feature.terminal.client.TerminalApp`
 - `platform.client.Draw`　**★ 被共用代码引用**
+- `platform.client.PhoneScreenBase`　**★ 被共用代码引用**
 - `platform.client.SystemFiles`　**★ 被共用代码引用**
 
 <!-- 乙 · 1.21.1-neoforge 结束 -->
@@ -358,7 +356,7 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 - `feature.chat.client.ChatImageSender` —— 加载器导入　**★ 被共用代码引用**
 - `feature.music.DiscService` —— 加载器导入　**★ 被共用代码引用**
 - `feature.music.client.playback.LocalPlayback` —— 加载器导入　**★ 被共用代码引用**
-- `feature.settings.client.AppManagerDetail` —— 加载器导入
+- `feature.settings.client.AppManagerDetail` —— 加载器导入　**★ 被共用代码引用**
 - `feature.terminal.TerminalSlotSync` —— 加载器导入
 - `feature.terminal.integration.Terminals` —— 加载器导入　**★ 被共用代码引用**
 - `platform.ModPresence` —— 加载器导入　**★ 被共用代码引用**
@@ -382,7 +380,7 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 
 - `compat.WaystonesCompat`　**★ 被共用代码引用**
 - `core.PhoneItem`　**★ 被共用代码引用**
-- `core.PhoneItemData`
+- `core.PhoneItemData`　**★ 被共用代码引用**
 - `core.PhoneLocation`　**★ 被共用代码引用**
 - `core.net.NetworkHandler`　**★ 被共用代码引用**
 - `core.net.PhoneScreenOnPacket`　**★ 被共用代码引用**
@@ -452,24 +450,22 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 - `platform.Slots`　**★ 被共用代码引用**
 - `platform.StackCodecs`　**★ 被共用代码引用**
 
-#### 客户端渲染路径（15）
+#### 客户端渲染路径（13）
 
 **判据在这批上最不可信** —— 签名漂移正集中在这里，逐个人工核过再搬。
 
 - `core.client.PhoneItemProperties`
-- `core.client.PhoneScreen`　**★ 被共用代码引用**
 - `core.client.PlayerAvatar`　**★ 被共用代码引用**
-- `feature.browser.client.BrowserScreen`　**★ 被共用代码引用**
 - `feature.camera.client.CameraFlash`　**★ 被共用代码引用**
 - `feature.camera.client.CameraMode`　**★ 被共用代码引用**
-- `feature.music.client.MusicPage`
+- `feature.music.client.MusicPage`　**★ 被共用代码引用**
 - `feature.music.client.playback.OggDecoder`　**★ 被共用代码引用**
-- `feature.notes.client.NoteEditor`
-- `feature.settings.client.DeviceNameEditor`
-- `feature.settings.client.PhoneHudEditor`
+- `feature.notes.client.NoteEditor`　**★ 被共用代码引用**
+- `feature.settings.client.DeviceNameEditor`　**★ 被共用代码引用**
 - `feature.terminal.client.TerminalApp`
 - `feature.terminal.client.TerminalSlotClient`
 - `platform.client.Draw`　**★ 被共用代码引用**
+- `platform.client.PhoneScreenBase`　**★ 被共用代码引用**
 - `platform.client.SystemFiles`　**★ 被共用代码引用**
 
 <!-- 乙 · 1.20.1-forge 结束 -->

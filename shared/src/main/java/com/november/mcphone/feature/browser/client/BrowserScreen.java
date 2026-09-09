@@ -17,6 +17,7 @@ import com.november.mcphone.core.client.GuiUtil;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.EditBox;
+import com.november.mcphone.platform.client.PhoneScreenBase;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import org.joml.Matrix4f;
@@ -28,7 +29,7 @@ import java.nio.charset.StandardCharsets;
  * 浏览器界面：一块居中、占屏幕九成的大面板，装整个网页。
  * 坐标有两套，别混：带 px 后缀的是真实像素（Chromium 用），其余是 GUI 缩放后的坐标，差一个 guiScale 倍数。
  */
-public final class BrowserScreen extends Screen {
+public final class BrowserScreen extends PhoneScreenBase {
 
     private static final String HOME_URL = "https://www.bing.com";
 
@@ -377,12 +378,12 @@ public final class BrowserScreen extends Screen {
     }
 
     @Override
-    public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+    protected boolean onScroll(double mouseX, double mouseY, double scrollX, double scrollY) {
         if (browser != null && inViewport(mouseX, mouseY)) {
             browser.mouseWheel(browserX(mouseX), browserY(mouseY), scrollY, currentModifiers());
             return true;
         }
-        return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
+        return false;
     }
 
     /**

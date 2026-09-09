@@ -175,10 +175,11 @@ public final class NoteEditor {
     }
 
     /**
-     * 1.21 的 mouseScrolled 有横竖两个滚动量，1.20.1 只有一个（竖直）。
-     * 多行输入框只用得上竖直那一个，所以这处退化不丢功能。
+     * 签名与 1.21 那一支一致（横竖两个滚动量），<b>这个类不是 Screen，没有覆写约束</b>，
+     * 所以四参在这一支上照样成立。多出来的 {@code scrollX} 这里用不上：原版的多行输入框
+     * 在 1.20.1 上只收竖直那一个。
      */
-    public boolean mouseScrolled(double mx, double my, double scrollY) {
+    public boolean mouseScrolled(double mx, double my, double scrollX, double scrollY) {
         return box != null && box.mouseScrolled(mx, my, scrollY);
     }
 

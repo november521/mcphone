@@ -6,6 +6,7 @@ import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.Tesselator;
 import com.mojang.blaze3d.vertex.VertexFormat;
 import net.minecraft.client.gui.GuiGraphics;
+import org.lwjgl.opengl.GL11;
 import net.minecraft.client.gui.screens.Screen;
 import org.joml.Matrix4f;
 
@@ -67,5 +68,26 @@ public final class Draw {
                                         int mouseX, int mouseY, float partialTick) {
         // 1.20.1 的 renderBackground 只收 GuiGraphics，后三个这一支用不上
         screen.renderBackground(g);
+    }
+
+    /**
+     * 裁剪框有没有被人漏下来 —— <b>这一支问的是 GL，不是 {@link GuiGraphics}</b>。
+     *
+     * <p>1.21 那边用 {@code g.containsPointInScissor(0, 0)}，1.20.1 <b>没有这个方法</b>
+     * （它是 1.20.2 才加的），{@code scissorStack} 又是私有的，问不到。所以这里直接问 GL：
+     * 裁剪测试还开着，就说明栈里还压着别人的框 —— 手机这一层自己的裁剪全走 {@code GuiUtil}
+     * 与 {@code PhoneCanvas.clipped}，两边都是成对的，画完这一页时不该还开着。
+     *
+     * <p>这么问反而<b>比那边更准</b>：那边是靠「(0,0) 在不在框里」推断的，万一漏下来的框
+     * 恰好包含窗口左上角就发现不了，GL 的这一位不会漏判。
+     *
+     * <p>栈弹空之后原版 {@code disableScissor} 会走 {@code applyScissor(null)} →
+     * {@code RenderSystem.disableScissor()}，GL 这一位跟着关掉，所以拿它当循环条件弹不穿，
+     * 不会去撞 "Scissor stack underflow"。
+     *
+     * <p>参数 {@code g} 这一支用不上，留着是为了两支签名一致。
+     */
+    public static boolean scissorLeaked(GuiGraphics g) {
+        return GL11.glIsEnabled(GL11.GL_SCISSOR_TEST);
     }
 }

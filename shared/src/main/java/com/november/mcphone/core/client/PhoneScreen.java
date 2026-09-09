@@ -5,7 +5,9 @@ import com.november.mcphone.api.client.app.IPhoneApp;
 import com.november.mcphone.api.client.store.AppInfo;
 import com.november.mcphone.api.client.ui.IPhonePage;
 import com.november.mcphone.api.client.ui.PhoneCanvas;
+import com.november.mcphone.core.PhoneItemData;
 import com.november.mcphone.core.PhoneLocation;
+import com.november.mcphone.platform.client.Draw;
 import com.november.mcphone.feature.chat.client.ChatAddContact;
 import com.november.mcphone.feature.chat.client.ChatConversation;
 import com.november.mcphone.core.ServerConfig;
@@ -40,7 +42,7 @@ import com.november.mcphone.feature.clock.client.ClockPage;
 import com.november.mcphone.feature.weather.client.WeatherPage;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
-import org.lwjgl.opengl.GL11;
+import com.november.mcphone.platform.client.PhoneScreenBase;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
@@ -50,7 +52,7 @@ import java.util.List;
 import java.util.UUID;
 
 /** 手机主屏幕 GUI：管理各页面之间的导航（{@link Mode}）、分发输入、兜住附属页面的异常 */
-public final class PhoneScreen extends Screen {
+public final class PhoneScreen extends PhoneScreenBase {
 
     public enum Mode { MAIN, SETTINGS, WALLPAPER_PICKER, FONT_COLOR_PICKER, UI_SCALE, HUD, APP_MANAGER, APP_MANAGER_DETAIL, MUSIC_PLAYER, APP_STORE, APP_DETAIL, COMPANION_APPS, ADDON_PAGE, ABOUT, GALLERY, DEVICE_NAME, CHAT, CHAT_ADD_CONTACT, CHAT_CONVERSATION, CHAT_PHOTO_PICKER, CHAT_STICKER_PICKER, NOTES, NOTE_EDIT, CLOCK, WEATHER, READER }
 
@@ -474,38 +476,32 @@ public final class PhoneScreen extends Screen {
     private static final java.util.Set<String> SCISSOR_WARNED = new java.util.HashSet<>();
 
     /**
-     * 附属页面画完之后，看一眼裁剪有没有收干净；没有就替它收掉，并留一条日志。
+     * 附属页面画完之后，把它漏下来的裁剪框收掉。
      *
-     * 为什么值得专门兜这一下
+     * <h2>为什么值得专门兜这一下</h2>
      *
-     * 裁剪是【全局状态】。附属 enableScissor 之后没走到 disableScissor（最常见的原因就是
-     * 中间抛了异常），这一帧【剩下的所有东西】都会被切在它那个框里——状态栏、导航栏、
+     * 裁剪是<b>全局状态</b>。附属 enableScissor 之后没走到 disableScissor（最常见的原因就是
+     * 中间抛了异常），这一帧<b>剩下的所有东西</b>都会被切在它那个框里 —— 状态栏、导航栏、
      * 之后弹的通知，全没了；而且 GL 那边的 scissor 是跨帧留着的，下一帧照旧，直到有人
-     * 再设一次。玩家看到的是"整个游戏界面缺了一块"，谁也想不到是某个手机 App 干的。
+     * 再设一次。玩家看到的是「整个游戏界面缺了一块」，谁也想不到是某个手机 App 干的。
      *
-     * 怎么判断"没收干净" ——【这一支问的是 GL，不是 GuiGraphics】
+     * <h2>怎么判断「没收干净」</h2>
      *
-     * main 那边用 {@code g.containsPointInScissor(0, 0)}，1.20.1 没有这个方法（它是 1.20.2
-     * 才加的），{@code scissorStack} 又是私有的，问不到。所以这里直接问 GL：裁剪测试还开着，
-     * 就说明栈里还压着别人的框——手机这一层自己的裁剪全走 {@code GuiUtil} 与
-     * {@code PhoneCanvas.clipped}，两边都是成对的，画完这一页时不该还开着。
+     * 交给 {@link Draw#scissorLeaked} —— 两支问的东西不一样（一支问 GuiGraphics 的裁剪栈，
+     * 一支直接问 GL），各自的准确度与理由写在那个方法上。
      *
-     * 这么问反而比那边更准。那边是靠"(0,0) 在不在框里"推断的，万一漏下来的那个框恰好包含
-     * 窗口左上角就发现不了；GL 的这一位不会漏判。
+     * 这是<b>兜底</b>不是<b>保证</b>，正确写法仍然是让附属用
+     * {@link com.november.mcphone.api.client.ui.PhoneCanvas#clipped}，那条路自带
+     * try/finally，压根漏不了。
      *
-     * 循环弹不穿：原版 {@code disableScissor} 把栈弹空之后会走 {@code applyScissor(null)}
-     * → {@code RenderSystem.disableScissor()}，GL 那一位跟着关掉，条件当场为假，不会再多弹
-     * 一次去撞 "Scissor stack underflow"。8 层是个够用的上限：正常没人嵌这么深，真嵌到了
+     * 弹之前先判一次，而且栈弹空之后那个谓词也会变假（两支各自为什么见 Draw），
+     * 所以永远不会把空栈弹穿。8 层是个够用的上限：正常没人嵌这么深，真嵌到了
      * 也说明那一页已经不对劲了。
-     *
-     * 这是【兜底】不是【保证】，正确写法仍然是让附属用
-     * {@link com.november.mcphone.api.client.ui.PhoneCanvas#clipped}，那条路自带 try/finally，
-     * 压根漏不了。
      */
     private static void healLeakedScissor(GuiGraphics g, IPhonePage page) {
-        if (!GL11.glIsEnabled(GL11.GL_SCISSOR_TEST)) return;
+        if (!Draw.scissorLeaked(g)) return;
 
-        for (int i = 0; i < 8 && GL11.glIsEnabled(GL11.GL_SCISSOR_TEST); i++) {
+        for (int i = 0; i < 8 && Draw.scissorLeaked(g); i++) {
             g.disableScissor();
         }
 
@@ -655,10 +651,8 @@ public final class PhoneScreen extends Screen {
         this.nowMs = System.currentTimeMillis();
         computeLayout();
 
-        // HUD 那副面孔不铺背景。铺了就把世界糊成一片，而它存在的全部意义正是"边玩边看"。
-        // 1.20.1 的 renderBackground 只收 GuiGraphics；1.21 多了鼠标坐标与 partialTick。
-        // 那三个参数在这里本来也用不上：它铺的是整个窗口，不在手机那层缩放里
-        if (!hudMode) renderBackground(g);
+        // HUD 那副面孔不铺背景。铺了就把世界糊成一片，而它存在的全部意义正是"边玩边看"
+        if (!hudMode) Draw.screenBackground(this, g, rawMouseX, rawMouseY, partialTick);
 
         drawPhone(g, rawMouseX, rawMouseY, partialTick);
     }
@@ -855,8 +849,7 @@ public final class PhoneScreen extends Screen {
 
     private String currentDeviceNameLabel() {
         if (minecraft == null || minecraft.player == null) return "";
-        String name = com.november.mcphone.core.PhoneItemData
-                .getDeviceName(location.resolve(minecraft.player));
+        String name = PhoneItemData.getDeviceName(location.resolve(minecraft.player));
         return (name == null || name.isBlank())
                 ? Component.translatable("mcphone.settings.device_name_unset").getString()
                 : name;
@@ -1234,15 +1227,8 @@ public final class PhoneScreen extends Screen {
         return super.mouseReleased(rawX, rawY, button);
     }
 
-    /**
-     * 1.21 的 mouseScrolled 是四参（横、竖两个滚动量），1.20.1 是三参、只有竖直。
-     * 手机界面从来只用竖直滚动，所以把 scrollY 收成第三个参数即可，功能不丢。
-     *
-     * 【签名必须对得上】：写成四参不会报错，只是【永远不会被调到】——
-     * 那是一个静默失效，滚不动却查不出原因。@Override 是这里唯一的守卫。
-     */
     @Override
-    public boolean mouseScrolled(double rawX, double rawY, double scrollY) {
+    protected boolean onScroll(double rawX, double rawY, double scrollX, double scrollY) {
         final double mx = unscaledX(rawX);
         final double my = unscaledY(rawY);
 
@@ -1277,7 +1263,7 @@ public final class PhoneScreen extends Screen {
         if (mode == Mode.NOTES && notesList.mouseScrolled(scrollY)) return true;
         if (mode == Mode.READER && bookList.mouseScrolled(scrollY)) return true;
         if (mode == Mode.MUSIC_PLAYER && musicPage.mouseScrolled(scrollY, my)) return true;
-        if (mode == Mode.NOTE_EDIT && noteEditor.mouseScrolled(mx, my, scrollY)) return true;
+        if (mode == Mode.NOTE_EDIT && noteEditor.mouseScrolled(mx, my, scrollX, scrollY)) return true;
         // 设置那几页：1.9.1 之前一页都滚不动，内容超出一屏就再也看不到
         if (mode == Mode.WALLPAPER_PICKER && wallpaperPicker.mouseScrolled(scrollY)) return true;
         if (mode == Mode.APP_MANAGER && appManagerPage.mouseScrolled(scrollY)) return true;
@@ -1285,7 +1271,7 @@ public final class PhoneScreen extends Screen {
         if (mode == Mode.ABOUT && aboutPage.mouseScrolled(scrollY, font)) return true;
         if (mode == Mode.ADDON_PAGE
                 && callPage(p -> p.mouseScrolled(mx, my, scrollY))) return true;
-        return super.mouseScrolled(rawX, rawY, scrollY);
+        return false;
     }
 
     @Override

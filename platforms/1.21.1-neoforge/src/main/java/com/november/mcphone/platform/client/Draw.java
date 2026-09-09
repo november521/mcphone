@@ -67,4 +67,20 @@ public final class Draw {
                                         int mouseX, int mouseY, float partialTick) {
         screen.renderBackground(g, mouseX, mouseY, partialTick);
     }
+
+    /**
+     * 裁剪框有没有被人漏下来 —— <b>这一支问的是 {@link GuiGraphics}</b>。
+     *
+     * <p>原版 {@code ScissorStack.containsPoint} 的第一句是「栈空就恒为 true」。所以
+     * {@code containsPointInScissor(0, 0)} 为 false，就说明栈里还压着别人的框 —— 手机永远
+     * 画在屏幕中间，它的裁剪框不会包含窗口左上角那个点。
+     *
+     * <p>反过来<b>不成立</b>：万一漏下来的那个框恰好包含 (0, 0)，这里就发现不了。
+     * 1.20.1 那一支问的是 GL，没有这个漏判。
+     *
+     * <p>栈弹空之后这个谓词会变假（空栈恒为 true），所以拿它当循环条件弹不穿。
+     */
+    public static boolean scissorLeaked(GuiGraphics g) {
+        return !g.containsPointInScissor(0, 0);
+    }
 }
