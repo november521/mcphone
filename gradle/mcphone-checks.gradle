@@ -714,7 +714,7 @@ abstract class SharedNeutralityTask extends DefaultTask {
                 sb << "加载器轴的不是。带加载器阻断的那些搬回 platforms/<目标名>/，各加载器各给一份。\n"
             } else {
                 sb << "shared/ 要求每个目标都能原样编译通过：Minecraft 最老一档是 1.20.1，加载器有三个。\n"
-                sb << "\n只被版本轴挡住的，可以放进共享层（layers/<层名>/，见 versions/layers.json）——\n"
+                sb << "\n只被版本轴挡住的，可以放进共享层（layers/version/<层名>/，见 versions/layers.json）——\n"
                 sb << "同一个版本的三个加载器共用一份。既碰版本又碰加载器的，只能回 platforms/。\n"
             }
             sb << "\n搬完记得 ./gradlew updateSeamsDoc。\n"
@@ -728,7 +728,7 @@ abstract class SharedNeutralityTask extends DefaultTask {
 // 【两类共享目录，两套要求】
 //
 //   shared/            全部目标共用 —— 一条判据都不许中
-//   共享层（layers/<层名>/）     写 since 的是版本层：同一批 Minecraft 版本的三个
+//   共享层（layers/version|loader/<层名>/）     写 since 的是版本层：同一批 Minecraft 版本的三个
 //                              加载器共用，只禁加载器轴；写 loader 的是加载器层：
 //                              同一个加载器的各版本共用，只禁版本轴。两者对称，
 //                              各自装的正好是对方挡掉的那一半
@@ -1022,7 +1022,7 @@ abstract class SeamsDocTask extends DefaultTask {
                         moved.collect { "  ${it}" }.join('\n') + "\n\n" +
                         "甲 的意思是它的方法体在不同目标上注定不同，共用一份必然编不过 —— " +
                         "这十有八九是搬错了，把它搬回 platforms/。\n\n" +
-                        "只被版本轴挡住的接缝不该进 shared/，该进对应的共享层（layers/<层名>/）—— " +
+                        "只被版本轴挡住的接缝不该进 shared/，该进对应的版本层（layers/version/<层名>/）—— " +
                         "共享层给同一批版本的三个加载器共用，搬进去是正常动作，这道闸不拦。\n\n" +
                         "如果确实是有意进 shared/（那个阻断真没了），先【手动】把它那一行从甲的清单里删掉，" +
                         "再跑 ./gradlew updateSeamsDoc。\n" +

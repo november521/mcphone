@@ -76,7 +76,8 @@ NeoForge 有（加载器轴），而它是 NeoForge **20.3** 引入的（版本�
 | 目录 | 谁用 | 允许什么 | 校验 |
 |---|---|---|---|
 | `shared/` | 全部目标 | 一条判据都不许中 | `verifySharedIsTargetNeutral` |
-| `layers/<层名>/` | 挂了这一层的目标 | 见下面「两种层」 | `verifyLayer<层名>` |
+| `layers/version/<层名>/` | 挂了该层的目标 | 版本轴可以有，加载器轴不行 | `verifyLayer<层名>` |
+| `layers/loader/<层名>/` | 挂了该层的目标 | 加载器轴可以有，版本轴不行 | `verifyLayer<层名>` |
 | `platforms/<目标名>/` | 单个目标 | 都可以 | —— |
 
 **层由配置文件说了算**，不写死在构建脚本里：

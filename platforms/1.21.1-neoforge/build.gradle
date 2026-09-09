@@ -129,6 +129,14 @@ myLayers.each { name ->
                 "写 since 是版本层（同版本、三个加载器共用），写 loader 是加载器层" +
                 "（同加载器、各版本共用）。两个都没有就不知道这一层该禁哪个轴。")
     }
+    // 两种层分开放，dir 必须落在相符的那一支下 —— 否则光看目录树分不出哪个是哪个，
+    // 而这两种层禁的轴正好相反
+    def wantSub = spec.since != null ? 'layers/version/' : 'layers/loader/'
+    if (!spec.dir.startsWith(wantSub)) {
+        throw new GradleException(
+                "共享层 \"${name}\" 是${spec.since != null ? '版本层' : '加载器层'}，" +
+                "它的 dir 应当在 ${wantSub} 下，实际是 ${spec.dir}。")
+    }
     if (spec.loader != null && spec.loader != myEntry.value.loader) {
         throw new GradleException(
                 "目标 ${myEntry.key} 的加载器是 ${myEntry.value.loader}，" +

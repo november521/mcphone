@@ -369,6 +369,23 @@ jobs:
             FAIL=1
           fi
 
+          # 两种层分开放：dir 要落在与层的种类相符的那一支下
+          WRONGSUB=$(jq -r '
+            to_entries[] | select((.value|type)=="object")
+            | select(.value.since != null or .value.loader != null)
+            | . as $e
+            | (if $e.value.since != null then "layers/version/" else "layers/loader/" end) as $want
+            | select(($e.value.dir | startswith($want)) | not)
+            | "  \($e.key)  是\(if $e.value.since != null then "版本层" else "加载器层" end)，dir 应在 \($want) 下，实际是 \($e.value.dir)"
+          ' "$L"); RC=$?
+          [ "$RC" = "0" ] || { echo "::error::查层目录的 jq 跑挂了（退出码 $RC）"; exit 1; }
+          if [ -n "$WRONGSUB" ]; then
+            echo "::error::有层的目录放错了支："
+            printf '%s\n' "$WRONGSUB"
+            echo "版本层放 layers/version/，加载器层放 layers/loader/ —— 两种层禁的轴正好相反，混在一起看不出来。"
+            FAIL=1
+          fi
+
           WRONGLOADER=$(jq -r --slurpfile L "$L" '
             to_entries[] | select((.value|type)=="object")
             | . as $e

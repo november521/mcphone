@@ -36,37 +36,42 @@
     "挂法一样，都写在 targets.json 的 layers 数组里。一个目标通常挂它够得到的所有版本层，",
     "加上它自己那个加载器层。",
     "",
-    "【为什么内容在 layers/ 而声明在 versions/】",
     "layers/ 放层的代码与资源，versions/ 放声明（targets.json 与这个文件）。",
     "加载器层与 Minecraft 版本无关，摆在 versions/ 下名不副实。",
-    "目录由这里的 dir 字段说了算，改位置只改这一处。"
+    "目录由这里的 dir 字段说了算，改位置只改这一处。",
+    "",
+    "【目录：内容在 layers/ 下，声明在 versions/ 下】",
+    "  layers/version/<层名>/   版本层（写 since 的）",
+    "  layers/loader/<层名>/    加载器层（写 loader 的）",
+    "两种层分开放，不混在一个目录里 —— 光看目录树就知道哪个是哪个。",
+    "dir 必须落在与层的种类相符的那一支下，构建会校验。"
   ],
   "1.20.5+": {
-    "dir": "layers/1.20.5+",
+    "dir": "layers/version/1.20.5+",
     "since": "1.20.5",
     "note": "1.20.5 起原版才有 net.minecraft.network.codec（StreamCodec / ByteBufCodecs）、CustomPacketPayload 与数据组件。手写编解码与各类网络包都在这一层：它们与加载器无关，同版本的三个加载器逐字共用一份。",
     "populated": true
   },
   "1.21+": {
-    "dir": "layers/1.21+",
+    "dir": "layers/version/1.21+",
     "since": "1.21",
     "populated": true,
     "note": "1.21（数据包格式 48）把数据包的目录名从复数改成单数：recipes→recipe、advancements→advancement、loot_tables→loot_table、tags/items→tags/item、functions→function。这条边界与 1.20.5+ 那条【不是同一条】，所以是单独一层 —— 塞进 1.20.5+ 的话，一个 1.20.6 的目标挂上那层就会拿到单数目录名，而它那儿要的是复数，而且不报错：那条配方/进度只是静默地不存在。"
   },
   "forge": {
-    "dir": "layers/forge",
+    "dir": "layers/loader/forge",
     "loader": "Forge",
     "populated": false,
     "note": "Forge 各个 Minecraft 版本共用的代码。与版本轴那几层对称：那边是「同版本、三个加载器共用」，这边是「同加载器、各版本共用」。眼下是空的 —— 本仓只有一个目标建得起来，没有第二个 Forge 目标可以对照，哪些代码在 Forge 的两个版本之间真的一样是猜不出来的。等第二个 Forge 目标并进来，拿它逐文件比对，逐字相同的才搬进来。"
   },
   "neoforge": {
-    "dir": "layers/neoforge",
+    "dir": "layers/loader/neoforge",
     "loader": "NeoForge",
     "populated": false,
     "note": "NeoForge 各个 Minecraft 版本共用的代码。与版本轴那几层对称：那边是「同版本、三个加载器共用」，这边是「同加载器、各版本共用」。眼下是空的 —— 本仓只有一个目标建得起来，没有第二个 NeoForge 目标可以对照，哪些代码在 NeoForge 的两个版本之间真的一样是猜不出来的。等第二个 NeoForge 目标并进来，拿它逐文件比对，逐字相同的才搬进来。"
   },
   "fabric": {
-    "dir": "layers/fabric",
+    "dir": "layers/loader/fabric",
     "loader": "Fabric",
     "populated": false,
     "note": "Fabric 各个 Minecraft 版本共用的代码。与版本轴那几层对称：那边是「同版本、三个加载器共用」，这边是「同加载器、各版本共用」。眼下是空的 —— 本仓只有一个目标建得起来，没有第二个 Fabric 目标可以对照，哪些代码在 Fabric 的两个版本之间真的一样是猜不出来的。等第二个 Fabric 目标并进来，拿它逐文件比对，逐字相同的才搬进来。"
