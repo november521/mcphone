@@ -123,6 +123,29 @@ ext.mcphoneRepoRoot = layersRepoRoot
 // 别的 apply 脚本看不见它 —— 版本比较只此一处，结果靠 ext 传出去。
 ext.mcphoneTargetDatapackSingular = McphoneVersions.datapackSingular(myEntry.value.minecraft, renamesJson.since)
 
+// 【全部目标的信息，供接缝清单用】
+//
+// 接缝清单是按目标算的，而它只有一份文件。原先每个平台只重生成自己那一段 ——
+// 于是改任何一个平台的文件，都要去跑那个平台的 updateSeamsDoc，而有的目标本机
+// 根本建不起来（缺 JDK、或者还没并进来），那一段就永远刷不了。
+//
+// 这些信息全都能从 JSON 与文件系统读出来，跟"当前是哪个平台"无关。所以任何一个
+// 平台都能把整份清单刷全。
+ext.mcphoneAllTargets = targetsJson.findAll { k, v ->
+    v instanceof Map && v.project != null && new File(layersRepoRoot, v.project).isDirectory()
+}.collect { k, v ->
+    def dirs = (v.layers ?: []).collect { name ->
+        def s = layersJson[name]
+        if (s == null) {
+            throw new GradleException("目标 ${k} 挂了 versions/layers.json 里没有的层 \"${name}\"。")
+        }
+        new File(layersRepoRoot, "${s.dir}/src/main/java")
+    }
+    [key: k,
+     projectJavaDir: new File(layersRepoRoot, "${v.project}/src/main/java"),
+     layerJavaDirs : dirs]
+}.toSorted { it.key }
+
 ext.mcphoneLayers = (myEntry.value.layers ?: []).collect { name ->
     def spec = layersJson[name]
     if (spec == null) {

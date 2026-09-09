@@ -419,9 +419,8 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 - `feature.enderchest.net.OpenEnderChestPacket`　**★ 被共用代码引用**
 - `feature.music.DiscState`　**★ 被共用代码引用**
 - `feature.music.NetSong`　**★ 被共用代码引用**
-- `feature.music.menu.DiscBayMenu`
 - `feature.music.net.DiscActionPacket`
-- `feature.music.net.MusicNetworking`
+- `feature.music.net.MusicNetworking`　**★ 被共用代码引用**
 - `feature.music.net.OpenDiscBayPacket`
 - `feature.music.net.PlayNetSongPacket`
 - `feature.music.net.StopNetSongPacket`
@@ -451,6 +450,7 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 - `feature.terminal.net.TerminalActionPacket`
 - `feature.terminal.net.TerminalNetworking`
 - `feature.waystone.net.OpenWaystoneSelectionPacket`
+- `platform.Slots`　**★ 被共用代码引用**
 
 #### 客户端渲染路径（24）
 
