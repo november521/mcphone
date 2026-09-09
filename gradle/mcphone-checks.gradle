@@ -342,60 +342,43 @@ tasks.register('assertTests') {
 tasks.named('check').configure { dependsOn tasks.named('assertTests') }
 
 // ============================================================
-//  Java 17 兼容校验
+//  Java 17 兼容校验 —— 【已删】，2026-09-09
 // ============================================================
 //
-// 1.20.1 那一支跑在 Java 17 上。源码里一旦出现 18~21 才有的东西，那一支就编不过，
-// 而这边（21）编得好好的，什么都不会说。
+// 这里原先有一道 verifyJava17Compatible：同一份源码加 --release 17 再编一遍，
+// 守的是「shared/ 里别出现 18~21 才有的东西，否则 1.20.1 那一支编不过」。
 //
-// 做法：同一份源码、同一份类路径，加 --release 17 再编一遍。
+// 【为什么删】
 //
-// 为什么是 --release，不是 -source/-target，也不是 grep
+// 它注册在这个共用文件里，两个平台都 apply，而两边都不该要它：
 //
-// -source 17 -target 17 【只管语法】。实测（JDK 21 的 javac）：List.getFirst()、
-// Math.ceilDiv、HashMap.newHashMap、Math.clamp、StringBuilder.repeat 这五个
-// 18~21 新增的库方法，-source/-target 一个都不拦，--release 17 五个全拦 ——
-// 差别在于 --release 会把 java.* 的签名换成 17 那一版，前者仍拿当前 JDK 的解析。
+//   1.20.1-forge    那个目标的 toolchain 就是 17（build.gradle:41），
+//                   source / classpath / 编译器与 compileJava 逐字相同 —— 纯重复。
+//   1.21.1-neoforge 它连 layers/version/* 一起编。那两层【只被 Java 21 的目标挂】，
+//                   拿 --release 17 编它们等于禁止只跑在 21 上的代码使用 21。
 //
-// 这里原先是五条正则（Math.clamp、记录模式、类型模式、when 守卫、字符串模板）。
-// 它有三个躲不掉的毛病：
+// 它想守的那件事，由 1.20.1-forge 在 CI 里真编一遍守着，而且更强：那是真的
+// JDK 17 编真的源码，不是把 java.* 的签名换一版来模拟。
 //
-//   覆盖不全  SequencedCollection 那一组（IDE 会主动建议把 get(0) 换成 getFirst()）、
-//             instanceof 里的记录模式、case null、case List<String> l 这种带泛型的、
-//             以及 18~21 一堆别的库方法 —— 每一条都得单独追一遍，追漏了是静默的
-//   会误报    扫的是原始行，注释里举个反例说明"别这么写"就把 CI 弄红了
-//   会写歪    正则本身没有任何东西守着，而它是唯一的守卫
+// 【删它引入的前提，已经变成一道闸】
 //
-// javac 三样都没有：它认的是真正的语法树和真正的 java.* 签名。
+// 上面那句成立的前提是「CI 里真的有一个 Java 17 的目标在编」。这个前提要是哪天
+// 不成立了（那个平台目录被挪走、被删），shared/ 的 Java 17 兼容性就一个守卫都没有，
+// 而且是静默的。所以 .github/workflows/build.yml 的 guard-version 里加了一条：
+// targets.json 里至少要有一个 java: 17 且工程目录存在的目标。
 //
-// 一条曾经的顾虑，实测不成立：以为"MC 的类文件是 65 版，--release 17 用不了"。
-// --release 只换 java.* 的签名，不碰用户 classpath —— 拿真的
-// neoforge-21.1.248-merged.jar 加 --release 17 编全树，266 个文件，退出码 0。
+// 【删之前留下的两条实测，别再重新踩】
 //
-// 这个任务只保证【能编】，不保证行为一致：两个版本上同一段代码可能编得过、
-// 跑出来不一样（1.20.1 上没有 ByteBufCodecs/StreamCodec 这类东西，那些地方仍然
-// 要各写各的）。真正的等价性靠那一支自己的 build 与断言测试。
-// ⚠ 【拆分完成后要把它收窄到 shared/】。现在 sourceSets.main.java 既含 shared/
-// 也含平台自己那 240 个文件，一起扫是对的 —— 那 240 个绝大多数最终都要进 shared。
-// 但等平台目录里真的只剩 NeoForge 1.21.1 专有代码时，再禁止它用 Java 21 的东西
-// 就是纯成本：那些代码 1.20.1 永远看不见，而这一支本来就跑在 21 上。
-// 到那时把 source 改成只扫 shared/ 与 docs/。
+//   --release 17 才拦得住库方法。-source 17 -target 17 只管语法：实测 JDK 21 的
+//   javac 对 List.getFirst / Math.ceilDiv / HashMap.newHashMap / Math.clamp /
+//   StringBuilder.repeat 这五个 18~21 新增的方法一个都不拦，--release 五个全拦。
 //
-// 写在这儿是因为：将来有人被这道闸拦住时，第一反应会是"这闸没道理，关掉吧"。
-tasks.register('verifyJava17Compatible', JavaCompile) {
-    description = '拿 --release 17 把源码再编一遍：1.20.1 那一支跑在 17 上'
-    group = 'verification'
+//   --release 不碰用户 classpath。曾以为「MC 的类文件是 65 版，--release 17 用不了」——
+//   拿真的 neoforge-21.1.248-merged.jar 加 --release 17 编全树，266 个文件，退出码 0。
+//
+// 这两条只在「有人想重新加一道这样的闸」时才用得上。真要加，先想清楚它比
+// 「让那个目标自己编一遍」多守了什么。
 
-    // docs/ 一起编：AddonApiExamples 是给附属作者照抄的示例，那几份断言测试也要
-    // 跟着移植过去，它们带头用 21 的东西一样是坑
-    source = files(sourceSets.main.java, assertTestsSource)
-    classpath = sourceSets.main.compileClasspath
-    destinationDirectory = layout.buildDirectory.dir('classes/java17-check')
-    options.release = 17
-    javaCompiler = javaToolchains.compilerFor(projectToolchain)
-}
-
-tasks.named('check').configure { dependsOn tasks.named('verifyJava17Compatible') }
 
 
 // ============================================================
@@ -615,15 +598,8 @@ abstract class TargetNeutrality {
 // 【为什么不叫"版本中立"】。它第一版只管 1.20.5+ 的原版 API，名字就叫版本中立，
 // 于是"加载器导入"和"注入的方法"两条没被写进来 —— 名分挡住了该管的事。
 // shared/ 里出现 import net.neoforged.* 当时是零守卫的：verifyDistIsolation 只看
-// 客户端类型，verifyJava17Compatible 只换 java.* 的签名，接缝清单那道只扫
+// 客户端类型，当时那道 Java 17 兼容校验只换 java.* 的签名，接缝清单那道只扫
 // platforms/ 一侧的文件。现在四条判据都在 TargetNeutrality 里，一处定义。
-//
-// 【为什么 verifyJava17Compatible 拦不住】
-//
-// 那道闸的 --release 17 换的是 java.* 的签名。stack.get(DataComponentType) 是
-// net.minecraft.*、player.getData(...) 是 net.neoforged 注入的 —— 用的都是这一支
-// 自己的 classpath，1.21.1 的 jar 里当然有。实测：那道闸把 PhoneItemData 编过了
-// 并且放行了（产物在 build/classes/java17-check/ 下确实有它的 class 文件）。
 //
 // 【这不是真判据，是替身】
 //

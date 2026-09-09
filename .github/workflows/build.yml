@@ -462,6 +462,35 @@ jobs:
             FAIL=1
           fi
 
+          # 六点八、【至少要有一个 Java 17 的目标真的在编】
+          #
+          # shared/ 必须能在 Java 17 上编过 —— 1.20.1 那一档跑在 17 上。
+          # 原先这件事由 gradle 里一道 verifyJava17Compatible（--release 17 再编一遍）守着，
+          # 那道闸已经删了：1.20.1-forge 在 CI 里用真的 JDK 17 编同一份 shared/，比模拟更强。
+          #
+          # 但那句话有个前提：CI 里【真的】有一个 Java 17 的目标在编。这个前提要是哪天不成立
+          # （那个平台目录被挪走、被删、targets.json 改了 java），shared/ 的 17 兼容性就
+          # 一个守卫都没有，而且完全静默 —— 构建照样全绿，直到有人拿 1.20.1 装上才发现。
+          #
+          # 「工程目录存在」与 targets job 挑目标用的是同一条判据（见那个 job 的 os.path.isdir）。
+          J17=$(jq -r '
+            [ to_entries[] | select((.value|type)=="object") | select(.value.java == 17)
+              | "\(.key)\t\(.value.project)" ] | .[]
+          ' "$F"); RC=$?
+          [ "$RC" = "0" ] || { echo "::error::查 Java 17 目标的 jq 跑挂了（退出码 $RC）"; exit 1; }
+          HAVE17=0
+          while IFS=$'\t' read -r NAME PROJ; do
+            [ -n "$NAME" ] || continue
+            [ -d "$PROJ" ] && HAVE17=1 && echo "  Java 17 的目标：$NAME（$PROJ）"
+          done <<< "$J17"
+          if [ "$HAVE17" = "0" ]; then
+            echo "::error::targets.json 里没有一个 java: 17 的目标的工程目录是存在的。"
+            echo "shared/ 要求在 Java 17 上编得过（1.20.1 那一档跑在 17 上），而这件事现在"
+            echo "没有任何东西在守：那道 --release 17 的闸已经删掉，理由正是「有真目标在编」。"
+            echo "要么把那个目标的工程目录放回来，要么重新加一道 --release 17 的校验。"
+            FAIL=1
+          fi
+
           # 七、【声明了却没有任何目标挂的层 = 孤儿层】
           #
           # 层里的文件只有被某个目标挂上才会进构建。没人挂的层是一整个目录的死代码，
