@@ -30,6 +30,22 @@ import net.minecraftforge.common.util.INBTSerializable;
  */
 public final class PhonePlayerData implements INBTSerializable<CompoundTag> {
 
+    /**
+     * 取某个玩家的这份数据 —— 共用代码唯一的入口。
+     *
+     * <b>这是接缝的一半。</b>{@code shared/} 里二十来处写的都是
+     * {@code PhonePlayerData.of(player).xxx()}，两支逐字相同；差别全在这个方法体里：
+     * 这边（Forge 1.20.1）走能力，NeoForge 1.21.1 那边走 Data Attachment。
+     *
+     * 【为什么不让调用方直接用 ModCapabilities.of】：那个名字是这一支专有的，
+     * NeoForge 那边根本没有能力这套东西。名字进了共用代码，共用代码就绑死在一个加载器上。
+     *
+     * 取不到时退回一份空的而不是抛：见 {@link ModCapabilities#of}。
+     */
+    public static PhonePlayerData of(net.minecraft.world.entity.player.Player player) {
+        return ModCapabilities.of(player);
+    }
+
     /** 存档里的键名，与那边 AttachmentType 的注册名对齐，方便两支对照排查 */
     private static final String KEY_WALLPAPER = "wallpaper_data";
     private static final String KEY_NOTES = "personal_notes";

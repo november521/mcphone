@@ -23,12 +23,17 @@
     "【怎么取证据】",
     "拿 origin/1.20.1-forge 上的同名文件比：去注释之后，那个包的 import 两支是否一致、",
     "正文是否逐字相同。两条都满足就是硬证据 —— 同一份文本已经在两个分支上各自编译通过。",
-    "取不到证据（那支没有这个文件、或者 import 不同）就别加，把文件搬回 platforms/。"
+    "取不到证据（那支没有这个文件、或者 import 不同）就别加，把文件搬回 platforms/。",
+    "",
+    "【这张表是必要条件，不是充分条件】",
+    "它只回答「这个包在不在」。包在、方法签名却变了的情况照样编不过 —— Curios 就是",
+    "这么栽的。真判据永远是矩阵里最老那个目标真编一遍，这张表只是把「包根本不存在」",
+    "那一类挡在前面，省一轮 CI。"
   ],
   "allowed": {
     "top.theillusivec4.curios.api": {
       "mod": "Curios",
-      "evidence": "1.20.1-forge 分支与 1.21.1-neoforge 的 CuriosCompat 都 import 这个包，且方法体除 ModPresence 门面外逐字相同；两版的 curios_version 分别是 5.14.1+1.20.1 与 9.x，API 包名与 CuriosApi 的入口方法未变。"
+      "evidence": "包名与 CuriosApi 这个入口类在 1.20.1（Curios 5.14.1）与 1.21.1（Curios 9.x）上都在。⚠ 【仅此而已】：CuriosApi.getCuriosInventory 的返回类型两版不同（5.x 是 LazyOptional，9.x 是 Optional），CuriosCompat 因此编不过 1.20.1，已从 shared/ 移进 1.21+ 层。这条记录的教训是：白名单管的是【包在不在】，不是【签名一样不一样】—— 它是必要条件不是充分条件，真判据仍然是拿另一个版本编一遍。"
     },
     "com.github.tartaricacid.netmusic": {
       "mod": "NetMusic",
