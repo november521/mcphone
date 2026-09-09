@@ -580,7 +580,15 @@ abstract class TargetNeutrality {
 // 而不是直接看原始文本。在那之前它按现在这样是对的。
 abstract class SharedNeutralityTask extends DefaultTask {
 
-    @InputDirectory abstract DirectoryProperty getSharedDir()
+    /** 【必须 @Optional】：populated: false 的层在克隆下来的仓库里没有这个目录。 */
+    @InputDirectory @Optional abstract DirectoryProperty getSharedDir()
+    /**
+     * 这一层的资源目录。
+     *
+     * 【显式传，不从 java 目录的父目录推】：java 目录不存在时（只放资源的层）
+     * 推不出来，于是资源数按 0 算，populated: true 的层就会被误判成空。踩过。
+     */
+    @InputDirectory @Optional abstract DirectoryProperty getResourcesDir()
     /** 这一层禁哪些轴：'版本' / '加载器'。 */
     @Input          abstract ListProperty<String> getForbiddenAxes()
     /**
@@ -595,43 +603,30 @@ abstract class SharedNeutralityTask extends DefaultTask {
     @Input          abstract Property<Boolean> getPopulated()
     /** 报错里怎么称呼这一层。 */
     @Input          abstract Property<String> getLayerName()
-    /** 这一层自哪个 Minecraft 版本起（shared/ 没有，留空）。 */
-    @Input @Optional abstract Property<String> getSince()
-
-    static int cmpVersion(String a, String b) {
-        def x = a.tokenize('.')*.toInteger(), y = b.tokenize('.')*.toInteger()
-        for (int i = 0; i < Math.max(x.size(), y.size()); i++) {
-            int c = (i < x.size() ? x[i] : 0) <=> (i < y.size() ? y[i] : 0)
-            if (c != 0) return c
-        }
-        return 0
-    }
-
     @TaskAction
     void run() {
-        File dir = sharedDir.get().asFile
         def forbidden = forbiddenAxes.get() as Set
         def layer = layerName.get()
+        File dir = sharedDir.isPresent() ? sharedDir.get().asFile : null
 
         // 取不到前提要红，不能静默扫空目录 —— 扫空目录的闸永远是绿的
-        if (!dir.isDirectory()) {
-            throw new GradleException(
-                    "找不到 ${dir.canonicalPath}。${layer}这一层的目录没了或者挪了位置，" +
-                    "这道闸就成了空转。先把路径修对。")
-        }
+        // 【java 目录可以不存在】：只放资源的层、以及还没开始填的层都是正当的。
+        // 「该在却不在」那一关由 populated 在 mcphone-layers.gradle 里管，走不到这儿。
         def files = []
-        dir.eachFileRecurse { if (it.isFile() && it.name.endsWith('.java')) files << it }
+        if (dir != null && dir.isDirectory()) {
+            dir.eachFileRecurse { if (it.isFile() && it.name.endsWith('.java')) files << it }
+        }
         // 资源也算内容：一个层可以只放数据包、一个 java 都没有
-        def resourceDir = new File(dir.parentFile, 'resources')
+        def resourceDir = resourcesDir.isPresent() ? resourcesDir.get().asFile : null
         def resourceCount = 0
-        if (resourceDir.isDirectory()) {
+        if (resourceDir != null && resourceDir.isDirectory()) {
             resourceDir.eachFileRecurse { if (it.isFile()) resourceCount++ }
         }
         boolean hasContent = !files.isEmpty() || resourceCount > 0
 
         if (populated.get() && !hasContent) {
             throw new GradleException(
-                    "${layer}声明了 populated: true，但 ${dir.parentFile.canonicalPath} 下" +
+                    "${layer}声明了 populated: true，但它的 src/main 下" +
                     "一个文件都没有（java 0 个、资源 0 个）。\n" +
                     "要么内容丢了、要么 layers.json 里的 dir 写错指到了别处 —— " +
                     "'一个都没扫到' 不等于 '没有问题'。\n" +
@@ -643,46 +638,6 @@ abstract class SharedNeutralityTask extends DefaultTask {
                     "（java ${files.size()} 个、资源 ${resourceCount} 个）。\n" +
                     "声明过期了，把 layers.json 里的 populated 改成 true。")
         }
-        // ── 【数据包目录名要与这一层的 since 对得上】
-        //
-        // 1.21（数据包格式 48）把这些目录从复数改成了单数。放错的后果是静默的：
-        // 那条配方 / 进度 / 战利品表只是不存在，构建全绿，游戏也不报错。
-        // 资源那半边没有 import 可查，这是唯一能机器判的一条，所以必须查。
-        if (since.isPresent() && resourceDir.isDirectory()) {
-            def renamedAt121 = [
-                    'recipes': 'recipe', 'advancements': 'advancement',
-                    'loot_tables': 'loot_table', 'functions': 'function',
-                    'tags/items': 'tags/item', 'tags/blocks': 'tags/block',
-                    'tags/entity_types': 'tags/entity_type', 'tags/fluids': 'tags/fluid',
-            ]
-            boolean singular = cmpVersion(since.get(), '1.21') >= 0
-            def wrong = []
-            resourceDir.eachFileRecurse { f ->
-                if (!f.isFile()) return
-                def rel = resourceDir.toPath().relativize(f.toPath()).toString().replace(File.separator, '/')
-                // 只看 data/<命名空间>/ 之后那一段
-                def m = rel =~ /^data\/[^\/]+\/(.+)$/
-                if (!m) return
-                def tail = m[0][1]
-                renamedAt121.each { plural, singularName ->
-                    if (singular && (tail.startsWith(plural + '/'))) {
-                        wrong << [rel, plural, singularName, "这一层自 ${since.get()} 起，该用单数"]
-                    } else if (!singular && tail.startsWith(singularName + '/')) {
-                        wrong << [rel, singularName, plural, "这一层自 ${since.get()} 起，1.21 之前该用复数"]
-                    }
-                }
-            }
-            if (wrong) {
-                def sb = new StringBuilder()
-                sb << "${layer}的数据包目录名与这一层的版本对不上，共 ${wrong.size()} 处：\n"
-                wrong.each { w -> sb << "\n  ${w[0]}\n      ${w[1]}/ 应为 ${w[2]}/ —— ${w[3]}\n" }
-                sb << "\n1.21（数据包格式 48）把这些目录从复数改成了单数。放错【不会报错】——\n"
-                sb << "那条配方 / 进度 / 战利品表只是静默地不存在，构建和游戏都不会说话。\n"
-                sb << "\n目录名对不上通常说明这批文件放错了层：两条边界不是同一条，就该是两层。\n"
-                throw new GradleException(sb.toString())
-            }
-        }
-
         if (files.isEmpty()) {
             logger.lifecycle("${layer}：没有 java（资源 ${resourceCount} 个）")
             return
@@ -727,66 +682,25 @@ abstract class SharedNeutralityTask extends DefaultTask {
 
 // 【两类共享目录，两套要求】
 //
-//   shared/            全部目标共用 —— 一条判据都不许中
-//   共享层（layers/version|loader/<层名>/）     写 since 的是版本层：同一批 Minecraft 版本的三个
-//                              加载器共用，只禁加载器轴；写 loader 的是加载器层：
-//                              同一个加载器的各版本共用，只禁版本轴。两者对称，
-//                              各自装的正好是对方挡掉的那一半
+//   shared/                       全部目标共用 —— 一条判据都不许中
+//   layers/version|loader/<层名>/  版本层禁加载器轴，加载器层禁版本轴。两者对称，
+//                                 各自装的正好是对方挡掉的那一半
 //
-// 【层的定义不写死在这儿，读配置】
-//   versions/layers.json   有哪些层、各自的目录（内容在 layers/ 下，声明在 versions/ 下）
-//   versions/targets.json  每个目标的 layers 字段：这个目标挂哪几层
-//
-// 层名是"这套 API 从哪个 Minecraft 版本开始有"，不是某一个具体版本 —— 1.21.1 与
-// 将来的更高版本都挂 1.20.5+，因为它们装的是同一份代码。
-//
-// 为什么要这一层：接缝里有一大批【只被版本轴挡住】的类型（手写编解码、各类网络包）。
-// 它们与加载器无关，第二个同版本目标并入时会被复制三份，而没有任何机制要求这三份
-// 一致 —— 多分支的病换了个尺度，从跨分支缩到跨目录，并且连"当场可见"都没有。
-// 加一层目录之后根本不产生三份，也就不需要一道"这几份必须逐字相同"的闸。
-// 【必须用 providers.fileContents 读，不能 JsonSlurper.parse(File)】
-// 后者不是被跟踪的配置输入：开着配置缓存时改了 JSON，缓存照旧命中，
-// 这些校验一条都不跑，构建还是绿的。实测过。
-def readTrackedJson = { String relFromProject, String shownPath ->
-    def content = providers.fileContents(layout.projectDirectory.file(relFromProject)).asText.orNull
-    if (content == null) {
-        throw new GradleException("找不到 ${shownPath} —— 共享层的声明在那儿，读不到就只能静默少校验一层。")
-    }
-    return new groovy.json.JsonSlurper().parseText(content)
-}
-def layersJson  = readTrackedJson('../../versions/layers.json',  'versions/layers.json')
-def targetsJson = readTrackedJson('../../versions/targets.json', 'versions/targets.json')
-
-def myRelPath = repoRoot.toPath().relativize(projectDir.toPath()).toString().replace(File.separator, '/')
-def myTarget = targetsJson.find { k, v -> v instanceof Map && v.project == myRelPath }
-if (myTarget == null) {
+// 层的解析与校验【不在这儿】，在 gradle/mcphone-layers.gradle 里，由平台的
+// build.gradle 先 apply。这里只从 ext.mcphoneLayers 取结果 —— 同一段逻辑
+// 两处各写一份是这个仓库栽过三次的坑。
+if (!project.hasProperty('mcphoneLayers')) {
     throw new GradleException(
-            "versions/targets.json 里没有 project == \"${myRelPath}\" 的条目，" +
-            "取不到这个目标挂哪几层，那几层就一道闸都没有。")
-}
-def myLayerDirs = (myTarget.value.layers ?: []).collect { name ->
-    def spec = layersJson[name]
-    if (spec == null) {
-        throw new GradleException("目标 ${myTarget.key} 声明的共享层 \"${name}\" 不在 versions/layers.json 里。")
-    }
-    if (spec.populated == null) {
-        throw new GradleException(
-                "versions/layers.json 里的层 \"${name}\" 没写 populated。" +
-                "这一层现在该不该有内容必须显式声明 —— 默认容忍空的层等于没有闸。")
-    }
-    if ((spec.since == null) == (spec.loader == null)) {
-        throw new GradleException(
-                "versions/layers.json 里的层 \"${name}\" 必须二选一写 since 或 loader，" +
-                "否则不知道这一层该禁哪个轴。")
-    }
-    [name: name, dir: new File(repoRoot, "${spec.dir}/src/main/java"),
-     populated: spec.populated, since: spec.since, loader: spec.loader]
+            "取不到 mcphoneLayers。平台的 build.gradle 要先 apply " +
+            "gradle/mcphone-layers.gradle，再 apply 这个文件 —— " +
+            "取不到就只能一层都不校验，而那是静默的。")
 }
 
 tasks.register('verifySharedIsTargetNeutral', SharedNeutralityTask) {
     description = '校验 shared/ 里没有只在某一个目标上成立的东西'
     group = 'verification'
     sharedDir.set(new File(repoRoot, 'shared/src/main/java'))
+    resourcesDir.set(new File(repoRoot, 'shared/src/main/resources'))
     forbiddenAxes.set(['版本', '加载器'])
     populated.set(true)        // shared/ 永远不该是空的
     layerName.set('shared/')
@@ -794,19 +708,19 @@ tasks.register('verifySharedIsTargetNeutral', SharedNeutralityTask) {
 tasks.named('check').configure { dependsOn tasks.named('verifySharedIsTargetNeutral') }
 
 // 这个目标挂几层就注册几道，各查各的目录
-myLayerDirs.each { layer ->
+mcphoneLayers.each { layer ->
     def taskName = 'verifyLayer' + layer.name.replaceAll(/[^A-Za-z0-9]/, '_')
     tasks.register(taskName, SharedNeutralityTask) {
-        description = "校验共享层 ${layer.name} 里没有" + (layer.since != null ? '绑加载器' : '绑版本') + "的东西"
+        description = "校验共享层 ${layer.name}（${layer.kind}）里没有" + (layer.kind == '版本层' ? '绑加载器' : '绑版本') + "的东西"
         group = 'verification'
-        sharedDir.set(layer.dir)
+        if (layer.javaDir.isDirectory()) sharedDir.set(layer.javaDir)
+        if (layer.resourcesDir.isDirectory()) resourcesDir.set(layer.resourcesDir)
         // 【禁的是另一个轴】：版本层挡加载器专有的东西，加载器层挡版本专有的东西。
         // 两种层是对称的，装的正好是对方挡掉的那一半。
-        forbiddenAxes.set(layer.since != null ? ['加载器'] : ['版本'])
+        forbiddenAxes.set(layer.kind == '版本层' ? ['加载器'] : ['版本'])
         // 空不空由 layers.json 的 populated 显式声明，不是默认容忍
         populated.set(layer.populated)
         layerName.set("共享层 ${layer.name}")
-        if (layer.since != null) since.set(layer.since)
     }
     tasks.named('check').configure { dependsOn tasks.named(taskName) }
 }
@@ -1062,13 +976,120 @@ abstract class SeamsDocTask extends DefaultTask {
     }
 }
 
+// ============================================================
+//  数据包目录名校验
+// ============================================================
+//
+// 1.21（数据包格式 48）把数据包的目录名从复数改成了单数。放错的后果是静默的：
+// 那条配方 / 进度 / 战利品表只是不存在，构建全绿、jar 照出、游戏也不报错。
+// 资源那半边没有 import 可查，这是唯一能机器判的一条。
+//
+// 【层和平台都要查】。原先只查层，而【新文件默认落在平台】—— 最可能写错的位置
+// 恰好是唯一没被查的位置。往 platforms/<目标>/src/main/resources/data/<ns>/recipes/
+// 放一个配方，1.21.1 上是错的，而当时构建照绿。
+//
+// 单复数由谁决定：层按自己的 since，平台按它自己的 minecraft（都在 JSON 里）。
+abstract class DatapackNamesTask extends DefaultTask {
+
+    @InputDirectory @Optional abstract DirectoryProperty getResourcesDir()
+    /** 1.21 起为 true。 */
+    @Input abstract Property<Boolean> getSingular()
+    @Input abstract Property<String>  getLabel()
+
+    /**
+     * 数据包格式 48 的改名，共 13 条。
+     *
+     * 【这张表要写全】。漏一条的症状正是这道闸存在的全部理由 —— 静默失效。
+     * 收的是"1.21 改了哪些"，不是"本仓用到哪些"：本仓今天用不到 loot_table，
+     * 但下一个人加的时候不该再撞一次。
+     * 出处：Minecraft Wiki 的 Data pack 页（24w19a / 24w21a 两个快照分两批改的）。
+     */
+    static final Map<String, String> RENAMED_AT_1_21 = [
+            'advancements'     : 'advancement',
+            'recipes'          : 'recipe',
+            'loot_tables'      : 'loot_table',
+            'predicates'       : 'predicate',
+            'item_modifiers'   : 'item_modifier',
+            'functions'        : 'function',
+            'structures'       : 'structure',
+            'tags/items'       : 'tags/item',
+            'tags/blocks'      : 'tags/block',
+            'tags/entity_types': 'tags/entity_type',
+            'tags/fluids'      : 'tags/fluid',
+            'tags/game_events' : 'tags/game_event',
+            'tags/functions'   : 'tags/function',
+    ].asImmutable()
+
+    @TaskAction
+    void run() {
+        if (!resourcesDir.isPresent() || !resourcesDir.get().asFile.isDirectory()) {
+            logger.lifecycle("${label.get()}：没有 resources 目录，跳过数据包目录名校验")
+            return
+        }
+        File root = resourcesDir.get().asFile
+        boolean wantSingular = singular.get()
+        def wrong = []
+        int checked = 0
+        root.eachFileRecurse { f ->
+            if (!f.isFile()) return
+            def rel = root.toPath().relativize(f.toPath()).toString().replace(File.separator, '/')
+            // 只看 data/<命名空间>/ 之后那一段
+            def m = rel =~ /^data\/[^\/]+\/(.+)$/
+            if (!m) return
+            checked++
+            def tail = m[0][1]
+            RENAMED_AT_1_21.each { plural, singularName ->
+                if (wantSingular && tail.startsWith(plural + '/')) {
+                    wrong << [rel, plural, singularName, '1.21 起该用单数']
+                } else if (!wantSingular && tail.startsWith(singularName + '/')) {
+                    wrong << [rel, singularName, plural, '1.21 之前该用复数']
+                }
+            }
+        }
+        if (wrong) {
+            def sb = new StringBuilder()
+            sb << "${label.get()} 的数据包目录名与它的 Minecraft 版本对不上，共 ${wrong.size()} 处：\n"
+            wrong.each { w -> sb << "\n  ${w[0]}\n      ${w[1]}/ 应为 ${w[2]}/ —— ${w[3]}\n" }
+            sb << "\n1.21（数据包格式 48）把这些目录从复数改成了单数。放错【不会报错】——\n"
+            sb << "那条配方 / 进度 / 战利品表只是静默地不存在，构建和游戏都不会说话。\n"
+            throw new GradleException(sb.toString())
+        }
+        logger.lifecycle("${label.get()} 数据包目录名校验通过：${checked} 个文件，" +
+                "按 ${wantSingular ? '1.21 起的单数' : '1.21 之前的复数'} 命名")
+    }
+}
+
+// 平台自己的 resources —— 新文件默认落这儿，最需要查
+tasks.register('verifyPlatformDatapackNames', DatapackNamesTask) {
+    description = '校验平台 resources 里的数据包目录名与目标的 Minecraft 版本相符'
+    group = 'verification'
+    def d = file('src/main/resources')
+    if (d.isDirectory()) resourcesDir.set(d)
+    singular.set(mcphoneTargetDatapackSingular)
+    label.set("平台 ${mcphoneTarget.key}")
+}
+tasks.named('check').configure { dependsOn tasks.named('verifyPlatformDatapackNames') }
+
+// 每个层一道
+mcphoneLayers.each { layer ->
+    def n = 'verifyDatapackNames' + layer.name.replaceAll(/[^A-Za-z0-9]/, '_')
+    tasks.register(n, DatapackNamesTask) {
+        description = "校验共享层 ${layer.name} 的数据包目录名"
+        group = 'verification'
+        if (layer.resourcesDir.isDirectory()) resourcesDir.set(layer.resourcesDir)
+        singular.set(layer.datapackSingular)
+        label.set("共享层 ${layer.name}")
+    }
+    tasks.named('check').configure { dependsOn tasks.named(n) }
+}
+
 def seamsDoc = new File(repoRoot, 'shared/PLATFORM-SEAMS.md')
 
 tasks.register('verifySeamsDocCurrent', SeamsDocTask) {
     description = '校验 shared/PLATFORM-SEAMS.md 跟源码对得上'
     group = 'verification'
     sharedDir.set(new File(repoRoot, 'shared/src/main/java'))
-    layerDirs.setFrom(myLayerDirs.collect { it.dir })
+    layerDirs.setFrom(mcphoneLayers.collect { it.javaDir })
     platformDir.set(file('src/main/java'))
     docFile.set(seamsDoc)
     updating.set(false)
@@ -1078,7 +1099,7 @@ tasks.register('updateSeamsDoc', SeamsDocTask) {
     description = '按现状重写 shared/PLATFORM-SEAMS.md 里生成的那两段'
     group = 'documentation'
     sharedDir.set(new File(repoRoot, 'shared/src/main/java'))
-    layerDirs.setFrom(myLayerDirs.collect { it.dir })
+    layerDirs.setFrom(mcphoneLayers.collect { it.javaDir })
     platformDir.set(file('src/main/java'))
     docFile.set(seamsDoc)
     updating.set(true)

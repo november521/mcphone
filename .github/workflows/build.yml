@@ -324,17 +324,34 @@ jobs:
           # 给 1.20.1-forge 挂上 1.20.5+ 在前面五道检查里完全合法（层存在、目录也在），
           # 编译器也不说话 —— 错要等那个目标真开始建的那天才炸。
           #
-          # 版本比较：拆成数字数组比。jq 比数组是逐元素比、再比长度，
-          # 所以 [1,21] < [1,21,1] 成立，正是想要的语义。
+          # 【版本比较必须与 Groovy 那一份同语义：补零，不是比数组长度】
+          #
+          # jq 原生比数组是逐元素比、再比长度，于是 [1,21] < [1,21,0] 成立 ——
+          # 而 gradle/mcphone-layers.gradle 里的 McphoneVersions.cmp 是补零比的，
+          # 1.21 与 1.21.0 相等。差这一格的后果形态很坏：本地绿、CI 红，
+          # 而 CI 的报错说的是"把这一层从 layers 里去掉"，指向的不是真原因。
+          #
+          # 跨语言合不成一份，只能同语义 + 留对拍用例。实测七组，补零后全对齐：
+          #   1.21   vs 1.21.0  → 放行   （原生会拦，这是唯一分叉的一格）
+          #   1.21.0 vs 1.21    → 放行
+          #   1.21.1 vs 1.20.5  → 放行
+          #   1.20.1 vs 1.20.5  → 拦下
+          #   1.21   vs 1.21    → 放行
+          #   1.20.5 vs 1.20.5  → 放行
+          #   1.21   vs 1.20.5  → 放行
           TOOOLD=$(jq -r --slurpfile L "$L" '
             def ver: split(".") | map(tonumber);
+            def vcmp($x; $y):
+              ([($x|length), ($y|length)] | max) as $n
+              | [range($n) | (($x[.] // 0) - ($y[.] // 0))]
+              | map(select(. != 0)) | (.[0] // 0);
             to_entries[] | select((.value|type)=="object")
             | . as $e
             | ($e.value.layers // [])
             | map(. as $n
                   | $L[0][$n] as $spec
                   | select($spec != null and $spec.since != null
-                           and (($e.value.minecraft | ver) < ($spec.since | ver)))
+                           and (vcmp(($e.value.minecraft | ver); ($spec.since | ver)) < 0))
                   | "\($n)（自 \($spec.since) 起）")
             | select(length > 0)
             | "  \($e.key)  是 \($e.value.minecraft)，却挂了：\(join("、"))"

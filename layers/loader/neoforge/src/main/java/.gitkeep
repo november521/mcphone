@@ -1,7 +1,0 @@
-这一层还是空的（versions/layers.json 里 populated: false）。
-
-这个文件的作用只有一个：git 不跟踪空目录，没有它，克隆下来之后这个目录不存在，
-而构建会去检查它在不在——报"共享层 neoforge 的目录不存在"，一个刚克隆完的仓库就建不起来。
-
-开始往这一层放代码时，把 layers.json 里的 populated 改成 true；
-这个文件可以留着，闸只数 .java，不数它。
