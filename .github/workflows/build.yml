@@ -189,3 +189,101 @@ jobs:
             exit 1
           fi
           echo "平台没有重复定义仓库级的键"
+
+      # 【矩阵是规则，不是清单】。targets.json 的 _comment 里写着"每个 Minecraft
+      # 版本都要有 Forge / NeoForge / Fabric 三条"，但那只是一段注释 —— 这个仓库
+      # 已经证明过写在注释里的规矩挡不住事（版本号那套规矩写得比这细，照样没挡住）。
+      #
+      # 少一条的后果是安静的：没人会在加 1.22 的时候想起 Fabric，而"某个版本没跟上
+      # 是当场可见的"正是同一分支这套结构存在的理由。看不见就等于回到了多分支。
+      - name: 检查 targets.json
+        run: |
+          set -uo pipefail
+          F=versions/targets.json
+          jq -e . "$F" > /dev/null || { echo "::error::$F 不是合法 JSON"; exit 1; }
+
+          # 【jq 自己失败也要红】。第一版这里是 X=$(jq ...)，jq 的表达式写错时它
+          # 往 stderr 吐一行、返回空字符串，而下面判的是"空 = 没有违规" —— 闸就绿了。
+          # 实测踩过：has(.) 那句在 jq 里报 "Cannot check whether object has a object
+          # key"，四道检查里的一道整个失效，退出码还是 0。
+          #
+          # 【q 里不能写 exit】：它总是在 X=$(q ...) 里被调用，那是个子 shell，
+          # exit 只退出那个子 shell，外面照跑不误 —— 实测过，改成 exit 之后闸仍然是绿的。
+          # 只能 return 非零，再靠每个调用点后面那句 || exit 1 把它接住。
+          q() {
+            local out rc
+            out=$(jq -r "$1" "$F"); rc=$?
+            if [ "$rc" != "0" ]; then
+              echo "::error::jq 表达式跑挂了（退出码 $rc），这道检查没能跑起来：" >&2
+              echo "$1" >&2
+              return 1
+            fi
+            printf '%s' "$out"
+          }
+
+          FAIL=0
+
+          # 一、每个 Minecraft 版本必须三个加载器齐全
+          MISSING=$(q '
+            [to_entries[] | select((.value|type)=="object")]
+            | group_by(.value.minecraft)[]
+            | { mc: .[0].value.minecraft, loaders: (map(.value.loader) | sort) }
+            | select(.loaders != ["Fabric","Forge","NeoForge"])
+            | "  \(.mc)  现有：\(.loaders | join("、"))"
+          ') || exit 1
+          if [ -n "$MISSING" ]; then
+            echo "::error::有 Minecraft 版本没把三个加载器写齐："
+            printf '%s\n' "$MISSING"
+            echo "缺的那个也要写进去，buildable: false，note 里说明卡在哪儿。"
+            echo "在这里看得见，才叫'没跟上是当场可见的'。"
+            FAIL=1
+          fi
+
+          # 二、必填字段
+          BAD=$(q '
+            to_entries[] | select((.value|type)=="object")
+            | . as $e
+            | ["minecraft","loader","java","gradle","project","buildable"]
+            | map(select($e.value[.] == null))
+            | select(length > 0)
+            | "  \($e.key)  缺：\(join("、"))"
+          ') || exit 1
+          if [ -n "$BAD" ]; then
+            echo "::error::有条目缺必填字段："
+            printf '%s\n' "$BAD"
+            FAIL=1
+          fi
+
+          # 三、建得起来的目标不许还挂着 unverified —— 建得起来，那些值就被构建验过了。
+          # 反过来说，把 buildable 翻成 true 的那一刻就得把 unverified 清掉，
+          # 而清掉之前你得真的去查一遍。这道闸就是逼那一下。
+          STILL=$(q '
+            to_entries[] | select((.value|type)=="object")
+            | select(.value.buildable == true and (.value.unverified // [] | length) > 0)
+            | "  \(.key)  还标着：\(.value.unverified | join("、"))"
+          ') || exit 1
+          if [ -n "$STILL" ]; then
+            echo "::error::buildable: true 的目标里还留着 unverified："
+            printf '%s\n' "$STILL"
+            echo "建得起来就说明这些值是对的。把 unverified 去掉（先确认一遍值本身）。"
+            FAIL=1
+          fi
+
+          # 四、unverified 里写的字段名得真的存在，否则这个标记就是摆设
+          GHOST=$(q '
+            to_entries[] | select((.value|type)=="object")
+            | . as $e
+            | ($e.value.unverified // [])
+            | map(. as $f | select(($e.value | has($f)) | not))
+            | select(length > 0)
+            | "  \($e.key)  unverified 里有这个条目根本没有的字段：\(join("、"))"
+          ') || exit 1
+          if [ -n "$GHOST" ]; then
+            echo "::error::unverified 指向了不存在的字段："
+            printf '%s\n' "$GHOST"
+            FAIL=1
+          fi
+
+          [ "$FAIL" = "0" ] || exit 1
+          N=$(q '[to_entries[] | select((.value|type)=="object")] | length') || exit 1
+          echo "targets.json 校验通过：$N 个目标，矩阵齐全"
