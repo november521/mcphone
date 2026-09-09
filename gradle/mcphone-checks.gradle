@@ -890,6 +890,198 @@ abstract class LoaderTwinsTask extends DefaultTask {
     }
 }
 
+// ============================================================
+//  平台双胞胎棘轮
+// ============================================================
+//
+// 【守的是哪条线】。platforms/<目标名>/ 下同路径同名的 java 文件 —— 眼下 56 对，
+// 去注释后 86.7% 的行逐字相同。这条线上原先【一道闸都没有】：verifyLoaderTwins
+// 守的是加载器层那 12 个文件，数量少 4.6 倍，却是唯一被守着的。
+//
+// 它的论证在这里成立得更厉害：每个目标只编自己那一份，没有任何一个编译单元同时
+// 看见两份，所以两边一起绿、内容一起漂。ImageFolder 两份逐字相同躺了很久，没有
+// 任何东西说过一句话。
+//
+// 【为什么是棘轮，不是「diff 为空即红」】。空 diff 那种写法今天只有一个对象
+// （ImageFolder），把它搬进 shared/ 之后就【永久为零】，而差 51 行的那些它结构上
+// 看不见。棘轮记的是每一对当前的差异行数，只许降不许升 —— 于是「还剩多少重复」
+// 成为一个被检查的数，而不是需要每次重新量的数。
+//
+// 【两个判据】
+//
+//   逐字相同   → 红。「这一对一字不差，还没搬进 shared/」
+//   差异变大   → 红。两份漂开了
+//   差异变小   → 红，但是好消息：要求把基线跟着调下去，否则棘轮会滑回去
+//
+// 【差异怎么算】。按行的多重集对称差，不是 LCS —— 成员顺序调换算 0。
+// 那是有意的：App 接口那几个文件差的全是 opensInsidePhone() 声明的位置，
+// 调完顺序就能搬，棘轮不该把「只差顺序」记成一笔要还的债。
+// 而「可以直接搬」那一条用的是【严格逐行相等】，不是这个分数。
+abstract class PlatformTwinsTask extends DefaultTask {
+
+    /** 每条 {key, projectJavaDir}，来自 mcphoneAllTargets。 */
+    @Input abstract ListProperty<Object> getTargets()
+
+    /** 基线文件的内容。用内容而不是 File：File 不是被追踪的配置输入，改了基线不重跑。 */
+    @Input @Optional abstract Property<String> getBaselineJson()
+
+    /** 写基线时用。verify 那个任务不设它。 */
+    @Internal abstract RegularFileProperty getBaselineFile()
+
+    @Input abstract Property<Boolean> getWriteBaseline()
+
+    static List<String> lines(File f) {
+        TargetNeutrality.strip(f.getText('UTF-8')).split('\n').collect { it.trim() }.findAll { it }
+    }
+
+    /** 多重集对称差：两边各自「多出来的行」的总条数。 */
+    static int score(List<String> a, List<String> b) {
+        def ca = a.countBy { it }, cb = b.countBy { it }
+        int n = 0
+        (ca.keySet() + cb.keySet()).each { k ->
+            n += Math.abs((ca[k] ?: 0) - (cb[k] ?: 0))
+        }
+        return n
+    }
+
+    /** 相对路径 -> [目标名: 文件]，只留出现在两个及以上目标里的。 */
+    Map<String, Map<String, File>> collect() {
+        def byPath = new TreeMap<String, Map<String, File>>()
+        targets.get().each { t ->
+            File root = t.projectJavaDir as File
+            if (!root.isDirectory()) return
+            root.eachFileRecurse { f ->
+                if (!f.isFile() || !f.name.endsWith('.java')) return
+                def rel = root.toPath().relativize(f.toPath()).toString().replace(File.separator, '/')
+                byPath.computeIfAbsent(rel, { new TreeMap<String, File>() })[t.key as String] = f
+            }
+        }
+        return byPath.findAll { k, v -> v.size() > 1 }
+    }
+
+    /** 一对（或一组）的分数：以字典序第一个目标为基准，与其余各家的分数之和。 */
+    static List measure(Map<String, File> copies) {
+        def names = copies.keySet().toList()
+        def base = lines(copies[names[0]])
+        int total = 0
+        boolean allExact = true
+        names.drop(1).each { o ->
+            def other = lines(copies[o])
+            total += score(base, other)
+            if (other != base) allExact = false
+        }
+        return [total, allExact]
+    }
+
+    @TaskAction
+    void run() {
+        def groups = collect()
+        if (groups.isEmpty()) {
+            throw new GradleException(
+                    "一对同名双胞胎都没扫到 —— 扫空清单的闸永远是绿的。\n" +
+                    "多半是 targets.json 里的 project 路径过期了，或者这道闸的枚举方式坏了。")
+        }
+        def now = new TreeMap<String, Integer>()
+        def movable = []
+        groups.each { rel, copies ->
+            def (int total, boolean exact) = measure(copies)
+            now[rel] = total
+            if (exact) movable << "  ${rel}  （${copies.keySet().join('、')}）"
+        }
+
+        if (writeBaseline.get()) {
+            def f = baselineFile.get().asFile
+            f.parentFile.mkdirs()
+            def sb = new StringBuilder("{\n")
+            sb << "  \"_comment\": [\n"
+            sb << "    \"platforms/<目标名>/ 下同名文件的差异基线，由 ./gradlew updateTwinBaseline 生成，别手改。\",\n"
+            sb << "    \"数字是按行的多重集对称差（成员顺序调换算 0）。verifyPlatformTwins 只许它降，不许升。\",\n"
+            sb << "    \"降了也红 —— 那是要求把这份基线跟着调下去，否则棘轮会滑回去。\",\n"
+            sb << "    \"归零的那一对会单独报出来：逐字相同就该搬进 shared/，不该留在这儿。\"\n"
+            sb << "  ],\n"
+            sb << "  \"pairs\": {\n"
+            sb << now.collect { k, v -> "    \"${k}\": ${v}" }.join(',\n')
+            sb << "\n  }\n}\n"
+            f.setText(sb.toString(), 'UTF-8')
+            logger.lifecycle("双胞胎基线已写入 ${f}：${now.size()} 对，差异合计 ${now.values().sum()} 行")
+            return
+        }
+
+        def raw = baselineJson.orNull
+        if (!raw?.trim()) {
+            throw new GradleException(
+                    "读不到 versions/platform-twins.json —— 基线是这道闸的全部判据，读不到就只能静默放行。\n" +
+                    "跑 ./gradlew updateTwinBaseline 生成一份。")
+        }
+        def base = new groovy.json.JsonSlurper().parseText(raw).pairs as Map
+        if (base == null) {
+            throw new GradleException("versions/platform-twins.json 里没有 pairs —— 那份基线坏了。")
+        }
+
+        def worse = [], stale = [], added = [], gone = []
+        now.each { rel, v ->
+            def b = base[rel]
+            if (b == null) { added << "  ${rel}  现在差 ${v} 行" }
+            else if (v > (b as int)) { worse << "  ${rel}  基线 ${b} → 现在 ${v}（+${v - (b as int)}）" }
+            else if (v < (b as int)) { stale << "  ${rel}  基线 ${b} → 现在 ${v}（-${(b as int) - v}）" }
+        }
+        base.each { rel, v -> if (!now.containsKey(rel)) gone << "  ${rel}（基线 ${v}）" }
+
+        def problems = []
+        if (movable) {
+            problems << "【这些对一字不差，还没搬进 shared/】共 ${movable.size()} 对：\n" +
+                    movable.join('\n') + "\n" +
+                    "  两份逐字相同意味着不存在接缝。留在 platforms/ 下，下一次只会有一边被改。"
+        }
+        if (worse) {
+            problems << "【这些对漂开了】共 ${worse.size()} 对：\n" + worse.join('\n') + "\n" +
+                    "  每个目标只编自己那一份，两边都编得过，所以编译器不会说话。\n" +
+                    "  要么把改动同步到每一份，要么这处差异是有意的接缝 —— 那就写清理由，\n" +
+                    "  再跑 ./gradlew updateTwinBaseline 把它记进基线。"
+        }
+        if (added) {
+            problems << "【基线里没有这几对】共 ${added.size()} 对：\n" + added.join('\n') + "\n" +
+                    "  新出现的同名双胞胎。确认它该存在之后跑 ./gradlew updateTwinBaseline。"
+        }
+        if (stale) {
+            problems << "【差异变小了，基线没跟上】共 ${stale.size()} 对：\n" + stale.join('\n') + "\n" +
+                    "  这是好消息，但基线不跟着降的话棘轮会滑回去 —— 明天改回原样不会有人拦。\n" +
+                    "  跑 ./gradlew updateTwinBaseline。"
+        }
+        if (gone) {
+            problems << "【基线里有、现在没有的对】共 ${gone.size()} 对：\n" + gone.join('\n') + "\n" +
+                    "  搬进 shared/ 或删掉了都算正常，跑 ./gradlew updateTwinBaseline 清掉这几行。"
+        }
+        if (problems) {
+            throw new GradleException(
+                    "platforms/ 下的同名双胞胎有 ${problems.size()} 类问题：\n\n" +
+                    problems.join('\n\n') + "\n")
+        }
+        logger.lifecycle("平台双胞胎校验通过：${now.size()} 对，差异合计 ${now.values().sum()} 行（基线内）")
+    }
+}
+
+def twinBaselineFile = new File(repoRoot, 'versions/platform-twins.json')
+
+tasks.register('verifyPlatformTwins', PlatformTwinsTask) {
+    description = '校验 platforms/ 下同名文件的差异不超过基线，且没有逐字相同却没搬走的'
+    group = 'verification'
+    targets.set(mcphoneAllTargets)
+    baselineJson.set(providers.fileContents(
+            layout.projectDirectory.file('../../versions/platform-twins.json')).asText)
+    writeBaseline.set(false)
+}
+tasks.named('check').configure { dependsOn tasks.named('verifyPlatformTwins') }
+
+tasks.register('updateTwinBaseline', PlatformTwinsTask) {
+    description = '重算 platforms/ 下同名文件的差异基线'
+    group = 'verification'
+    targets.set(mcphoneAllTargets)
+    baselineFile.set(twinBaselineFile)
+    writeBaseline.set(true)
+}
+
+
 tasks.register('verifyLoaderTwins', LoaderTwinsTask) {
     description = '校验加载器层里同名的几份除加载器 import 外逐字相同'
     group = 'verification'
