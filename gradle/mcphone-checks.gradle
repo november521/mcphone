@@ -581,59 +581,142 @@ abstract class TargetNeutrality {
 abstract class SharedNeutralityTask extends DefaultTask {
 
     @InputDirectory abstract DirectoryProperty getSharedDir()
+    /** 这一层禁哪些轴：'版本' / '加载器'。 */
+    @Input          abstract ListProperty<String> getForbiddenAxes()
+    /** 这一层允不允许一个 java 都没有（按版本那层可以是空的，shared/ 不行）。 */
+    @Input          abstract Property<Boolean> getAllowEmpty()
+    /** 报错里怎么称呼这一层。 */
+    @Input          abstract Property<String> getLayerName()
 
     @TaskAction
     void run() {
         File dir = sharedDir.get().asFile
+        def forbidden = forbiddenAxes.get() as Set
+        def layer = layerName.get()
+
         // 取不到前提要红，不能静默扫空目录 —— 扫空目录的闸永远是绿的
         if (!dir.isDirectory()) {
             throw new GradleException(
-                    "找不到 ${dir.canonicalPath}。共享源码目录没了或者挪了位置，" +
+                    "找不到 ${dir.canonicalPath}。${layer}这一层的目录没了或者挪了位置，" +
                     "这道闸就成了空转。先把路径修对。")
         }
         def files = []
         dir.eachFileRecurse { if (it.isFile() && it.name.endsWith('.java')) files << it }
         if (files.isEmpty()) {
-            throw new GradleException(
-                    "${dir.canonicalPath} 下一个 .java 都没有。" +
-                    "'一个都没扫到' 不等于 '没有问题'。")
+            if (!allowEmpty.get()) {
+                throw new GradleException(
+                        "${dir.canonicalPath} 下一个 .java 都没有。" +
+                        "'一个都没扫到' 不等于 '没有问题'。")
+            }
+            logger.lifecycle("${layer}：还是空的，没有可校验的文件")
+            return
         }
         files = files.toSorted { it.path }
 
+        // 只留下落在被禁轴上的命中。按版本那一层允许版本轴的东西，
+        // 它存在的意义正是装这些 —— 挡的是加载器轴。
         def offenders = [:]
         files.each { f ->
             def hs = TargetNeutrality.hits(TargetNeutrality.strip(f.getText('UTF-8')))
+                    .findAll { h -> TargetNeutrality.BLOCKERS[h[0]].axes.any { forbidden.contains(it) } }
             if (hs) offenders[f] = hs
         }
 
         if (offenders) {
             int total = offenders.values().sum { it.size() }
             def sb = new StringBuilder()
-            sb << "shared/ 里出现了只在某一个目标上成立的东西，共 ${total} 处 / ${offenders.size()} 个文件：\n"
+            sb << "${layer}里出现了这一层不该有的东西，共 ${total} 处 / ${offenders.size()} 个文件：\n"
             offenders.each { f, hs ->
                 sb << "\n  ${dir.toPath().relativize(f.toPath())}\n"
-                hs.each { h -> sb << "      :${h[1]}  [${h[0]}]  ${h[2]}\n" }
+                hs.each { h ->
+                    sb << "      :${h[1]}  [${h[0]}，${TargetNeutrality.BLOCKERS[h[0]].axes.join('+')}轴]  ${h[2]}\n"
+                }
             }
-            sb << "\nshared/ 的定义是每个目标都能原样编过：Minecraft 最老一档是 1.20.1，加载器有三个。\n"
-            sb << "这些东西别的目标上不存在，平台侧写什么类都补不出来。\n"
-            sb << "\n把这个文件搬回 platforms/<目标名>/ 下的同一个包，各平台各给一份 ——\n"
-            sb << "签名相同、方法体各写各的（PhonePlayerData 就是这个形状）。\n"
-            sb << "调用它的共享代码不用改：全限定名一样，编译时由各平台的源码集接进来。\n"
-            sb << "\n搬完记得 ./gradlew updateSeamsDoc，它要进 PLATFORM-SEAMS.md 的甲。\n"
+            sb << "\n${layer}禁的轴：${forbidden.join('、')}。\n"
+            if (forbidden.contains('加载器') && !forbidden.contains('版本')) {
+                sb << "这一层给同一个 Minecraft 版本的三个加载器共用，所以版本轴的东西在这儿是合法的，\n"
+                sb << "加载器轴的不是。带加载器阻断的那些搬回 platforms/<目标名>/，各加载器各给一份。\n"
+            } else {
+                sb << "shared/ 要求每个目标都能原样编译通过：Minecraft 最老一档是 1.20.1，加载器有三个。\n"
+                sb << "\n只被版本轴挡住的，可以放进共享层（versions/<层名>/，见 versions/layers.json）——\n"
+                sb << "同一个版本的三个加载器共用一份。既碰版本又碰加载器的，只能回 platforms/。\n"
+            }
+            sb << "\n搬完记得 ./gradlew updateSeamsDoc。\n"
             throw new GradleException(sb.toString())
         }
 
-        logger.lifecycle("shared/ 目标中立校验通过：${files.size()} 个文件，${TargetNeutrality.BLOCKERS.size()} 条判据全过")
+        logger.lifecycle("${layer}校验通过：${files.size()} 个文件，禁 ${forbidden.join('、')}轴")
     }
+}
+
+// 【两类共享目录，两套要求】
+//
+//   shared/            全部目标共用 —— 一条判据都不许中
+//   共享层（versions/<层名>/）  该层覆盖的那些 Minecraft 版本的三个加载器共用
+//                              —— 只禁加载器轴，版本轴的东西在那儿才是它存在的理由
+//
+// 【层的定义不写死在这儿，读配置】
+//   versions/layers.json   有哪些层、各自的目录
+//   versions/targets.json  每个目标的 layers 字段：这个目标挂哪几层
+//
+// 层名是"这套 API 从哪个 Minecraft 版本开始有"，不是某一个具体版本 —— 1.21.1 与
+// 将来的更高版本都挂 1.20.5+，因为它们装的是同一份代码。
+//
+// 为什么要这一层：接缝里有一大批【只被版本轴挡住】的类型（手写编解码、各类网络包）。
+// 它们与加载器无关，第二个同版本目标并入时会被复制三份，而没有任何机制要求这三份
+// 一致 —— 多分支的病换了个尺度，从跨分支缩到跨目录，并且连"当场可见"都没有。
+// 加一层目录之后根本不产生三份，也就不需要一道"这几份必须逐字相同"的闸。
+def layersFile  = new File(repoRoot, 'versions/layers.json')
+def targetsFile = new File(repoRoot, 'versions/targets.json')
+[layersFile, targetsFile].each { f ->
+    if (!f.exists()) {
+        throw new GradleException("找不到 ${f} —— 共享层的声明在那儿，读不到就只能静默少校验一层。")
+    }
+}
+def layersJson  = new groovy.json.JsonSlurper().parse(layersFile)
+def targetsJson = new groovy.json.JsonSlurper().parse(targetsFile)
+
+def myRelPath = repoRoot.toPath().relativize(projectDir.toPath()).toString().replace(File.separator, '/')
+def myTarget = targetsJson.find { k, v -> v instanceof Map && v.project == myRelPath }
+if (myTarget == null) {
+    throw new GradleException(
+            "versions/targets.json 里没有 project == \"${myRelPath}\" 的条目，" +
+            "取不到这个目标挂哪几层，那几层就一道闸都没有。")
+}
+def myLayerDirs = (myTarget.value.layers ?: []).collect { name ->
+    def spec = layersJson[name]
+    if (spec == null) {
+        throw new GradleException("目标 ${myTarget.key} 声明的共享层 \"${name}\" 不在 versions/layers.json 里。")
+    }
+    [name: name, dir: new File(repoRoot, "${spec.dir}/src/main/java")]
 }
 
 tasks.register('verifySharedIsTargetNeutral', SharedNeutralityTask) {
     description = '校验 shared/ 里没有只在某一个目标上成立的东西'
     group = 'verification'
     sharedDir.set(new File(repoRoot, 'shared/src/main/java'))
+    forbiddenAxes.set(['版本', '加载器'])
+    allowEmpty.set(false)
+    layerName.set('shared/')
+}
+tasks.named('check').configure { dependsOn tasks.named('verifySharedIsTargetNeutral') }
+
+// 这个目标挂几层就注册几道，各查各的目录
+myLayerDirs.each { layer ->
+    def taskName = 'verifyLayer' + layer.name.replaceAll(/[^A-Za-z0-9]/, '_')
+    tasks.register(taskName, SharedNeutralityTask) {
+        description = "校验共享层 ${layer.name} 里没有绑加载器的东西"
+        group = 'verification'
+        sharedDir.set(layer.dir)
+        forbiddenAxes.set(['加载器'])
+        // 层可以是空的：某一层可能确实还没有内容。目录本身必须在 ——
+        // 目录没了是配置错，不是"没东西"。
+        allowEmpty.set(true)
+        layerName.set("共享层 ${layer.name}")
+    }
+    tasks.named('check').configure { dependsOn tasks.named(taskName) }
 }
 
-tasks.named('check').configure { dependsOn tasks.named('verifySharedIsTargetNeutral') }
 
 // ============================================================
 //  平台接缝清单
@@ -667,6 +750,8 @@ tasks.named('check').configure { dependsOn tasks.named('verifySharedIsTargetNeut
 abstract class SeamsDocTask extends DefaultTask {
 
     @InputDirectory abstract DirectoryProperty getSharedDir()
+    /** 这个目标挂的所有共享层的 java 根。 */
+    @InputFiles     abstract ConfigurableFileCollection getLayerDirs()
     @InputDirectory abstract DirectoryProperty getPlatformDir()
     @OutputFile     abstract RegularFileProperty getDocFile()
     /** true 改文档，false 只对比 */
@@ -692,6 +777,8 @@ abstract class SeamsDocTask extends DefaultTask {
         File sharedRoot = sharedDir.get().asFile
         File platRoot = platformDir.get().asFile
 
+        // 两层共享目录都算"已经共用了"：一个类型进了按版本那一层，
+        // 它就不再是"只定义在 platforms/ 下"的接缝了。
         def sharedFiles = javaFiles(sharedRoot)
         if (sharedFiles.isEmpty()) {
             throw new GradleException("${sharedRoot} 下一个 .java 都没有 —— 扫空目录算出来的清单永远是空的。")
@@ -701,7 +788,12 @@ abstract class SeamsDocTask extends DefaultTask {
         if (platFiles.isEmpty()) {
             throw new GradleException("${platRoot} 下一个 .java 都没有。")
         }
-        def sharedFqcns = sharedFiles.collect { fqcnOf(sharedRoot, it) } as Set
+        // 全中立那一层单独记一份：下面「甲的类型跑进 shared/」那道闸只认它。
+        def neutralFqcns = sharedFiles.collect { fqcnOf(sharedRoot, it) } as Set
+        // 【必须拷一份】：Groovy 里 someSet as Set 返回的是【同一个对象】，
+        // 下面那句 addAll 会把 neutralFqcns 一起改掉，两个变量就成了一份。
+        def sharedFqcns = new LinkedHashSet(neutralFqcns)
+        layerDirs.files.each { root -> if (root.isDirectory()) sharedFqcns.addAll(javaFiles(root).collect { fqcnOf(root, it) }) }
 
         // shared/ 引用了哪些本模组的类型：显式 import，加上同包里的（同包不写 import）
         def referenced = [] as Set
@@ -730,7 +822,7 @@ abstract class SeamsDocTask extends DefaultTask {
             def tags = TargetNeutrality.tagsOf(platFiles[t].getText('UTF-8'))
             if (tags) { a << [t, tags] } else { b << [t, []] }
         }
-        return [a: a, b: b, sharedFqcns: sharedFqcns]
+        return [a: a, b: b, sharedFqcns: sharedFqcns, neutralFqcns: neutralFqcns]
     }
 
     /** 甲：按轴分三组。只被版本轴挡住的那批，是同版本三个加载器可以共用的。 */
@@ -810,7 +902,12 @@ abstract class SeamsDocTask extends DefaultTask {
         }
         def doc = f.getText('UTF-8')
 
-        // ── 【甲里的类型整个消失】。这一条要单独拦，两个任务都拦。
+        // ── 【甲里的类型跑进了 shared/】。这一条要单独拦，两个任务都拦。
+        //
+        // 【只认 shared/，不认共享层】。共享层是给同一批 Minecraft 版本的三个加载器
+        // 共用的，只被版本轴挡住的接缝【就该】搬进去 —— 那是正常动作，拦它等于把
+        // 这一层废掉。搬错了层由那一层自己的闸接住：带加载器阻断的进了共享层，
+        // 那一层的 verifyLayer<层名> 会红。
         //
         // 上一版这里只有"文档跟源码对不上"一句，处方是"重写那两段，然后看一眼 diff"，
         // 并且只点了"甲↔乙互相跑"两种情况。而误搬长的是第三种样子：一个记在甲里的
@@ -823,7 +920,7 @@ abstract class SeamsDocTask extends DefaultTask {
         // 再跑 —— 多一步，但那一步是明确的意思表示，不是顺手。
         def recorded = recordedA(doc, f)
         if (recorded != null) {
-            def moved = recorded.findAll { r.sharedFqcns.contains(PREFIX + it) }
+            def moved = recorded.findAll { r.neutralFqcns.contains(PREFIX + it) }
             if (moved) {
                 throw new GradleException(
                         "这些类型记在 PLATFORM-SEAMS.md 的【甲】里（每个平台各写一份），" +
@@ -831,7 +928,9 @@ abstract class SeamsDocTask extends DefaultTask {
                         moved.collect { "  ${it}" }.join('\n') + "\n\n" +
                         "甲 的意思是它的方法体在不同目标上注定不同，共用一份必然编不过 —— " +
                         "这十有八九是搬错了，把它搬回 platforms/。\n\n" +
-                        "如果确实是有意的（那个阻断真没了），先【手动】把它那一行从甲的清单里删掉，" +
+                        "只被版本轴挡住的接缝不该进 shared/，该进对应的共享层（versions/<层名>/）—— " +
+                        "共享层给同一批版本的三个加载器共用，搬进去是正常动作，这道闸不拦。\n\n" +
+                        "如果确实是有意进 shared/（那个阻断真没了），先【手动】把它那一行从甲的清单里删掉，" +
                         "再跑 ./gradlew updateSeamsDoc。\n" +
                         "多这一步是故意的：直接重写文档会让这次搬动被静默追认，构建还转绿。")
             }
@@ -875,6 +974,7 @@ tasks.register('verifySeamsDocCurrent', SeamsDocTask) {
     description = '校验 shared/PLATFORM-SEAMS.md 跟源码对得上'
     group = 'verification'
     sharedDir.set(new File(repoRoot, 'shared/src/main/java'))
+    layerDirs.setFrom(myLayerDirs.collect { it.dir })
     platformDir.set(file('src/main/java'))
     docFile.set(seamsDoc)
     updating.set(false)
@@ -884,6 +984,7 @@ tasks.register('updateSeamsDoc', SeamsDocTask) {
     description = '按现状重写 shared/PLATFORM-SEAMS.md 里生成的那两段'
     group = 'documentation'
     sharedDir.set(new File(repoRoot, 'shared/src/main/java'))
+    layerDirs.setFrom(myLayerDirs.collect { it.dir })
     platformDir.set(file('src/main/java'))
     docFile.set(seamsDoc)
     updating.set(true)

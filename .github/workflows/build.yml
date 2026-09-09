@@ -284,6 +284,49 @@ jobs:
             FAIL=1
           fi
 
+          # 五、layers 是必填，且写的层在 layers.json 里都得有
+          L=versions/layers.json
+          jq -e . "$L" > /dev/null || { echo "::error::$L 不是合法 JSON"; exit 1; }
+
+          NOLAYERS=$(q '
+            to_entries[] | select((.value|type)=="object")
+            | select(.value.layers == null)
+            | "  \(.key)"
+          ') || exit 1
+          if [ -n "$NOLAYERS" ]; then
+            echo "::error::这些目标没写 layers 字段（挂零层也要写成 []）："
+            printf '%s\n' "$NOLAYERS"
+            echo "不写和写空数组是两回事：前者是漏了，后者是'确实一层都不挂'。"
+            FAIL=1
+          fi
+
+          GHOSTL=$(jq -r --slurpfile L "$L" '
+            to_entries[] | select((.value|type)=="object")
+            | . as $e
+            | ($e.value.layers // [])
+            | map(select(. as $n | ($L[0] | has($n)) | not))
+            | select(length > 0)
+            | "  \($e.key)  挂了不存在的层：\(join("、"))"
+          ' "$F"); RC=$?
+          if [ "$RC" != "0" ]; then
+            echo "::error::对照 layers.json 的 jq 跑挂了（退出码 $RC），这道检查没能跑起来"
+            exit 1
+          fi
+          if [ -n "$GHOSTL" ]; then
+            echo "::error::有目标挂了 versions/layers.json 里没有的层："
+            printf '%s\n' "$GHOSTL"
+            FAIL=1
+          fi
+
+          # 六、层声明的目录必须真的在
+          MISSDIR=$(jq -r 'to_entries[] | select((.value|type)=="object") | .value.dir' "$L") || exit 1
+          for d in $MISSDIR; do
+            if [ ! -d "$d" ]; then
+              echo "::error::layers.json 里声明的目录不存在：$d"
+              FAIL=1
+            fi
+          done
+
           [ "$FAIL" = "0" ] || exit 1
           N=$(q '[to_entries[] | select((.value|type)=="object")] | length') || exit 1
           echo "targets.json 校验通过：$N 个目标，矩阵齐全"

@@ -71,64 +71,56 @@ NeoForge 有（加载器轴），而它是 NeoForge **20.3** 引入的（版本�
 目标下是可以逐字共用的 —— 手写编解码的那一批（`Note`、`ChatMessage`、`TextBody`、
 各种网络包）就是典型：它们与加载器无关，只是与 1.20.1 不同。
 
-### 未决：中间层
+### 三层结构
 
-当前结构只有一层共享目录，各平台以一行 `srcDir '../../shared/src/main/java'` 接入。
-没有按版本或按加载器的中间层。
+| 目录 | 谁用 | 允许什么 | 校验 |
+|---|---|---|---|
+| `shared/` | 全部目标 | 一条判据都不许中 | `verifySharedIsTargetNeutral` |
+| `versions/<层名>/` | 挂了这一层的目标 | 版本轴可以有，加载器轴不行 | `verifyLayer<层名>` |
+| `platforms/<目标名>/` | 单个目标 | 都可以 | —— |
 
-后果在第二个 1.21.1 目标并入时发生：仅版本轴的那一批将在
-`platforms/1.21.1-fabric/` 下复制一份，`platforms/1.21.1-forge/` 下再复制一份，
-而**没有任何机制要求这三份保持一致**。这是多分支的病换了个尺度 —— 从跨分支缩到
-跨目录，并且失去了「当场可见」：三份在各自的构建里各编各的，互不参照。
+**层由配置文件说了算**，不写死在构建脚本里：
 
-两条路，尚未选定：
+- [`versions/layers.json`](../versions/layers.json) —— 有哪些层、各自的目录
+- [`versions/targets.json`](../versions/targets.json) —— 每个目标的 `layers` 字段
 
-| 方案 | 做法 | 代价 |
-|---|---|---|
-| 加一层按版本的共享目录 | `shared-<mc 版本>/`，该版本的三个目标各加一行 `srcDir` | 目录层级多一级；不需要新的闸，因为只有一份 |
-| 接受复制，加闸约束 | 三份保留，另加一道「这几份必须逐字相同」的校验 | 闸本身要维护，且复制仍是复制 |
+层名是「这套 API 从**哪个 Minecraft 版本开始**有」，不是某一个具体版本。1.21.1 与
+将来的 26.x 都挂 `1.20.5+`，因为它们装的是同一份代码 —— 写死成某个版本号的话，
+每加一个版本就要多一层，而那些层里是一样的东西。
 
-**眼下不必动**：只有一个目标建得起来，一份都还没复制。这一节的作用是在复制发生
-之前把选择摆出来 —— 复制一旦发生，撤回的成本就不是改一行 `srcDir` 了。
+加一个目标、加一层，都只改 JSON，`build.gradle` 不用动。
+
+**层是可组合的**：`layers` 是数组，一个目标可以同时挂好几层。所以层要按**一条**
+版本边界切，不要按版本切成大块 —— 一个功能自 1.20.5 起有、另一个自 1.21.2 起有，
+那就是两层，1.21.1 挂前一层，1.21.2 及以后两层都挂，两拨代码各写一次。
+把「1.20.5 之后的所有东西」塞进一层的话，1.21.2 才有的东西会把 1.21.1 挡在门外，
+而那批代码只能退回各目标下复制粘贴 —— 而消掉那种复制正是层存在的理由。
+宁可层多：层多不花钱，复制才花钱。
+
+**为什么要中间层。** 只被版本轴挡住的类型（手写编解码、各类网络包）与加载器无关。
+若无这一层，第二个同版本目标并入时它们将被复制三份，而没有任何机制要求三份一致 ——
+那是多分支的病换了个尺度，从跨分支缩到跨目录，并且失去「当场可见」：三份在各自的
+构建里各编各的，互不参照。加一层目录之后根本不产生三份，也就不需要一道「这几份必须
+逐字相同」的校验。
+
+数据包资源同理放在这一层：目录名本身是版本专有的（1.21 把 `recipes` 改成 `recipe`、
+`advancements` 改成 `advancement`、`tags/items` 改成 `tags/item`），但与加载器无关。
+
+**搬错层由各层自己的闸接住。** 带加载器阻断的进了中间层，
+`verifyVersionLayerIsLoaderNeutral` 报红并指出是哪一条判据、落在哪个轴上；
+任何有阻断的进了 `shared/`，`verifySharedIsTargetNeutral` 报红。
+另有一道单独的闸拦「记在甲里的类型出现在 `shared/` 下」—— 它**只认 `shared/`**，
+搬进中间层是正常动作，不拦。
 
 后面的清单按轴分组，分组即数据。
 
 <!-- 下面这段由 ./gradlew updateSeamsDoc 生成，别手改：甲 -->
 
-#### 仅版本轴（30）
+#### 仅版本轴（0）
 
 同一 Minecraft 版本的三个加载器可逐字共用；与 1.20.1 之间必然分叉。
 
-- `core.PhoneItemData` —— 组件读写
-- `core.PhoneLocation` —— 1.20.5+ 原版
-- `feature.chat.ChatMessage` —— 1.20.5+ 原版
-- `feature.chat.ImageBody` —— 1.20.5+ 原版
-- `feature.chat.TextBody` —— 1.20.5+ 原版
-- `feature.chat.net.ChatImageDataPacket` —— 1.20.5+ 原版
-- `feature.chat.net.ConversationSummary` —— 1.20.5+ 原版
-- `feature.chat.net.FriendRequestPacket` —— 1.20.5+ 原版
-- `feature.chat.net.MarkReadPacket` —— 1.20.5+ 原版
-- `feature.chat.net.OnlinePlayer` —— 1.20.5+ 原版
-- `feature.chat.net.Relation` —— 1.20.5+ 原版
-- `feature.chat.net.RemoveFriendPacket` —— 1.20.5+ 原版
-- `feature.chat.net.RequestChatImagePacket` —— 1.20.5+ 原版
-- `feature.chat.net.RequestConversationsPacket` —— 1.20.5+ 原版
-- `feature.chat.net.RequestMessagesPacket` —— 1.20.5+ 原版
-- `feature.chat.net.RequestOnlinePlayersPacket` —— 1.20.5+ 原版
-- `feature.chat.net.RespondFriendRequestPacket` —— 1.20.5+ 原版
-- `feature.chat.net.SendChatMessagePacket` —— 1.20.5+ 原版
-- `feature.chat.net.TeleportToFriendPacket` —— 1.20.5+ 原版
-- `feature.enderchest.net.OpenEnderChestPacket` —— 1.20.5+ 原版
-- `feature.music.NetSong` —— 1.20.5+ 原版
-- `feature.notes.Note` —— 1.20.5+ 原版
-- `feature.notes.NotePrinter` —— 1.20.5+ 原版、组件读写
-- `feature.notes.NoteSummary` —— 1.20.5+ 原版
-- `feature.notes.net.PrintNotePacket` —— 1.20.5+ 原版
-- `feature.notes.net.RequestNoteListPacket` —— 1.20.5+ 原版
-- `feature.store.PurchasedApps` —— 1.20.5+ 原版
-- `feature.store.net.PurchaseAppPacket` —— 1.20.5+ 原版
-- `feature.store.net.RequestPurchasedAppsPacket` —— 1.20.5+ 原版
-- `feature.terminal.integration.refinedstorage.TerminalSlotReferenceFactory` —— 1.20.5+ 原版
+（无）
 
 #### 仅加载器轴（16）
 

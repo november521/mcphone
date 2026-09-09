@@ -19,8 +19,11 @@
     "东西跟实测值长得一模一样 —— 一个数字，旁边没有任何东西说它的来历。把猜的字段名",
     "列在 unverified 里，接手的人一眼就知道哪几个要自己查过再改。",
     "",
-    "buildable: true 的条目【不许】有 unverified：建得起来，那些值就是被构建验过的。",
-    "这一条同样由 guard-version 校验。"
+    "",
+    "【layers：这个目标挂哪几层共享代码】",
+    "层的定义在 versions/layers.json。层名是「这套 API 从哪个 Minecraft 版本开始有」，",
+    "所以 1.21.1 与将来的 26.x 都挂 1.20.5+，而 1.20.1 在它之前，一层都不挂。",
+    "各平台的 build.gradle 读这个字段拼出 srcDir，CI 校验这里写的层在 layers.json 里都有。"
   ],
   "1.20.1-forge": {
     "minecraft": "1.20.1",
@@ -30,7 +33,8 @@
     "gradle": "8.8",
     "project": "platforms/1.20.1-forge",
     "buildable": false,
-    "note": "代码在 1.20.1-forge 分支上，尚未并入。这一行的值是从那个分支上读出来的：gradle.properties 里 forge_version=47.4.23 / forge_version_range=[47.4.0,)，wrapper 是 gradle-8.8-bin.zip，build.gradle 里 toolchain 是 17，构建插件是 ForgeGradle 6（[6.0.54,6.2)）。"
+    "note": "代码在 1.20.1-forge 分支上，尚未并入。这一行的值是从那个分支上读出来的：gradle.properties 里 forge_version=47.4.23 / forge_version_range=[47.4.0,)，wrapper 是 gradle-8.8-bin.zip，build.gradle 里 toolchain 是 17，构建插件是 ForgeGradle 6（[6.0.54,6.2)）。",
+    "layers": []
   },
   "1.20.1-neoforge": {
     "minecraft": "1.20.1",
@@ -40,8 +44,12 @@
     "gradle": "9.2.1",
     "project": "platforms/1.20.1-neoforge",
     "buildable": false,
-    "unverified": ["loader_version", "gradle"],
-    "note": "尚未开始。java 17 是确定的（1.20.1 就跑在 17 上，与同版本的 Forge 那一行一致）；loader_version 与 gradle 是占位：NeoForge 1.20.1 是 20.1.x 那条线，它用的构建插件与 1.21.1 这边的 ModDevGradle 不是一回事，具体要什么 Gradle 得自己查过再填。"
+    "unverified": [
+      "loader_version",
+      "gradle"
+    ],
+    "note": "尚未开始。java 17 是确定的（1.20.1 就跑在 17 上，与同版本的 Forge 那一行一致）；loader_version 与 gradle 是占位：NeoForge 1.20.1 是 20.1.x 那条线，它用的构建插件与 1.21.1 这边的 ModDevGradle 不是一回事，具体要什么 Gradle 得自己查过再填。",
+    "layers": []
   },
   "1.20.1-fabric": {
     "minecraft": "1.20.1",
@@ -51,8 +59,12 @@
     "gradle": "9.7.1",
     "project": "platforms/1.20.1-fabric",
     "buildable": false,
-    "unverified": ["loader_version", "gradle"],
-    "note": "尚未开始。java 17 同上。gradle 9.7.1 是照抄 1.21.1-fabric 那一行的占位值 —— 那个数是给 Loom 1.17.20 测出来的，而 1.20.1 未必要用那么新的 Loom，旧 Loom 对 Gradle 的要求低得多。自己查过再填。"
+    "unverified": [
+      "loader_version",
+      "gradle"
+    ],
+    "note": "尚未开始。java 17 同上。gradle 9.7.1 是照抄 1.21.1-fabric 那一行的占位值 —— 那个数是给 Loom 1.17.20 测出来的，而 1.20.1 未必要用那么新的 Loom，旧 Loom 对 Gradle 的要求低得多。自己查过再填。",
+    "layers": []
   },
   "1.21.1-forge": {
     "minecraft": "1.21.1",
@@ -62,8 +74,14 @@
     "gradle": "8.8",
     "project": "platforms/1.21.1-forge",
     "buildable": false,
-    "unverified": ["loader_version", "gradle"],
-    "note": "尚未开始。java 21 是确定的（1.21.1 跑在 21 上，与同版本的 NeoForge 那一行一致）；gradle 8.8 是照抄 1.20.1-forge 那一行的占位值，只因为两边都是 ForgeGradle；loader_version 得自己查 1.21.1 上的 Forge 是哪一条线。"
+    "unverified": [
+      "loader_version",
+      "gradle"
+    ],
+    "note": "尚未开始。java 21 是确定的（1.21.1 跑在 21 上，与同版本的 NeoForge 那一行一致）；gradle 8.8 是照抄 1.20.1-forge 那一行的占位值，只因为两边都是 ForgeGradle；loader_version 得自己查 1.21.1 上的 Forge 是哪一条线。",
+    "layers": [
+      "1.20.5+"
+    ]
   },
   "1.21.1-neoforge": {
     "minecraft": "1.21.1",
@@ -73,7 +91,10 @@
     "gradle": "9.2.1",
     "project": "platforms/1.21.1-neoforge",
     "buildable": true,
-    "note": "本仓唯一建得起来的目标。这些值就是它自己构建时用的，由构建本身验着。运行时接受的加载器版本范围不写在这里 —— 它是 platforms/1.21.1-neoforge/gradle.properties 里的 neo_version_range，一个值只该有一处。"
+    "note": "本仓唯一建得起来的目标。这些值就是它自己构建时用的，由构建本身验着。运行时接受的加载器版本范围不写在这里 —— 它是 platforms/1.21.1-neoforge/gradle.properties 里的 neo_version_range，一个值只该有一处。",
+    "layers": [
+      "1.20.5+"
+    ]
   },
   "1.21.1-fabric": {
     "minecraft": "1.21.1",
@@ -83,7 +104,12 @@
     "gradle": "9.7.1",
     "project": "platforms/1.21.1-fabric",
     "buildable": false,
-    "unverified": ["loader_version"],
-    "note": "社区 PR #2 已有可跑实现，尚未并入 —— loader_version 抄自那个 PR，本仓没验过。gradle 9.7.1 是实测出来的：fabric-loom 1.17.20 要求 Gradle >= 9.5，而 9.5 没有发行包，往上第一个能用的是 9.7.1（本仓 wrapper 是 9.2.1，所以这个目标不能跟着仓库的 wrapper 走）。"
+    "unverified": [
+      "loader_version"
+    ],
+    "note": "社区 PR #2 已有可跑实现，尚未并入 —— loader_version 抄自那个 PR，本仓没验过。gradle 9.7.1 是实测出来的：fabric-loom 1.17.20 要求 Gradle >= 9.5，而 9.5 没有发行包，往上第一个能用的是 9.7.1（本仓 wrapper 是 9.2.1，所以这个目标不能跟着仓库的 wrapper 走）。",
+    "layers": [
+      "1.20.5+"
+    ]
   }
 }
