@@ -31,7 +31,7 @@ import net.minecraft.world.item.ItemStack;
  *
  * 为什么不复用 {@code PhoneContainerMenu}（末影箱那个）
  *
- * 它是个等大的普通容器，表达不了这一格的两条要求：只收开得了的终端（mayPlace），以及
+ * 它是个等大的普通容器，表达不了这一格的两条要求：只收装得进的终端（mayPlace），以及
  * 下面那个「打开终端」按钮。唱片仓当初也是同一个理由自己写了一份。三者共用的是外壳
  * ——{@code PhoneChassis}，见 {@code TerminalSlotScreen}。
  */
@@ -97,19 +97,25 @@ public class TerminalSlotMenu extends AbstractContainerMenu {
 
         addSlot(new Slot(terminal, 0, SLOT_X, SLOT_Y) {
             /**
-             * 只收<b>能从手机上打开</b>的终端。
+             * 只收<b>装得进这一格</b>的终端。
              *
-             * 问的是 {@link Terminals#isOpenable}，不是"是不是终端"——两者会不一样：
+             * 问的是 {@link Terminals#isInstallable}，不是"是不是终端"——两者会不一样：
              * Tom's 的基础无线终端是终端，但它没有"隔空打开"这回事（{@code canOpen} 恒为
              * false，{@code open} 的方法体是一句 return）。装得进去却点不开，比装不进去
              * 更难解释，所以它在这一步就被挡住。
+             *
+             * {@code isInstallable} 比"开得了"再多问一句
+             * {@link com.november.mcphone.feature.terminal.integration.TerminalIntegration#canLiveInPhoneSlot}：
+             * Forge 1.20.1 上的 RS 答不 —— 它那个版本表达不了"东西在手机卡槽里"这种位置。
+             * <b>这一句一度被丢过</b>：这个文件合进 shared/ 时调用点被换成了 isOpenable，
+             * 于是那条限制在 1.20.1 上静默失效，两边构建照样全绿。
              *
              * 认哪些牌子由 {@link Terminals} 现问现答，这里不认识任何一家存储模组——三家
              * 全是软前置，这个类要在一家都没装的情况下也能加载。
              */
             @Override
             public boolean mayPlace(ItemStack stack) {
-                return Terminals.isOpenable(stack);
+                return Terminals.isInstallable(stack);
             }
 
             @Override

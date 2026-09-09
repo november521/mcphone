@@ -129,6 +129,22 @@ public final class Terminals {
     }
 
     /**
+     * 这台终端<b>装得进手机卡槽</b>吗 —— 开得了，而且这一家支持「住在卡槽里」。
+     *
+     * 卡槽只收这一种（见 {@code TerminalSlotMenu} 的 mayPlace）。比 {@link #isOpenable}
+     * 多问一句 {@link TerminalIntegration#canLiveInPhoneSlot}，而那一问在这一支上
+     * <b>没有人答不</b> —— RS2 表达得了「东西在手机卡槽里」这种位置。
+     *
+     * 那为什么还要有这个方法：Forge 1.20.1 上的 RS 答不（它那个版本表达不了那种位置），
+     * 而问这一句的 {@code TerminalSlotMenu} 住在 shared/ 里，两支得有同一个方法可调。
+     */
+    public static boolean isInstallable(ItemStack stack) {
+        return owner(stack)
+                .filter(integration -> integration.canOpen(stack) && integration.canLiveInPhoneSlot())
+                .isPresent();
+    }
+
+    /**
      * 认得出、但远程开不了的那一种吗。
      *
      * 只有 Tom's 的基础无线终端会答 true。拿它来给玩家解释"为什么这台不行"，不然他看到的

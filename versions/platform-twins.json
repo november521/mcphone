@@ -91,7 +91,7 @@
     "com/november/mcphone/feature/store/net/StoreNetworking.java": 29,
     "com/november/mcphone/feature/store/net/SyncPurchasedAppsPacket.java": 15,
     "com/november/mcphone/feature/terminal/TerminalCharger.java": 13,
-    "com/november/mcphone/feature/terminal/integration/Terminals.java": 7,
+    "com/november/mcphone/feature/terminal/integration/Terminals.java": 2,
     "com/november/mcphone/feature/terminal/integration/ae2/Ae2Integration.java": 34,
     "com/november/mcphone/feature/terminal/integration/ae2/Ae2wtlibSupport.java": 17,
     "com/november/mcphone/feature/terminal/integration/ae2/TerminalSlotLocator.java": 30,
