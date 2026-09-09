@@ -1099,10 +1099,9 @@ public final class PhoneScreen extends Screen {
                 yield true;
             }
             case READER -> {
+                // 按下只是按下：手指没离开之前，"点开这本"与"拖着排序"还是同一个动作。
+                // 定性在 mouseReleased 里做，见 BookList
                 bookList.mouseClicked(mx, my, button);
-                BookRef book = bookList.consumeOpenRequest();
-                // 打开之后接管屏幕的是那本书自己的界面，这一部手机就退下去了
-                if (book != null) BookSources.open(book);
                 yield true;
             }
             case APP_DETAIL -> {
@@ -1206,6 +1205,9 @@ public final class PhoneScreen extends Screen {
         if (mode == Mode.UI_SCALE && uiScalePage.mouseDragged(mx)) return true;
         if (mode == Mode.HUD && hudPage.mouseDragged(mx)) return true;
 
+        // 书架页靠拖动排书
+        if (mode == Mode.READER && bookList.mouseDragged(mx, my)) return true;
+
         // 多行输入框靠拖动选中文本，不转发的话选不了
         if (mode == Mode.NOTE_EDIT && noteEditor.mouseDragged(mx, my, button, ldx, ldy)) return true;
         return super.mouseDragged(rawX, rawY, button, dx, dy);
@@ -1227,6 +1229,14 @@ public final class PhoneScreen extends Screen {
                 && homeGrid.mouseReleased(unscaledX(rawX), unscaledY(rawY))) {
             IPhoneApp launch = homeGrid.consumeLaunchRequest();
             if (launch != null) launchApp(launch);
+            return true;
+        }
+
+        // 书架页同理：拖过就是排序，没拖过才是"打开这本"
+        if (mode == Mode.READER && button == 0 && bookList.mouseReleased()) {
+            BookRef book = bookList.consumeOpenRequest();
+            // 打开之后接管屏幕的是那本书自己的界面，这一部手机就退下去了
+            if (book != null) BookSources.open(book);
             return true;
         }
         return super.mouseReleased(rawX, rawY, button);

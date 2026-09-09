@@ -290,7 +290,9 @@ public final class BookList {
         // 为什么是换而不是并排：这一行只有一百来像素，两样都放就没地方打字了。放弃的是
         // 书架页的本数——架上有几本，一眼扫过去就数得出来；而本地小说是直接进书架的
         // （不再经过书城），所以"往里加书"这件事的入口就该在书架这一页
-        boolean folderSlot = tab == Tab.SHELF;
+        // 「文件夹」只在本地书源真的可用时才出现：书源不可用的目标上点它，
+        // 只会建出一个那个目标读不了的目录（directory() 会顺手建）
+        boolean folderSlot = tab == Tab.SHELF && BookSources.available(TxtBookSource.SOURCE_ID);
         String count = folderSlot
                 ? Component.translatable("mcphone.reader.txt.folder").getString()
                 : countText(total, matched);
@@ -554,7 +556,9 @@ public final class BookList {
         if (folderHovered) {
             // 交给系统自己的文件管理器开，不弹任何 Java 的窗口：AWT 的选择器在 macOS 上
             // 要与游戏抢主线程。目录不存在时 directory() 会先建出来
-            Util.getPlatform().openPath(TxtLibrary.directory());
+            // 走收 File 的那个重载：openPath(Path) 是 1.20.2 才加的，最老的目标上没有
+            // （见 docs/PORTING.md 的差异表）。openFile 两档版本都在，语义相同
+            Util.getPlatform().openFile(TxtLibrary.directory().toFile());
             return true;
         }
 

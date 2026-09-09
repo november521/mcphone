@@ -1,6 +1,5 @@
 package com.november.mcphone.feature.camera.client;
 
-import com.november.mcphone.core.client.MCphoneKeyBindings;
 import com.november.mcphone.core.client.PhoneKeys;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Screenshot;

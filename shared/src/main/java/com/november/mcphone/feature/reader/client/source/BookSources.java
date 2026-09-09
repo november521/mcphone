@@ -74,6 +74,14 @@ public final class BookSources {
     }
 
     /** 重扫所有书源。打开书架页时调 */
+    /** 某个书源在这个目标上可用吗。id 见各书源的 SOURCE_ID */
+    public static boolean available(String sourceId) {
+        for (BookSource source : SOURCES) {
+            if (source.id().equals(sourceId)) return source.isAvailable();
+        }
+        return false;
+    }
+
     public static void refreshAll() {
         for (BookSource source : SOURCES) {
             if (!isAvailable(source)) continue;
