@@ -1,5 +1,6 @@
 package com.november.mcphone.feature.browser.client;
 
+import com.november.mcphone.platform.Draw;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.BufferBuilder;
 import com.mojang.blaze3d.vertex.BufferUploader;
@@ -190,7 +191,7 @@ public final class BrowserScreen extends Screen {
 
         // 暗化只画这一次，部件（地址栏）由本方法末尾自己画。
         // 别在末尾调 super.render()：Screen.render 会把暗化再画一遍，盖在网页上
-        renderBackground(g, mouseX, mouseY, partialTick);
+        Draw.screenBackground(this, g, mouseX, mouseY, partialTick);
 
         PhoneSkin.drawOrFill(g, PhoneSkin.Element.BROWSER_PANEL,
                 panelX, panelY, panelW, panelH, PhoneTheme.COLOR_SCREEN_BG);
@@ -225,18 +226,9 @@ public final class BrowserScreen extends Screen {
         RenderSystem.setShader(net.minecraft.client.renderer.GameRenderer::getPositionTexColorShader);
         RenderSystem.setShaderTexture(0, texture);
 
-        BufferBuilder buffer = Tesselator.getInstance()
-                .begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_TEX_COLOR);
-        // v 轴是反的：Chromium 的画面原点在左上，OpenGL 纹理坐标原点在左下
-        buffer.addVertex(matrix, viewX, viewY + viewH, 0)
-                .setUv(0f, 1f).setColor(255, 255, 255, 255);
-        buffer.addVertex(matrix, viewX + viewW, viewY + viewH, 0)
-                .setUv(1f, 1f).setColor(255, 255, 255, 255);
-        buffer.addVertex(matrix, viewX + viewW, viewY, 0)
-                .setUv(1f, 0f).setColor(255, 255, 255, 255);
-        buffer.addVertex(matrix, viewX, viewY, 0)
-                .setUv(0f, 0f).setColor(255, 255, 255, 255);
-        BufferUploader.drawWithShader(buffer.build());
+        // 顶点缓冲那套 API 1.21 整个改过名，差别关在 Draw 里；
+        // uv 为什么要翻 v 轴见它的文档
+        Draw.texturedQuad(matrix, viewX, viewY, viewW, viewH);
 
         // 把纹理槽还原。留着的话，之后画别的东西会莫名其妙糊上一层网页
         RenderSystem.setShaderTexture(0, 0);

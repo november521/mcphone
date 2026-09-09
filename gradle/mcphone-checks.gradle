@@ -856,7 +856,37 @@ abstract class LoaderTwinsTask extends DefaultTask {
                     "要么把改动同步到每一份，要么这个类根本不该在加载器层 —— \n" +
                     "它如果开始各家各的样，那就是平台专有的东西，回 platforms/<目标名>/。")
         }
-        logger.lifecycle("加载器层孪生校验通过：${twins.size()} 组，各 ${layers.size()} 层里的同名文件正文一致")
+        // 【报实际比对了什么，不报声明了几个层】
+        //
+        // 原先这里写的是「各 ${layers.size()} 层里的同名文件正文一致」—— layers.size()
+        // 是【声明】的加载器层数（3），而 fabric 层里一个 java 都没有，实际每组只有
+        // forge / neoforge 两份。那句话读起来是「三个加载器的副本都一致」，
+        // 而那恰好是人会拿它当保证的那一句。
+        //
+        // 更要紧的是它掩盖一个真实的边：只在一个层里存在的文件不算孪生、不红
+        // （那是有意的 —— 某个类可能确实只有一个加载器有）。于是 fabric 并进来之后，
+        // 某一组漏了 fabric 那一份时这道闸不会响 —— 那就更不能让消息替它打包票。
+        def withFiles = layers.findAll { l -> (l.dir as File).isDirectory() &&
+                (l.dir as File).listFiles() != null && byFqcn.any { fq, m -> m.containsKey(l.name) } }
+                .collect { it.name }.toSorted()
+        def sizes = twins.values().collect { it.size() }
+        def bySize = sizes.countBy { it }
+        def shape = bySize.collect { n, c -> "${c} 组各 ${n} 份" }.join('，')
+        logger.lifecycle("加载器层孪生校验通过：${twins.size()} 组（${shape}），" +
+                "参与比对的层：${withFiles.join('、')}")
+
+        // 哪些层有内容、却在某些组里缺席 —— 不报错（那可能是那个加载器专有的类），
+        // 但要说出来：这正是「漏了一份」与「本来就只有一份」看起来一样的地方。
+        def gaps = []
+        twins.each { fq, m ->
+            def absent = withFiles.findAll { !m.containsKey(it) }
+            if (absent) gaps << "  ${fq}  缺：${absent.join('、')}"
+        }
+        if (gaps) {
+            logger.lifecycle("  ⚠ 下面这些组不是每个有内容的层都有一份 —— " +
+                    "可能是那个加载器专有，也可能是漏了，这道闸分不出来：")
+            gaps.each { logger.lifecycle(it) }
+        }
     }
 }
 
