@@ -225,7 +225,7 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 
 （无）
 
-#### 仅加载器轴（23）
+#### 仅加载器轴（24）
 
 同一加载器的各个 Minecraft 版本可共用；三个加载器之间必然分叉。
 
@@ -235,6 +235,7 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 - `compat.IntegratedDynamicsCompat` —— 加载器导入
 - `core.ModAttachments` —— 加载器导入
 - `core.ModCreativeTabs` —— 加载器导入
+- `core.ModItems` —— 加载器导入　**★ 被共用代码引用**
 - `core.ModSounds` —— 加载器导入　**★ 被共用代码引用**
 - `core.ServerConfig` —— 加载器导入　**★ 被共用代码引用**
 - `core.client.AppHotkeys` —— 加载器导入　**★ 被共用代码引用**
@@ -288,25 +289,23 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 判据在这批上相对可信。
 
 - `compat.WaystonesCompat`　**★ 被共用代码引用**
-- `feature.terminal.integration.ae2.Ae2Integration`
+- `feature.terminal.integration.ae2.Ae2Integration`　**★ 被共用代码引用**
 - `feature.terminal.integration.ae2.Ae2wtlibSupport`
 - `feature.terminal.integration.ae2.TerminalSlotLocator`
-- `feature.terminal.integration.refinedstorage.RefinedStorageIntegration`
+- `feature.terminal.integration.refinedstorage.RefinedStorageIntegration`　**★ 被共用代码引用**
 - `feature.terminal.integration.refinedstorage.TerminalSlotReference`　**★ 被共用代码引用**
 - `platform.CuriosInventories`　**★ 被共用代码引用**
 - `platform.Slots`　**★ 被共用代码引用**
 - `platform.StackCodecs`　**★ 被共用代码引用**
 
-#### 客户端渲染路径（13）
+#### 客户端渲染路径（11）
 
 **判据在这批上最不可信** —— 签名漂移正集中在这里，逐个人工核过再搬。
 
 - `api.client.ui.PhoneMultiLineEditBox`
-- `core.client.PhoneItemProperties`
 - `feature.camera.client.CameraFlash`　**★ 被共用代码引用**
-- `feature.camera.client.CameraMode`　**★ 被共用代码引用**
 - `feature.notes.client.NoteEditor`　**★ 被共用代码引用**
-- `feature.terminal.client.TerminalApp`
+- `platform.client.CameraGui`　**★ 被共用代码引用**
 - `platform.client.DiscSongs`　**★ 被共用代码引用**
 - `platform.client.Draw`　**★ 被共用代码引用**
 - `platform.client.EditBoxes`　**★ 被共用代码引用**
@@ -344,7 +343,7 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 - `compat.IntegratedDynamicsCompat` —— 加载器导入
 - `compat.WaystonesWarpItemModule` —— 加载器导入
 - `core.ModCreativeTabs` —— 加载器导入
-- `core.ModItems` —— 加载器导入
+- `core.ModItems` —— 加载器导入　**★ 被共用代码引用**
 - `core.ModSounds` —— 加载器导入　**★ 被共用代码引用**
 - `core.PhonePlayerData` —— 加载器导入　**★ 被共用代码引用**
 - `core.PhoneScreenOnCleanup` —— 加载器导入
@@ -439,10 +438,10 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 - `feature.store.net.RequestPurchasedAppsPacket`　**★ 被共用代码引用**
 - `feature.store.net.StoreNetworking`
 - `feature.store.net.SyncPurchasedAppsPacket`
-- `feature.terminal.integration.ae2.Ae2Integration`
+- `feature.terminal.integration.ae2.Ae2Integration`　**★ 被共用代码引用**
 - `feature.terminal.integration.ae2.Ae2wtlibSupport`
 - `feature.terminal.integration.ae2.TerminalSlotLocator`
-- `feature.terminal.integration.refinedstorage.RefinedStorageIntegration`
+- `feature.terminal.integration.refinedstorage.RefinedStorageIntegration`　**★ 被共用代码引用**
 - `feature.terminal.net.SyncTerminalSlotPacket`
 - `feature.terminal.net.TerminalActionPacket`　**★ 被共用代码引用**
 - `feature.terminal.net.TerminalNetworking`
@@ -451,16 +450,14 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 - `platform.Slots`　**★ 被共用代码引用**
 - `platform.StackCodecs`　**★ 被共用代码引用**
 
-#### 客户端渲染路径（13）
+#### 客户端渲染路径（11）
 
 **判据在这批上最不可信** —— 签名漂移正集中在这里，逐个人工核过再搬。
 
-- `core.client.PhoneItemProperties`
 - `feature.camera.client.CameraFlash`　**★ 被共用代码引用**
-- `feature.camera.client.CameraMode`　**★ 被共用代码引用**
 - `feature.notes.client.NoteEditor`　**★ 被共用代码引用**
-- `feature.terminal.client.TerminalApp`
 - `feature.terminal.client.TerminalSlotClient`
+- `platform.client.CameraGui`　**★ 被共用代码引用**
 - `platform.client.DiscSongs`　**★ 被共用代码引用**
 - `platform.client.Draw`　**★ 被共用代码引用**
 - `platform.client.EditBoxes`　**★ 被共用代码引用**

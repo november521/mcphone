@@ -4,13 +4,10 @@ import com.mojang.logging.LogUtils;
 import com.november.mcphone.core.ModAttachments;
 import com.november.mcphone.core.ModCreativeTabs;
 import com.november.mcphone.core.ModDataComponents;
-import com.november.mcphone.core.PhoneItem;
-import net.minecraft.world.item.Rarity;
+import com.november.mcphone.core.ModItems;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;
-import net.neoforged.neoforge.registries.DeferredItem;
-import net.neoforged.neoforge.registries.DeferredRegister;
 import org.slf4j.Logger;
 
 @Mod(MCphone.MODID)
@@ -25,13 +22,8 @@ public class MCphone {
      */
     private static String version = "";
 
-    public static final DeferredRegister.Items ITEMS = DeferredRegister.createItems(MODID);
-
-    public static final DeferredItem<PhoneItem> PHONE = ITEMS.registerItem("phone",
-            props -> new PhoneItem(props.stacksTo(1).rarity(Rarity.RARE)));
-
     public MCphone(IEventBus modEventBus, ModContainer modContainer) {
-        ITEMS.register(modEventBus);
+        ModItems.ITEMS.register(modEventBus);
         ModDataComponents.COMPONENTS.register(modEventBus);
         ModCreativeTabs.TABS.register(modEventBus);
         com.november.mcphone.core.menu.ModMenus.MENUS.register(modEventBus);

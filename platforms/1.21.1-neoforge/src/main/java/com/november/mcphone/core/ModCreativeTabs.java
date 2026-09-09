@@ -7,7 +7,9 @@ import net.minecraft.world.item.CreativeModeTab;
 import net.neoforged.neoforge.registries.DeferredHolder;
 import net.neoforged.neoforge.registries.DeferredRegister;
 
-public class ModCreativeTabs {
+public final class ModCreativeTabs {
+
+    private ModCreativeTabs() {}
 
     public static final DeferredRegister<CreativeModeTab> TABS =
             DeferredRegister.create(Registries.CREATIVE_MODE_TAB, MCphone.MODID);
@@ -15,9 +17,9 @@ public class ModCreativeTabs {
     public static final DeferredHolder<CreativeModeTab, CreativeModeTab> MCPHONE_TAB =
             TABS.register("mcphone_tab", () -> CreativeModeTab.builder()
                     .title(Component.translatable("itemGroup.mcphone"))
-                    .icon(() -> MCphone.PHONE.get().getDefaultInstance())
+                    .icon(() -> ModItems.PHONE.get().getDefaultInstance())
                     .displayItems((params, output) -> {
-                        output.accept(MCphone.PHONE.get());
+                        output.accept(ModItems.PHONE.get());
                     })
                     .build());
 }
