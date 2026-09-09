@@ -1,5 +1,6 @@
 package com.november.mcphone.feature.terminal.integration.ae2;
 
+import com.november.mcphone.platform.ModPresence;
 import appeng.core.localization.PlayerMessages;
 import appeng.items.tools.powered.WirelessTerminalItem;
 import appeng.menu.MenuOpener;
@@ -9,7 +10,6 @@ import com.november.mcphone.feature.terminal.integration.TerminalIntegration;
 import com.november.mcphone.feature.terminal.integration.TerminalSource;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.ItemStack;
-import net.minecraftforge.fml.ModList;
 
 /**
  * Applied Energistics 2 的接入 —— 无线终端，以及 AE2WTLib 的各种终端。
@@ -159,7 +159,7 @@ public final class Ae2Integration implements TerminalIntegration {
      * 而缓存要多一个字段、多一处"什么时候填"的约定。
      */
     private static boolean hasAe2wtlib() {
-        return ModList.get().isLoaded(AE2WTLIB_MODID);
+        return ModPresence.isLoaded(AE2WTLIB_MODID);
     }
 
     @Override

@@ -1,12 +1,12 @@
 package com.november.mcphone.feature.terminal.integration;
 
+import com.november.mcphone.platform.ModPresence;
 import com.november.mcphone.MCphone;
 import com.november.mcphone.feature.terminal.integration.ae2.Ae2Integration;
 import com.november.mcphone.feature.terminal.integration.refinedstorage.RefinedStorageIntegration;
 import com.november.mcphone.feature.terminal.integration.toms.TomsStorageIntegration;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.ItemStack;
-import net.minecraftforge.fml.ModList;
 import net.minecraftforge.fml.event.lifecycle.FMLCommonSetupEvent;
 
 import java.util.ArrayList;
@@ -66,9 +66,9 @@ public final class Terminals {
     public static void discover() {
         List<TerminalIntegration> candidates = new ArrayList<>(3);
 
-        if (ModList.get().isLoaded(Ae2Integration.MODID)) candidates.add(new Ae2Integration());
-        if (ModList.get().isLoaded(RefinedStorageIntegration.MODID)) candidates.add(new RefinedStorageIntegration());
-        if (ModList.get().isLoaded(TomsStorageIntegration.MODID)) candidates.add(new TomsStorageIntegration());
+        if (ModPresence.isLoaded(Ae2Integration.MODID)) candidates.add(new Ae2Integration());
+        if (ModPresence.isLoaded(RefinedStorageIntegration.MODID)) candidates.add(new RefinedStorageIntegration());
+        if (ModPresence.isLoaded(TomsStorageIntegration.MODID)) candidates.add(new TomsStorageIntegration());
 
         // 每一家单独兜住 Throwable：一家的注册翻车不该带走另外两家，更不该带走整个模组。
         //

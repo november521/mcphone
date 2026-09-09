@@ -14,6 +14,8 @@
 
 **[🔌 附属接口文档](../../wiki/Addon-API)** —— 做一个自己的手机 App
 
+**[🧩 附属一览](../../wiki/Addons)** —— 第三方基于 App SPI 做的模组
+
 wiki 是文档的唯一真源，仓库里不再另存一份。
 
 ## 装了什么
@@ -27,19 +29,21 @@ wiki 是文档的唯一真源，仓库里不再另存一份。
 
 ## 支持的版本
 
-一个分支，一次发版所有版本各出一个 jar —— 不按版本分分支。多分支的毛病是老版本
-永远慢半拍：功能落在主力分支上，再靠一轮轮「追平」补过去，而那一轮什么时候来没人保证。
+一个分支，一次发版所有目标各出一个 jar，不按 Minecraft 版本或加载器分分支。
+按分支划分时，非主力分支的更新依赖额外的「追平」提交，其时机不受任何机制约束，
+老版本因而长期滞后。
 
-支持哪些目标由 [`versions/targets.json`](versions/targets.json) 声明：
+支持哪些目标由 [`versions/targets.json`](versions/targets.json) 声明 ——
+每个 Minecraft 版本都有 Forge / NeoForge / Fabric 三条，眼下建得起来的两个：
 
 | 目标 | Minecraft | 加载器 | 状态 |
 |---|---|---|---|
-| `1.21.1-neoforge` | 1.21.1 | NeoForge | 可构建 |
-| `1.20.1-forge` | 1.20.1 | Forge | 工程尚未并入 |
-| `1.21.1-fabric` | 1.21.1 | Fabric | 尚未开始 |
+| `1.21.1-neoforge` | 1.21.1 | NeoForge | 产物进 Release |
+| `1.20.1-forge` | 1.20.1 | Forge | CI 在编，产物尚不进 Release |
 
-代码是分块共用的：与 Minecraft 版本、加载器都无关的部分在 `shared/`，各目标自己的
-部分在 `platforms/<目标名>/`。各目标的 Gradle、Java 版本可以不同，由 CI 逐个构建。
+代码按共用范围分层：`shared/` 全部目标共用，`layers/` 下按 Minecraft 版本或加载器
+再分，`platforms/<目标名>/` 是目标专有。各目标的 Gradle、Java 版本可以不同，
+由 CI 逐个构建。详见 [wiki → 从源码构建](../../wiki/Development)。
 
 ## 从源码构建
 

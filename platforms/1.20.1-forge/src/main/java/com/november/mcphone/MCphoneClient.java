@@ -1,8 +1,8 @@
 package com.november.mcphone;
 
+import com.november.mcphone.platform.client.ClientTicks;
 import com.november.mcphone.core.client.AppHotkeyHandler;
 import com.november.mcphone.core.client.ClientConfig;
-import com.november.mcphone.core.client.ClientTicks;
 import com.november.mcphone.core.client.MCphoneKeyBindings;
 import com.november.mcphone.core.client.PhoneHud;
 import com.november.mcphone.core.client.PhoneKeyHandler;
@@ -34,7 +34,6 @@ import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.client.event.ClientPlayerNetworkEvent;
 import net.minecraftforge.client.event.RegisterClientReloadListenersEvent;
 import net.minecraftforge.common.MinecraftForge;
-import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.eventbus.api.IEventBus;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
@@ -92,7 +91,7 @@ public final class MCphoneClient {
         // 1.20.1 上对应的是 RegisterGuiOverlaysEvent，插的位置一样，见 PhoneHud
         modBus.addListener(PhoneHud::onRegisterOverlays);
 
-        MinecraftForge.EVENT_BUS.addListener(PhoneKeyHandler::onClientTick);
+        ClientTicks.onEndTick(PhoneKeyHandler::tick);
 
         // 手机进出副手、Alt 与 G 的按下松开都在这条 tick 里判，见 PhoneHud
         MinecraftForge.EVENT_BUS.addListener(PhoneHud::onClientTick);
@@ -100,11 +99,8 @@ public final class MCphoneClient {
         // 共用侧每 tick 要做的事，全在 ClientTicks 里排队 —— 这条订阅是它们唯一的入口，
         // 共用侧再加功能这里一行都不用改。排在 PhoneHud 之后：同一 tick 里挂上的那台
         // 设备，本 tick 就能被报上去。
-        // 这一支的 tick 事件不分 Pre/Post，要自己判 phase —— 不判就是一 tick 触发两次，
-        // 见 PhoneKeyHandler
-        MinecraftForge.EVENT_BUS.addListener((TickEvent.ClientTickEvent event) -> {
-            if (event.phase == TickEvent.Phase.END) ClientTicks.tick();
-        });
+        // 走 ClientTicks 门面：这一支的 tick 事件不分 Pre/Post，判 phase 的活在门面里做完了
+        ClientTicks.onEndTick(com.november.mcphone.core.client.ClientTicks::tick);
 
         MinecraftForge.EVENT_BUS.addListener(CameraHandler::onClientTick);
         MinecraftForge.EVENT_BUS.addListener(CameraHandler::onRenderGui);
@@ -120,10 +116,10 @@ public final class MCphoneClient {
         MinecraftForge.EVENT_BUS.addListener(AppHotkeyHandler::onMouseInput);
 
         // 每 tick 泵一次音频流；没在放的时候第一行就返回
-        MinecraftForge.EVENT_BUS.addListener(LocalPlayback::onClientTick);
+        ClientTicks.onEndTick(LocalPlayback::tick);
 
         // 冷却期里点的那几张图排着，每 tick 看一眼闸开了没有；队伍空的时候第一行就返回
-        MinecraftForge.EVENT_BUS.addListener(ChatImageSender::onClientTick);
+        ClientTicks.onEndTick(ChatImageSender::tick);
 
         // 一首停下来时带停止原因通知控制器，见 LocalPlayback.Ending
         LocalPlayback.setEndListener(MusicController::onTrackEnded);

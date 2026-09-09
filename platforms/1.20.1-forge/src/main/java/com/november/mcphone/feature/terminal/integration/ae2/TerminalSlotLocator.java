@@ -1,5 +1,6 @@
 package com.november.mcphone.feature.terminal.integration.ae2;
 
+import com.november.mcphone.platform.ModPresence;
 import appeng.helpers.WirelessTerminalMenuHost;
 import appeng.items.tools.powered.WirelessTerminalItem;
 import appeng.menu.MenuOpener;
@@ -8,7 +9,6 @@ import appeng.menu.locator.MenuLocators;
 import com.november.mcphone.feature.terminal.TerminalSlot;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
-import net.minecraftforge.fml.ModList;
 
 /**
  * 告诉 AE2「那台终端在手机的卡槽里」。
@@ -80,7 +80,7 @@ public record TerminalSlotLocator() implements MenuLocator {
 
         // AE2WTLib 的终端得由它自己造 host：它的菜单类型取决于是哪一种终端，
         // 拿 AE2 的通用 host 顶上去会开出一个没有合成格的普通 ME 终端。见 Ae2wtlibSupport
-        if (ModList.get().isLoaded(AE2WTLIB_MODID) && Ae2wtlibSupport.isWirelessTerminal(stack)) {
+        if (ModPresence.isLoaded(AE2WTLIB_MODID) && Ae2wtlibSupport.isWirelessTerminal(stack)) {
             return Ae2wtlibSupport.menuHost(player, this, stack);
         }
 

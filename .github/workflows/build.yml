@@ -418,40 +418,32 @@ jobs:
             FAIL=1
           fi
 
-          # 六点五、【每一层必须二选一写 since 或 loader；加载器层要挂对】
+          # 六点五、【每一层至少要写 since 或 loader 之一】
           #
-          # 写 since 的是版本层（同版本、三个加载器共用），写 loader 的是加载器层
-          # （同加载器、各版本共用）。两个都没有，构建就不知道该禁哪个轴 ——
-          # 而"不知道禁哪个轴"的层等于一道不设防的门。
+          # 层是对目标的谓词：since 钉住版本、loader 钉住加载器，而【禁哪个轴 = 哪个轴
+          # 没被钉住】。两个都不写就是「全部目标」，构建不知道该禁哪个轴 —— 那种层
+          # 等于一道不设防的门。
+          #
+          # 【两个都写是合法的】：那是交集层（该加载器 × 该批版本），两个轴都钉住了。
+          # 原先这里判的是"二选一"，与 gradle/mcphone-layers.gradle 的谓词模型对不上，
+          # 后果是交集层声明得出来却过不了 CI —— 规则说得通，构建不认。
           BADKIND=$(jq -r '
             to_entries[] | select((.value|type)=="object")
-            | select((.value.since == null) == (.value.loader == null))
-            | "  \(.key)  since=\(.value.since // "无")  loader=\(.value.loader // "无")"
+            | select(.value.since == null and .value.loader == null)
+            | "  \(.key)  since=无  loader=无"
           ' "$L"); RC=$?
           [ "$RC" = "0" ] || { echo "::error::查层类型的 jq 跑挂了（退出码 $RC）"; exit 1; }
           if [ -n "$BADKIND" ]; then
-            echo "::error::这些层没有二选一写 since 或 loader："
+            echo "::error::这些层既没写 since 也没写 loader："
             printf '%s\n' "$BADKIND"
-            echo "写 since 是版本层，写 loader 是加载器层。都不写就不知道该禁哪个轴，都写是两件事挤在一层。"
+            echo "两个都不写就是「全部目标」，那是 shared/，不是层。"
             FAIL=1
           fi
 
-          # 两种层分开放：dir 要落在与层的种类相符的那一支下
-          WRONGSUB=$(jq -r '
-            to_entries[] | select((.value|type)=="object")
-            | select(.value.since != null or .value.loader != null)
-            | . as $e
-            | (if $e.value.since != null then "layers/version/" else "layers/loader/" end) as $want
-            | select(($e.value.dir | startswith($want)) | not)
-            | "  \($e.key)  是\(if $e.value.since != null then "版本层" else "加载器层" end)，dir 应在 \($want) 下，实际是 \($e.value.dir)"
-          ' "$L"); RC=$?
-          [ "$RC" = "0" ] || { echo "::error::查层目录的 jq 跑挂了（退出码 $RC）"; exit 1; }
-          if [ -n "$WRONGSUB" ]; then
-            echo "::error::有层的目录放错了支："
-            printf '%s\n' "$WRONGSUB"
-            echo "版本层放 layers/version/，加载器层放 layers/loader/ —— 两种层禁的轴正好相反，混在一起看不出来。"
-            FAIL=1
-          fi
+          # 【这里原先还有一道「dir 要落在与层的种类相符的那一支下」】。已经删掉：
+          # layers.json 不再声明 dir，目录由层的种类与层名推出（layers/<种类>/<层名>），
+          # 放错这个状态压根表达不出来。留着那道闸的代价是它与 Gradle 那份各写各的 ——
+          # 实际发生过：Gradle 认三种层、这里认两种，交集层于是无处可放。
 
           WRONGLOADER=$(jq -r --slurpfile L "$L" '
             to_entries[] | select((.value|type)=="object")
@@ -470,6 +462,66 @@ jobs:
             FAIL=1
           fi
 
+          # 二点五、【mappings 必须人人都写，而且六个一模一样】
+          #
+          # shared/ 里有一百多个文件 import net.minecraft.*。那些名字来自映射：用 Mojang
+          # 官方名（official）时它们叫这些名字，换成 Yarn 就【全部改名】，那一百多个文件在
+          # 那个目标上一个都编不过 —— 也就是说这个字段决定 shared/ 在一个新目标上是全活还是全灭。
+          #
+          # 这件事原先只记在 README 的一句散文里，不在模型里、没有闸。加 Fabric 目标的人
+          # 最可能踩的正是这一脚：Fabric 那边 Yarn 是默认选项。
+          NOMAP=$(jq -r '
+            to_entries[] | select((.value|type)=="object") | select(.value.mappings == null) | "  \(.key)"
+          ' "$F"); RC=$?
+          [ "$RC" = "0" ] || { echo "::error::查 mappings 的 jq 跑挂了（退出码 $RC）"; exit 1; }
+          if [ -n "$NOMAP" ]; then
+            echo "::error::这些目标没写 mappings："
+            printf '%s\n' "$NOMAP"
+            echo "shared/ 能不能在一个目标上编过，取决于它用哪套映射。这个字段是必填。"
+            FAIL=1
+          fi
+          MAPS=$(jq -r '[ to_entries[] | select((.value|type)=="object") | .value.mappings ] | unique | .[]' "$F"); RC=$?
+          [ "$RC" = "0" ] || { echo "::error::汇总 mappings 的 jq 跑挂了（退出码 $RC）"; exit 1; }
+          if [ "$(printf '%s\n' "$MAPS" | grep -c .)" != "1" ]; then
+            echo "::error::目标之间的 mappings 不一致，出现了这几种："
+            printf '  %s\n' $MAPS
+            echo "shared/ 是一份源码给所有目标编的。两个目标用不同的映射，"
+            echo "那一份源码里的 net.minecraft.* 名字不可能同时对 —— shared/ 这个概念本身就不成立了。"
+            echo "真要支持另一套映射，得先决定 shared/ 怎么办，不是改这一行。"
+            FAIL=1
+          else
+            echo "全部目标的 mappings：$MAPS"
+          fi
+
+          # 六点八、【至少要有一个 Java 17 的目标真的在编】
+          #
+          # shared/ 必须能在 Java 17 上编过 —— 1.20.1 那一档跑在 17 上。
+          # 原先这件事由 gradle 里一道 verifyJava17Compatible（--release 17 再编一遍）守着，
+          # 那道闸已经删了：1.20.1-forge 在 CI 里用真的 JDK 17 编同一份 shared/，比模拟更强。
+          #
+          # 但那句话有个前提：CI 里【真的】有一个 Java 17 的目标在编。这个前提要是哪天不成立
+          # （那个平台目录被挪走、被删、targets.json 改了 java），shared/ 的 17 兼容性就
+          # 一个守卫都没有，而且完全静默 —— 构建照样全绿，直到有人拿 1.20.1 装上才发现。
+          #
+          # 「工程目录存在」与 targets job 挑目标用的是同一条判据（见那个 job 的 os.path.isdir）。
+          J17=$(jq -r '
+            [ to_entries[] | select((.value|type)=="object") | select(.value.java == 17)
+              | "\(.key)\t\(.value.project)" ] | .[]
+          ' "$F"); RC=$?
+          [ "$RC" = "0" ] || { echo "::error::查 Java 17 目标的 jq 跑挂了（退出码 $RC）"; exit 1; }
+          HAVE17=0
+          while IFS=$'\t' read -r NAME PROJ; do
+            [ -n "$NAME" ] || continue
+            [ -d "$PROJ" ] && HAVE17=1 && echo "  Java 17 的目标：$NAME（$PROJ）"
+          done <<< "$J17"
+          if [ "$HAVE17" = "0" ]; then
+            echo "::error::targets.json 里没有一个 java: 17 的目标的工程目录是存在的。"
+            echo "shared/ 要求在 Java 17 上编得过（1.20.1 那一档跑在 17 上），而这件事现在"
+            echo "没有任何东西在守：那道 --release 17 的闸已经删掉，理由正是「有真目标在编」。"
+            echo "要么把那个目标的工程目录放回来，要么重新加一道 --release 17 的校验。"
+            FAIL=1
+          fi
+
           # 七、【声明了却没有任何目标挂的层 = 孤儿层】
           #
           # 层里的文件只有被某个目标挂上才会进构建。没人挂的层是一整个目录的死代码，
@@ -482,7 +534,7 @@ jobs:
             | . as $used
             | $layers | to_entries[] | select((.value|type)=="object")
             | select(.key as $k | ($used | index($k)) == null)
-            | "  \(.key)  （目录 \(.value.dir)）"
+            | "  \(.key)"
           ' "$L"); RC=$?
           if [ "$RC" != "0" ]; then
             echo "::error::查孤儿层的 jq 跑挂了（退出码 $RC），这道检查没能跑起来"
@@ -501,16 +553,26 @@ jobs:
           # 这一条跟 gradle/mcphone-layers.gradle 里那一条是同一个模型，两边必须一致：
           #
           #   populated: true   java 与 resources 至少要有一个在，都不在就是内容丢了
-          #                     或者 dir 写错
+          #                     或者层名与目录名对不上（目录由层名推出）
           #   populated: false  两个都不在是【正常的】—— git 不跟踪空目录，一个还没
           #                     开始填的层在克隆下来的仓库里本来就没有这些目录；
           #                     反过来，声明了没内容却有内容，是声明过期
           #
           # 这道检查跑在 CI 的干净检出上，正好是本地永远复现不出来的那个环境：
           # 本地那些目录是 mkdir 出来的，一直都在。
+          # 目录不是声明的，是推出来的：layers/<种类>/<层名>。
+          # 【CI 侧只有这一处推它】—— 另一处在 gradle/mcphone-layers.gradle 的
+          # layerDirOf。两处要是推得不一样，后果只会是"目录找不到"，
+          # 而那正好被下面 populated: true 那一支当场拦住，不会静默放行。
           LAYERROWS=$(q_layers '
+            def layerdir:
+              "layers/"
+              + (if .value.since != null and .value.loader != null then "both"
+                 elif .value.since != null then "version"
+                 else "loader" end)
+              + "/" + .key;
             to_entries[] | select((.value|type)=="object")
-            | "\(.key)\t\(.value.dir)\t\(.value.populated)"
+            | "\(.key)\t\(layerdir)\t\(.value.populated)"
           ') || exit 1
           while IFS=$'\t' read -r NAME DIR POP; do
             [ -n "$NAME" ] || continue
@@ -520,7 +582,7 @@ jobs:
             [ -d "$DIR/docs" ] && HAS=1        # 一个层可以只有 docs/（断言测试按被测对象分层）
             if [ "$POP" = "true" ] && [ "$HAS" = "0" ]; then
               echo "::error::共享层 $NAME 声明了 populated: true，但 $DIR 下 src/main/java、src/main/resources 与 docs 都不存在（在这次干净检出里）。"
-              echo "要么内容丢了，要么 layers.json 里的 dir 写错了。这一层确实还没开始填的话，把 populated 改成 false。"
+              echo "要么内容丢了，要么层名与目录名对不上（目录由层名推出：layers/<种类>/<层名>）。这一层确实还没开始填的话，把 populated 改成 false。"
               FAIL=1
             fi
             if [ "$POP" = "false" ] && [ "$HAS" = "1" ]; then

@@ -89,11 +89,14 @@ public interface TerminalIntegration {
         return true;
     }
 
-    // ⚠ 【1.21.1 那一侧还没用上这个方法】。并 1.20.1 时发现：那一支的
-    // Terminals.isInstallable 会拿它过滤，RefinedStorageIntegration 答 false，
-    // 便携网格因此进不了手机卡槽；而 1.21.1 的 Terminals.isOpenable 不看它 ——
-    // 同一件东西在 1.21.1 上装得进去却点不开。那支的注释管这叫「功能上的降级」。
-    // 方法先收进共用层（两边都编得过），这处行为差异单独记着，不在"让它编过"里顺手改。
+    // 【这个方法一度被架空过】。1.20.1 分支上 TerminalSlotMenu 的 mayPlace 问的是
+    // Terminals.isInstallable（它会问这一句），RefinedStorageIntegration 答 false，
+    // 便携网格因此进不了卡槽。那个文件合进 shared/ 时（7541688）调用点变成了
+    // isOpenable —— 1.21.1 的写法赢了，1.20.1 的限制被静默丢掉，两边构建全绿，
+    // 而这段注释还在描述已经不成立的行为。
+    //
+    // 现在 mayPlace 问回 isInstallable，两支的 Terminals 都有这个方法。
+    // 1.21.1 上没有人答不（RS2 表达得了那种位置），所以那一支行为不变。
 
     default void setup() {}
 }

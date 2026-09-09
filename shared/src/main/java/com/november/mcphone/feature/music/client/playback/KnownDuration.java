@@ -17,7 +17,7 @@ package com.november.mcphone.feature.music.client.playback;
  *
  * {@link PcmAudioStream} 实现，具体的数由各个解码器算：MP3 读 Xing 头里的
  * 帧数或按固定码率折算，WAV 用 javax.sound 报的帧数。OGG 走的是 Minecraft
- * 自己的 JOrbisAudioStream，我们改不了它，也就没有这个信息 —— 那一档就是
+ * 自己的 Ogg 解码器（1.21 叫 JOrbisAudioStream，1.20.1 叫 OggAudioStream），我们改不了它，也就没有这个信息 —— 那一档就是
  * 不知道，进度条不画，这比画一个瞎猜的比例诚实。
  */
 public interface KnownDuration {

@@ -1,8 +1,8 @@
 package com.november.mcphone;
 
+import com.november.mcphone.platform.client.ClientTicks;
 import com.november.mcphone.core.client.AppHotkeyHandler;
 import com.november.mcphone.core.client.ClientConfig;
-import com.november.mcphone.core.client.ClientTicks;
 import com.november.mcphone.core.client.MCphoneKeyBindings;
 import com.november.mcphone.core.client.PhoneHud;
 import com.november.mcphone.core.client.PhoneContainerScreen;
@@ -63,7 +63,7 @@ public class MCphoneClient {
 
         NeoForge.EVENT_BUS.addListener(CameraHandler::onClientTick);
 
-        NeoForge.EVENT_BUS.addListener(PhoneKeyHandler::onClientTick);
+        ClientTicks.onEndTick(PhoneKeyHandler::tick);
 
         // 手机进出副手、Alt 按下松开都在这条 tick 里判，见 PhoneHud
         NeoForge.EVENT_BUS.addListener(PhoneHud::onClientTick);
@@ -71,13 +71,11 @@ public class MCphoneClient {
         // 共用侧每 tick 要做的事，全在 ClientTicks 里排队 —— 这条订阅是它们唯一的入口，
         // 共用侧再加功能这里一行都不用改。排在 PhoneHud 之后：同一 tick 里挂上的那台
         // 设备，本 tick 就能被报上去
-        NeoForge.EVENT_BUS.addListener(
-                (net.neoforged.neoforge.client.event.ClientTickEvent.Post event) -> ClientTicks.tick());
+        ClientTicks.onEndTick(com.november.mcphone.core.client.ClientTicks::tick);
 
         // 挂在 HUD 上看书时的两个翻页键。手机成了 mc.screen 就走不动路，
         // 而边走边看正是这个功能最想要的场景，见 ReaderKeyHandler
-        NeoForge.EVENT_BUS.addListener(
-                com.november.mcphone.feature.reader.client.ReaderKeyHandler::onClientTick);
+        ClientTicks.onEndTick(com.november.mcphone.feature.reader.client.ReaderKeyHandler::tick);
 
 
         // 每个 App 自己的快捷键。它不是 KeyMapping，只能听按下事件，理由见 AppHotkeys。
@@ -86,10 +84,10 @@ public class MCphoneClient {
         NeoForge.EVENT_BUS.addListener(AppHotkeyHandler::onMouseInput);
 
         // 每 tick 泵一次音频流；没在放的时候第一行就返回
-        NeoForge.EVENT_BUS.addListener(LocalPlayback::onClientTick);
+        ClientTicks.onEndTick(LocalPlayback::tick);
 
         // 冷却期里点的那几张图排着，每 tick 看一眼闸开了没有；队伍空的时候第一行就返回
-        NeoForge.EVENT_BUS.addListener(ChatImageSender::onClientTick);
+        ClientTicks.onEndTick(ChatImageSender::tick);
 
         // 一首停下来时带停止原因通知控制器，见 LocalPlayback.Ending
         LocalPlayback.setEndListener(MusicController::onTrackEnded);

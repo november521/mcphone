@@ -50,6 +50,10 @@
     "com.cinemamod.mcef": {
       "mod": "MCEF",
       "evidence": "两支的 import 完全一致，且该文件正文在两支上逐字相同（去注释后比对 origin/1.20.1-forge）。"
+    },
+    "vazkii.patchouli": {
+      "mod": "Patchouli",
+      "evidence": "PatchouliSource.java 在 1.20.1-forge 与 1.21.1-neoforge 上正文逐字相同（去注释后比对 origin/1.20.1-forge），vazkii.patchouli.* 的 4 条 import 两支完全一致：PatchouliAPI、BookIcon、Book、BookRegistry。同一份文本已在两个目标上各自编译通过。"
     }
   },
   "banned_examples": {
