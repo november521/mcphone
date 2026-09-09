@@ -1,8 +1,11 @@
 name: Build & Upload
 
-# 这个分支（main）是 NeoForge 1.21.1 那一支，也是当前的主力版本。
-# 仓库里每个 Minecraft 版本 / 加载器各占一个分支，每个分支就是一个普通的
-# 单工程仓库，根目录直接是 gradlew。1.20.1 的移植在 1.20.1-forge 分支上。
+# 这个仓库【一个分支出多个版本】：支持哪些目标写在 versions/targets.json 里，
+# 每个目标一个工程目录（platforms/<目标名>/），各有各的 Gradle 与 Java 版本。
+#
+# 这里遍历所有 buildable 的目标逐个构建 —— 不用 GitHub 的 matrix 分 job：
+# 一次推送就该看到"哪个目标挂了"，分成几个 job 之后，红的是哪一个要点进去才知道，
+# 而且 setup-java 一次就能把几个 JDK 都装好，分 job 反而更慢。
 on:
   push:
     branches: [master, main]
@@ -11,6 +14,7 @@ on:
 
 jobs:
   build:
+    name: 全部目标构建
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -19,73 +23,101 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
 
-      - name: Setup JDK 21
+      # 【一次把所有目标要的 JDK 都装上】。setup-java 会为每个版本导出
+      # JAVA_HOME_<版本>_X64，下面按目标的 java 字段挑。
+      #
+      # ⚠ 这个列表要跟 versions/targets.json 里出现过的 java 值一致。多装一个不要紧，
+      # 少装一个会在循环里报"JAVA_HOME_17_X64 为空"——所以下面那句挑 JDK 的代码
+      # 取不到就直接失败，不退回默认 JDK：拿错 JDK 编出来的 class 文件版本不对，
+      # 而那要等玩家装上才发现。
+      - name: Setup JDKs
         uses: actions/setup-java@v6
         with:
-          java-version: '21'
           distribution: 'temurin'
+          java-version: |
+            17
+            21
 
       # 【停在 v5，不要升 v6】。v6 把缓存那部分抽成了 gradle-actions-caching，
       # 那是个不再开源的商业组件，启用缓存就等于接受 Gradle 自己那份
       # Terms of Use（https://gradle.com/legal/terms-of-use/）。一个 MIT 的
       # 模组仓库不该在顺手修个告警的时候，把自己绑上另一份条款。
-      #
-      # v5 相对 v4 的唯一变更就是跑在 node 24 上 —— 而那正是我们要修的那条
-      # 弃用告警。真需要 v6 里的东西时再单独权衡，别跟着"升到最新"一起做。
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v5
 
-      - name: Make Gradle wrapper executable
-        run: chmod +x ./gradlew
-
-      - name: Build with Gradle
-        run: ./gradlew build
-
-      - name: Find built JAR
-        id: find-jar
+      - name: 逐个目标构建
         run: |
-          # 【按确切文件名取，不要 find | head -1】。
-          #
-          # 眼下 CI 是全新检出、build/libs 里只有一个 jar，head -1 挑不错。
-          # 但那是"碰巧"，不是"保证"：本地 pruneOldJars 会留着前两个版本，
-          # 而 1.20.1-forge 那一支就因为 jarJar 多出一个 -slim 差点发错包 ——
-          # 挑错的后果是发出一个旧版本或残缺包，而构建全绿、测试全绿，
-          # 没有任何东西会告诉你。
-          #
-          # mod_version 是这次构建的唯一真值，直接拿它拼名字。
-          MOD_VERSION=$(grep -E '^mod_version=' gradle.properties | cut -d= -f2- | tr -d '[:space:]')
-          JAR_PATH="build/libs/mcphone-${MOD_VERSION}.jar"
-          if [ ! -f "$JAR_PATH" ]; then
-            echo "::error::没找到 $JAR_PATH。build/libs 下现有："
-            ls -la build/libs || true
+          set -euo pipefail
+          VERSION=$(grep -E '^mod_version=' gradle.properties | cut -d= -f2- | tr -d '[:space:]')
+          echo "仓库版本号：$VERSION"
+          mkdir -p dist
+
+          TARGETS=$(jq -r 'to_entries[] | select((.value | type) == "object" and .value.buildable == true) | .key' versions/targets.json)
+          if [ -z "$TARGETS" ]; then
+            echo "::error::versions/targets.json 里一个 buildable 的目标都没有。"
+            echo "这不是'没有目标'，是那个文件坏了或者被改空了 —— 就这么放行的话这个 job 会永远绿。"
             exit 1
           fi
-          echo "jar_path=$JAR_PATH" >> "$GITHUB_OUTPUT"
-          echo "jar_name=$(basename "$JAR_PATH")" >> "$GITHUB_OUTPUT"
 
-      - name: Upload artifact
+          for T in $TARGETS; do
+            PROJ=$(jq -r --arg t "$T" '.[$t].project' versions/targets.json)
+            JAVA=$(jq -r --arg t "$T" '.[$t].java'    versions/targets.json)
+
+            # 取不到就失败，别退回默认 JDK
+            eval "TARGET_JAVA_HOME=\${JAVA_HOME_${JAVA}_X64:-}"
+            if [ -z "$TARGET_JAVA_HOME" ]; then
+              echo "::error::目标 $T 要 Java $JAVA，但这台机器上没装（JAVA_HOME_${JAVA}_X64 为空）。"
+              echo "把 $JAVA 加进上面 Setup JDKs 的 java-version 列表。"
+              exit 1
+            fi
+            if [ ! -d "$PROJ" ]; then
+              echo "::error::目标 $T 声明的工程目录 $PROJ 不存在。"
+              exit 1
+            fi
+
+            echo "::group::$T  （$PROJ，Java $JAVA）"
+            ( cd "$PROJ" && chmod +x ./gradlew && JAVA_HOME="$TARGET_JAVA_HOME" ./gradlew build )
+
+            # 【按确切文件名取，不要 find | head -1】。挑错的后果是发出一个旧版本或
+            # 残缺包，而构建全绿、测试全绿，没有任何东西会告诉你。
+            # mod_version 是这次构建的唯一真值，直接拿它拼名字。
+            JAR="$PROJ/build/libs/mcphone-${VERSION}.jar"
+            if [ ! -f "$JAR" ]; then
+              echo "::error::没找到 $JAR。$PROJ/build/libs 下现有："
+              ls -la "$PROJ/build/libs" || true
+              exit 1
+            fi
+            # 各目标的 jar 在工程里同名（都是 mcphone-<版本>.jar），收进 dist 时
+            # 必须带上目标名，否则后一个会把前一个覆盖掉，而且不报错
+            cp "$JAR" "dist/mcphone-${VERSION}-${T}.jar"
+            echo "::endgroup::"
+          done
+
+          echo "── 产物 ──"
+          ls -lh dist/
+
+      - name: Upload artifacts
         uses: actions/upload-artifact@v7
         with:
-          name: ${{ steps.find-jar.outputs.jar_name }}
-          path: ${{ steps.find-jar.outputs.jar_path }}
+          name: mcphone-jars
+          path: dist/*.jar
           retention-days: 30
 
   # ============================================================
   #  版本号只能由 CI 改
   # ============================================================
   #
-  # mod_version 归 release.yml 管：发版时它算出新号、写进 gradle.properties、
-  # 以 github-actions[bot] 的身份提交并打 tag。平时任何人都不该动它。
+  # mod_version 归 release.yml 管：发版时它算出新号、写进【仓库根的】
+  # gradle.properties、以 github-actions[bot] 的身份提交并打 tag。平时任何人都不该动它。
   #
   # 为什么要一道闸而不是只写在注释里
   #
-  # 原先那套规矩就写在 gradle.properties 里，写得很细，照样没挡住：每个 commit
-  # 随手 +1，攒出一串谁也没见过的号，还因为分支合并往回走过 —— 1.10.1 到 1.10.4
-  # 之间出现过两个内容不同、mod_version 都写 1.10.1 的 commit。而这个字段是要
-  # 烧进 jar、在游戏内模组列表里显示的：两个不同的包自称同一个版本，比不升号糟。
+  # 原先那套规矩就写在注释里，写得很细，照样没挡住：号被随手 +1，攒出一串谁也没见过
+  # 的版本，还因为分支合并往回走过。而这个字段要烧进 jar、在游戏内模组列表里显示，
+  # 现在还要求【所有目标共用同一个号】—— 两个不同的包自称同一个版本，比不升号糟。
   #
-  # 判据是【提交人】不是【改了什么】：bot 改得，人改不得。所以 release.yml 里
-  # 那两行 git config 是这道闸的一半，改掉那个身份等于把闸拆了。
+  # 判据是【提交人】不是【改了什么】：bot 改得，人改不得。所以 release.yml 里那两行
+  # git config 是这道闸的一半，改掉那个身份等于把闸拆了。
   guard-version:
     name: 版本号只能由 CI 改
     runs-on: ubuntu-latest
@@ -136,3 +168,24 @@ jobs:
             exit 1
           fi
           echo "没有人手动改过 mod_version"
+
+      # 仓库级身份只能有仓库根那一份。平台里再定义一遍，两边就能各自漂移，
+      # 而"所有目标同一个版本号"正是这套结构存在的理由。
+      #
+      # 平台的 build.gradle 读不到仓库根会直接失败，但它【不会】拦住"平台自己也定义了
+      # 一份"——那种情况下 ext 里两个值打架，谁赢看加载顺序。所以在这儿拦。
+      - name: 检查平台有没有自己定义仓库级的键
+        run: |
+          set -uo pipefail
+          BAD=""
+          for f in platforms/*/gradle.properties; do
+            [ -f "$f" ] || continue
+            HIT=$(grep -nE '^(mod_id|mod_name|mod_license|mod_group_id|mod_version)=' "$f" || true)
+            [ -n "$HIT" ] && BAD="${BAD}${f}:"$'\n'"${HIT}"$'\n'
+          done
+          if [ -n "$BAD" ]; then
+            echo "::error::平台的 gradle.properties 里出现了仓库级的键，它们只能写在仓库根："
+            printf '%s' "$BAD"
+            exit 1
+          fi
+          echo "平台没有重复定义仓库级的键"
