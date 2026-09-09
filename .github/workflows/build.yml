@@ -493,6 +493,41 @@ jobs:
             echo "全部目标的 mappings：$MAPS"
           fi
 
+          # 二点六、【server_config_sync 必须人人都写，而且不许有 false】
+          #
+          # shared/ 的客户端代码有三处直接读 ServerConfig（PhoneScreen:289、ChatList:193、
+          # ChatConversation:564），只管按钮显隐与提示文案 —— 权威判定在服务端侧另有一道。
+          #
+          # 那三处成立，靠的是加载器把 SERVER 档的配置在连接时推给客户端。Forge 与 NeoForge
+          # 都这么做；Fabric 没有这个机制，不补同步包的话那三处读到的是客户端本地的默认值 ——
+          # 编得过、跑得起来、按钮显隐是错的，【而且不报错】。
+          #
+          # 写 false 会红。那不是刁难：是要求先决定那三处怎么办，而不是让它静默地错。
+          NOSYNC=$(jq -r '
+            to_entries[] | select((.value|type)=="object") | select(.value.server_config_sync == null) | "  \(.key)"
+          ' "$F"); RC=$?
+          [ "$RC" = "0" ] || { echo "::error::查 server_config_sync 的 jq 跑挂了（退出码 $RC）"; exit 1; }
+          if [ -n "$NOSYNC" ]; then
+            echo "::error::这些目标没写 server_config_sync："
+            printf '%s\n' "$NOSYNC"
+            echo "shared/ 的客户端代码有三处依赖它。这个字段是必填。"
+            FAIL=1
+          fi
+          BADSYNC=$(jq -r '
+            to_entries[] | select((.value|type)=="object") | select(.value.server_config_sync == false) | "  \(.key)"
+          ' "$F"); RC=$?
+          [ "$RC" = "0" ] || { echo "::error::查 server_config_sync 的 jq 跑挂了（退出码 $RC）"; exit 1; }
+          if [ -n "$BADSYNC" ]; then
+            echo "::error::这些目标声明了 server_config_sync: false："
+            printf '%s\n' "$BADSYNC"
+            echo "shared/ 的这三处客户端读取会拿到客户端本地的默认值，按钮显隐是错的，而且不报错："
+            echo "  core/client/PhoneScreen.java:289"
+            echo "  feature/chat/client/ChatList.java:193"
+            echo "  feature/chat/client/ChatConversation.java:564"
+            echo "先决定那三处怎么办（补一个同步包，或者改成不依赖服务端配置），再把这个字段改回 true。"
+            FAIL=1
+          fi
+
           # 六点八、【至少要有一个 Java 17 的目标真的在编】
           #
           # shared/ 必须能在 Java 17 上编过 —— 1.20.1 那一档跑在 17 上。

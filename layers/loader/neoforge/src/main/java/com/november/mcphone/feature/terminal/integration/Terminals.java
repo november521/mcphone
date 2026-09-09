@@ -52,11 +52,12 @@ public final class Terminals {
      *
      * 为什么不在模组构造里做
      *
-     * RS 的 {@code RefinedStorageApi.INSTANCE} 是个<b>代理对象</b>，真正的实现由 RS 自己的
-     * 初始化挂上去。在构造里调它，靠的是"依赖写了 ordering=AFTER 所以我在它后面"这条推理；
-     * setup 阶段则是<b>所有</b>模组都构造完了，不需要推理。
+     * AE2 与 RS 的入口都是静态注册表或代理对象（各版本长得不一样，看各目标自己的
+     * {@code XxxIntegration}），真正的内容由它们自己的初始化挂上去。在构造里碰它们，
+     * 靠的是「依赖写了 ordering=AFTER 所以我在它后面」这条推理；setup 阶段则是
+     * <b>所有</b>模组都构造完了，不需要推理。
      *
-     * {@code enqueueWork} 不能省：setup 是并行派发的，而我们要往 AE2 与 RS 的静态注册表里写。
+     * {@code enqueueWork} 不能省：setup 是并行派发的，而我们要往那些静态注册表里写。
      */
     public static void onCommonSetup(final FMLCommonSetupEvent event) {
         event.enqueueWork(Terminals::discover);
@@ -121,8 +122,8 @@ public final class Terminals {
     /**
      * 这台终端能从手机上打开吗 —— 认得出<b>并且</b>开得了。
      *
-     * 卡槽只收这一种（见 {@code TerminalSlotMenu} 的 mayPlace）：装得进去却点不开的东西
-     * 比装不进去更难解释。
+     * 用在「身上有没有一台能开的」这类问题上（背包扫描、卡槽界面那个按钮亮不亮）。
+     * 卡槽收不收它是另一问，见 {@link #isInstallable}。
      */
     public static boolean isOpenable(ItemStack stack) {
         return owner(stack).filter(integration -> integration.canOpen(stack)).isPresent();
@@ -131,12 +132,14 @@ public final class Terminals {
     /**
      * 这台终端<b>装得进手机卡槽</b>吗 —— 开得了，而且这一家支持「住在卡槽里」。
      *
-     * 卡槽只收这一种（见 {@code TerminalSlotMenu} 的 mayPlace）。比 {@link #isOpenable}
-     * 多问一句 {@link TerminalIntegration#canLiveInPhoneSlot}，而那一问在这一支上
-     * <b>没有人答不</b> —— RS2 表达得了「东西在手机卡槽里」这种位置。
+     * 卡槽只收这一种（见 {@code TerminalSlotMenu} 的 mayPlace）：装得进去却点不开的东西
+     * 比装不进去更难解释。比 {@link #isOpenable} 多问一句
+     * {@link TerminalIntegration#canLiveInPhoneSlot}。
      *
-     * 那为什么还要有这个方法：Forge 1.20.1 上的 RS 答不（它那个版本表达不了那种位置），
-     * 而问这一句的 {@code TerminalSlotMenu} 住在 shared/ 里，两支得有同一个方法可调。
+     * 哪些实现会答不，看各目标自己的 {@code XxxIntegration} —— 眼下只有 Forge 1.20.1 上的
+     * RS 答不：它的终端在背包里照常开得了，只是那个版本的 RS 表达不了「东西在手机卡槽里」
+     * 这种位置。别的目标上没有人答不，这个方法在那儿等价于 {@link #isOpenable}，
+     * <b>但它必须存在</b>：问这一句的 {@code TerminalSlotMenu} 住在 shared/ 里。
      */
     public static boolean isInstallable(ItemStack stack) {
         return owner(stack)

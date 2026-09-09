@@ -1,10 +1,10 @@
 package com.november.mcphone.feature.terminal.integration;
 
-import com.november.mcphone.platform.ModPresence;
 import com.november.mcphone.MCphone;
 import com.november.mcphone.feature.terminal.integration.ae2.Ae2Integration;
 import com.november.mcphone.feature.terminal.integration.refinedstorage.RefinedStorageIntegration;
 import com.november.mcphone.feature.terminal.integration.toms.TomsStorageIntegration;
+import com.november.mcphone.platform.ModPresence;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.ItemStack;
 import net.minecraftforge.fml.event.lifecycle.FMLCommonSetupEvent;
@@ -52,11 +52,12 @@ public final class Terminals {
      *
      * 为什么不在模组构造里做
      *
-     * AE2 的 {@code MenuLocators} 与 RS 的 {@code API.instance()} 都是静态注册表，真正的
-     * 内容由它们自己的初始化挂上去。在构造里碰它们，靠的是"依赖写了 ordering=AFTER 所以我
-     * 在它后面"这条推理；setup 阶段则是<b>所有</b>模组都构造完了，不需要推理。
+     * AE2 与 RS 的入口都是静态注册表或代理对象（各版本长得不一样，看各目标自己的
+     * {@code XxxIntegration}），真正的内容由它们自己的初始化挂上去。在构造里碰它们，
+     * 靠的是「依赖写了 ordering=AFTER 所以我在它后面」这条推理；setup 阶段则是
+     * <b>所有</b>模组都构造完了，不需要推理。
      *
-     * {@code enqueueWork} 不能省：setup 是并行派发的，而我们要往 AE2 的静态注册表里写。
+     * {@code enqueueWork} 不能省：setup 是并行派发的，而我们要往那些静态注册表里写。
      */
     public static void onCommonSetup(final FMLCommonSetupEvent event) {
         event.enqueueWork(Terminals::discover);
@@ -121,7 +122,7 @@ public final class Terminals {
     /**
      * 这台终端能从手机上打开吗 —— 认得出<b>并且</b>开得了。
      *
-     * 用在"身上有没有一台能开的"这类问题上（背包扫描、卡槽界面那个按钮亮不亮）。
+     * 用在「身上有没有一台能开的」这类问题上（背包扫描、卡槽界面那个按钮亮不亮）。
      * 卡槽收不收它是另一问，见 {@link #isInstallable}。
      */
     public static boolean isOpenable(ItemStack stack) {
@@ -129,14 +130,16 @@ public final class Terminals {
     }
 
     /**
-     * 这台终端<b>装得进手机卡槽</b>吗 —— 开得了，而且这一家支持"住在卡槽里"。
+     * 这台终端<b>装得进手机卡槽</b>吗 —— 开得了，而且这一家支持「住在卡槽里」。
      *
-     * 卡槽只收这一种（见 {@code TerminalSlotMenu} 的 mayPlace）。比
-     * {@link #isOpenable} 多一问，多出来的那一问只有 Forge 1.20.1 上的 RS 会答不 ——
-     * 它的终端在背包里照常开得了，只是那个版本的 RS 表达不了"东西在手机卡槽里"这种位置，
-     * 理由见 {@link TerminalIntegration#canLiveInPhoneSlot}。
+     * 卡槽只收这一种（见 {@code TerminalSlotMenu} 的 mayPlace）：装得进去却点不开的东西
+     * 比装不进去更难解释。比 {@link #isOpenable} 多问一句
+     * {@link TerminalIntegration#canLiveInPhoneSlot}。
      *
-     * 这一支比 main 多这么一个方法，是这次移植里唯一一处<b>功能上的降级</b>，不是等价替换。
+     * 哪些实现会答不，看各目标自己的 {@code XxxIntegration} —— 眼下只有 Forge 1.20.1 上的
+     * RS 答不：它的终端在背包里照常开得了，只是那个版本的 RS 表达不了「东西在手机卡槽里」
+     * 这种位置。别的目标上没有人答不，这个方法在那儿等价于 {@link #isOpenable}，
+     * <b>但它必须存在</b>：问这一句的 {@code TerminalSlotMenu} 住在 shared/ 里。
      */
     public static boolean isInstallable(ItemStack stack) {
         return owner(stack)

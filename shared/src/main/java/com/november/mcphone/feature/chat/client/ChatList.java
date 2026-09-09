@@ -188,7 +188,9 @@ public final class ChatList {
         String name = GuiUtil.truncate(font, c.name(), nameMaxW);
         g.drawString(font, name, nameX, y, colorName(), false);
 
-        // 传送图标只给在线的人；ServerConfig 会同步到客户端，这里读得到。
+        // 传送图标只给在线的人。这里读的是【服务端】的开关 —— 它读得到，靠的是加载器
+        // 把 SERVER 档的配置推给客户端；哪些目标做得到，见 versions/targets.json 的
+        // server_config_sync。读错了只是图标显隐不对，真正的拦截在 TeleportService。
         // 位置先算、图最后画：第二行预览要按它让出的宽度截断
         boolean canTeleport = c.online() && ServerConfig.allowFriendTeleport();
         int secondLineY = y + font.lineHeight + 1;
