@@ -50,36 +50,115 @@
 
 ## 甲 · 每个平台各写一份
 
-后面跟的是判据在这个类里找到的阻断。
+**这一类混着两个轴，不要当成一个平面来读。**
+
+| 判据 | 版本轴 | 加载器轴 |
+|---|:---:|:---:|
+| 1.20.5+ 原版类型 | ● | |
+| `ItemStack` 的组件读写 | ● | |
+| 加载器导入 | | ● |
+| 注入到原版类型上的方法 | ● | ● |
+
+**版本轴**指「在 1.21.1 上成立、在 1.20.1 上不成立，与加载器无关」；**加载器轴**指
+「绑在某一个加载器上，与 Minecraft 版本无关」。
+
+一条判据可以同时落在两个轴上。`player.getData(...)` 即是：Data Attachment 只有
+NeoForge 有（加载器轴），而它是 NeoForge **20.3** 引入的（版本轴）—— 20.1.x 那条线
+即 Minecraft 1.20.1，在它之前，那边只能用能力。`getCapability(...)` 同理。
+因此 `PhonePlayerData` 与 `TerminalCharger` 属于「两轴都有」，而非「仅加载器轴」。
+
+只被**版本轴**挡住的类型，在同一个 Minecraft 版本的 Forge / NeoForge / Fabric 三个
+目标下是可以逐字共用的 —— 手写编解码的那一批（`Note`、`ChatMessage`、`TextBody`、
+各种网络包）就是典型：它们与加载器无关，只是与 1.20.1 不同。
+
+### 未决：中间层
+
+当前结构只有一层共享目录，各平台以一行 `srcDir '../../shared/src/main/java'` 接入。
+没有按版本或按加载器的中间层。
+
+后果在第二个 1.21.1 目标并入时发生：仅版本轴的那一批将在
+`platforms/1.21.1-fabric/` 下复制一份，`platforms/1.21.1-forge/` 下再复制一份，
+而**没有任何机制要求这三份保持一致**。这是多分支的病换了个尺度 —— 从跨分支缩到
+跨目录，并且失去了「当场可见」：三份在各自的构建里各编各的，互不参照。
+
+两条路，尚未选定：
+
+| 方案 | 做法 | 代价 |
+|---|---|---|
+| 加一层按版本的共享目录 | `shared-<mc 版本>/`，该版本的三个目标各加一行 `srcDir` | 目录层级多一级；不需要新的闸，因为只有一份 |
+| 接受复制，加闸约束 | 三份保留，另加一道「这几份必须逐字相同」的校验 | 闸本身要维护，且复制仍是复制 |
+
+**眼下不必动**：只有一个目标建得起来，一份都还没复制。这一节的作用是在复制发生
+之前把选择摆出来 —— 复制一旦发生，撤回的成本就不是改一行 `srcDir` 了。
+
+后面的清单按轴分组，分组即数据。
 
 <!-- 下面这段由 ./gradlew updateSeamsDoc 生成，别手改：甲 -->
 
-- `MCphone` —— 加载器导入
+#### 仅版本轴（30）
+
+同一 Minecraft 版本的三个加载器可逐字共用；与 1.20.1 之间必然分叉。
+
 - `core.PhoneItemData` —— 组件读写
 - `core.PhoneLocation` —— 1.20.5+ 原版
-- `core.PhonePlayerData` —— 注入的方法
-- `core.ServerConfig` —— 加载器导入
-- `core.client.ClientConfig` —— 加载器导入
-- `core.menu.ModMenus` —— 加载器导入
-- `core.net.MCphoneNetwork` —— 1.20.5+ 原版、加载器导入
-- `feature.chat.ChatImageStore` —— 加载器导入
 - `feature.chat.ChatMessage` —— 1.20.5+ 原版
 - `feature.chat.ImageBody` —— 1.20.5+ 原版
 - `feature.chat.TextBody` —— 1.20.5+ 原版
-- `feature.chat.client.ChatImageSender` —— 加载器导入
+- `feature.chat.net.ChatImageDataPacket` —— 1.20.5+ 原版
 - `feature.chat.net.ConversationSummary` —— 1.20.5+ 原版
+- `feature.chat.net.FriendRequestPacket` —— 1.20.5+ 原版
+- `feature.chat.net.MarkReadPacket` —— 1.20.5+ 原版
 - `feature.chat.net.OnlinePlayer` —— 1.20.5+ 原版
 - `feature.chat.net.Relation` —— 1.20.5+ 原版
+- `feature.chat.net.RemoveFriendPacket` —— 1.20.5+ 原版
+- `feature.chat.net.RequestChatImagePacket` —— 1.20.5+ 原版
+- `feature.chat.net.RequestConversationsPacket` —— 1.20.5+ 原版
+- `feature.chat.net.RequestMessagesPacket` —— 1.20.5+ 原版
+- `feature.chat.net.RequestOnlinePlayersPacket` —— 1.20.5+ 原版
+- `feature.chat.net.RespondFriendRequestPacket` —— 1.20.5+ 原版
+- `feature.chat.net.SendChatMessagePacket` —— 1.20.5+ 原版
+- `feature.chat.net.TeleportToFriendPacket` —— 1.20.5+ 原版
 - `feature.enderchest.net.OpenEnderChestPacket` —— 1.20.5+ 原版
-- `feature.music.DiscService` —— 1.20.5+ 原版、加载器导入
 - `feature.music.NetSong` —— 1.20.5+ 原版
-- `feature.music.net.MusicNetworking` —— 加载器导入
 - `feature.notes.Note` —— 1.20.5+ 原版
+- `feature.notes.NotePrinter` —— 1.20.5+ 原版、组件读写
 - `feature.notes.NoteSummary` —— 1.20.5+ 原版
-- `feature.terminal.TerminalCharger` —— 加载器导入、注入的方法
-- `feature.terminal.integration.Terminals` —— 加载器导入
+- `feature.notes.net.PrintNotePacket` —— 1.20.5+ 原版
+- `feature.notes.net.RequestNoteListPacket` —— 1.20.5+ 原版
+- `feature.store.PurchasedApps` —— 1.20.5+ 原版
+- `feature.store.net.PurchaseAppPacket` —— 1.20.5+ 原版
+- `feature.store.net.RequestPurchasedAppsPacket` —— 1.20.5+ 原版
 - `feature.terminal.integration.refinedstorage.TerminalSlotReferenceFactory` —— 1.20.5+ 原版
+
+#### 仅加载器轴（16）
+
+同一加载器的各个 Minecraft 版本可共用；三个加载器之间必然分叉。
+
+- `MCphone` —— 加载器导入
+- `core.ServerConfig` —— 加载器导入
+- `core.client.AppHotkeys` —— 加载器导入
+- `core.client.ClientConfig` —— 加载器导入
+- `core.client.MCphoneKeyBindings` —— 加载器导入
+- `core.menu.ModMenus` —— 加载器导入
+- `core.net.NetworkHandler` —— 加载器导入
+- `feature.chat.ChatImageStore` —— 加载器导入
+- `feature.chat.client.ChatImageSender` —— 加载器导入
+- `feature.chat.net.ChatNetworking` —— 加载器导入
+- `feature.music.client.playback.LocalPlayback` —— 加载器导入
+- `feature.music.net.MusicNetworking` —— 加载器导入
+- `feature.settings.client.AppManagerDetail` —— 加载器导入
+- `feature.store.net.StoreNetworking` —— 加载器导入
+- `feature.terminal.integration.Terminals` —— 加载器导入
 - `platform.ModPresence` —— 加载器导入
+
+#### 两轴都有（4）
+
+六个目标各不相同。
+
+- `core.PhonePlayerData` —— 注入的方法
+- `core.net.MCphoneNetwork` —— 1.20.5+ 原版、加载器导入
+- `feature.music.DiscService` —— 1.20.5+ 原版、加载器导入
+- `feature.terminal.TerminalCharger` —— 加载器导入、注入的方法
 
 <!-- 甲 结束 -->
 
@@ -96,25 +175,39 @@
 
 **这不是「可以搬」的清单**，见上面第 3 层盲区。
 
+这一类中绝大多数位于客户端渲染路径下，而第 3 层盲区（方法名不变、签名变更）正集中
+在那里 —— 即「乙」这张单子几乎整个落在判据自己声明的失效范围内。按清单从第一条
+往下搬，恰好先撞上最需要人工核对的一批，因此下面把客户端路径单独分组。
+
 <!-- 下面这段由 ./gradlew updateSeamsDoc 生成，别手改：乙 -->
 
-- `api.client.app.IPhoneApp`
-- `api.client.ui.PhoneCanvas`
+#### 非客户端（1）
+
+判据在这批上相对可信。
+
 - `compat.WaystonesCompat`
-- `core.client.ImageCodec`
+
+#### 客户端渲染路径（18）
+
+**判据在这批上最不可信** —— 签名漂移正集中在这里，逐个人工核过再搬。
+
+- `api.client.app.IPhoneApp`
+- `core.client.GuiUtil`
 - `core.client.ImageFolder`
-- `core.client.PhoneApp`
-- `core.client.PhoneScale`
 - `core.client.PhoneScreen`
 - `core.client.PhoneScreenOpener`
-- `core.client.PhoneScreenRegistry`
-- `core.client.PhoneSkin`
 - `core.client.PlayerAvatar`
-- `feature.music.client.playback.PcmAudioStream`
-- `feature.music.client.source.LocalFileSource`
-- `feature.music.client.source.MusicSource`
+- `feature.camera.client.CameraFlash`
+- `feature.camera.client.CameraMode`
+- `feature.gallery.client.Gallery`
+- `feature.music.client.NetSongSound`
+- `feature.music.client.playback.OggDecoder`
+- `feature.reader.client.compat.BookQuirk`
+- `feature.reader.client.compat.BookQuirks`
+- `feature.reader.client.source.BookSources`
 - `feature.reader.client.source.ExternalBookSource`
+- `feature.reader.client.source.GuideMeSource`
 - `feature.reader.client.source.PatchouliSource`
-- `feature.store.AppPriceRegistry`
+- `feature.settings.client.PhoneHudEditor`
 
 <!-- 乙 结束 -->

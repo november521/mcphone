@@ -148,7 +148,7 @@ tasks.register('verifyDistIsolation') {
         root.eachFileRecurse { f ->
             if (!f.name.endsWith('.class')) return
             def rel = root.toPath().relativize(f.toPath()).toString().replace('\\', '/')
-            if (rel.contains('/client/')) return          // 这些包本来就准
+            if (TargetNeutrality.isClient(rel)) return    // 这些包本来就准
             if (allowed.contains(rel)) return
             checked++
 
@@ -418,13 +418,73 @@ tasks.named('check').configure { dependsOn tasks.named('verifyJava17Compatible')
 // 闭包走动态派发，看不见私有方法，同样的报错。
 abstract class TargetNeutrality {
 
-    /** 名字 → 形状。名字会原样印进报错和 PLATFORM-SEAMS.md 的清单里。 */
-    static final Map<String, java.util.regex.Pattern> BLOCKERS = [
-            '加载器导入'   : ~/(?m)^[ \t]*import[ \t]+(?:static[ \t]+)?(?:net\.neoforged|net\.minecraftforge|net\.fabricmc|cpw\.mods)\./,
-            '1.20.5+ 原版' : ~/\b(?:StreamCodec|ByteBufCodecs|RegistryFriendlyByteBuf|CustomPacketPayload|DataComponent\w*)\b/,
-            '注入的方法'   : ~/\.\s*(?:getData|setData|hasData|removeData|getCapability)\s*\(/,
-            '组件读写'     : ~/\.\s*(?:getOrDefault|remove|has|get|set)\s*\(\s*[\w$.]*DataComponents?\s*[.<]/,
+    /**
+     * 判据表。名字会原样印进报错和 PLATFORM-SEAMS.md 的清单里。
+     *
+     * 【一张表，不是两张】。轴写在这里的 axes 里，不另开一张按名字对齐的表 ——
+     * 并排放两张必须逐键对齐的表，没有任何东西保证它们对齐：往这张加第五条判据、
+     * 忘了往那张补一行，取到的轴是 null，随后在分组时抛一个裸 NPE，
+     * 而真正的原因（少了一行）要自己回溯出来。合成一张之后没有对不齐这回事。
+     *
+     * 【axes 可以有两个】。「这条判据挡在哪个轴上」不是单选：
+     * NeoForge 的 Data Attachment 既只有 NeoForge 有（加载器轴），又是 NeoForge 20.3
+     * 才引入的（版本轴）—— 20.1.x 那条线即 Minecraft 1.20.1，在它之前，那边只能用
+     * 能力。写成单轴会让 PhonePlayerData 落进「仅加载器轴」，而那一组的提示是
+     * 「同一加载器的各个 Minecraft 版本可共用」—— 对它是错的，且那句话正要指导下一步。
+     */
+    static final Map<String, Map> BLOCKERS = [
+            '加载器导入': [
+                    axes   : ['加载器'],
+                    pattern: ~/(?m)^[ \t]*import[ \t]+(?:static[ \t]+)?(?:net\.neoforged|net\.minecraftforge|net\.fabricmc|cpw\.mods)\./,
+            ],
+            '1.20.5+ 原版': [
+                    axes   : ['版本'],
+                    pattern: ~/\b(?:StreamCodec|ByteBufCodecs|RegistryFriendlyByteBuf|CustomPacketPayload|DataComponent\w*)\b/,
+            ],
+            '注入的方法': [
+                    // 【两轴】：getData/setData 是 NeoForge 的 Data Attachment，
+                    // getCapability 是能力 —— 都只有某一个加载器有（加载器轴），
+                    // 而且都在该加载器的某一版才成形（版本轴）。
+                    axes   : ['加载器', '版本'],
+                    pattern: ~/\.\s*(?:getData|setData|hasData|removeData|getCapability)\s*\(/,
+            ],
+            '组件读写': [
+                    axes   : ['版本'],
+                    pattern: ~/\.\s*(?:getOrDefault|remove|has|get|set)\s*\(\s*[\w$.]*DataComponents?\s*[.<]/,
+            ],
     ].asImmutable()
+
+    /**
+     * 一组判据合起来落在哪个轴上：'版本' / '加载器' / '两轴'。
+     *
+     * 判据名认不出来时抛异常，不返回 null —— 返回 null 的下场是调用方一个裸 NPE，
+     * 而这个文件里别的闸取不到前提时抛的都是带解释的 GradleException。
+     */
+    static String axisOf(List<String> tags) {
+        def axes = [] as Set
+        tags.each { tag ->
+            def spec = BLOCKERS[tag]
+            if (spec == null) {
+                throw new GradleException(
+                        "判据「${tag}」不在 BLOCKERS 里，取不到它的轴。" +
+                        "认得的判据：${BLOCKERS.keySet().join('、')}")
+            }
+            axes.addAll(spec.axes)
+        }
+        if (axes.isEmpty()) return null
+        return axes.size() > 1 ? '两轴' : axes.first()
+    }
+
+    /**
+     * 什么算客户端代码 —— 【本文件里只此一处】。
+     *
+     * 收 FQCN（{@code a.b.client.C}）也收类文件路径（{@code a/b/client/C.class}）。
+     * dist 隔离校验与接缝清单都用它：同一个概念散成两处写法，下次谁调整
+     * 「什么算客户端」就会只改到一处。
+     */
+    static boolean isClient(String fqcnOrPath) {
+        return fqcnOrPath.contains('.client.') || fqcnOrPath.contains('/client/')
+    }
 
     /**
      * 去掉块注释、行注释与字符串/字符字面量，只留真代码。换行原样留着，行号才对得上。
@@ -464,8 +524,8 @@ abstract class TargetNeutrality {
     /** 逐处命中：[[判据名, 行号, 匹配到的文本], …]。传进来的必须是 strip 过的。 */
     static List<List> hits(String code) {
         def out = []
-        BLOCKERS.each { name, pattern ->
-            def m = pattern.matcher(code)
+        BLOCKERS.each { name, spec ->
+            def m = spec.pattern.matcher(code)
             while (m.find()) {
                 out << [name, code.substring(0, m.start()).count('\n') + 1, m.group().trim()]
             }
@@ -673,14 +733,48 @@ abstract class SeamsDocTask extends DefaultTask {
         return [a: a, b: b, sharedFqcns: sharedFqcns]
     }
 
-    static String renderBlock(List rows, boolean withTags) {
+    /** 甲：按轴分三组。只被版本轴挡住的那批，是同版本三个加载器可以共用的。 */
+    static String renderA(List rows) {
+        def by = [ '版本': [], '加载器': [], '两轴': [] ]
+        rows.each { by[TargetNeutrality.axisOf(it[1])] << it }
         def sb = new StringBuilder()
-        rows.each { r ->
-            sb << "- `" << (r[0] - PREFIX) << "`"
-            if (withTags) sb << " —— " << r[1].join('、')
-            sb << "\n"
+        [['版本',   '仅版本轴',   '同一 Minecraft 版本的三个加载器可逐字共用；与 1.20.1 之间必然分叉'],
+         ['加载器', '仅加载器轴', '同一加载器的各个 Minecraft 版本可共用；三个加载器之间必然分叉'],
+         ['两轴',   '两轴都有',   '六个目标各不相同']].each { key, title, hint ->
+            def list = by[key]
+            sb << "#### ${title}（${list.size()}）\n\n${hint}。\n\n"
+            if (list.isEmpty()) {
+                sb << "（无）\n\n"
+            } else {
+                list.each { sb << "- `" << (it[0] - PREFIX) << "` —— " << it[1].join('、') << "\n" }
+                sb << "\n"
+            }
         }
-        return sb.toString()
+        return sb.toString().trim() + "\n"
+    }
+
+    /**
+     * 乙：客户端渲染路径单独分一组。
+     *
+     * 这一组几乎整个落在判据自己声明的第三层盲区里（方法名没变、签名变了，
+     * 客户端渲染那套尤其多）。把乙当待办队列从第一条往下搬的人，正好会先撞上
+     * 最该人工细看的那批 —— 所以分开列。
+     */
+    static String renderB(List rows) {
+        def client = rows.findAll { TargetNeutrality.isClient(it[0]) }
+        def other  = rows.findAll { !TargetNeutrality.isClient(it[0]) }
+        def sb = new StringBuilder()
+        [[other,  '非客户端', '判据在这批上相对可信'],
+         [client, '客户端渲染路径', '**判据在这批上最不可信** —— 签名漂移正集中在这里，逐个人工核过再搬']].each { list, title, hint ->
+            sb << "#### ${title}（${list.size()}）\n\n${hint}。\n\n"
+            if (list.isEmpty()) {
+                sb << "（无）\n\n"
+            } else {
+                list.each { sb << "- `" << (it[0] - PREFIX) << "`\n" }
+                sb << "\n"
+            }
+        }
+        return sb.toString().trim() + "\n"
     }
 
     /** 从文档里读回上一次记下的甲清单（短名）。 */
@@ -744,8 +838,8 @@ abstract class SeamsDocTask extends DefaultTask {
         }
 
         def wanted = replaceBlock(
-                replaceBlock(doc, A_BEGIN, A_END, renderBlock(r.a, true), f),
-                B_BEGIN, B_END, renderBlock(r.b, false), f)
+                replaceBlock(doc, A_BEGIN, A_END, renderA(r.a), f),
+                B_BEGIN, B_END, renderB(r.b), f)
 
         if (updating.get()) {
             if (doc == wanted) {
@@ -760,7 +854,9 @@ abstract class SeamsDocTask extends DefaultTask {
         if (doc != wanted) {
             throw new GradleException(
                     "shared/PLATFORM-SEAMS.md 跟源码对不上了。\n" +
-                    "现算出来：甲 ${r.a.size()} 个、乙 ${r.b.size()} 个。\n\n" +
+                    "现算出来：甲 ${r.a.size()} 个（版本轴 ${r.a.count { TargetNeutrality.axisOf(it[1]) == '版本' }}、" +
+                    "加载器轴 ${r.a.count { TargetNeutrality.axisOf(it[1]) == '加载器' }}、" +
+                    "两轴 ${r.a.count { TargetNeutrality.axisOf(it[1]) == '两轴' }}）、乙 ${r.b.size()} 个。\n\n" +
                     "跑 ./gradlew updateSeamsDoc 重写那两段，然后【看一眼 diff】——\n" +
                     "  乙 → 甲    它开始碰别的目标上没有的东西了\n" +
                     "  甲 → 乙    那个阻断没了，可以考虑搬进 shared/\n" +
