@@ -997,33 +997,20 @@ abstract class DatapackNamesTask extends DefaultTask {
     @Input abstract Property<String>  getLabel()
 
     /**
-     * 数据包格式 48 的改名，共 13 条。
-     *
-     * 【这张表要写全】。漏一条的症状正是这道闸存在的全部理由 —— 静默失效。
-     * 收的是"1.21 改了哪些"，不是"本仓用到哪些"：本仓今天用不到 loot_table，
-     * 但下一个人加的时候不该再撞一次。
-     * 出处：Minecraft Wiki 的 Data pack 页（24w19a / 24w21a 两个快照分两批改的）。
+     * 改名表。【清单不写死在这儿】——它在 versions/datapack-renames.json 里，
+     * Gradle 与 CI 读同一份。作用域（收到哪儿为止、哪些是查过不归、哪些没核实）
+     * 也写在那个文件的 _comment 里。
      */
-    static final Map<String, String> RENAMED_AT_1_21 = [
-            'advancements'     : 'advancement',
-            'recipes'          : 'recipe',
-            'loot_tables'      : 'loot_table',
-            'predicates'       : 'predicate',
-            'item_modifiers'   : 'item_modifier',
-            'functions'        : 'function',
-            'structures'       : 'structure',
-            'tags/items'       : 'tags/item',
-            'tags/blocks'      : 'tags/block',
-            'tags/entity_types': 'tags/entity_type',
-            'tags/fluids'      : 'tags/fluid',
-            'tags/game_events' : 'tags/game_event',
-            'tags/functions'   : 'tags/function',
-    ].asImmutable()
+    @Input abstract MapProperty<String, String> getRenames()
 
     @TaskAction
     void run() {
         if (!resourcesDir.isPresent() || !resourcesDir.get().asFile.isDirectory()) {
-            logger.lifecycle("${label.get()}：没有 resources 目录，跳过数据包目录名校验")
+            // 【跳过要说清是哪一种】。层那边有 populated 把"本来就空"和"路径写错"
+            // 分开，这里没有对应物，所以由注册方决定：层的资源目录不在是正常的
+            // （populated 管着），平台的 src/main/resources 是 Gradle 的约定路径，
+            // 不在就是不对劲 —— 那一头注册时直接拦，走不到这儿。
+            logger.lifecycle("${label.get()}：没有 resources 目录，没有可校验的文件")
             return
         }
         File root = resourcesDir.get().asFile
@@ -1038,7 +1025,7 @@ abstract class DatapackNamesTask extends DefaultTask {
             if (!m) return
             checked++
             def tail = m[0][1]
-            RENAMED_AT_1_21.each { plural, singularName ->
+            renames.get().each { plural, singularName ->
                 if (wantSingular && tail.startsWith(plural + '/')) {
                     wrong << [rel, plural, singularName, '1.21 起该用单数']
                 } else if (!wantSingular && tail.startsWith(singularName + '/')) {
@@ -1063,9 +1050,27 @@ abstract class DatapackNamesTask extends DefaultTask {
 tasks.register('verifyPlatformDatapackNames', DatapackNamesTask) {
     description = '校验平台 resources 里的数据包目录名与目标的 Minecraft 版本相符'
     group = 'verification'
+    // 【区分"真的没有"和"路径假设破了"】
+    //
+    // 层那边有 populated 把这两种分开，平台这边没有对应物。但不必再发明一个声明：
+    // 问 Gradle 就行 —— 约定路径必须仍在这个源码集的 srcDirs 里。
+    //
+    //   在 srcDirs 里、磁盘上没有  → 这个平台确实没有自己的资源（本仓就是这样，
+    //                              资源全在 shared/ 与层里），跳过是对的
+    //   不在 srcDirs 里            → 约定被改了，这道闸会安静地跳过 —— 必须红
+    //
+    // 判据是源码集本身，不是我们对路径的猜测，所以改了约定当场就知道。
     def d = file('src/main/resources')
+    if (!sourceSets.main.resources.srcDirs.contains(d)) {
+        throw new GradleException(
+                "${d} 不在 sourceSets.main.resources 的 srcDirs 里。\n" +
+                "平台资源的约定路径变了，而数据包目录名那道闸盯的还是老路径 —— " +
+                "它会安静地跳过。把这里的路径改成新的。\n" +
+                "现有的 srcDirs：${sourceSets.main.resources.srcDirs.join(', ')}")
+    }
     if (d.isDirectory()) resourcesDir.set(d)
     singular.set(mcphoneTargetDatapackSingular)
+    renames.set(mcphoneDatapackRenames)
     label.set("平台 ${mcphoneTarget.key}")
 }
 tasks.named('check').configure { dependsOn tasks.named('verifyPlatformDatapackNames') }
@@ -1078,6 +1083,7 @@ mcphoneLayers.each { layer ->
         group = 'verification'
         if (layer.resourcesDir.isDirectory()) resourcesDir.set(layer.resourcesDir)
         singular.set(layer.datapackSingular)
+        renames.set(mcphoneDatapackRenames)
         label.set("共享层 ${layer.name}")
     }
     tasks.named('check').configure { dependsOn tasks.named(n) }

@@ -492,6 +492,53 @@ jobs:
             fi
           done <<< "$LAYERROWS"
 
+          # 九、【数据包目录名 —— 覆盖所有目标，不只是建得起来的那个】
+          #
+          # Gradle 里那道只跑在 buildable: true 的目标上。而一个新目标的自然顺序是
+          # 「先把工程放进来 → 编通 → 再翻 buildable: true」，那段时间正是有人在手工
+          # 搬数据包文件、最容易把单复数搬错的时候，恰好一个看着的都没有。
+          # 这跟 since 曾经的缺口是同一个形状，一并补上。
+          #
+          # 【改名表不在这儿，读 versions/datapack-renames.json】——Gradle 侧读的是
+          # 同一份。同一条规则两个语言各写一份是这个仓库付过三次账的坑。
+          R=versions/datapack-renames.json
+          jq -e . "$R" > /dev/null || { echo "::error::$R 不是合法 JSON"; exit 1; }
+          RCOUNT=$(jq -r '.renames | length' "$R") || exit 1
+          if [ "${RCOUNT:-0}" = "0" ]; then
+            echo "::error::$R 里的改名表是空的。空清单的闸永远是绿的，而它挡的正是静默失效。"
+            exit 1
+          fi
+          RSINCE=$(jq -r '.since' "$R") || exit 1
+
+          DPROWS=$(q '
+            to_entries[] | select((.value|type)=="object")
+            | "\(.key)\t\(.value.project)\t\(.value.minecraft)"
+          ') || exit 1
+          while IFS=$'\t' read -r NAME PROJ MC; do
+            [ -n "$NAME" ] || continue
+            RES="$PROJ/src/main/resources"
+            [ -d "$RES" ] || continue          # 工程还没并进来，没东西可查
+            SINGULAR=$(jq -rn --arg a "$MC" --arg b "$RSINCE" '
+              def ver: split(".") | map(tonumber);
+              def vcmp($x; $y):
+                ([($x|length), ($y|length)] | max) as $n
+                | [range($n) | (($x[.] // 0) - ($y[.] // 0))]
+                | map(select(. != 0)) | (.[0] // 0);
+              vcmp(($a|ver); ($b|ver)) >= 0') || exit 1
+            while IFS=$'\t' read -r PLURAL SINGULARNAME; do
+              [ -n "$PLURAL" ] || continue
+              if [ "$SINGULAR" = "true" ]; then BAD_DIR="$PLURAL"; WANT="$SINGULARNAME";
+              else BAD_DIR="$SINGULARNAME"; WANT="$PLURAL"; fi
+              HITS=$(find "$RES" -path "$RES/data/*/$BAD_DIR/*" -type f 2>/dev/null || true)
+              if [ -n "$HITS" ]; then
+                echo "::error::目标 $NAME（Minecraft $MC）的数据包目录名不对：$BAD_DIR/ 应为 $WANT/"
+                printf '%s\n' "$HITS" | sed 's/^/    /'
+                echo "1.21（格式 48）把这些目录从复数改成了单数。放错不会报错，那条配方 / 进度只是静默地不存在。"
+                FAIL=1
+              fi
+            done < <(jq -r '.renames | to_entries[] | "\(.key)\t\(.value)"' "$R")
+          done <<< "$DPROWS"
+
           [ "$FAIL" = "0" ] || exit 1
           N=$(q '[to_entries[] | select((.value|type)=="object")] | length') || exit 1
           echo "targets.json 校验通过：$N 个目标，矩阵齐全"

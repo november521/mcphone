@@ -34,9 +34,9 @@ abstract class McphoneVersions {
         }
         return 0
     }
-    /** 数据包目录名从 1.21（格式 48）起用单数。 */
-    static boolean datapackSingular(String minecraftVersion) {
-        return cmp(minecraftVersion, '1.21') >= 0
+    /** 数据包目录名从改名那一版起用单数。边界写在 versions/datapack-renames.json 的 since 里。 */
+    static boolean datapackSingular(String minecraftVersion, String renamedSince) {
+        return cmp(minecraftVersion, renamedSince) >= 0
     }
 }
 
@@ -61,6 +61,19 @@ def readTrackedJson = { String rel ->
 def layersJson  = readTrackedJson('versions/layers.json')
 def targetsJson = readTrackedJson('versions/targets.json')
 
+// 数据包改名表。【清单只有一份】：这个文件，Gradle 与 CI 都读它。
+// 同一条规则在两个语言里各写一份是这个仓库付过三次账的坑，改成数据就没这回事。
+def renamesJson = readTrackedJson('versions/datapack-renames.json')
+if (!(renamesJson.renames instanceof Map) || renamesJson.renames.isEmpty()) {
+    throw new GradleException(
+            "versions/datapack-renames.json 里的 renames 是空的或者不是对象。" +
+            "空清单的闸永远是绿的 —— 而它挡的正是静默失效。")
+}
+if (renamesJson.since == null) {
+    throw new GradleException("versions/datapack-renames.json 缺 since：改名是从哪个版本起的，没有它判不了单复数。")
+}
+ext.mcphoneDatapackRenames = renamesJson.renames.asImmutable()
+
 // 认出自己是哪个目标：按 targets.json 里的 project 字段反查，不靠目录名猜。
 // 目录挪了而 JSON 没跟着改，这里当场失败 —— 而不是安静地一层都不接。
 def myRelPath = layersRepoRoot.toPath().relativize(projectDir.toPath()).toString().replace(File.separator, '/')
@@ -75,7 +88,7 @@ ext.mcphoneTarget = [key: myEntry.key] + myEntry.value
 ext.mcphoneRepoRoot = layersRepoRoot
 // 平台自己的数据包单复数。【在这儿算】：McphoneVersions 是这个脚本里的类，
 // 别的 apply 脚本看不见它 —— 版本比较只此一处，结果靠 ext 传出去。
-ext.mcphoneTargetDatapackSingular = McphoneVersions.datapackSingular(myEntry.value.minecraft)
+ext.mcphoneTargetDatapackSingular = McphoneVersions.datapackSingular(myEntry.value.minecraft, renamesJson.since)
 
 ext.mcphoneLayers = (myEntry.value.layers ?: []).collect { name ->
     def spec = layersJson[name]
@@ -153,6 +166,6 @@ ext.mcphoneLayers = (myEntry.value.layers ?: []).collect { name ->
             since           : spec.since,
             // 版本层按自己的 since 判，加载器层跟着挂它的目标走
             datapackSingular: McphoneVersions.datapackSingular(
-                    isVersionLayer ? spec.since : myEntry.value.minecraft),
+                    isVersionLayer ? spec.since : myEntry.value.minecraft, renamesJson.since),
     ]
 }
