@@ -1,15 +1,32 @@
 # 平台接缝清单
 
-`shared/` 里的代码会引用一批**只定义在 `platforms/` 下**的类型。写一个新平台的人
-第一件要做的事，就是把它们分成两类：
+`platforms/<目标名>/` 下的**每一个** java 文件都在下面的清单里，分两类。写一个新平台
+的人第一件要做的事，就是把它们分开：
 
 | | 是什么 | 新平台该怎么办 |
 |---|---|---|
 | **甲** | 有意的接缝 | **必须自己写一份**：全限定名与签名相同、方法体各写各的 |
-| **乙** | 只是还没搬 | **不要重新实现**，它迟早要搬进 `shared/` |
+| **乙** | 只是还没搬 | **不要重新实现**，它迟早要搬进 `shared/` 或某个共享层 |
 
 判错的代价不对称：把甲当成乙，新平台编不过（当场就知道）；把乙当成甲，两份实现
 从此各自漂移，而两边都是绿的。
+
+**★ 标记**的那些是被共用代码（`shared/` 或某个共享层）直接引用的 —— 它们的全限定名
+是硬约束，新平台**必须**提供，否则共用代码编不过。没有 ★ 的是平台内部的，
+新平台不一定需要同名的东西。
+
+### 为什么是「全部」而不是「被引用到的」
+
+原先这份清单只列**被 `shared/` 引用到的**类型，于是有两类东西整个在视野外：
+
+- **从没被引用过的**。24 个只被版本轴挡住的网络包就是这么漏的 —— 它们该进
+  `layers/version/1.20.5+/`，却因为没被 `shared/` 引用而从没进过视野，靠人扫才发现。
+- **只被共享层引用的**。`core.net.Wire` 被层里两个文件 `import`、不被 `shared/`
+  引用，甲乙两张单子都不提它 —— 而第二个同版本目标一挂上那层就编不过，
+  届时要么给它复制一份（正是层要消掉的那种复制），要么现场才发现要挪。
+
+现在两头都改了：引用来源是 `shared/` **加上所有共享层**，枚举基准是 `platforms/` 下的
+**全部**。`platforms/` 下的每个文件都必然出现在甲或乙里，「从没进过视野」这一类关掉了。
 
 ## 这张清单为什么存在
 
@@ -152,37 +169,51 @@ NeoForge 有（加载器轴），而它是 NeoForge **20.3** 引入的（版本�
 
 （无）
 
-#### 仅加载器轴（18）
+#### 仅加载器轴（31）
 
 同一加载器的各个 Minecraft 版本可共用；三个加载器之间必然分叉。
 
-- `MCphone` —— 加载器导入
-- `core.ModSounds` —— 加载器导入
-- `core.ServerConfig` —— 加载器导入
-- `core.client.AppHotkeys` —— 加载器导入
-- `core.client.ClientConfig` —— 加载器导入
-- `core.client.MCphoneKeyBindings` —— 加载器导入
-- `core.client.PhoneHud` —— 加载器导入
-- `core.menu.ModMenus` —— 加载器导入
-- `core.net.NetworkHandler` —— 加载器导入
-- `feature.chat.ChatImageStore` —— 加载器导入
-- `feature.chat.client.ChatImageSender` —— 加载器导入
-- `feature.chat.net.ChatNetworking` —— 加载器导入
-- `feature.music.client.playback.LocalPlayback` —— 加载器导入
-- `feature.music.net.MusicNetworking` —— 加载器导入
-- `feature.settings.client.AppManagerDetail` —— 加载器导入
-- `feature.store.net.StoreNetworking` —— 加载器导入
-- `feature.terminal.integration.Terminals` —— 加载器导入
-- `platform.ModPresence` —— 加载器导入
+- `MCphone` —— 加载器导入　**★ 被共用代码引用**
+- `MCphoneClient` —— 加载器导入
+- `compat.CompatModule` —— 加载器导入
+- `compat.CompatModules` —— 加载器导入
+- `compat.IntegratedDynamicsCompat` —— 加载器导入
+- `core.ModAttachments` —— 加载器导入
+- `core.ModCreativeTabs` —— 加载器导入
+- `core.ModSounds` —— 加载器导入　**★ 被共用代码引用**
+- `core.ServerConfig` —— 加载器导入　**★ 被共用代码引用**
+- `core.client.AppHotkeyHandler` —— 加载器导入
+- `core.client.AppHotkeys` —— 加载器导入　**★ 被共用代码引用**
+- `core.client.ClientConfig` —— 加载器导入　**★ 被共用代码引用**
+- `core.client.MCphoneKeyBindings` —— 加载器导入　**★ 被共用代码引用**
+- `core.client.PhoneHud` —— 加载器导入　**★ 被共用代码引用**
+- `core.client.PhoneKeyHandler` —— 加载器导入
+- `core.menu.ModMenus` —— 加载器导入　**★ 被共用代码引用**
+- `core.net.NetworkHandler` —— 加载器导入　**★ 被共用代码引用**
+- `core.net.RequestThrottle` —— 加载器导入
+- `feature.camera.client.CameraHandler` —— 加载器导入
+- `feature.chat.ChatImageStore` —— 加载器导入　**★ 被共用代码引用**
+- `feature.chat.ChatImageUploads` —— 加载器导入
+- `feature.chat.client.ChatImageSender` —— 加载器导入　**★ 被共用代码引用**
+- `feature.chat.net.ChatNetworking` —— 加载器导入　**★ 被共用代码引用**
+- `feature.music.client.playback.LocalPlayback` —— 加载器导入　**★ 被共用代码引用**
+- `feature.music.net.MusicNetworking` —— 加载器导入　**★ 被共用代码引用**
+- `feature.notes.net.NotesNetworking` —— 加载器导入
+- `feature.settings.client.AppManagerDetail` —— 加载器导入　**★ 被共用代码引用**
+- `feature.store.net.StoreNetworking` —— 加载器导入　**★ 被共用代码引用**
+- `feature.terminal.integration.Terminals` —— 加载器导入　**★ 被共用代码引用**
+- `feature.terminal.net.TerminalNetworking` —— 加载器导入
+- `platform.ModPresence` —— 加载器导入　**★ 被共用代码引用**
 
-#### 两轴都有（4）
+#### 两轴都有（5）
 
 六个目标各不相同。
 
-- `core.PhonePlayerData` —— 注入的方法
-- `core.net.MCphoneNetwork` —— 1.20.5+ 原版、加载器导入
-- `feature.music.DiscService` —— 1.20.5+ 原版、加载器导入
-- `feature.terminal.TerminalCharger` —— 加载器导入、注入的方法
+- `core.ModDataComponents` —— 1.20.5+ 原版、加载器导入　**★ 被共用代码引用**
+- `core.PhonePlayerData` —— 注入的方法　**★ 被共用代码引用**
+- `core.net.MCphoneNetwork` —— 1.20.5+ 原版、加载器导入　**★ 被共用代码引用**
+- `feature.music.DiscService` —— 1.20.5+ 原版、加载器导入　**★ 被共用代码引用**
+- `feature.terminal.TerminalCharger` —— 加载器导入、注入的方法　**★ 被共用代码引用**
 
 <!-- 甲 结束 -->
 
@@ -209,26 +240,42 @@ NeoForge 有（加载器轴），而它是 NeoForge **20.3** 引入的（版本�
 
 判据在这批上相对可信。
 
-- `compat.WaystonesCompat`
+- `compat.WaystonesCompat`　**★ 被共用代码引用**
 
-#### 客户端渲染路径（15）
+#### 客户端渲染路径（31）
 
 **判据在这批上最不可信** —— 签名漂移正集中在这里，逐个人工核过再搬。
 
-- `api.client.app.IPhoneApp`
-- `core.client.ImageFolder`
-- `core.client.PhoneItemProperties`
-- `core.client.PhoneScreen`
-- `core.client.PlayerAvatar`
-- `feature.camera.client.CameraFlash`
-- `feature.camera.client.CameraMode`
-- `feature.gallery.client.Gallery`
-- `feature.music.client.playback.OggDecoder`
-- `feature.reader.client.compat.BookQuirk`
-- `feature.reader.client.source.BookSource`
-- `feature.reader.client.source.ExternalBookSource`
-- `feature.reader.client.source.GuideMeSource`
-- `feature.reader.client.source.PatchouliSource`
-- `feature.settings.client.PhoneHudEditor`
+- `api.client.app.IPhoneApp`　**★ 被共用代码引用**
+- `api.client.ui.PhoneMultiLineEditBox`
+- `core.client.ImageFolder`　**★ 被共用代码引用**
+- `core.client.PhoneContainerScreen`
+- `core.client.PhoneItemProperties`　**★ 被共用代码引用**
+- `core.client.PhoneScreen`　**★ 被共用代码引用**
+- `core.client.PlayerAvatar`　**★ 被共用代码引用**
+- `feature.browser.client.BrowserApp`
+- `feature.browser.client.BrowserScreen`
+- `feature.camera.client.CameraApp`
+- `feature.camera.client.CameraFlash`　**★ 被共用代码引用**
+- `feature.camera.client.CameraMode`　**★ 被共用代码引用**
+- `feature.chat.client.ChatMediaPicker`
+- `feature.gallery.client.Gallery`　**★ 被共用代码引用**
+- `feature.music.client.DiscBayScreen`
+- `feature.music.client.MusicPage`
+- `feature.music.client.playback.OggDecoder`　**★ 被共用代码引用**
+- `feature.notes.client.NoteEditor`
+- `feature.reader.client.compat.BookQuirk`　**★ 被共用代码引用**
+- `feature.reader.client.source.BookSource`　**★ 被共用代码引用**
+- `feature.reader.client.source.ExternalBookSource`　**★ 被共用代码引用**
+- `feature.reader.client.source.GuideMeSource`　**★ 被共用代码引用**
+- `feature.reader.client.source.PatchouliSource`　**★ 被共用代码引用**
+- `feature.settings.client.AboutPage`
+- `feature.settings.client.DeviceNameEditor`
+- `feature.settings.client.PhoneHudEditor`　**★ 被共用代码引用**
+- `feature.settings.client.WallpaperPicker`
+- `feature.store.client.CompanionApps`
+- `feature.terminal.client.TerminalApp`
+- `feature.terminal.client.TerminalSlotScreen`
+- `feature.waystone.client.WaystoneApp`
 
 <!-- 乙 结束 -->

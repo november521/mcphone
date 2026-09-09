@@ -785,8 +785,6 @@ abstract class SeamsDocTask extends DefaultTask {
         File sharedRoot = sharedDir.get().asFile
         File platRoot = platformDir.get().asFile
 
-        // 两层共享目录都算"已经共用了"：一个类型进了按版本那一层，
-        // 它就不再是"只定义在 platforms/ 下"的接缝了。
         def sharedFiles = javaFiles(sharedRoot)
         if (sharedFiles.isEmpty()) {
             throw new GradleException("${sharedRoot} 下一个 .java 都没有 —— 扫空目录算出来的清单永远是空的。")
@@ -796,22 +794,37 @@ abstract class SeamsDocTask extends DefaultTask {
         if (platFiles.isEmpty()) {
             throw new GradleException("${platRoot} 下一个 .java 都没有。")
         }
+
         // 全中立那一层单独记一份：下面「甲的类型跑进 shared/」那道闸只认它。
         def neutralFqcns = sharedFiles.collect { fqcnOf(sharedRoot, it) } as Set
         // 【必须拷一份】：Groovy 里 someSet as Set 返回的是【同一个对象】，
         // 下面那句 addAll 会把 neutralFqcns 一起改掉，两个变量就成了一份。
         def sharedFqcns = new LinkedHashSet(neutralFqcns)
-        layerDirs.files.each { root -> if (root.isDirectory()) sharedFqcns.addAll(javaFiles(root).collect { fqcnOf(root, it) }) }
 
-        // shared/ 引用了哪些本模组的类型：显式 import，加上同包里的（同包不写 import）
+        // 【共用代码 = shared/ 加上所有共享层】。原先只收 shared/ 的文件，
+        // 于是 layers/ → platforms/ 那条边整个在视野外：core.net.Wire 被层里两个
+        // 文件 import、却不被 shared/ 引用，甲乙两张单子都不会提到它 ——
+        // 而第二个同版本目标一挂上那层就编不过。
+        def sharedSideFiles = [] as List
+        sharedSideFiles.addAll(sharedFiles.collect { [root: sharedRoot, file: it] })
+        layerDirs.files.each { root ->
+            if (root.isDirectory()) {
+                javaFiles(root).each {
+                    sharedFqcns << fqcnOf(root, it)
+                    sharedSideFiles << [root: root, file: it]
+                }
+            }
+        }
+
+        // 共用代码引用了哪些本模组的类型：显式 import，加上同包里的（同包不写 import）
         def referenced = [] as Set
         def samePkg = [:]
         platFiles.keySet().each { t ->
             samePkg.computeIfAbsent(t.replaceAll(/\.[^.]+$/, ''), { [] as List }) << t
         }
-        sharedFiles.each { f ->
-            def src = f.getText('UTF-8')
-            def pkg = fqcnOf(sharedRoot, f).replaceAll(/\.[^.]+$/, '')
+sharedSideFiles.each { e ->
+            def src = e.file.getText('UTF-8')
+            def pkg = fqcnOf(e.root, e.file).replaceAll(/\.[^.]+$/, '')
             def m = src =~ /(?m)^[ \t]*import[ \t]+(?:static[ \t]+)?([\w.]+)[ \t]*;/
             while (m.find()) {
                 if (m.group(1).startsWith(PREFIX)) referenced << m.group(1)
@@ -822,18 +835,21 @@ abstract class SeamsDocTask extends DefaultTask {
             }
         }
 
+        // 【枚举 platforms/ 下的全部，不只是被引用到的】
+        //
+        // 原先只列"被共用代码引用到的"，于是"从没被引用过"的文件从来没进过视野 ——
+        // 那 24 个只被版本轴挡住的网络包就是这么漏的，靠人扫才发现。改成全量之后
+        // 这一类彻底关掉：platforms/ 下的每个文件都必然出现在甲或乙里。
         def a = [], b = []
-        referenced.findAll { platFiles.containsKey(it) && !sharedFqcns.contains(it) }
-                  .toSorted()
-                  .each { t ->
-            // 与 verifySharedIsTargetNeutral 同一份判据
+        platFiles.keySet().toSorted().each { t ->
+            if (sharedFqcns.contains(t)) return          // 同名的已经共用了，不算平台专有
             def tags = TargetNeutrality.tagsOf(platFiles[t].getText('UTF-8'))
-            if (tags) { a << [t, tags] } else { b << [t, []] }
+            def row = [t, tags, referenced.contains(t)]
+            if (tags) { a << row } else { b << row }
         }
         return [a: a, b: b, sharedFqcns: sharedFqcns, neutralFqcns: neutralFqcns]
     }
 
-    /** 甲：按轴分三组。只被版本轴挡住的那批，是同版本三个加载器可以共用的。 */
     static String renderA(List rows) {
         def by = [ '版本': [], '加载器': [], '两轴': [] ]
         rows.each { by[TargetNeutrality.axisOf(it[1])] << it }
@@ -846,7 +862,11 @@ abstract class SeamsDocTask extends DefaultTask {
             if (list.isEmpty()) {
                 sb << "（无）\n\n"
             } else {
-                list.each { sb << "- `" << (it[0] - PREFIX) << "` —— " << it[1].join('、') << "\n" }
+                list.each {
+                sb << "- `" << (it[0] - PREFIX) << "` —— " << it[1].join('、')
+                if (it[2]) sb << "　**★ 被共用代码引用**"
+                sb << "\n"
+            }
                 sb << "\n"
             }
         }
@@ -870,7 +890,11 @@ abstract class SeamsDocTask extends DefaultTask {
             if (list.isEmpty()) {
                 sb << "（无）\n\n"
             } else {
-                list.each { sb << "- `" << (it[0] - PREFIX) << "`\n" }
+                list.each {
+                    sb << "- `" << (it[0] - PREFIX) << "`"
+                    if (it[2]) sb << "　**★ 被共用代码引用**"
+                    sb << "\n"
+                }
                 sb << "\n"
             }
         }
