@@ -27,6 +27,15 @@ import java.util.List;
  * <b>移植到这个目标时，把这份换成真的实现</b>，照 1.21.1 那一份抄：它除了
  * {@code PhoneScreen.openTxtBook} 那一句，其余（扫目录、id 用文件名哈希、大小那一行）
  * 与版本、加载器都无关。
+ *
+ * 同一趟要一起补的（漏了都不会报错，只会静默少一块）：
+ * <ul>
+ *   <li>{@code PhoneScreen} 的阅读页管线：一个 Mode、渲染分发、返回键、全屏、拖 txt 进来收书</li>
+ *   <li>翻页处理器——{@code PhoneKeys.READER_PREV/READER_NEXT} 已经在这个目标上注册出去了，
+ *       在此之前它们是按了没反应的死键</li>
+ *   <li>{@code ShelfStore.ensureShelved}：本地书不经过书城，不调这一句就上不了架，
+ *       表现是"书在、两个页签都看不见"</li>
+ * </ul>
  */
 public final class TxtBookSource implements BookSource {
 

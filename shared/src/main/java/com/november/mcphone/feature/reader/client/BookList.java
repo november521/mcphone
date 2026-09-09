@@ -366,7 +366,12 @@ public final class BookList {
             hint = "mcphone.reader.no_match_hint";
         } else if (tab == Tab.SHELF) {
             title = "mcphone.reader.shelf_empty";
-            hint = "mcphone.reader.shelf_empty_hint";
+            // 提示里写着"点「文件夹」"与"把文件拖进来"，那两条路都来自本地书源。书源不在的
+            // 目标上要换一句，否则是指着两个不存在的入口。判据与「文件夹」入口用同一个，
+            // 一处改两处不会再漂
+            hint = BookSources.available(TxtBookSource.SOURCE_ID)
+                    ? "mcphone.reader.shelf_empty_hint"
+                    : "mcphone.reader.shelf_empty_hint_no_txt";
         } else {
             title = "mcphone.reader.empty";
             hint = "mcphone.reader.empty_hint";

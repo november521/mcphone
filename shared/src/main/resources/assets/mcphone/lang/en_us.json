@@ -333,5 +333,6 @@
   "mcphone.reader.txt.broken_hint": "The file may be too large (over 32 MB), locked by another program, or not text at all. The reason is in the game log (latest.log, search for MCphone).",
   "mcphone.reader.tab_store": "All books",
   "mcphone.reader.shelf_empty": "Your shelf is empty",
-  "mcphone.reader.shelf_empty_hint": "Drop .txt novels into config/mcphone/reader/books/ (the \"Folder\" link above opens it), or drag the files onto the game window - they land here directly, no need to star them. Mod guide books live under \"All books\"; tap the star to bring one here."
+  "mcphone.reader.shelf_empty_hint": "Drop .txt novels into config/mcphone/reader/books/ (the \"Folder\" link above opens it), or drag the files onto the game window - they land here directly, no need to star them. Mod guide books live under \"All books\"; tap the star to bring one here.",
+  "mcphone.reader.shelf_empty_hint_no_txt": "Tap the star on a row under \"All books\" to put it here. Keep the few you actually read on the shelf."
 }

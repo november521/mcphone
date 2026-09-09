@@ -73,15 +73,21 @@ public final class BookSources {
         return false;
     }
 
-    /** 重扫所有书源。打开书架页时调 */
-    /** 某个书源在这个目标上可用吗。id 见各书源的 SOURCE_ID */
+    /**
+     * 某个书源在这个目标上可用吗。id 见各书源的 SOURCE_ID。
+     *
+     * 走本类的 {@link #isAvailable(BookSource)} 而不是直接问书源：那一层兜的是 Throwable，
+     * 理由见类注释。这个方法的调用点在每帧的渲染路径上，更不能让别人模组抛出来的
+     * Error 直穿过去。
+     */
     public static boolean available(String sourceId) {
         for (BookSource source : SOURCES) {
-            if (source.id().equals(sourceId)) return source.isAvailable();
+            if (source.id().equals(sourceId)) return isAvailable(source);
         }
         return false;
     }
 
+    /** 重扫所有书源。打开书架页时调 */
     public static void refreshAll() {
         for (BookSource source : SOURCES) {
             if (!isAvailable(source)) continue;

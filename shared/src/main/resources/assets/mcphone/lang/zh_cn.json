@@ -333,5 +333,6 @@
   "mcphone.reader.txt.broken_hint": "文件可能太大（超过 32 MB）、正被别的程序占着，或者压根不是文本。具体原因写在游戏日志里（latest.log，搜 MCphone）。",
   "mcphone.reader.tab_store": "书城",
   "mcphone.reader.shelf_empty": "书架还是空的",
-  "mcphone.reader.shelf_empty_hint": "把 txt 小说放进 config/mcphone/reader/books/（点右上角「文件夹」直接打开它），或者把文件拖进游戏窗口——放进去就在这儿了，不用再去书城收藏。模组的教程手册在「书城」，点右边的 ☆ 收到这儿来。"
+  "mcphone.reader.shelf_empty_hint": "把 txt 小说放进 config/mcphone/reader/books/（点右上角「文件夹」直接打开它），或者把文件拖进游戏窗口——放进去就在这儿了，不用再去书城收藏。模组的教程手册在「书城」，点右边的 ☆ 收到这儿来。",
+  "mcphone.reader.shelf_empty_hint_no_txt": "去「书城」点书右边的 ☆，它就放到这儿了。常翻的那几本收进来，以后不用每次从几十本里翻。"
 }

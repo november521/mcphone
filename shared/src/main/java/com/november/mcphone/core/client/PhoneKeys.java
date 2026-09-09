@@ -120,6 +120,12 @@ public final class PhoneKeys {
      *
      * 手机界面开着时这两个键不管事——那时候方向键、翻页键、点屏幕左右两半都在，
      * 见 {@code TxtReaderPage.keyPressed}。
+     *
+     * <b>前提</b>：这两个键要求目标上有翻页处理器与 {@code PhoneScreen} 那一侧的翻页入口。
+     * 还没有阅读页的目标照样会把它们注册出去（注册走的是 {@link #ALL} 的循环，不按目标挑），
+     * 那时玩家在按键设置里看得见它们、按下去没有反应。补齐阅读页的那一刻它们自己就活了——
+     * 为此单造一套"这个键在这个目标上有没有用"的机制不值：那个信息既不在版本轴也不在
+     * 加载器轴上，没有层装得下它，而漏声明的代价比死键更重。
      */
     public static final Key READER_PREV = new Key("key.mcphone.reader_prev", GLFW.GLFW_KEY_PAGE_UP);
 
