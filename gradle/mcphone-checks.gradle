@@ -506,12 +506,47 @@ abstract class TargetNeutrality {
     }
 
     /**
-     * 去掉块注释、行注释与字符串/字符字面量，只留真代码。换行原样留着，行号才对得上。
+     * 去掉块注释、行注释与字符串/字符字面量的<b>内容</b>，只留真代码。
+     * 换行原样留着，行号才对得上。
      *
      * 【为什么必须去】：shared/ 里正有文件在注释里解释 "1.20.1 上没有 StreamCodec"，
-     * 直接扫原始文本会把它们当成违规 —— 那种误报会让人把整道闸关掉。
+     * 直接扫原始文本会把它们当成违规 —— 那种误报会让人把整道闸关掉。字符串同理：
+     * 一句日志文案里出现 StreamCodec 不是违规。
+     *
+     * 【别拿它做孪生比对】—— 用 {@link #stripComments}，理由见那个方法。
      */
     static String strip(String src) {
+        return scrub(src, true)
+    }
+
+    /**
+     * 只去注释，<b>字符串字面量原样保留</b>。孪生比对用这一个。
+     *
+     * 【为什么不能共用 strip】：那个方法把字符串内容整个丢掉，于是两份只差一个翻译键、
+     * 一句日志文案、一个资源路径的文件，在它眼里<b>一模一样</b>。而孪生闸对「一模一样」
+     * 的反应是印一句「这一对一字不差，还没搬进 shared/」—— 那是一条可执行指令，
+     * 照着搬就是把两种行为合成一份，而且两边都编得过、两边都绿。
+     *
+     * 判据扫描要的是「代码里有没有碰那个 API」，字符串不算；孪生比对要的是「这两份是不是
+     * 同一段代码」，字符串<b>算</b>。同一个函数服务不了这两个问题。
+     *
+     * 实测：本轮装闸时全仓 0 对受影响，是潜在的不是已发生的 —— 但那道闸给的是指令，
+     * 不是提示。
+     */
+    static String stripComments(String src) {
+        return scrub(src, false)
+    }
+
+    /**
+     * 注释与字面量的扫描器。{@code blankStrings} 决定字符串留不留内容。
+     *
+     * 【不能是 private】：闭包走动态派发，看不见私有方法（实测报 "Could not find method"）。
+     *
+     * 【扫不到闭合就抛，不静默吞】：原先的写法在找不到收尾引号时把 j 一路推到文件尾，
+     * 于是<b>那一行之后的全部代码从结果里消失</b> —— 判据扫了个空，孪生比对看到两份都被
+     * 截短，结果是全绿。字符串不能跨行，所以遇到换行就是扫描器错位了，当场说出来。
+     */
+    static String scrub(String src, boolean blankStrings) {
         def out = new StringBuilder(src.length())
         int i = 0, n = src.length()
         while (i < n) {
@@ -524,13 +559,40 @@ abstract class TargetNeutrality {
             } else if (c == ('/' as char) && i + 1 < n && src.charAt(i + 1) == ('/' as char)) {
                 int j = src.indexOf('\n', i)
                 i = (j < 0) ? n : j
+            } else if (c == ('"' as char) && src.startsWith('"""', i)) {
+                // 文本块。仓库眼下一个都没有，但它一进来就会让按单引号配对的扫描器错位，
+                // 而错位的后果是安静地吞掉后面所有代码 —— 所以先把它认出来
+                int j = src.indexOf('"""', i + 3)
+                if (j < 0) {
+                    throw new GradleException(
+                            "第 ${src.substring(0, i).count('\n') + 1} 行有一个没闭合的文本块（\"\"\"）。\n" +
+                            "扫描器到这里就走不下去了，再往下的代码会整段从结果里消失 —— 那会让闸全绿。")
+                }
+                int stop = j + 3
+                if (blankStrings) {
+                    out.append('""')
+                    for (int k = i; k < stop; k++) if (src.charAt(k) == ('\n' as char)) out.append('\n')
+                } else {
+                    out.append(src, i, stop)
+                }
+                i = stop
             } else if (c == ('"' as char) || c == ("'" as char)) {
                 char quote = c
                 int j = i + 1
-                while (j < n && src.charAt(j) != quote) {
+                while (j < n && src.charAt(j) != quote && src.charAt(j) != ('\n' as char)) {
                     j += (src.charAt(j) == ('\\' as char)) ? 2 : 1
                 }
-                out.append(quote).append(quote)
+                if (j >= n || src.charAt(j) != quote) {
+                    throw new GradleException(
+                            "第 ${src.substring(0, i).count('\n') + 1} 行有一个没闭合的字符串或字符字面量。\n" +
+                            "Java 的字符串不能跨行，所以这多半是扫描器错位了。\n" +
+                            "就这么放过去的话，这一行之后的代码会整段从结果里消失，闸会全绿。")
+                }
+                if (blankStrings) {
+                    out.append(quote).append(quote)
+                } else {
+                    out.append(src, i, j + 1)
+                }
                 i = j + 1
             } else {
                 out.append(c)
@@ -793,8 +855,9 @@ abstract class LoaderTwinsTask extends DefaultTask {
     static final java.util.regex.Pattern LOADER_PKG =
             ~/^import\s+(?:static\s+)?(?:net\.neoforged|net\.minecraftforge|net\.fabricmc|cpw\.mods)\./
 
+    /** 【stripComments 不是 strip】：孪生比对要看字符串内容，理由见那个方法。 */
     static List<String> lines(File f) {
-        TargetNeutrality.strip(f.getText('UTF-8')).split('\n').collect { it.trim() }.findAll { it }
+        TargetNeutrality.stripComments(f.getText('UTF-8')).split('\n').collect { it.trim() }.findAll { it }
     }
 
     @TaskAction
@@ -930,8 +993,9 @@ abstract class PlatformTwinsTask extends DefaultTask {
 
     @Input abstract Property<Boolean> getWriteBaseline()
 
+    /** 【stripComments 不是 strip】：孪生比对要看字符串内容，理由见那个方法。 */
     static List<String> lines(File f) {
-        TargetNeutrality.strip(f.getText('UTF-8')).split('\n').collect { it.trim() }.findAll { it }
+        TargetNeutrality.stripComments(f.getText('UTF-8')).split('\n').collect { it.trim() }.findAll { it }
     }
 
     /** 多重集对称差：两边各自「多出来的行」的总条数。 */
@@ -944,16 +1008,30 @@ abstract class PlatformTwinsTask extends DefaultTask {
         return n
     }
 
-    /** 相对路径 -> [目标名: 文件]，只留出现在两个及以上目标里的。 */
+    /**
+     * 相对路径 -> [目标名: 文件]，只留出现在两个及以上目标里的。
+     *
+     * 【一个目标的源码根不止 platforms/<目标名>/】，还有它挂的每一个层。不把层算进来，
+     * 就会漏掉<b>第三条配对线</b>：layers/version/1.20.5+/ 里的文件与 platforms/1.20.1-forge/
+     * 下的同名文件也是一对拷贝，而且是全仓最大的一批。原先这里只读 projectJavaDir，
+     * 于是那 55 对一道闸都没有 —— layerJavaDirs 早就算好带在数据里了，只是没人读。
+     *
+     * 【与 verifyLoaderTwins 有重叠，是有意的】：加载器层那 6 对同样会出现在这里。
+     * 那道闸管的是「除加载器 import 外必须逐字相同」，这道闸管的是「有几份拷贝、
+     * 差多少行、只许降」。两个问题不一样，重叠没有坏处。
+     */
     Map<String, Map<String, File>> collect() {
         def byPath = new TreeMap<String, Map<String, File>>()
         targets.get().each { t ->
-            File root = t.projectJavaDir as File
-            if (!root.isDirectory()) return
-            root.eachFileRecurse { f ->
-                if (!f.isFile() || !f.name.endsWith('.java')) return
-                def rel = root.toPath().relativize(f.toPath()).toString().replace(File.separator, '/')
-                byPath.computeIfAbsent(rel, { new TreeMap<String, File>() })[t.key as String] = f
+            def roots = [t.projectJavaDir as File]
+            ((t.layerJavaDirs ?: []) as List).each { roots << (it as File) }
+            roots.each { File root ->
+                if (!root.isDirectory()) return
+                root.eachFileRecurse { f ->
+                    if (!f.isFile() || !f.name.endsWith('.java')) return
+                    def rel = root.toPath().relativize(f.toPath()).toString().replace(File.separator, '/')
+                    byPath.computeIfAbsent(rel, { new TreeMap<String, File>() })[t.key as String] = f
+                }
             }
         }
         return byPath.findAll { k, v -> v.size() > 1 }
