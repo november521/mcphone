@@ -131,6 +131,11 @@ ext.mcphoneLayers = (myEntry.value.layers ?: []).collect { name ->
     // 原先无条件要求 java 目录存在，于是只放资源的层、以及所有空层都得塞一个占位
     // 文件才建得起来 —— 那是绕开一条过严的前提，不是修好它。判据本来就在
     // layers.json 里写着，用它就行。
+    //
+    // ⚠ 【同一个模型在 .github/workflows/build.yml 的「检查 targets.json」里还有一份】。
+    // 跨语言（Groovy 与 shell）合不成一份，改这里就要改那里。那一份跑在 CI 的干净
+    // 检出上 —— 本地这些目录是 mkdir 出来的一直都在，只有那儿才验得到"克隆下来
+    // 有没有"。实测踩过：这里放宽了、那里没跟上，本地全绿而 CI 红。
     if (spec.populated && !javaDir.isDirectory() && !resDir.isDirectory()) {
         throw new GradleException(
                 "共享层 \"${name}\" 声明了 populated: true，但 ${spec.dir} 下" +

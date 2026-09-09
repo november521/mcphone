@@ -210,6 +210,17 @@ jobs:
           # 【q 里不能写 exit】：它总是在 X=$(q ...) 里被调用，那是个子 shell，
           # exit 只退出那个子 shell，外面照跑不误 —— 实测过，改成 exit 之后闸仍然是绿的。
           # 只能 return 非零，再靠每个调用点后面那句 || exit 1 把它接住。
+          q_layers() {
+            local out rc
+            out=$(jq -r "$1" "$L"); rc=$?
+            if [ "$rc" != "0" ]; then
+              echo "::error::读 layers.json 的 jq 跑挂了（退出码 $rc），这道检查没能跑起来：" >&2
+              echo "$1" >&2
+              return 1
+            fi
+            printf '%s' "$out"
+          }
+
           q() {
             local out rc
             out=$(jq -r "$1" "$F"); rc=$?
@@ -446,26 +457,40 @@ jobs:
             FAIL=1
           fi
 
-          # 八、【层声明的目录、以及它的 src/main/java 都必须真的在】
+          # 八、【层的目录在不在，由 populated 说了算】
           #
-          # 查到 src/main/java 这一级是有原因的：git 不跟踪空目录。一个只放资源、
-          # 没有 java 的层，它的 src/main/java 在本地是存在的（被 mkdir 出来过），
-          # 但【克隆下来就没有】，而构建会检查那个目录在不在 —— 刚克隆完的仓库直接
-          # 建不起来。实测踩过。解法是往那个目录放一个占位文件让 git 跟踪它。
+          # 这一条跟 gradle/mcphone-layers.gradle 里那一条是同一个模型，两边必须一致：
           #
-          # 这道检查跑在 CI 的干净检出上，正好是本地永远复现不出来的那个环境。
-          MISSDIR=$(jq -r 'to_entries[] | select((.value|type)=="object") | .value.dir' "$L") || exit 1
-          for d in $MISSDIR; do
-            if [ ! -d "$d" ]; then
-              echo "::error::layers.json 里声明的目录不存在：$d"
-              FAIL=1
-            elif [ ! -d "$d/src/main/java" ]; then
-              echo "::error::$d/src/main/java 不存在（在这次干净检出里）。"
-              echo "git 不跟踪空目录：这一层要是还没有 .java，往那个目录放一个占位文件，"
-              echo "否则任何人克隆下来都建不起来。"
+          #   populated: true   java 与 resources 至少要有一个在，都不在就是内容丢了
+          #                     或者 dir 写错
+          #   populated: false  两个都不在是【正常的】—— git 不跟踪空目录，一个还没
+          #                     开始填的层在克隆下来的仓库里本来就没有这些目录；
+          #                     反过来，声明了没内容却有内容，是声明过期
+          #
+          # 这道检查跑在 CI 的干净检出上，正好是本地永远复现不出来的那个环境：
+          # 本地那些目录是 mkdir 出来的，一直都在。
+          LAYERROWS=$(q_layers '
+            to_entries[] | select((.value|type)=="object")
+            | "\(.key)\t\(.value.dir)\t\(.value.populated)"
+          ') || exit 1
+          while IFS=$'\t' read -r NAME DIR POP; do
+            [ -n "$NAME" ] || continue
+            HAS=0
+            [ -d "$DIR/src/main/java" ] && HAS=1
+            [ -d "$DIR/src/main/resources" ] && HAS=1
+            if [ "$POP" = "true" ] && [ "$HAS" = "0" ]; then
+              echo "::error::共享层 $NAME 声明了 populated: true，但 $DIR 下 src/main/java 与 src/main/resources 都不存在（在这次干净检出里）。"
+              echo "要么内容丢了，要么 layers.json 里的 dir 写错了。这一层确实还没开始填的话，把 populated 改成 false。"
               FAIL=1
             fi
-          done
+            if [ "$POP" = "false" ] && [ "$HAS" = "1" ]; then
+              COUNT=$(find "$DIR/src/main" -type f 2>/dev/null | wc -l | tr -d " ")
+              if [ "$COUNT" != "0" ]; then
+                echo "::error::共享层 $NAME 声明了 populated: false，却有 $COUNT 个文件。声明过期了，把 populated 改成 true。"
+                FAIL=1
+              fi
+            fi
+          done <<< "$LAYERROWS"
 
           [ "$FAIL" = "0" ] || exit 1
           N=$(q '[to_entries[] | select((.value|type)=="object")] | length') || exit 1
