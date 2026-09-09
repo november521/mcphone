@@ -429,11 +429,23 @@ jobs:
             FAIL=1
           fi
 
-          # 八、层声明的目录必须真的在
+          # 八、【层声明的目录、以及它的 src/main/java 都必须真的在】
+          #
+          # 查到 src/main/java 这一级是有原因的：git 不跟踪空目录。一个只放资源、
+          # 没有 java 的层，它的 src/main/java 在本地是存在的（被 mkdir 出来过），
+          # 但【克隆下来就没有】，而构建会检查那个目录在不在 —— 刚克隆完的仓库直接
+          # 建不起来。实测踩过。解法是往那个目录放一个占位文件让 git 跟踪它。
+          #
+          # 这道检查跑在 CI 的干净检出上，正好是本地永远复现不出来的那个环境。
           MISSDIR=$(jq -r 'to_entries[] | select((.value|type)=="object") | .value.dir' "$L") || exit 1
           for d in $MISSDIR; do
             if [ ! -d "$d" ]; then
               echo "::error::layers.json 里声明的目录不存在：$d"
+              FAIL=1
+            elif [ ! -d "$d/src/main/java" ]; then
+              echo "::error::$d/src/main/java 不存在（在这次干净检出里）。"
+              echo "git 不跟踪空目录：这一层要是还没有 .java，往那个目录放一个占位文件，"
+              echo "否则任何人克隆下来都建不起来。"
               FAIL=1
             fi
           done
