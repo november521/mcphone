@@ -3,9 +3,17 @@ name: Build & Upload
 # 这个仓库【一个分支出多个版本】：支持哪些目标写在 versions/targets.json 里，
 # 每个目标一个工程目录（platforms/<目标名>/），各有各的 Gradle 与 Java 版本。
 #
-# 这里遍历所有 buildable 的目标逐个构建 —— 不用 GitHub 的 matrix 分 job：
-# 一次推送就该看到"哪个目标挂了"，分成几个 job 之后，红的是哪一个要点进去才知道，
-# 而且 setup-java 一次就能把几个 JDK 都装好，分 job 反而更慢。
+# 【一个目标一个 job，job 名就是目标名】
+#
+# 原先是一个 job 里串着编，理由写的是"分 job 之后红的是哪一个要点进去才知道"。
+# 那个理由是反的，第二个目标并进来当天就被打脸：两个目标的日志混在一条流里，
+# 74 个编译错误分不清是谁的，得靠文件路径一条条认。分 job 之后目标名【就是】
+# job 名，红的是哪个在列表上一眼看到。
+#
+# fail-fast: false —— 一个目标挂了不该把别的掐掉。恰恰相反：一次推送就想知道
+# 全部目标各自的状态，掐掉等于下次还要再推一遍才知道第二个怎么样。
+#
+# 串行还有个实际问题：每个目标都要解一遍 Minecraft，串着跑既慢又吃内存。
 on:
   push:
     branches: [master, main]
@@ -13,9 +21,43 @@ on:
     branches: [master, main]
 
 jobs:
-  build:
-    name: 全部目标构建
+  # 先把要编哪些读出来，下面按矩阵一个 runner 编一个。
+  #
+  # 【编哪些 ≠ 发哪些】：工程目录存在就编 —— 代码进了仓库就该编得过，不编它等于
+  # 仓库里躺着一份没有任何地方验证的源码。buildable: true 另外决定产物进不进
+  # Release，那是下面 upload 那一步的事。
+  targets:
+    name: 要编哪些目标
     runs-on: ubuntu-latest
+    outputs:
+      list: ${{ steps.t.outputs.list }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: t
+        run: |
+          set -euo pipefail
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json, os, sys
+          t = json.load(open('versions/targets.json', encoding='utf-8'))
+          rows = {k: v for k, v in t.items() if isinstance(v, dict)}
+          if not rows:
+              sys.exit("versions/targets.json 里一个目标都没有 —— 那个文件坏了或者被改空了")
+          have = sorted(k for k, v in rows.items() if os.path.isdir(v['project']))
+          if not have:
+              sys.exit("声明的目标里没有一个的工程目录存在")
+          print('list=' + json.dumps(have))
+          PY
+          echo "要编的目标：$(grep '^list=' "$GITHUB_OUTPUT" | tail -1)"
+
+  build:
+    name: ${{ matrix.target }}
+    needs: targets
+    runs-on: ubuntu-latest
+    strategy:
+      # 一个目标挂了不该把别的掐掉 —— 一次推送就想知道全部目标各自的状态
+      fail-fast: false
+      matrix:
+        target: ${{ fromJSON(needs.targets.outputs.list) }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -23,13 +65,10 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
 
-      # 【一次把所有目标要的 JDK 都装上】。setup-java 会为每个版本导出
-      # JAVA_HOME_<版本>_X64，下面按目标的 java 字段挑。
-      #
+      # 矩阵横跨 Java 17（1.20.1）与 21（1.21.1），两个都得在。
       # ⚠ 这个列表要跟 versions/targets.json 里出现过的 java 值一致。多装一个不要紧，
-      # 少装一个会在循环里报"JAVA_HOME_17_X64 为空"——所以下面那句挑 JDK 的代码
-      # 取不到就直接失败，不退回默认 JDK：拿错 JDK 编出来的 class 文件版本不对，
-      # 而那要等玩家装上才发现。
+      # 少装一个会在下面报"JAVA_HOME_17_X64 为空"——挑 JDK 那句取不到就直接失败，
+      # 不退回默认 JDK：拿错 JDK 编出来的 class 文件版本不对，而那要等玩家装上才发现。
       - name: Setup JDKs
         uses: actions/setup-java@v6
         with:
@@ -45,88 +84,56 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v5
 
-      - name: 逐个目标构建
+      - name: 构建 ${{ matrix.target }}
+        id: b
         run: |
           set -euo pipefail
+          T='${{ matrix.target }}'
           VERSION=$(grep -E '^mod_version=' gradle.properties | cut -d= -f2- | tr -d '[:space:]')
-          echo "仓库版本号：$VERSION"
+          PROJ=$(jq -r --arg t "$T" '.[$t].project'   versions/targets.json)
+          JAVA=$(jq -r --arg t "$T" '.[$t].java'      versions/targets.json)
+          BUILDABLE=$(jq -r --arg t "$T" '.[$t].buildable' versions/targets.json)
+          echo "仓库版本号：$VERSION　工程：$PROJ　Java：$JAVA　buildable：$BUILDABLE"
+
+          # 取不到就失败，别退回默认 JDK
+          eval "TARGET_JAVA_HOME=\${JAVA_HOME_${JAVA}_X64:-}"
+          if [ -z "$TARGET_JAVA_HOME" ]; then
+            echo "::error::目标 $T 要 Java $JAVA，但这台机器上没装（JAVA_HOME_${JAVA}_X64 为空）。"
+            echo "把 $JAVA 加进上面 Setup JDKs 的 java-version 列表。"
+            exit 1
+          fi
+
+          ( cd "$PROJ" && chmod +x ./gradlew && JAVA_HOME="$TARGET_JAVA_HOME" ./gradlew build )
+
+          {
+            echo "version=$VERSION"
+            echo "proj=$PROJ"
+            echo "buildable=$BUILDABLE"
+          } >> "$GITHUB_OUTPUT"
+
+      # 【只有 buildable 的产物往外传】。编是为了知道它编不编得过，
+      # 发是另一件事：还没建稳的目标不该混进 Release。
+      - name: 收产物
+        if: steps.b.outputs.buildable == 'true'
+        run: |
+          set -euo pipefail
           mkdir -p dist
-
-          # 【编哪些 ≠ 发哪些】
-          #
-          #   工程目录存在  → 编。代码进了仓库就该编得过，不编它等于仓库里躺着
-          #                   一份没有任何地方验证的源码。
-          #   buildable:true → 产物进 dist/，也就是进 Release。
-          #
-          # 原先两件事由 buildable 一个字段管，于是一个"工程已并入、还没建起来"的
-          # 目标【任何地方都不编】—— 本地不编（它不是当前平台）、CI 也跳过。
-          # 那正是这套结构要消掉的那种静默：某个目标没跟上应该当场可见。
-          ALL=$(jq -r 'to_entries[] | select((.value | type) == "object") | .key' versions/targets.json)
-          if [ -z "$ALL" ]; then
-            echo "::error::versions/targets.json 里一个目标都没有。"
-            echo "这不是'没有目标'，是那个文件坏了或者被改空了 —— 就这么放行的话这个 job 会永远绿。"
+          # 【按确切文件名取，不要 find | head -1】。挑错的后果是发出一个旧版本或
+          # 残缺包，而构建全绿、测试全绿，没有任何东西会告诉你。
+          JAR="${{ steps.b.outputs.proj }}/build/libs/mcphone-${{ steps.b.outputs.version }}.jar"
+          if [ ! -f "$JAR" ]; then
+            echo "::error::没找到 $JAR。${{ steps.b.outputs.proj }}/build/libs 下现有："
+            ls -la "${{ steps.b.outputs.proj }}/build/libs" || true
             exit 1
           fi
-          TARGETS=""
-          for T in $ALL; do
-            PROJ=$(jq -r --arg t "$T" '.[$t].project' versions/targets.json)
-            if [ -d "$PROJ" ]; then TARGETS="$TARGETS $T"; fi
-          done
-          if [ -z "$TARGETS" ]; then
-            echo "::error::声明的目标里没有一个的工程目录存在。"
-            exit 1
-          fi
-          echo "要编的目标：$TARGETS"
-
-          for T in $TARGETS; do
-            PROJ=$(jq -r --arg t "$T" '.[$t].project' versions/targets.json)
-            JAVA=$(jq -r --arg t "$T" '.[$t].java'    versions/targets.json)
-
-            # 取不到就失败，别退回默认 JDK
-            eval "TARGET_JAVA_HOME=\${JAVA_HOME_${JAVA}_X64:-}"
-            if [ -z "$TARGET_JAVA_HOME" ]; then
-              echo "::error::目标 $T 要 Java $JAVA，但这台机器上没装（JAVA_HOME_${JAVA}_X64 为空）。"
-              echo "把 $JAVA 加进上面 Setup JDKs 的 java-version 列表。"
-              exit 1
-            fi
-            if [ ! -d "$PROJ" ]; then
-              echo "::error::目标 $T 声明的工程目录 $PROJ 不存在。"
-              exit 1
-            fi
-
-            echo "::group::$T  （$PROJ，Java $JAVA）"
-            ( cd "$PROJ" && chmod +x ./gradlew && JAVA_HOME="$TARGET_JAVA_HOME" ./gradlew build )
-
-            # 【按确切文件名取，不要 find | head -1】。挑错的后果是发出一个旧版本或
-            # 残缺包，而构建全绿、测试全绿，没有任何东西会告诉你。
-            # mod_version 是这次构建的唯一真值，直接拿它拼名字。
-            JAR="$PROJ/build/libs/mcphone-${VERSION}.jar"
-            if [ ! -f "$JAR" ] && [ "$(jq -r --arg t "$T" '.[$t].buildable' versions/targets.json)" = "true" ]; then
-              echo "::error::没找到 $JAR。$PROJ/build/libs 下现有："
-              ls -la "$PROJ/build/libs" || true
-              exit 1
-            fi
-            # 【只有 buildable 的产物进 dist/】。编是为了知道它编不编得过，
-            # 发是另一件事：还没建稳的目标不该混进 Release。
-            BUILDABLE=$(jq -r --arg t "$T" '.[$t].buildable' versions/targets.json)
-            if [ "$BUILDABLE" != "true" ]; then
-              echo "编过了，但 buildable 还是 false —— 不进 dist/"
-              echo "::endgroup::"
-              continue
-            fi
-            # 各目标的 jar 在工程里同名（都是 mcphone-<版本>.jar），收进 dist 时
-            # 必须带上目标名，否则后一个会把前一个覆盖掉，而且不报错
-            cp "$JAR" "dist/mcphone-${VERSION}-${T}.jar"
-            echo "::endgroup::"
-          done
-
-          echo "── 产物 ──"
+          cp "$JAR" "dist/mcphone-${{ steps.b.outputs.version }}-${{ matrix.target }}.jar"
           ls -lh dist/
 
       - name: Upload artifacts
+        if: steps.b.outputs.buildable == 'true'
         uses: actions/upload-artifact@v7
         with:
-          name: mcphone-jars
+          name: mcphone-${{ matrix.target }}
           path: dist/*.jar
           retention-days: 30
 

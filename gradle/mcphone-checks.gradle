@@ -822,8 +822,12 @@ abstract class SeamsDocTask extends DefaultTask {
         platFiles.keySet().each { t ->
             samePkg.computeIfAbsent(t.replaceAll(/\.[^.]+$/, ''), { [] as List }) << t
         }
-sharedSideFiles.each { e ->
-            def src = e.file.getText('UTF-8')
+        sharedSideFiles.each { e ->
+            // 【必须去注释】。同包引用是拿简单名在正文里搜的，不去注释的话
+            // 类注释里提一句某个类名就算"引用"—— ★ 标记因此假阳性，而这张单子
+            // 正是拿来照着补接缝的：假阳性会让人去实现一个根本没人用的类。
+            // import 那一段同理：块注释里注掉的 import 也会被行锚点匹配上。
+            def src = TargetNeutrality.strip(e.file.getText('UTF-8'))
             def pkg = fqcnOf(e.root, e.file).replaceAll(/\.[^.]+$/, '')
             def m = src =~ /(?m)^[ \t]*import[ \t]+(?:static[ \t]+)?([\w.]+)[ \t]*;/
             while (m.find()) {

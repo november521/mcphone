@@ -39,7 +39,7 @@
     "gradle": "8.8",
     "project": "platforms/1.20.1-forge",
     "buildable": false,
-    "note": "代码在 1.20.1-forge 分支上，尚未并入。这一行的值是从那个分支上读出来的：gradle.properties 里 forge_version=47.4.23 / forge_version_range=[47.4.0,)，wrapper 是 gradle-8.8-bin.zip，build.gradle 里 toolchain 是 17，构建插件是 ForgeGradle 6（[6.0.54,6.2)）。",
+    "note": "工程已并入 platforms/1.20.1-forge/，正在让它编过。buildable 仍是 false —— CI 会编它（工程目录存在就编），但产物不进 Release。这一行的值是从 1.20.1-forge 分支上读出来的：gradle.properties 里 forge_version=47.4.23 / forge_version_range=[47.4.0,)，wrapper 是 gradle-8.8-bin.zip，build.gradle 里 toolchain 是 17，构建插件是 ForgeGradle 6（[6.0.54,6.2)）。",
     "layers": [
       "forge"
     ]
