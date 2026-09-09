@@ -462,6 +462,37 @@ jobs:
             FAIL=1
           fi
 
+          # 二点五、【mappings 必须人人都写，而且六个一模一样】
+          #
+          # shared/ 里有一百多个文件 import net.minecraft.*。那些名字来自映射：用 Mojang
+          # 官方名（official）时它们叫这些名字，换成 Yarn 就【全部改名】，那一百多个文件在
+          # 那个目标上一个都编不过 —— 也就是说这个字段决定 shared/ 在一个新目标上是全活还是全灭。
+          #
+          # 这件事原先只记在 README 的一句散文里，不在模型里、没有闸。加 Fabric 目标的人
+          # 最可能踩的正是这一脚：Fabric 那边 Yarn 是默认选项。
+          NOMAP=$(jq -r '
+            to_entries[] | select((.value|type)=="object") | select(.value.mappings == null) | "  \(.key)"
+          ' "$F"); RC=$?
+          [ "$RC" = "0" ] || { echo "::error::查 mappings 的 jq 跑挂了（退出码 $RC）"; exit 1; }
+          if [ -n "$NOMAP" ]; then
+            echo "::error::这些目标没写 mappings："
+            printf '%s\n' "$NOMAP"
+            echo "shared/ 能不能在一个目标上编过，取决于它用哪套映射。这个字段是必填。"
+            FAIL=1
+          fi
+          MAPS=$(jq -r '[ to_entries[] | select((.value|type)=="object") | .value.mappings ] | unique | .[]' "$F"); RC=$?
+          [ "$RC" = "0" ] || { echo "::error::汇总 mappings 的 jq 跑挂了（退出码 $RC）"; exit 1; }
+          if [ "$(printf '%s\n' "$MAPS" | grep -c .)" != "1" ]; then
+            echo "::error::目标之间的 mappings 不一致，出现了这几种："
+            printf '  %s\n' $MAPS
+            echo "shared/ 是一份源码给所有目标编的。两个目标用不同的映射，"
+            echo "那一份源码里的 net.minecraft.* 名字不可能同时对 —— shared/ 这个概念本身就不成立了。"
+            echo "真要支持另一套映射，得先决定 shared/ 怎么办，不是改这一行。"
+            FAIL=1
+          else
+            echo "全部目标的 mappings：$MAPS"
+          fi
+
           # 六点八、【至少要有一个 Java 17 的目标真的在编】
           #
           # shared/ 必须能在 Java 17 上编过 —— 1.20.1 那一档跑在 17 上。
