@@ -152,15 +152,17 @@ NeoForge 有（加载器轴），而它是 NeoForge **20.3** 引入的（版本�
 
 （无）
 
-#### 仅加载器轴（16）
+#### 仅加载器轴（18）
 
 同一加载器的各个 Minecraft 版本可共用；三个加载器之间必然分叉。
 
 - `MCphone` —— 加载器导入
+- `core.ModSounds` —— 加载器导入
 - `core.ServerConfig` —— 加载器导入
 - `core.client.AppHotkeys` —— 加载器导入
 - `core.client.ClientConfig` —— 加载器导入
 - `core.client.MCphoneKeyBindings` —— 加载器导入
+- `core.client.PhoneHud` —— 加载器导入
 - `core.menu.ModMenus` —— 加载器导入
 - `core.net.NetworkHandler` —— 加载器导入
 - `feature.chat.ChatImageStore` —— 加载器导入
@@ -209,24 +211,21 @@ NeoForge 有（加载器轴），而它是 NeoForge **20.3** 引入的（版本�
 
 - `compat.WaystonesCompat`
 
-#### 客户端渲染路径（18）
+#### 客户端渲染路径（15）
 
 **判据在这批上最不可信** —— 签名漂移正集中在这里，逐个人工核过再搬。
 
 - `api.client.app.IPhoneApp`
-- `core.client.GuiUtil`
 - `core.client.ImageFolder`
+- `core.client.PhoneItemProperties`
 - `core.client.PhoneScreen`
-- `core.client.PhoneScreenOpener`
 - `core.client.PlayerAvatar`
 - `feature.camera.client.CameraFlash`
 - `feature.camera.client.CameraMode`
 - `feature.gallery.client.Gallery`
-- `feature.music.client.NetSongSound`
 - `feature.music.client.playback.OggDecoder`
 - `feature.reader.client.compat.BookQuirk`
-- `feature.reader.client.compat.BookQuirks`
-- `feature.reader.client.source.BookSources`
+- `feature.reader.client.source.BookSource`
 - `feature.reader.client.source.ExternalBookSource`
 - `feature.reader.client.source.GuideMeSource`
 - `feature.reader.client.source.PatchouliSource`
