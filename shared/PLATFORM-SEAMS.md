@@ -244,6 +244,7 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 **新平台必须提供同名类型**，否则 shared/ 与共享层编不过。全限定名是硬约束；方法体是抄现成的一份还是自己写，看那个文件。
 
 - `MCphone`　—— 加载器导入
+- `api.client.ui.PhoneMultiLineEditBox`
 - `compat.WaystonesCompat`
 - `core.ModDataComponents`　—— 1.20.5+ 原版、加载器导入
 - `core.ModItems`　—— 加载器导入
@@ -259,7 +260,6 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 - `feature.camera.client.CameraFlash`
 - `feature.music.DiscService`　—— 1.20.5+ 原版、加载器导入
 - `feature.music.net.MusicNetworking`　—— 加载器导入
-- `feature.notes.client.NoteEditor`
 - `feature.terminal.TerminalCharger`　—— 加载器导入、注入的方法
 - `feature.terminal.integration.Terminals`　—— 加载器导入
 - `feature.terminal.integration.ae2.Ae2Integration`
@@ -279,12 +279,11 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 - `platform.client.SystemFiles`
 - `platform.client.VanillaAudio`
 
-#### 平台内部的（14）
+#### 平台内部的（13）
 
 只在这个平台自己的代码里用到。新平台不必提供同名类型。
 
 - `MCphoneClient`　—— 加载器导入
-- `api.client.ui.PhoneMultiLineEditBox`
 - `compat.CompatModules`　—— 加载器导入
 - `compat.IntegratedDynamicsCompat`　—— 加载器导入
 - `core.ModAttachments`　—— 加载器导入
@@ -309,11 +308,12 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 
 <!-- 下面这段由 ./gradlew updateSeamsDoc 生成，别手改：1.20.1-forge -->
 
-#### 共用代码引用了的（72）
+#### 共用代码引用了的（75）
 
 **新平台必须提供同名类型**，否则 shared/ 与共享层编不过。全限定名是硬约束；方法体是抄现成的一份还是自己写，看那个文件。
 
 - `MCphone`　—— 加载器导入
+- `api.client.ui.PhoneMultiLineEditBox`
 - `compat.WaystonesCompat`
 - `core.ModItems`　—— 加载器导入
 - `core.ModSounds`　—— 加载器导入
@@ -358,9 +358,11 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 - `feature.notes.Note`
 - `feature.notes.NotePrinter`
 - `feature.notes.NoteSummary`
-- `feature.notes.client.NoteEditor`
+- `feature.notes.net.DeleteNotePacket`
 - `feature.notes.net.PrintNotePacket`
 - `feature.notes.net.RequestNoteListPacket`
+- `feature.notes.net.RequestNotePacket`
+- `feature.notes.net.SaveNotePacket`
 - `feature.settings.net.SetDeviceNamePacket`
 - `feature.settings.net.SetWallpaperPacket`
 - `feature.store.PurchasedApps`
@@ -386,7 +388,7 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 - `platform.client.SystemFiles`
 - `platform.client.VanillaAudio`
 
-#### 平台内部的（35）
+#### 平台内部的（32）
 
 只在这个平台自己的代码里用到。新平台不必提供同名类型。
 
@@ -409,10 +411,7 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 - `feature.music.net.PlayNetSongPacket`
 - `feature.music.net.StopNetSongPacket`
 - `feature.music.net.SyncDiscStatePacket`
-- `feature.notes.net.DeleteNotePacket`
 - `feature.notes.net.NotesNetworking`
-- `feature.notes.net.RequestNotePacket`
-- `feature.notes.net.SaveNotePacket`
 - `feature.notes.net.SyncNoteListPacket`
 - `feature.notes.net.SyncNotePacket`
 - `feature.settings.net.SyncWallpaperPacket`

@@ -8,6 +8,7 @@
   "pairs": {
     "com/november/mcphone/MCphone.java": 71,
     "com/november/mcphone/MCphoneClient.java": 83,
+    "com/november/mcphone/api/client/ui/PhoneMultiLineEditBox.java": 3,
     "com/november/mcphone/compat/CompatModule.java": 2,
     "com/november/mcphone/compat/CompatModules.java": 5,
     "com/november/mcphone/compat/IntegratedDynamicsCompat.java": 8,
@@ -73,7 +74,6 @@
     "com/november/mcphone/feature/notes/Note.java": 3,
     "com/november/mcphone/feature/notes/NotePrinter.java": 28,
     "com/november/mcphone/feature/notes/NoteSummary.java": 3,
-    "com/november/mcphone/feature/notes/client/NoteEditor.java": 8,
     "com/november/mcphone/feature/notes/net/DeleteNotePacket.java": 18,
     "com/november/mcphone/feature/notes/net/NotesNetworking.java": 45,
     "com/november/mcphone/feature/notes/net/PrintNotePacket.java": 18,
