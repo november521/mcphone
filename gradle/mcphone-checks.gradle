@@ -474,27 +474,6 @@ abstract class TargetNeutrality {
     ].asImmutable()
 
     /**
-     * 一组判据合起来落在哪个轴上：'版本' / '加载器' / '两轴'。
-     *
-     * 判据名认不出来时抛异常，不返回 null —— 返回 null 的下场是调用方一个裸 NPE，
-     * 而这个文件里别的闸取不到前提时抛的都是带解释的 GradleException。
-     */
-    static String axisOf(List<String> tags) {
-        def axes = [] as Set
-        tags.each { tag ->
-            def spec = BLOCKERS[tag]
-            if (spec == null) {
-                throw new GradleException(
-                        "判据「${tag}」不在 BLOCKERS 里，取不到它的轴。" +
-                        "认得的判据：${BLOCKERS.keySet().join('、')}")
-            }
-            axes.addAll(spec.axes)
-        }
-        if (axes.isEmpty()) return null
-        return axes.size() > 1 ? '两轴' : axes.first()
-    }
-
-    /**
      * 什么算客户端代码 —— 【本文件里只此一处】。
      *
      * 收 FQCN（{@code a.b.client.C}）也收类文件路径（{@code a/b/client/C.class}）。
@@ -1215,10 +1194,8 @@ abstract class SeamsDocTask extends DefaultTask {
     static final String PREFIX = 'com.november.mcphone.'
 
 
-    static String aBegin(String k) { "<!-- 下面这段由 ./gradlew updateSeamsDoc 生成，别手改：甲 · ${k} -->" }
-    static String aEnd(String k)   { "<!-- 甲 · ${k} 结束 -->" }
-    static String bBegin(String k) { "<!-- 下面这段由 ./gradlew updateSeamsDoc 生成，别手改：乙 · ${k} -->" }
-    static String bEnd(String k)   { "<!-- 乙 · ${k} 结束 -->" }
+    static String begin(String k) { "<!-- 下面这段由 ./gradlew updateSeamsDoc 生成，别手改：${k} -->" }
+    static String end(String k)   { "<!-- ${k} 结束 -->" }
 
     static String fqcnOf(File root, File f) {
         (root.toPath().relativize(f.toPath()).toString().replace(File.separator, '.')) - ~/\.java$/
@@ -1243,11 +1220,7 @@ abstract class SeamsDocTask extends DefaultTask {
             throw new GradleException("${platRoot} 下一个 .java 都没有。")
         }
 
-        // 全中立那一层单独记一份：下面「甲的类型跑进 shared/」那道闸只认它。
-        def neutralFqcns = sharedFiles.collect { fqcnOf(sharedRoot, it) } as Set
-        // 【必须拷一份】：Groovy 里 someSet as Set 返回的是【同一个对象】，
-        // 下面那句 addAll 会把 neutralFqcns 一起改掉，两个变量就成了一份。
-        def sharedFqcns = new LinkedHashSet(neutralFqcns)
+        def sharedFqcns = new LinkedHashSet(sharedFiles.collect { fqcnOf(sharedRoot, it) })
 
         // 【共用代码 = shared/ 加上所有共享层】。原先只收 shared/ 的文件，
         // 于是 layers/ → platforms/ 那条边整个在视野外：core.net.Wire 被层里两个
@@ -1292,59 +1265,46 @@ abstract class SeamsDocTask extends DefaultTask {
         // 原先只列"被共用代码引用到的"，于是"从没被引用过"的文件从来没进过视野 ——
         // 那 24 个只被版本轴挡住的网络包就是这么漏的，靠人扫才发现。改成全量之后
         // 这一类彻底关掉：platforms/ 下的每个文件都必然出现在甲或乙里。
-        def a = [], b = []
+        def rows = []
         platFiles.keySet().toSorted().each { t ->
             if (sharedFqcns.contains(t)) return          // 同名的已经共用了，不算平台专有
-            def tags = TargetNeutrality.tagsOf(platFiles[t].getText('UTF-8'))
-            def row = [t, tags, referenced.contains(t)]
-            if (tags) { a << row } else { b << row }
+            rows << [t, TargetNeutrality.tagsOf(platFiles[t].getText('UTF-8')), referenced.contains(t)]
         }
-        return [a: a, b: b, sharedFqcns: sharedFqcns, neutralFqcns: neutralFqcns]
-    }
-
-    static String renderA(List rows) {
-        def by = [ '版本': [], '加载器': [], '两轴': [] ]
-        rows.each { by[TargetNeutrality.axisOf(it[1])] << it }
-        def sb = new StringBuilder()
-        [['版本',   '仅版本轴',   '同一 Minecraft 版本的三个加载器可逐字共用；与 1.20.1 之间必然分叉'],
-         ['加载器', '仅加载器轴', '同一加载器的各个 Minecraft 版本可共用；三个加载器之间必然分叉'],
-         ['两轴',   '两轴都有',   '六个目标各不相同']].each { key, title, hint ->
-            def list = by[key]
-            sb << "#### ${title}（${list.size()}）\n\n${hint}。\n\n"
-            if (list.isEmpty()) {
-                sb << "（无）\n\n"
-            } else {
-                list.each {
-                sb << "- `" << (it[0] - PREFIX) << "` —— " << it[1].join('、')
-                if (it[2]) sb << "　**★ 被共用代码引用**"
-                sb << "\n"
-            }
-                sb << "\n"
-            }
-        }
-        return sb.toString().trim() + "\n"
+        return [rows: rows, sharedFqcns: sharedFqcns]
     }
 
     /**
-     * 乙：客户端渲染路径单独分一组。
+     * 一个目标下 platforms/ 里的全部类型，按「共用代码引不引用它」分两组。
      *
-     * 这一组几乎整个落在判据自己声明的第三层盲区里（方法名没变、签名变了，
-     * 客户端渲染那套尤其多）。把乙当待办队列从第一条往下搬的人，正好会先撞上
-     * 最该人工细看的那批 —— 所以分开列。
+     * <h2>为什么是全量，不是只列被引用的</h2>
+     *
+     * 「从没被引用过」的那一类正是最容易脱离视野的 —— 那 24 个只被版本轴挡住的网络包
+     * 就是这么漏的，靠人扫才发现。所以枚举基准是 platforms/ 下的每一个文件。
+     *
+     * <h2>为什么不再分甲/乙</h2>
+     *
+     * 那个二分说的是「这是有意的接缝」还是「只是还没搬」，而做出判断的是那四条判据 ——
+     * 它们看不出来。四个门面（Slots / StackCodecs / CuriosInventories / Draw）判据
+     * 一条都不中，于是全被归进「还没搬」，而它们恰恰是最典型的有意接缝；
+     * 反过来「必须提供」与「不得重新实现」曾经同时挂在同一批条目上。
+     *
+     * 现在只报事实：<b>共用代码引不引用它</b>（编译期可查），以及<b>它命中了哪几条判据</b>
+     * （证据，不是判决）。该抄一份还是该自己写，打开那个文件看，别指望一个标签替你决定。
      */
-    static String renderB(List rows) {
-        def client = rows.findAll { TargetNeutrality.isClient(it[0]) }
-        def other  = rows.findAll { !TargetNeutrality.isClient(it[0]) }
+    static String render(List rows) {
+        def star = rows.findAll { it[2] }
+        def rest = rows.findAll { !it[2] }
         def sb = new StringBuilder()
-        [[other,  '非客户端', '判据在这批上相对可信'],
-         [client, '客户端渲染路径', '**判据在这批上最不可信** —— 签名漂移正集中在这里，逐个人工核过再搬']].each { list, title, hint ->
+        [[star, '共用代码引用了的', '**新平台必须提供同名类型**，否则 shared/ 与共享层编不过。' +
+                '全限定名是硬约束；方法体是抄现成的一份还是自己写，看那个文件'],
+         [rest, '平台内部的', '只在这个平台自己的代码里用到。新平台不必提供同名类型']].each { list, title, hint ->
             sb << "#### ${title}（${list.size()}）\n\n${hint}。\n\n"
             if (list.isEmpty()) {
                 sb << "（无）\n\n"
             } else {
                 list.each {
                     sb << "- `" << (it[0] - PREFIX) << "`"
-                    if (it[2]) sb << "　**★ 被共用代码引用**"
+                    if (it[1]) sb << "　—— " << it[1].join('、')
                     sb << "\n"
                 }
                 sb << "\n"
@@ -1353,17 +1313,6 @@ abstract class SeamsDocTask extends DefaultTask {
         return sb.toString().trim() + "\n"
     }
 
-    /** 从文档里读回上一次记下的甲清单（短名），只看这个目标那一段。 */
-    static List<String> recordedA(String doc, File f, String k) {
-        int i = doc.indexOf(aBegin(k)), j = doc.indexOf(aEnd(k))
-        if (i < 0 || j < 0 || j < i) return null
-        def out = []
-        doc.substring(i + aBegin(k).length(), j).eachLine { line ->
-            def m = line =~ /^-\s+`([^`]+)`/
-            if (m) out << m[0][1]
-        }
-        return out
-    }
 
     static String replaceBlock(String doc, String begin, String end, String body, File f) {
         int i = doc.indexOf(begin), j = doc.indexOf(end)
@@ -1395,29 +1344,8 @@ abstract class SeamsDocTask extends DefaultTask {
             String k = tgt.key
             def r = compute(tgt.projectJavaDir as File, tgt.layerJavaDirs as List<File>)
 
-            // 【甲里的类型跑进 shared/】—— 这一条对每个目标各查各的
-            def recorded = recordedA(doc, f, k)
-            if (recorded != null) {
-                def moved = recorded.findAll { r.neutralFqcns.contains(PREFIX + it) }
-                if (moved) {
-                    throw new GradleException(
-                            "这些类型记在 PLATFORM-SEAMS.md 的【甲 · ${k}】里（每个平台各写一份），" +
-                            "现在却出现在 shared/ 下：\n" +
-                            moved.collect { "  ${it}" }.join('\n') + "\n\n" +
-                            "甲 的意思是它的方法体在不同目标上注定不同，共用一份必然编不过 —— " +
-                            "这十有八九是搬错了，把它搬回 platforms/。\n\n" +
-                            "只被版本轴挡住的接缝不该进 shared/，该进对应的共享层（layers/version/<层名>/）—— " +
-                            "共享层给同一批版本的三个加载器共用，搬进去是正常动作，这道闸不拦。\n\n" +
-                            "如果确实是有意进 shared/（那个阻断真没了），先【手动】把它那一行从甲的清单里删掉，" +
-                            "再跑 ./gradlew updateSeamsDoc。\n" +
-                            "多这一步是故意的：直接重写文档会让这次搬动被静默追认，构建还转绿。")
-                }
-            }
-
-            wanted = replaceBlock(
-                    replaceBlock(wanted, aBegin(k), aEnd(k), renderA(r.a), f),
-                    bBegin(k), bEnd(k), renderB(r.b), f)
-            summary << "${k} 甲 ${r.a.size()} 乙 ${r.b.size()}"
+            wanted = replaceBlock(wanted, begin(k), end(k), render(r.rows), f)
+            summary << "${k} ${r.rows.size()} 个（共用代码引用 ${r.rows.count { it[2] }} 个）"
         }
 
         if (updating.get()) {
@@ -1435,9 +1363,9 @@ abstract class SeamsDocTask extends DefaultTask {
                     "shared/PLATFORM-SEAMS.md 跟源码对不上了。\n" +
                     "现算出来：${summary.join('，')}\n\n" +
                     "跑 ./gradlew updateSeamsDoc 重写（它一次刷【全部目标】那几段），然后【看一眼 diff】——\n" +
-                    "  乙 → 甲    它开始碰别的目标上没有的东西了\n" +
-                    "  甲 → 乙    那个阻断没了，可以考虑搬进 shared/\n" +
-                    "  新出现     多了一个平台专有的类型\n" +
+                    "  进了「共用代码引用了的」   共用层开始依赖它了，新平台从此必须提供同名类型\n" +
+                    "  出了那一组             共用层不再引用它，新平台可以不提供\n" +
+                    "  新出现                 多了一个平台专有的类型\n" +
                     "  整个消失   那个类型被删了，或者被搬进了共用层\n" +
                     "都值得看一眼再提交，不要闭眼重写。")
         }
