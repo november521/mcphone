@@ -1,0 +1,79 @@
+{
+  "_comment": [
+    "共享层的定义。一个层 = 一批【三个加载器都一样、但只在某些 Minecraft 版本上成立】的代码。",
+    "",
+    "【层名是「这套 API 从哪个 Minecraft 版本开始有」，不是某一个具体版本】",
+    "1.21.1 和将来的 26.x 都挂 1.20.5+，因为它们都有 StreamCodec / 数据组件那一套。",
+    "写死成某个版本号的话，每加一个版本就要多一层，而它们装的其实是同一份代码。",
+    "",
+    "【层是可组合的，所以要按一条边界切，不要按版本切成大块】",
+    "targets.json 里的 layers 是数组：一个目标可以同时挂好几层，各取所需。",
+    "所以一个功能从 1.20.5 起有、另一个从 1.21.2 起有，就是两层 —— 1.21.1 挂前一层，",
+    "1.21.2 及以后两层都挂。这样两拨代码各写一次。",
+    "反过来，把「1.20.5 之后的所有东西」塞进一层，1.21.2 才有的东西就会把 1.21.1 挡在",
+    "门外，而那批代码只能回到各目标下复制粘贴 —— 层存在的意义正是消掉那种复制。",
+    "",
+    "【加一层的判断】：这批代码是不是【同一条】版本边界决定的？是就是一层；",
+    "如果是两条边界凑在一起，那就是两层。宁可层多，层多不花钱，复制才花钱。",
+    "",
+    "哪个目标挂哪几层写在 targets.json 每个条目的 layers 字段里，不在这儿 ——",
+    "这里只回答「有哪些层、各自是什么」。两边由 CI 的 guard-version 对齐。",
+    "",
+    "层里【不许】出现绑加载器的东西（import net.neoforged 之类、player.getData）：",
+    "那种东西同版本的三个加载器也不一样，只能留在 platforms/<目标名>/ 下。",
+    "每挂一层，构建就注册一道 verifyLayer<层名> 校验它。",
+    "",
+    "【populated：这一层现在该不该有内容】",
+    "true 时层里一个文件都没有就红。层可以先声明后填，但'空'要是显式声明的状态，",
+    "不能默认容忍 —— 否则本该有内容的层被清空、或者 dir 写错指到一个恰好存在的空目录，",
+    "都只会在日志里留一行，没人看。",
+    "",
+    "【两种层，各挡各的轴】",
+    "  写 since 的是版本层：同一批 Minecraft 版本、三个加载器共用 —— 层里不许有绑加载器的东西",
+    "  写 loader 的是加载器层：同一个加载器、各个 Minecraft 版本共用 —— 层里不许有绑版本的东西",
+    "两者必须二选一：都不写就不知道该禁哪个轴，都写了就是两件事挤在一层。",
+    "",
+    "挂法一样，都写在 targets.json 的 layers 数组里。一个目标通常挂它够得到的所有版本层，",
+    "加上它自己那个加载器层。",
+    "",
+    "layers/ 放层的代码与资源，versions/ 放声明（targets.json 与这个文件）。",
+    "加载器层与 Minecraft 版本无关，摆在 versions/ 下名不副实。",
+    "目录由这里的 dir 字段说了算，改位置只改这一处。",
+    "",
+    "【目录：内容在 layers/ 下，声明在 versions/ 下】",
+    "  layers/version/<层名>/   版本层（写 since 的）",
+    "  layers/loader/<层名>/    加载器层（写 loader 的）",
+    "两种层分开放，不混在一个目录里 —— 光看目录树就知道哪个是哪个。",
+    "dir 必须落在与层的种类相符的那一支下，构建会校验。"
+  ],
+  "1.20.5+": {
+    "dir": "layers/version/1.20.5+",
+    "since": "1.20.5",
+    "note": "1.20.5 起原版才有 net.minecraft.network.codec（StreamCodec / ByteBufCodecs）、CustomPacketPayload 与数据组件。手写编解码与各类网络包都在这一层：它们与加载器无关，同版本的三个加载器逐字共用一份。",
+    "populated": true
+  },
+  "1.21+": {
+    "dir": "layers/version/1.21+",
+    "since": "1.21",
+    "populated": true,
+    "note": "1.21（数据包格式 48）把数据包的目录名从复数改成单数：recipes→recipe、advancements→advancement、loot_tables→loot_table、tags/items→tags/item、functions→function。这条边界与 1.20.5+ 那条【不是同一条】，所以是单独一层 —— 塞进 1.20.5+ 的话，一个 1.20.6 的目标挂上那层就会拿到单数目录名，而它那儿要的是复数，而且不报错：那条配方/进度只是静默地不存在。"
+  },
+  "forge": {
+    "dir": "layers/loader/forge",
+    "loader": "Forge",
+    "populated": true,
+    "note": "Forge 各个 Minecraft 版本共用的代码。这五个的【正文跨 1.20.1 与 1.21.1 逐字相同】，差异只在加载器 import —— 也就是同一段代码已经在两个 Minecraft 版本上各自编译通过，版本中立是证出来的，剩下那一行 import 正是加载器轴。第二个同加载器目标进来时它们不用再抄一遍。"
+  },
+  "neoforge": {
+    "dir": "layers/loader/neoforge",
+    "loader": "NeoForge",
+    "populated": true,
+    "note": "NeoForge 各个 Minecraft 版本共用的代码。这五个的【正文跨 1.20.1 与 1.21.1 逐字相同】，差异只在加载器 import —— 也就是同一段代码已经在两个 Minecraft 版本上各自编译通过，版本中立是证出来的，剩下那一行 import 正是加载器轴。第二个同加载器目标进来时它们不用再抄一遍。 docs/ 里另有 AddonApiExamples —— 附属接口文档那份可编译副本，它 import 的 Tags 是 NeoForge 专有的。"
+  },
+  "fabric": {
+    "dir": "layers/loader/fabric",
+    "loader": "Fabric",
+    "populated": false,
+    "note": "Fabric 各个 Minecraft 版本共用的代码。与版本轴那几层对称：那边是「同版本、三个加载器共用」，这边是「同加载器、各版本共用」。眼下是空的 —— 本仓只有一个目标建得起来，没有第二个 Fabric 目标可以对照，哪些代码在 Fabric 的两个版本之间真的一样是猜不出来的。等第二个 Fabric 目标并进来，拿它逐文件比对，逐字相同的才搬进来。"
+  }
+}

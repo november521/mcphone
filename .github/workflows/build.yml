@@ -1,8 +1,19 @@
 name: Build & Upload
 
-# 这个分支（main）是 NeoForge 1.21.1 那一支，也是当前的主力版本。
-# 仓库里每个 Minecraft 版本 / 加载器各占一个分支，每个分支就是一个普通的
-# 单工程仓库，根目录直接是 gradlew。1.20.1 的移植在 1.20.1-forge 分支上。
+# 这个仓库【一个分支出多个版本】：支持哪些目标写在 versions/targets.json 里，
+# 每个目标一个工程目录（platforms/<目标名>/），各有各的 Gradle 与 Java 版本。
+#
+# 【一个目标一个 job，job 名就是目标名】
+#
+# 原先是一个 job 里串着编，理由写的是"分 job 之后红的是哪一个要点进去才知道"。
+# 那个理由是反的，第二个目标并进来当天就被打脸：两个目标的日志混在一条流里，
+# 74 个编译错误分不清是谁的，得靠文件路径一条条认。分 job 之后目标名【就是】
+# job 名，红的是哪个在列表上一眼看到。
+#
+# fail-fast: false —— 一个目标挂了不该把别的掐掉。恰恰相反：一次推送就想知道
+# 全部目标各自的状态，掐掉等于下次还要再推一遍才知道第二个怎么样。
+#
+# 串行还有个实际问题：每个目标都要解一遍 Minecraft，串着跑既慢又吃内存。
 on:
   push:
     branches: [master, main]
@@ -10,8 +21,43 @@ on:
     branches: [master, main]
 
 jobs:
-  build:
+  # 先把要编哪些读出来，下面按矩阵一个 runner 编一个。
+  #
+  # 【编哪些 ≠ 发哪些】：工程目录存在就编 —— 代码进了仓库就该编得过，不编它等于
+  # 仓库里躺着一份没有任何地方验证的源码。buildable: true 另外决定产物进不进
+  # Release，那是下面 upload 那一步的事。
+  targets:
+    name: 要编哪些目标
     runs-on: ubuntu-latest
+    outputs:
+      list: ${{ steps.t.outputs.list }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: t
+        run: |
+          set -euo pipefail
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json, os, sys
+          t = json.load(open('versions/targets.json', encoding='utf-8'))
+          rows = {k: v for k, v in t.items() if isinstance(v, dict)}
+          if not rows:
+              sys.exit("versions/targets.json 里一个目标都没有 —— 那个文件坏了或者被改空了")
+          have = sorted(k for k, v in rows.items() if os.path.isdir(v['project']))
+          if not have:
+              sys.exit("声明的目标里没有一个的工程目录存在")
+          print('list=' + json.dumps(have))
+          PY
+          echo "要编的目标：$(grep '^list=' "$GITHUB_OUTPUT" | tail -1)"
+
+  build:
+    name: ${{ matrix.target }}
+    needs: targets
+    runs-on: ubuntu-latest
+    strategy:
+      # 一个目标挂了不该把别的掐掉 —— 一次推送就想知道全部目标各自的状态
+      fail-fast: false
+      matrix:
+        target: ${{ fromJSON(needs.targets.outputs.list) }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -19,73 +65,98 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
 
-      - name: Setup JDK 21
+      # 矩阵横跨 Java 17（1.20.1）与 21（1.21.1），两个都得在。
+      # ⚠ 这个列表要跟 versions/targets.json 里出现过的 java 值一致。多装一个不要紧，
+      # 少装一个会在下面报"JAVA_HOME_17_X64 为空"——挑 JDK 那句取不到就直接失败，
+      # 不退回默认 JDK：拿错 JDK 编出来的 class 文件版本不对，而那要等玩家装上才发现。
+      - name: Setup JDKs
         uses: actions/setup-java@v6
         with:
-          java-version: '21'
           distribution: 'temurin'
+          java-version: |
+            17
+            21
 
       # 【停在 v5，不要升 v6】。v6 把缓存那部分抽成了 gradle-actions-caching，
       # 那是个不再开源的商业组件，启用缓存就等于接受 Gradle 自己那份
       # Terms of Use（https://gradle.com/legal/terms-of-use/）。一个 MIT 的
       # 模组仓库不该在顺手修个告警的时候，把自己绑上另一份条款。
-      #
-      # v5 相对 v4 的唯一变更就是跑在 node 24 上 —— 而那正是我们要修的那条
-      # 弃用告警。真需要 v6 里的东西时再单独权衡，别跟着"升到最新"一起做。
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v5
 
-      - name: Make Gradle wrapper executable
-        run: chmod +x ./gradlew
-
-      - name: Build with Gradle
-        run: ./gradlew build
-
-      - name: Find built JAR
-        id: find-jar
+      - name: 构建 ${{ matrix.target }}
+        id: b
         run: |
-          # 【按确切文件名取，不要 find | head -1】。
-          #
-          # 眼下 CI 是全新检出、build/libs 里只有一个 jar，head -1 挑不错。
-          # 但那是"碰巧"，不是"保证"：本地 pruneOldJars 会留着前两个版本，
-          # 而 1.20.1-forge 那一支就因为 jarJar 多出一个 -slim 差点发错包 ——
-          # 挑错的后果是发出一个旧版本或残缺包，而构建全绿、测试全绿，
-          # 没有任何东西会告诉你。
-          #
-          # mod_version 是这次构建的唯一真值，直接拿它拼名字。
-          MOD_VERSION=$(grep -E '^mod_version=' gradle.properties | cut -d= -f2- | tr -d '[:space:]')
-          JAR_PATH="build/libs/mcphone-${MOD_VERSION}.jar"
-          if [ ! -f "$JAR_PATH" ]; then
-            echo "::error::没找到 $JAR_PATH。build/libs 下现有："
-            ls -la build/libs || true
+          set -euo pipefail
+          T='${{ matrix.target }}'
+          VERSION=$(grep -E '^mod_version=' gradle.properties | cut -d= -f2- | tr -d '[:space:]')
+          PROJ=$(jq -r --arg t "$T" '.[$t].project'   versions/targets.json)
+          JAVA=$(jq -r --arg t "$T" '.[$t].java'      versions/targets.json)
+          BUILDABLE=$(jq -r --arg t "$T" '.[$t].buildable' versions/targets.json)
+          echo "仓库版本号：$VERSION　工程：$PROJ　Java：$JAVA　buildable：$BUILDABLE"
+
+          # 取不到就失败，别退回默认 JDK
+          eval "TARGET_JAVA_HOME=\${JAVA_HOME_${JAVA}_X64:-}"
+          if [ -z "$TARGET_JAVA_HOME" ]; then
+            echo "::error::目标 $T 要 Java $JAVA，但这台机器上没装（JAVA_HOME_${JAVA}_X64 为空）。"
+            echo "把 $JAVA 加进上面 Setup JDKs 的 java-version 列表。"
             exit 1
           fi
-          echo "jar_path=$JAR_PATH" >> "$GITHUB_OUTPUT"
-          echo "jar_name=$(basename "$JAR_PATH")" >> "$GITHUB_OUTPUT"
 
-      - name: Upload artifact
+          ( cd "$PROJ" && chmod +x ./gradlew && JAVA_HOME="$TARGET_JAVA_HOME" ./gradlew build )
+
+          {
+            echo "version=$VERSION"
+            echo "proj=$PROJ"
+            echo "buildable=$BUILDABLE"
+          } >> "$GITHUB_OUTPUT"
+
+      # 【每个编过的目标都要出产物】
+      #
+      # 这一步属于"编"，不属于"发"。原先它也挂在 buildable 上，于是一个刚并进来、
+      # 还没翻 buildable 的目标编过了却没有 jar —— 而下一步恰恰是「确认它跑得起来」，
+      # 那需要那个 jar。把它扣着，等于把验证的路堵死。
+      #
+      # 真正的「发」在 release.yml 里，那边照旧只收 buildable: true 的。
+      - name: 收产物
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          # 【按确切文件名取，不要 find | head -1】。挑错的后果是发出一个旧版本或
+          # 残缺包，而构建全绿、测试全绿，没有任何东西会告诉你。
+          JAR="${{ steps.b.outputs.proj }}/build/libs/mcphone-${{ steps.b.outputs.version }}.jar"
+          if [ ! -f "$JAR" ]; then
+            echo "::error::没找到 $JAR。${{ steps.b.outputs.proj }}/build/libs 下现有："
+            ls -la "${{ steps.b.outputs.proj }}/build/libs" || true
+            exit 1
+          fi
+          cp "$JAR" "dist/mcphone-${{ steps.b.outputs.version }}-${{ matrix.target }}.jar"
+          ls -lh dist/
+
+      # 名字上带出 buildable —— 一个还没翻 buildable 的目标出的 jar 是拿来试跑的，
+      # 不是候选发布包。名字里不说，下载的人分不出来。
+      - name: Upload artifacts
         uses: actions/upload-artifact@v7
         with:
-          name: ${{ steps.find-jar.outputs.jar_name }}
-          path: ${{ steps.find-jar.outputs.jar_path }}
+          name: mcphone-${{ matrix.target }}${{ steps.b.outputs.buildable == 'true' && '' || '-未验证' }}
+          path: dist/*.jar
           retention-days: 30
 
   # ============================================================
   #  版本号只能由 CI 改
   # ============================================================
   #
-  # mod_version 归 release.yml 管：发版时它算出新号、写进 gradle.properties、
-  # 以 github-actions[bot] 的身份提交并打 tag。平时任何人都不该动它。
+  # mod_version 归 release.yml 管：发版时它算出新号、写进【仓库根的】
+  # gradle.properties、以 github-actions[bot] 的身份提交并打 tag。平时任何人都不该动它。
   #
   # 为什么要一道闸而不是只写在注释里
   #
-  # 原先那套规矩就写在 gradle.properties 里，写得很细，照样没挡住：每个 commit
-  # 随手 +1，攒出一串谁也没见过的号，还因为分支合并往回走过 —— 1.10.1 到 1.10.4
-  # 之间出现过两个内容不同、mod_version 都写 1.10.1 的 commit。而这个字段是要
-  # 烧进 jar、在游戏内模组列表里显示的：两个不同的包自称同一个版本，比不升号糟。
+  # 原先那套规矩就写在注释里，写得很细，照样没挡住：号被随手 +1，攒出一串谁也没见过
+  # 的版本，还因为分支合并往回走过。而这个字段要烧进 jar、在游戏内模组列表里显示，
+  # 现在还要求【所有目标共用同一个号】—— 两个不同的包自称同一个版本，比不升号糟。
   #
-  # 判据是【提交人】不是【改了什么】：bot 改得，人改不得。所以 release.yml 里
-  # 那两行 git config 是这道闸的一半，改掉那个身份等于把闸拆了。
+  # 判据是【提交人】不是【改了什么】：bot 改得，人改不得。所以 release.yml 里那两行
+  # git config 是这道闸的一半，改掉那个身份等于把闸拆了。
   guard-version:
     name: 版本号只能由 CI 改
     runs-on: ubuntu-latest
@@ -136,3 +207,413 @@ jobs:
             exit 1
           fi
           echo "没有人手动改过 mod_version"
+
+      # 仓库级身份只能有仓库根那一份。平台里再定义一遍，两边就能各自漂移，
+      # 而"所有目标同一个版本号"正是这套结构存在的理由。
+      #
+      # 平台的 build.gradle 读不到仓库根会直接失败，但它【不会】拦住"平台自己也定义了
+      # 一份"——那种情况下 ext 里两个值打架，谁赢看加载顺序。所以在这儿拦。
+      - name: 检查平台有没有自己定义仓库级的键
+        run: |
+          set -uo pipefail
+          BAD=""
+          for f in platforms/*/gradle.properties; do
+            [ -f "$f" ] || continue
+            HIT=$(grep -nE '^(mod_id|mod_name|mod_license|mod_group_id|mod_version)=' "$f" || true)
+            [ -n "$HIT" ] && BAD="${BAD}${f}:"$'\n'"${HIT}"$'\n'
+          done
+          if [ -n "$BAD" ]; then
+            echo "::error::平台的 gradle.properties 里出现了仓库级的键，它们只能写在仓库根："
+            printf '%s' "$BAD"
+            exit 1
+          fi
+          echo "平台没有重复定义仓库级的键"
+
+      # 【矩阵是规则，不是清单】。targets.json 的 _comment 里写着"每个 Minecraft
+      # 版本都要有 Forge / NeoForge / Fabric 三条"，但那只是一段注释 —— 这个仓库
+      # 已经证明过写在注释里的规矩挡不住事（版本号那套规矩写得比这细，照样没挡住）。
+      #
+      # 少一条的后果是安静的：没人会在加 1.22 的时候想起 Fabric，而"某个版本没跟上
+      # 是当场可见的"正是同一分支这套结构存在的理由。看不见就等于回到了多分支。
+      - name: 检查 targets.json
+        run: |
+          set -uo pipefail
+          F=versions/targets.json
+          jq -e . "$F" > /dev/null || { echo "::error::$F 不是合法 JSON"; exit 1; }
+
+          # 【jq 自己失败也要红】。第一版这里是 X=$(jq ...)，jq 的表达式写错时它
+          # 往 stderr 吐一行、返回空字符串，而下面判的是"空 = 没有违规" —— 闸就绿了。
+          # 实测踩过：has(.) 那句在 jq 里报 "Cannot check whether object has a object
+          # key"，四道检查里的一道整个失效，退出码还是 0。
+          #
+          # 【q 里不能写 exit】：它总是在 X=$(q ...) 里被调用，那是个子 shell，
+          # exit 只退出那个子 shell，外面照跑不误 —— 实测过，改成 exit 之后闸仍然是绿的。
+          # 只能 return 非零，再靠每个调用点后面那句 || exit 1 把它接住。
+          q_layers() {
+            local out rc
+            out=$(jq -r "$1" "$L"); rc=$?
+            if [ "$rc" != "0" ]; then
+              echo "::error::读 layers.json 的 jq 跑挂了（退出码 $rc），这道检查没能跑起来：" >&2
+              echo "$1" >&2
+              return 1
+            fi
+            printf '%s' "$out"
+          }
+
+          q() {
+            local out rc
+            out=$(jq -r "$1" "$F"); rc=$?
+            if [ "$rc" != "0" ]; then
+              echo "::error::jq 表达式跑挂了（退出码 $rc），这道检查没能跑起来：" >&2
+              echo "$1" >&2
+              return 1
+            fi
+            printf '%s' "$out"
+          }
+
+          FAIL=0
+
+          # 一、每个 Minecraft 版本必须三个加载器齐全
+          MISSING=$(q '
+            [to_entries[] | select((.value|type)=="object")]
+            | group_by(.value.minecraft)[]
+            | { mc: .[0].value.minecraft, loaders: (map(.value.loader) | sort) }
+            | select(.loaders != ["Fabric","Forge","NeoForge"])
+            | "  \(.mc)  现有：\(.loaders | join("、"))"
+          ') || exit 1
+          if [ -n "$MISSING" ]; then
+            echo "::error::有 Minecraft 版本没把三个加载器写齐："
+            printf '%s\n' "$MISSING"
+            echo "缺的那个也要写进去，buildable: false，note 里说明卡在哪儿。"
+            echo "在这里看得见，才叫'没跟上是当场可见的'。"
+            FAIL=1
+          fi
+
+          # 二、必填字段
+          BAD=$(q '
+            to_entries[] | select((.value|type)=="object")
+            | . as $e
+            | ["minecraft","loader","java","gradle","project","buildable"]
+            | map(select($e.value[.] == null))
+            | select(length > 0)
+            | "  \($e.key)  缺：\(join("、"))"
+          ') || exit 1
+          if [ -n "$BAD" ]; then
+            echo "::error::有条目缺必填字段："
+            printf '%s\n' "$BAD"
+            FAIL=1
+          fi
+
+          # 三、建得起来的目标不许还挂着 unverified —— 建得起来，那些值就被构建验过了。
+          # 反过来说，把 buildable 翻成 true 的那一刻就得把 unverified 清掉，
+          # 而清掉之前你得真的去查一遍。这道闸就是逼那一下。
+          STILL=$(q '
+            to_entries[] | select((.value|type)=="object")
+            | select(.value.buildable == true and (.value.unverified // [] | length) > 0)
+            | "  \(.key)  还标着：\(.value.unverified | join("、"))"
+          ') || exit 1
+          if [ -n "$STILL" ]; then
+            echo "::error::buildable: true 的目标里还留着 unverified："
+            printf '%s\n' "$STILL"
+            echo "建得起来就说明这些值是对的。把 unverified 去掉（先确认一遍值本身）。"
+            FAIL=1
+          fi
+
+          # 四、unverified 里写的字段名得真的存在，否则这个标记就是摆设
+          GHOST=$(q '
+            to_entries[] | select((.value|type)=="object")
+            | . as $e
+            | ($e.value.unverified // [])
+            | map(. as $f | select(($e.value | has($f)) | not))
+            | select(length > 0)
+            | "  \($e.key)  unverified 里有这个条目根本没有的字段：\(join("、"))"
+          ') || exit 1
+          if [ -n "$GHOST" ]; then
+            echo "::error::unverified 指向了不存在的字段："
+            printf '%s\n' "$GHOST"
+            FAIL=1
+          fi
+
+          # 五、layers 是必填，且写的层在 layers.json 里都得有
+          L=versions/layers.json
+          jq -e . "$L" > /dev/null || { echo "::error::$L 不是合法 JSON"; exit 1; }
+
+          NOLAYERS=$(q '
+            to_entries[] | select((.value|type)=="object")
+            | select(.value.layers == null)
+            | "  \(.key)"
+          ') || exit 1
+          if [ -n "$NOLAYERS" ]; then
+            echo "::error::这些目标没写 layers 字段（挂零层也要写成 []）："
+            printf '%s\n' "$NOLAYERS"
+            echo "不写和写空数组是两回事：前者是漏了，后者是'确实一层都不挂'。"
+            FAIL=1
+          fi
+
+          GHOSTL=$(jq -r --slurpfile L "$L" '
+            to_entries[] | select((.value|type)=="object")
+            | . as $e
+            | ($e.value.layers // [])
+            | map(select(. as $n | ($L[0] | has($n)) | not))
+            | select(length > 0)
+            | "  \($e.key)  挂了不存在的层：\(join("、"))"
+          ' "$F"); RC=$?
+          if [ "$RC" != "0" ]; then
+            echo "::error::对照 layers.json 的 jq 跑挂了（退出码 $RC），这道检查没能跑起来"
+            exit 1
+          fi
+          if [ -n "$GHOSTL" ]; then
+            echo "::error::有目标挂了 versions/layers.json 里没有的层："
+            printf '%s\n' "$GHOSTL"
+            FAIL=1
+          fi
+
+          # 六、【目标的 Minecraft 版本必须够到层的 since】
+          #
+          # 这条是本地构建查不到的那一半：buildable: false 的目标根本不会被建，
+          # 给 1.20.1-forge 挂上 1.20.5+ 在前面五道检查里完全合法（层存在、目录也在），
+          # 编译器也不说话 —— 错要等那个目标真开始建的那天才炸。
+          #
+          # 【版本比较必须与 Groovy 那一份同语义：补零，不是比数组长度】
+          #
+          # jq 原生比数组是逐元素比、再比长度，于是 [1,21] < [1,21,0] 成立 ——
+          # 而 gradle/mcphone-layers.gradle 里的 McphoneVersions.cmp 是补零比的，
+          # 1.21 与 1.21.0 相等。差这一格的后果形态很坏：本地绿、CI 红，
+          # 而 CI 的报错说的是"把这一层从 layers 里去掉"，指向的不是真原因。
+          #
+          # 跨语言合不成一份，只能同语义 + 留对拍用例。实测七组，补零后全对齐：
+          #   1.21   vs 1.21.0  → 放行   （原生会拦，这是唯一分叉的一格）
+          #   1.21.0 vs 1.21    → 放行
+          #   1.21.1 vs 1.20.5  → 放行
+          #   1.20.1 vs 1.20.5  → 拦下
+          #   1.21   vs 1.21    → 放行
+          #   1.20.5 vs 1.20.5  → 放行
+          #   1.21   vs 1.20.5  → 放行
+          TOOOLD=$(jq -r --slurpfile L "$L" '
+            def ver: split(".") | map(tonumber);
+            def vcmp($x; $y):
+              ([($x|length), ($y|length)] | max) as $n
+              | [range($n) | (($x[.] // 0) - ($y[.] // 0))]
+              | map(select(. != 0)) | (.[0] // 0);
+            to_entries[] | select((.value|type)=="object")
+            | . as $e
+            | ($e.value.layers // [])
+            | map(. as $n
+                  | $L[0][$n] as $spec
+                  | select($spec != null and $spec.since != null
+                           and (vcmp(($e.value.minecraft | ver); ($spec.since | ver)) < 0))
+                  | "\($n)（自 \($spec.since) 起）")
+            | select(length > 0)
+            | "  \($e.key)  是 \($e.value.minecraft)，却挂了：\(join("、"))"
+          ' "$F"); RC=$?
+          if [ "$RC" != "0" ]; then
+            echo "::error::比对 since 的 jq 跑挂了（退出码 $RC），这道检查没能跑起来"
+            exit 1
+          fi
+          if [ -n "$TOOOLD" ]; then
+            echo "::error::有目标挂了它的 Minecraft 版本还没有的层："
+            printf '%s\n' "$TOOOLD"
+            echo "层里装的东西在那个版本上不存在。把这一层从该目标的 layers 里去掉，"
+            echo "或者确认 layers.json 里的 since 写对了。"
+            FAIL=1
+          fi
+
+          # 六点五、【每一层必须二选一写 since 或 loader；加载器层要挂对】
+          #
+          # 写 since 的是版本层（同版本、三个加载器共用），写 loader 的是加载器层
+          # （同加载器、各版本共用）。两个都没有，构建就不知道该禁哪个轴 ——
+          # 而"不知道禁哪个轴"的层等于一道不设防的门。
+          BADKIND=$(jq -r '
+            to_entries[] | select((.value|type)=="object")
+            | select((.value.since == null) == (.value.loader == null))
+            | "  \(.key)  since=\(.value.since // "无")  loader=\(.value.loader // "无")"
+          ' "$L"); RC=$?
+          [ "$RC" = "0" ] || { echo "::error::查层类型的 jq 跑挂了（退出码 $RC）"; exit 1; }
+          if [ -n "$BADKIND" ]; then
+            echo "::error::这些层没有二选一写 since 或 loader："
+            printf '%s\n' "$BADKIND"
+            echo "写 since 是版本层，写 loader 是加载器层。都不写就不知道该禁哪个轴，都写是两件事挤在一层。"
+            FAIL=1
+          fi
+
+          # 两种层分开放：dir 要落在与层的种类相符的那一支下
+          WRONGSUB=$(jq -r '
+            to_entries[] | select((.value|type)=="object")
+            | select(.value.since != null or .value.loader != null)
+            | . as $e
+            | (if $e.value.since != null then "layers/version/" else "layers/loader/" end) as $want
+            | select(($e.value.dir | startswith($want)) | not)
+            | "  \($e.key)  是\(if $e.value.since != null then "版本层" else "加载器层" end)，dir 应在 \($want) 下，实际是 \($e.value.dir)"
+          ' "$L"); RC=$?
+          [ "$RC" = "0" ] || { echo "::error::查层目录的 jq 跑挂了（退出码 $RC）"; exit 1; }
+          if [ -n "$WRONGSUB" ]; then
+            echo "::error::有层的目录放错了支："
+            printf '%s\n' "$WRONGSUB"
+            echo "版本层放 layers/version/，加载器层放 layers/loader/ —— 两种层禁的轴正好相反，混在一起看不出来。"
+            FAIL=1
+          fi
+
+          WRONGLOADER=$(jq -r --slurpfile L "$L" '
+            to_entries[] | select((.value|type)=="object")
+            | . as $e
+            | ($e.value.layers // [])
+            | map(. as $n | $L[0][$n] as $spec
+                  | select($spec != null and $spec.loader != null and $spec.loader != $e.value.loader)
+                  | "\($n)（\($spec.loader) 的）")
+            | select(length > 0)
+            | "  \($e.key)  是 \($e.value.loader)，却挂了：\(join("、"))"
+          ' "$F"); RC=$?
+          [ "$RC" = "0" ] || { echo "::error::比对加载器层的 jq 跑挂了（退出码 $RC）"; exit 1; }
+          if [ -n "$WRONGLOADER" ]; then
+            echo "::error::有目标挂了别的加载器的层："
+            printf '%s\n' "$WRONGLOADER"
+            FAIL=1
+          fi
+
+          # 七、【声明了却没有任何目标挂的层 = 孤儿层】
+          #
+          # 层里的文件只有被某个目标挂上才会进构建。没人挂的层是一整个目录的死代码，
+          # 而且完全静默：构建绿、测试绿、jar 里少了那批文件也没有任何东西会说话。
+          # 实测踩过：改 targets.json 时用旧备份覆盖回去，1.21+ 那一层的 5 个数据包
+          # 文件当场全部退出构建，六道闸没有一道响。
+          ORPHAN=$(jq -r --slurpfile T "$F" '
+            . as $layers
+            | [$T[0] | to_entries[] | select((.value|type)=="object") | (.value.layers // [])[]]
+            | . as $used
+            | $layers | to_entries[] | select((.value|type)=="object")
+            | select(.key as $k | ($used | index($k)) == null)
+            | "  \(.key)  （目录 \(.value.dir)）"
+          ' "$L"); RC=$?
+          if [ "$RC" != "0" ]; then
+            echo "::error::查孤儿层的 jq 跑挂了（退出码 $RC），这道检查没能跑起来"
+            exit 1
+          fi
+          if [ -n "$ORPHAN" ]; then
+            echo "::error::这些层在 layers.json 里声明了，但没有任何目标挂它："
+            printf '%s\n' "$ORPHAN"
+            echo "层里的文件只有被挂上才进构建。没人挂 = 整个目录是死代码，而且不报错。"
+            echo "给该挂的目标补上 layers，或者把这一层从 layers.json 里删掉。"
+            FAIL=1
+          fi
+
+          # 八、【层的目录在不在，由 populated 说了算】
+          #
+          # 这一条跟 gradle/mcphone-layers.gradle 里那一条是同一个模型，两边必须一致：
+          #
+          #   populated: true   java 与 resources 至少要有一个在，都不在就是内容丢了
+          #                     或者 dir 写错
+          #   populated: false  两个都不在是【正常的】—— git 不跟踪空目录，一个还没
+          #                     开始填的层在克隆下来的仓库里本来就没有这些目录；
+          #                     反过来，声明了没内容却有内容，是声明过期
+          #
+          # 这道检查跑在 CI 的干净检出上，正好是本地永远复现不出来的那个环境：
+          # 本地那些目录是 mkdir 出来的，一直都在。
+          LAYERROWS=$(q_layers '
+            to_entries[] | select((.value|type)=="object")
+            | "\(.key)\t\(.value.dir)\t\(.value.populated)"
+          ') || exit 1
+          while IFS=$'\t' read -r NAME DIR POP; do
+            [ -n "$NAME" ] || continue
+            HAS=0
+            [ -d "$DIR/src/main/java" ] && HAS=1
+            [ -d "$DIR/src/main/resources" ] && HAS=1
+            [ -d "$DIR/docs" ] && HAS=1        # 一个层可以只有 docs/（断言测试按被测对象分层）
+            if [ "$POP" = "true" ] && [ "$HAS" = "0" ]; then
+              echo "::error::共享层 $NAME 声明了 populated: true，但 $DIR 下 src/main/java、src/main/resources 与 docs 都不存在（在这次干净检出里）。"
+              echo "要么内容丢了，要么 layers.json 里的 dir 写错了。这一层确实还没开始填的话，把 populated 改成 false。"
+              FAIL=1
+            fi
+            if [ "$POP" = "false" ] && [ "$HAS" = "1" ]; then
+              COUNT=$(find "$DIR/src/main" "$DIR/docs" -type f 2>/dev/null | wc -l | tr -d " ")
+              if [ "$COUNT" != "0" ]; then
+                echo "::error::共享层 $NAME 声明了 populated: false，却有 $COUNT 个文件。声明过期了，把 populated 改成 true。"
+                FAIL=1
+              fi
+            fi
+          done <<< "$LAYERROWS"
+
+          # 九、【数据包目录名 —— 覆盖所有目标，不只是建得起来的那个】
+          #
+          # Gradle 里那道只跑在 buildable: true 的目标上。而一个新目标的自然顺序是
+          # 「先把工程放进来 → 编通 → 再翻 buildable: true」，那段时间正是有人在手工
+          # 搬数据包文件、最容易把单复数搬错的时候，恰好一个看着的都没有。
+          # 这跟 since 曾经的缺口是同一个形状，一并补上。
+          #
+          # 【改名表不在这儿，读 versions/datapack-renames.json】——Gradle 侧读的是
+          # 同一份。同一条规则两个语言各写一份是这个仓库付过三次账的坑。
+          R=versions/datapack-renames.json
+          jq -e . "$R" > /dev/null || { echo "::error::$R 不是合法 JSON"; exit 1; }
+          RCOUNT=$(jq -r '.renames | length' "$R") || exit 1
+          if [ "${RCOUNT:-0}" = "0" ]; then
+            echo "::error::$R 里的改名表是空的。空清单的闸永远是绿的，而它挡的正是静默失效。"
+            exit 1
+          fi
+          RSINCE=$(jq -r '.since' "$R") || exit 1
+
+          DPROWS=$(q '
+            to_entries[] | select((.value|type)=="object")
+            | "\(.key)\t\(.value.project)\t\(.value.minecraft)"
+          ') || exit 1
+          while IFS=$'\t' read -r NAME PROJ MC; do
+            [ -n "$NAME" ] || continue
+            RES="$PROJ/src/main/resources"
+            [ -d "$RES" ] || continue          # 工程还没并进来，没东西可查
+            SINGULAR=$(jq -rn --arg a "$MC" --arg b "$RSINCE" '
+              def ver: split(".") | map(tonumber);
+              def vcmp($x; $y):
+                ([($x|length), ($y|length)] | max) as $n
+                | [range($n) | (($x[.] // 0) - ($y[.] // 0))]
+                | map(select(. != 0)) | (.[0] // 0);
+              vcmp(($a|ver); ($b|ver)) >= 0') || exit 1
+            while IFS=$'\t' read -r PLURAL SINGULARNAME; do
+              [ -n "$PLURAL" ] || continue
+              if [ "$SINGULAR" = "true" ]; then BAD_DIR="$PLURAL"; WANT="$SINGULARNAME";
+              else BAD_DIR="$SINGULARNAME"; WANT="$PLURAL"; fi
+              HITS=$(find "$RES" -path "$RES/data/*/$BAD_DIR/*" -type f 2>/dev/null || true)
+              if [ -n "$HITS" ]; then
+                echo "::error::目标 $NAME（Minecraft $MC）的数据包目录名不对：$BAD_DIR/ 应为 $WANT/"
+                printf '%s\n' "$HITS" | sed 's/^/    /'
+                echo "1.21（格式 48）把这些目录从复数改成了单数。放错不会报错，那条配方 / 进度只是静默地不存在。"
+                FAIL=1
+              fi
+            done < <(jq -r '.renames | to_entries[] | "\(.key)\t\(.value)"' "$R")
+          done <<< "$DPROWS"
+
+          # 十、【第三方 API 白名单的每一条都要带证据】
+          #
+          # 那张表的全部价值就是这道门槛：包名在两个版本上都在，是查过的还是想当然的，
+          # 只有证据能区分。而碰到那道闸的人最省事的动作恰好是往表里加一个空 key ——
+          # 不检查的话 "appeng.menu.locator": {} 就放行了，实测过。
+          #
+          # targets.json 的 unverified 是同类的「带门槛的声明」，它有四道检查盯着；
+          # 这张表原先零道。这一轮还刚好证明了门槛会松：Curios 那条证据上一轮写错了，
+          # 是靠 1.20.1 真编译才暴露的 —— 人写证据会写错，那更该检查「有没有写」。
+          TP=versions/third-party-apis.json
+          jq -e . "$TP" > /dev/null || { echo "::error::$TP 不是合法 JSON"; exit 1; }
+          BADTP=$(jq -r '
+            .allowed | to_entries[]
+            | select((.value | type) != "object")
+              // empty
+            | "  \(.key)  不是对象"
+          ' "$TP"); RC=$?
+          [ "$RC" = "0" ] || { echo "::error::查第三方白名单的 jq 跑挂了（退出码 $RC）"; exit 1; }
+          MISSTP=$(jq -r '
+            .allowed | to_entries[]
+            | . as $e
+            | ["mod","evidence"]
+            | map(select((($e.value[.]? // "") | tostring | gsub("^\\s+|\\s+$";"")) == ""))
+            | select(length > 0)
+            | "  \($e.key)  缺：\(join("、"))"
+          ' "$TP"); RC=$?
+          [ "$RC" = "0" ] || { echo "::error::查第三方白名单字段的 jq 跑挂了（退出码 $RC）"; exit 1; }
+          if [ -n "$BADTP$MISSTP" ]; then
+            echo "::error::versions/third-party-apis.json 的 allowed 里有条目没写全："
+            printf '%s\n' "$BADTP$MISSTP"
+            echo "每一条都要写 mod 与 evidence。取证：拿 origin/1.20.1-forge 的同名文件比，"
+            echo "去注释后那个包的 import 两支是否一致、正文是否逐字相同。查不动就别加。"
+            FAIL=1
+          fi
+
+          [ "$FAIL" = "0" ] || exit 1
+          N=$(q '[to_entries[] | select((.value|type)=="object")] | length') || exit 1
+          echo "targets.json 校验通过：$N 个目标，矩阵齐全"

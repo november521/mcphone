@@ -25,17 +25,29 @@ wiki 是文档的唯一真源，仓库里不再另存一份。
 沉浸工程、FTB Quests、AE2 / Refined Storage / Tom's Simple Storage 会各多一块内容，不装一切照常。
 详见 [wiki → 可选依赖](../../wiki/Getting-Started#可选依赖)。
 
-## 分支
+## 支持的版本
 
-| 分支 | 版本 | 状态 |
-|---|---|---|
-| `main` | Minecraft 1.21.1 + NeoForge | **当前主力**，wiki 跟的是这一支 |
-| [`1.20.1-forge`](../../tree/1.20.1-forge) | Minecraft 1.20.1 + Forge | 功能已完整移植，文档以该分支为准 |
+一个分支，一次发版所有版本各出一个 jar —— 不按版本分分支。多分支的毛病是老版本
+永远慢半拍：功能落在主力分支上，再靠一轮轮「追平」补过去，而那一轮什么时候来没人保证。
+
+支持哪些目标由 [`versions/targets.json`](versions/targets.json) 声明：
+
+| 目标 | Minecraft | 加载器 | 状态 |
+|---|---|---|---|
+| `1.21.1-neoforge` | 1.21.1 | NeoForge | 可构建 |
+| `1.20.1-forge` | 1.20.1 | Forge | 工程尚未并入 |
+| `1.21.1-fabric` | 1.21.1 | Fabric | 尚未开始 |
+
+代码是分块共用的：与 Minecraft 版本、加载器都无关的部分在 `shared/`，各目标自己的
+部分在 `platforms/<目标名>/`。各目标的 Gradle、Java 版本可以不同，由 CI 逐个构建。
 
 ## 从源码构建
 
+在目标自己的工程目录下跑，不是仓库根：
+
 ```bash
-./gradlew build      # 产物在 build/libs/
+cd platforms/1.21.1-neoforge
+./gradlew build      # 产物在 platforms/1.21.1-neoforge/build/libs/
 ./gradlew runClient  # 开发环境启动
 ```
 

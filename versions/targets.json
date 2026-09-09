@@ -1,0 +1,133 @@
+{
+  "_comment": [
+    "支持哪些目标，一处声明。发版时 CI 遍历这里所有 buildable 的条目，逐个构建，",
+    "把全部 jar 挂在同一个 Release 上 —— 一次发版就是所有版本各出一个包。",
+    "",
+    "【矩阵是规则，不是清单】：每个 Minecraft 版本都要有 Forge / NeoForge / Fabric 三个",
+    "条目。缺了哪个应该在这里看得见（buildable: false + note 写明卡在哪儿），",
+    "而不是想不起来。加一个新的 Minecraft 版本 = 加三条。这条规矩由 CI 的",
+    "guard-version 校验，不是只写在这儿。",
+    "",
+    "为什么不用多分支：老版本永远慢半拍。功能落在主力分支上，再靠一轮轮「追平」补过去，",
+    "而那一轮什么时候来没人保证。同一个分支之后，某个版本没跟上是【当场可见】的。",
+    "",
+    "各目标的 Gradle 不必相同：java 与 gradle 字段就是用来记这件事的。它们各建各的，",
+    "CI 逐个跑，不必凑成一个构建。",
+    "",
+    "【unverified：这一行里哪些字段是猜的】",
+    "没建起来的目标，java / gradle / loader_version 只能靠推断填一个占位值，而填出来的",
+    "东西跟实测值长得一模一样 —— 一个数字，旁边没有任何东西说它的来历。把猜的字段名",
+    "列在 unverified 里，接手的人一眼就知道哪几个要自己查过再改。",
+    "",
+    "",
+    "【layers：这个目标挂哪几层共享代码】",
+    "层的定义在 versions/layers.json。层名是「这套 API 从哪个 Minecraft 版本开始有」，",
+    "所以 1.21.1 与将来的 26.x 都挂 1.20.5+，而 1.20.1 在它之前，一层都不挂。",
+    "各平台的 build.gradle 读这个字段拼出 srcDir，CI 校验这里写的层在 layers.json 里都有。",
+    "",
+    "【buildable 管的是「发不发」，不是「编不编」】",
+    "工程目录存在 = CI 就编它。代码进了仓库却没有任何地方编，等于躺着一份没人验证的",
+    "源码：本地不编（它不是你当前那个平台），CI 也跳过 —— 正是这套结构要消掉的静默。",
+    "buildable: true 另外表示「产物进 Release」。所以一个刚并进来、还没编通的目标是",
+    "buildable: false + 工程目录存在：CI 会编它、会红，但不会把半成品发出去。"
+  ],
+  "1.20.1-forge": {
+    "minecraft": "1.20.1",
+    "loader": "Forge",
+    "loader_version": "47.4.23",
+    "java": 17,
+    "gradle": "8.8",
+    "project": "platforms/1.20.1-forge",
+    "buildable": false,
+    "note": "工程已并入 platforms/1.20.1-forge/，正在让它编过。buildable 仍是 false —— CI 会编它（工程目录存在就编），但产物不进 Release。这一行的值是从 1.20.1-forge 分支上读出来的：gradle.properties 里 forge_version=47.4.23 / forge_version_range=[47.4.0,)，wrapper 是 gradle-8.8-bin.zip，build.gradle 里 toolchain 是 17，构建插件是 ForgeGradle 6（[6.0.54,6.2)）。",
+    "layers": [
+      "forge"
+    ]
+  },
+  "1.20.1-neoforge": {
+    "minecraft": "1.20.1",
+    "loader": "NeoForge",
+    "loader_version": null,
+    "java": 17,
+    "gradle": "9.2.1",
+    "project": "platforms/1.20.1-neoforge",
+    "buildable": false,
+    "unverified": [
+      "loader_version",
+      "gradle"
+    ],
+    "note": "尚未开始。java 17 是确定的（1.20.1 就跑在 17 上，与同版本的 Forge 那一行一致）；loader_version 与 gradle 是占位：NeoForge 1.20.1 是 20.1.x 那条线，它用的构建插件与 1.21.1 这边的 ModDevGradle 不是一回事，具体要什么 Gradle 得自己查过再填。",
+    "layers": [
+      "neoforge"
+    ]
+  },
+  "1.20.1-fabric": {
+    "minecraft": "1.20.1",
+    "loader": "Fabric",
+    "loader_version": null,
+    "java": 17,
+    "gradle": "9.7.1",
+    "project": "platforms/1.20.1-fabric",
+    "buildable": false,
+    "unverified": [
+      "loader_version",
+      "gradle"
+    ],
+    "note": "尚未开始。java 17 同上。gradle 9.7.1 是照抄 1.21.1-fabric 那一行的占位值 —— 那个数是给 Loom 1.17.20 测出来的，而 1.20.1 未必要用那么新的 Loom，旧 Loom 对 Gradle 的要求低得多。自己查过再填。",
+    "layers": [
+      "fabric"
+    ]
+  },
+  "1.21.1-forge": {
+    "minecraft": "1.21.1",
+    "loader": "Forge",
+    "loader_version": null,
+    "java": 21,
+    "gradle": "8.8",
+    "project": "platforms/1.21.1-forge",
+    "buildable": false,
+    "unverified": [
+      "loader_version",
+      "gradle"
+    ],
+    "note": "尚未开始。java 21 是确定的（1.21.1 跑在 21 上，与同版本的 NeoForge 那一行一致）；gradle 8.8 是照抄 1.20.1-forge 那一行的占位值，只因为两边都是 ForgeGradle；loader_version 得自己查 1.21.1 上的 Forge 是哪一条线。",
+    "layers": [
+      "1.20.5+",
+      "1.21+",
+      "forge"
+    ]
+  },
+  "1.21.1-neoforge": {
+    "minecraft": "1.21.1",
+    "loader": "NeoForge",
+    "loader_version": "21.1.248",
+    "java": 21,
+    "gradle": "9.2.1",
+    "project": "platforms/1.21.1-neoforge",
+    "buildable": true,
+    "note": "本仓唯一建得起来的目标。这些值就是它自己构建时用的，由构建本身验着。运行时接受的加载器版本范围不写在这里 —— 它是 platforms/1.21.1-neoforge/gradle.properties 里的 neo_version_range，一个值只该有一处。",
+    "layers": [
+      "1.20.5+",
+      "1.21+",
+      "neoforge"
+    ]
+  },
+  "1.21.1-fabric": {
+    "minecraft": "1.21.1",
+    "loader": "Fabric",
+    "loader_version": "0.19.5",
+    "java": 21,
+    "gradle": "9.7.1",
+    "project": "platforms/1.21.1-fabric",
+    "buildable": false,
+    "unverified": [
+      "loader_version"
+    ],
+    "note": "社区 PR #2 已有可跑实现，尚未并入 —— loader_version 抄自那个 PR，本仓没验过。gradle 9.7.1 是实测出来的：fabric-loom 1.17.20 要求 Gradle >= 9.5，而 9.5 没有发行包，往上第一个能用的是 9.7.1（本仓 wrapper 是 9.2.1，所以这个目标不能跟着仓库的 wrapper 走）。",
+    "layers": [
+      "1.20.5+",
+      "1.21+",
+      "fabric"
+    ]
+  }
+}

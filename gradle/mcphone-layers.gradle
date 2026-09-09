@@ -1,0 +1,230 @@
+// ============================================================
+//  共享层的解析 —— 唯一一份
+// ============================================================
+//
+// 这个脚本由各平台的 build.gradle 在设置源码集【之前】 apply，算出：
+//
+//   ext.mcphoneTarget   这个平台在 targets.json 里的那一条
+//   ext.mcphoneLayers   它挂的层，每条含 name / javaDir / resourcesDir /
+//                       populated / kind / datapackSingular
+//
+// 【为什么单独一个脚本】
+//
+// 同一段逻辑原先有两份：build.gradle 一份（要拼 srcDir）、mcphone-checks.gradle
+// 一份（要注册闸）。同一个仓库里第三次出现"两份必须对齐的东西"了
+// —— 前两次是 banned/blockers 和 BLOCKERS/AXIS，都是靠合成一份解决的。
+// 两份长得像但不一样，是最难发现的一种坏：两处都在，都像在工作。
+//
+// build.gradle 用它的时机在 apply from mcphone-checks.gradle 之前，
+// 这正是那两份当初没合上的原因；拆出来单独一个脚本就没这个先后问题了。
+//
+// 【版本比较也只此一处】
+//
+// 补零比较：1.21 与 1.21.0 相等。CI 那边是 jq 写的，跨语言合不了，
+// 但它按同一套语义（补零，不是比数组长度）实现，并在旁边留了对拍用例。
+// 不补零的话 [1,21] < [1,21,0] 成立 —— 本地绿、CI 红，而 CI 的报错指向的
+// 不是真原因。
+abstract class McphoneVersions {
+    /** 补零比较：1.21 == 1.21.0。返回负 / 零 / 正。 */
+    static int cmp(String a, String b) {
+        def x = a.tokenize('.')*.toInteger(), y = b.tokenize('.')*.toInteger()
+        for (int i = 0; i < Math.max(x.size(), y.size()); i++) {
+            int c = (i < x.size() ? x[i] : 0) <=> (i < y.size() ? y[i] : 0)
+            if (c != 0) return c
+        }
+        return 0
+    }
+    /** 数据包目录名从改名那一版起用单数。边界写在 versions/datapack-renames.json 的 since 里。 */
+    static boolean datapackSingular(String minecraftVersion, String renamedSince) {
+        return cmp(minecraftVersion, renamedSince) >= 0
+    }
+}
+
+def layersRepoRoot = file('../..')
+if (!new File(layersRepoRoot, 'versions/layers.json').exists()) {
+    throw new GradleException(
+            "从 ${projectDir} 往上两级找不到 versions/layers.json。" +
+            "这个脚本假定平台工程在 platforms/<目标名>/ 下。")
+}
+
+// 【必须用 providers.fileContents 读，不能 JsonSlurper.parse(File)】
+// 后者不是被跟踪的配置输入：开着配置缓存时改了 JSON，缓存照旧命中，
+// 下面这些校验一条都不跑，构建还是绿的。实测过。
+def readTrackedJson = { String rel ->
+    def content = providers.fileContents(layout.projectDirectory.file("../../${rel}")).asText.orNull
+    if (content == null) {
+        throw new GradleException("找不到 ${rel} —— 共享层的声明在那儿，读不到就只能静默少接/少校验一层。")
+    }
+    return new groovy.json.JsonSlurper().parseText(content)
+}
+
+def layersJson  = readTrackedJson('versions/layers.json')
+def targetsJson = readTrackedJson('versions/targets.json')
+
+// 数据包改名表。【清单只有一份】：这个文件，Gradle 与 CI 都读它。
+// 同一条规则在两个语言里各写一份是这个仓库付过三次账的坑，改成数据就没这回事。
+def renamesJson = readTrackedJson('versions/datapack-renames.json')
+if (!(renamesJson.renames instanceof Map) || renamesJson.renames.isEmpty()) {
+    throw new GradleException(
+            "versions/datapack-renames.json 里的 renames 是空的或者不是对象。" +
+            "空清单的闸永远是绿的 —— 而它挡的正是静默失效。")
+}
+if (renamesJson.since == null) {
+    throw new GradleException("versions/datapack-renames.json 缺 since：改名是从哪个版本起的，没有它判不了单复数。")
+}
+ext.mcphoneDatapackRenames = renamesJson.renames.asImmutable()
+
+// shared/ 里允许出现哪些第三方模组的 API 包。四条判据一条都不覆盖第三方包，
+// 而一刀切禁掉会把真能共用的联动代码（Curios）赶出 shared/ ——
+// 「这个第三方 API 跨版本稳不稳定」只能一条条查过再写下来，所以是一张声明表。
+def thirdPartyJson = readTrackedJson('versions/third-party-apis.json')
+if (!(thirdPartyJson.allowed instanceof Map)) {
+    throw new GradleException("versions/third-party-apis.json 里的 allowed 不是对象 —— 取不到白名单，这道闸就成了空转。")
+}
+// 【每一条都必须带证据】。这张表的全部价值就是那道门槛：包名在两个版本上都在，
+// 是查过的还是想当然的，只有证据能区分。而碰到这道闸的人最省事的动作恰好是
+// 往表里加一个空 key —— 不检查的话，加一行 "appeng.menu.locator": {} 就放行了。
+//
+// 同一个仓库里 targets.json 的 unverified 是同类的「带门槛的声明」，它有四道
+// CI 检查盯着；这张表原先零道。而这一轮刚好证明了门槛会松：Curios 那条证据
+// 上一轮就写错了，是靠 1.20.1 真编译才暴露的 —— 人写证据会写错，那就更该
+// 至少检查「有没有写」。
+thirdPartyJson.allowed.each { pkg, spec ->
+    if (!(spec instanceof Map)) {
+        throw new GradleException("versions/third-party-apis.json 里 allowed.\"${pkg}\" 不是对象。")
+    }
+    ['mod', 'evidence'].each { field ->
+        def v = spec[field]
+        if (!(v instanceof CharSequence) || v.toString().trim().isEmpty()) {
+            throw new GradleException(
+                    "versions/third-party-apis.json 里 allowed.\"${pkg}\" 缺 ${field}，或者写成了空的。\n" +
+                    "这张表的全部价值就是那道门槛：那个包在矩阵里【每一个】Minecraft 版本上\n" +
+                    "都存在且签名一致 —— 是查过的还是想当然的，只有证据能区分。\n" +
+                    "取证的办法：拿 origin/1.20.1-forge 的同名文件比，去注释后那个包的 import\n" +
+                    "两支是否一致、正文是否逐字相同。查不动就别加，把文件搬回 platforms/。")
+        }
+    }
+}
+ext.mcphoneAllowedThirdParty = (thirdPartyJson.allowed.keySet() as List).asImmutable()
+
+// 认出自己是哪个目标：按 targets.json 里的 project 字段反查，不靠目录名猜。
+// 目录挪了而 JSON 没跟着改，这里当场失败 —— 而不是安静地一层都不接。
+def myRelPath = layersRepoRoot.toPath().relativize(projectDir.toPath()).toString().replace(File.separator, '/')
+def myEntry = targetsJson.find { k, v -> v instanceof Map && v.project == myRelPath }
+if (myEntry == null) {
+    throw new GradleException(
+            "versions/targets.json 里没有 project == \"${myRelPath}\" 的条目。\n" +
+            "每个平台工程都要在那儿有一条，否则它挂哪几层共享代码就没人知道。")
+}
+
+ext.mcphoneTarget = [key: myEntry.key] + myEntry.value
+ext.mcphoneRepoRoot = layersRepoRoot
+// 平台自己的数据包单复数。【在这儿算】：McphoneVersions 是这个脚本里的类，
+// 别的 apply 脚本看不见它 —— 版本比较只此一处，结果靠 ext 传出去。
+ext.mcphoneTargetDatapackSingular = McphoneVersions.datapackSingular(myEntry.value.minecraft, renamesJson.since)
+
+ext.mcphoneLayers = (myEntry.value.layers ?: []).collect { name ->
+    def spec = layersJson[name]
+    if (spec == null) {
+        throw new GradleException(
+                "目标 ${myEntry.key} 声明挂了共享层 \"${name}\"，但 versions/layers.json 里没有它。\n" +
+                "已有的层：${layersJson.findAll { k, v -> !k.startsWith('_') }.keySet().join('、')}")
+    }
+    if (spec.populated == null) {
+        throw new GradleException(
+                "versions/layers.json 里的层 \"${name}\" 没写 populated。" +
+                "这一层现在该不该有内容必须显式声明 —— 默认容忍空的层等于没有闸。")
+    }
+    // 【一个层就是对目标的一个谓词】
+    //
+    //   since   钉住版本：Minecraft >= 这个版本的目标才挂
+    //   loader  钉住加载器：这个加载器的目标才挂
+    //
+    // 【禁哪个轴 = 哪个轴没被钉住】：
+    //
+    //   只有 since   该批版本的三个加载器共用 → 禁加载器轴
+    //   只有 loader  该加载器的各个版本共用   → 禁版本轴
+    //   两个都有     该加载器 × 该批版本      → 都不禁（两个轴都钉住了）
+    //   都没有       全部目标                → 都禁，那就是 shared/，不是层
+    //
+    // 【原先禁掉"两个都写"是定窄了】。那不是"两件事挤在一层"，那是【交集层】：
+    // 既绑加载器又绑版本的代码，眼下只能各平台各写一份 —— 而 NeoForge 1.21.1 与
+    // 将来的 NeoForge 1.21.x 之间，那批东西是一样的。第二个同加载器同版本档的目标
+    // 一进来就要复制，正是层要消掉的那种复制。
+    //
+    // 交集层今天【一个都没有】，因为现有两个目标不共用加载器，也不共用版本档。
+    // 规则先放开，目录到有第一个占用者时再建 —— 不预先造空目录。
+    if (spec.since == null && spec.loader == null) {
+        throw new GradleException(
+                "versions/layers.json 里的层 \"${name}\" 既没有 since 也没有 loader。\n" +
+                "层是对目标的谓词，两个都没有就是「全部目标」—— 那是 shared/，不是层。")
+    }
+    boolean pinsVersion = spec.since != null
+    boolean pinsLoader  = spec.loader != null
+
+    // 三种层分开放，光看目录树就该分得出是哪一种
+    def wantSub = (pinsVersion && pinsLoader) ? 'layers/both/'
+                : pinsVersion ? 'layers/version/' : 'layers/loader/'
+    if (!spec.dir.startsWith(wantSub)) {
+        throw new GradleException(
+                "共享层 \"${name}\" 是${(pinsVersion && pinsLoader) ? '交集层' : (pinsVersion ? '版本层' : '加载器层')}，" +
+                "它的 dir 应当在 ${wantSub} 下，实际是 ${spec.dir}。")
+    }
+    if (pinsLoader && spec.loader != myEntry.value.loader) {
+        throw new GradleException(
+                "目标 ${myEntry.key} 的加载器是 ${myEntry.value.loader}，" +
+                "却挂了加载器层 \"${name}\"（${spec.loader} 的）。\n" +
+                "加载器层里装的是那一个加载器专有的东西，挂错了编不过。")
+    }
+    if (pinsVersion && McphoneVersions.cmp(myEntry.value.minecraft, spec.since) < 0) {
+        throw new GradleException(
+                "目标 ${myEntry.key} 是 Minecraft ${myEntry.value.minecraft}，" +
+                "却挂了共享层 \"${name}\"（自 ${spec.since} 起才有）。\n" +
+                "层里装的东西在这个版本上不存在，编出来的 jar 一装就炸。\n" +
+                "把这一层从该目标的 layers 里去掉，或者确认 layers.json 里的 since 写对了。")
+    }
+
+    def javaDir = new File(layersRepoRoot, "${spec.dir}/src/main/java")
+    def resDir  = new File(layersRepoRoot, "${spec.dir}/src/main/resources")
+    // docs/ 也算这一层的内容：带 main() 的断言测试按「被测对象住在哪一层」分层放，
+    // 一个层可以只有 docs/（neoforge 层眼下就是这样）
+    def docsDir = new File(layersRepoRoot, "${spec.dir}/docs")
+    // 【目录在不在，由 populated 说了算】
+    //
+    // populated: true  —— java 与 resources 至少要有一个在，两个都没有就是内容丢了
+    //                     或者 dir 写错，必须红。
+    // populated: false —— 两个都不在是【正常的】：git 不跟踪空目录，一个还没开始填的
+    //                     层在克隆下来的仓库里本来就没有这些目录。
+    //
+    // 原先无条件要求 java 目录存在，于是只放资源的层、以及所有空层都得塞一个占位
+    // 文件才建得起来 —— 那是绕开一条过严的前提，不是修好它。判据本来就在
+    // layers.json 里写着，用它就行。
+    //
+    // ⚠ 【同一个模型在 .github/workflows/build.yml 的「检查 targets.json」里还有一份】。
+    // 跨语言（Groovy 与 shell）合不成一份，改这里就要改那里。那一份跑在 CI 的干净
+    // 检出上 —— 本地这些目录是 mkdir 出来的一直都在，只有那儿才验得到"克隆下来
+    // 有没有"。实测踩过：这里放宽了、那里没跟上，本地全绿而 CI 红。
+    if (spec.populated && !javaDir.isDirectory() && !resDir.isDirectory() && !docsDir.isDirectory()) {
+        throw new GradleException(
+                "共享层 \"${name}\" 声明了 populated: true，但 ${spec.dir} 下" +
+                "src/main/java、src/main/resources 与 docs 都不存在。\n" +
+                "要么内容丢了，要么 layers.json 里的 dir 写错了（写的是 ${spec.dir}）。\n" +
+                "这一层确实还没开始填的话，把 populated 改成 false。")
+    }
+
+    [
+            name            : name,
+            kind            : (pinsVersion && pinsLoader) ? '交集层' : (pinsVersion ? '版本层' : '加载器层'),
+            // 禁的是【没被钉住】的那些轴
+            forbiddenAxes   : ((pinsVersion ? [] : ['版本']) + (pinsLoader ? [] : ['加载器'])).asImmutable(),
+            javaDir         : javaDir,
+            resourcesDir    : resDir,
+            docsDir         : docsDir,
+            populated       : spec.populated,
+            since           : spec.since,
+            // 版本层按自己的 since 判，加载器层跟着挂它的目标走
+            // 数据包单复数：钉住版本就按 since，否则跟着挂它的目标走
+            datapackSingular: McphoneVersions.datapackSingular(
+                    pinsVersion ? spec.since : myEntry.value.minecraft, renamesJson.since),
+    ]
+}

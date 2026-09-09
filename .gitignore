@@ -13,7 +13,7 @@ out/
 !**/src/**/out/
 
 .run/
-# 在仓库根目录跑 gradlew 时 log4j 会在这儿建一个空的 logs/，别让它进版本库
+# 跑 gradlew 时 log4j 会建一个空的 logs/（仓库根、各平台目录下都可能有），别让它进版本库
 logs/
 
 ### Eclipse ###
@@ -51,6 +51,9 @@ repo/
 # 它曾经被 git add -A 顺手收进一个不相干的提交里，那次是从历史里剜出去的。
 #
 # 必须写成 **/ 开头：带斜杠的模式是【锚在仓库根】的，而各版本的工程现在都在
-# 「MCphone <加载器> <版本>/」这样的子目录下。写成 docs/wallpapers/ 的话，
+# 「platforms/<目标名>/」这样的子目录下。写成 docs/wallpapers/ 的话，
 # 这条规则一个也匹配不上，上面那次事故会原样重演一遍
 **/docs/wallpapers/
+
+# CI 收产物用的目录：一次发版所有目标的 jar 都落在这儿，不进版本库
+dist/

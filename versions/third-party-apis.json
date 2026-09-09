@@ -1,0 +1,61 @@
+{
+  "_comment": [
+    "shared/ 里允许出现哪些第三方模组的 API 包。",
+    "",
+    "【为什么要一张表，而不是第五条正则】",
+    "verifySharedIsTargetNeutral 那四条判据一条都不覆盖第三方模组包。但也【不能一刀切",
+    "禁掉】：Curios 的 top.theillusivec4.curios.api 在 1.20.1 与 1.21.1 上都在，禁了会",
+    "把真能共用的联动代码赶出 shared/。",
+    "",
+    "「这个第三方 API 跨版本稳不稳定」是个矩阵问题，只能一条条查过再写下来 ——",
+    "所以是一张声明表：allowed 里的可以出现在 shared/，没在表里的一律拦。",
+    "",
+    "【怎么加一条】",
+    "先确认那个包在矩阵里【每一个】Minecraft 版本上都存在且签名一致，把证据写进",
+    "evidence，再加进 allowed。查不动就别加 —— 放进 shared/ 的代价是老版本编不过，",
+    "而那要等那个目标真开始建才发现。",
+    "",
+    "【已经踩过的】",
+    "AE2 的 appeng.menu.locator 与 Refined Storage 的 com.refinedmods.* 都是这么炸的：",
+    "1.20.1 上 AE2WTLib 15.x 还没把 api 拆成单独的子包，RS 那边是 1.12.x（RS1），",
+    "两个包在那一版根本不存在。它们已经从 shared/ 移回各平台，各写各的。",
+    "",
+    "【怎么取证据】",
+    "拿 origin/1.20.1-forge 上的同名文件比：去注释之后，那个包的 import 两支是否一致、",
+    "正文是否逐字相同。两条都满足就是硬证据 —— 同一份文本已经在两个分支上各自编译通过。",
+    "取不到证据（那支没有这个文件、或者 import 不同）就别加，把文件搬回 platforms/。",
+    "",
+    "【这张表是必要条件，不是充分条件】",
+    "它只回答「这个包在不在」。包在、方法签名却变了的情况照样编不过 —— Curios 就是",
+    "这么栽的。真判据永远是矩阵里最老那个目标真编一遍，这张表只是把「包根本不存在」",
+    "那一类挡在前面，省一轮 CI。"
+  ],
+  "allowed": {
+    "top.theillusivec4.curios.api": {
+      "mod": "Curios",
+      "evidence": "包名与 CuriosApi 这个入口类在 1.20.1（Curios 5.14.1）与 1.21.1（Curios 9.x）上都在。⚠ 【仅此而已】：CuriosApi.getCuriosInventory 的返回类型两版不同（5.x 是 LazyOptional，9.x 是 Optional），CuriosCompat 因此编不过 1.20.1，已从 shared/ 移进 1.21+ 层。这条记录的教训是：白名单管的是【包在不在】，不是【签名一样不一样】—— 它是必要条件不是充分条件，真判据仍然是拿另一个版本编一遍。"
+    },
+    "com.github.tartaricacid.netmusic": {
+      "mod": "NetMusic",
+      "evidence": "两支的 import 完全一致；NetMusicPlayback 正文逐字相同，NetMusicCompat 只差 1 行（ModPresence 门面）。⚠ 它【没有对外的 API 包】，用到的类在内部包里，改版时可能整个消失 —— 接触面已经压到最小，且兼容层兜的是 Throwable 不是 Exception，正是为了这个。"
+    },
+    "fr.delthas.javamp3": {
+      "mod": "javamp3（普通 maven 库，不是模组）",
+      "evidence": "中央仓库上的普通库，与 Minecraft 版本无关。两支 import 一致、正文逐字相同。"
+    },
+    "com.tom.storagemod": {
+      "mod": "Tom's Simple Storage",
+      "evidence": "两支的 import 完全一致，且该文件正文在两支上逐字相同（去注释后比对 origin/1.20.1-forge）。"
+    },
+    "com.cinemamod.mcef": {
+      "mod": "MCEF",
+      "evidence": "两支的 import 完全一致，且该文件正文在两支上逐字相同（去注释后比对 origin/1.20.1-forge）。"
+    }
+  },
+  "banned_examples": {
+    "_comment": "不在 allowed 里就是禁的，这里只记几个踩过的，方便下一个人对号入座",
+    "appeng.menu.locator": "AE2：1.20.1 上 ItemMenuHostLocator / MenuLocators 不存在",
+    "de.mari_023.ae2wtlib.api": "AE2WTLib：15.x 还没把 api 拆成单独子包与构件",
+    "com.refinedmods.refinedstorage.common.api": "Refined Storage：1.20.1 上是 1.12.x（RS1），没有这套注册点"
+  }
+}
