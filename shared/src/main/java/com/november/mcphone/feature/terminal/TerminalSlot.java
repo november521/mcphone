@@ -47,6 +47,22 @@ public final class TerminalSlot {
     }
 
     /**
+     * 客户端收到同步包之后写进本地那份。
+     *
+     * 与 {@link #set} 分开只为一件事：那个会回头再发一次包。客户端调 {@code set} 会往
+     * 服务端方向发一个 S2C 包，Forge 1.20.1 的 SimpleChannel 直接抛「wrong side」。
+     *
+     * 【这个方法是并 1.20.1 时补进来的】。它原本只在那一支有 —— 那一支的能力没有
+     * NeoForge 的 {@code .sync()}，上线 / 重生 / 换维度三处都要自己发包，客户端才有值。
+     * 方法体只碰 {@link PhonePlayerData}，两个目标上都成立，所以进共用层；
+     * 而「什么时候发」是加载器专有的（那三个 PlayerEvent 各家包名不同），
+     * 留在各平台自己那儿。
+     */
+    public static void applyFromServer(Player player, ItemStack stack) {
+        PhonePlayerData.of(player).setTerminal(stack);
+    }
+
+    /**
      * 内容原地改过了，推一次同步。
      *
      * {@link #get} 给的是活对象，所以改它不会经过 {@link #set}，附件那边不知道自己变了。

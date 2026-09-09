@@ -94,11 +94,11 @@ public final class MCphone {
         // 那种 .sync()，上线、重生、换维度这三处不发一次，客户端手里就是空的。
         // 为什么客户端非知道不可，见 TerminalSlot 的类注释
         MinecraftForge.EVENT_BUS.addListener(
-                com.november.mcphone.feature.terminal.TerminalSlot::onPlayerLoggedIn);
+                com.november.mcphone.feature.terminal.TerminalSlotSync::onPlayerLoggedIn);
         MinecraftForge.EVENT_BUS.addListener(
-                com.november.mcphone.feature.terminal.TerminalSlot::onPlayerRespawn);
+                com.november.mcphone.feature.terminal.TerminalSlotSync::onPlayerRespawn);
         MinecraftForge.EVENT_BUS.addListener(
-                com.november.mcphone.feature.terminal.TerminalSlot::onChangedDimension);
+                com.november.mcphone.feature.terminal.TerminalSlotSync::onChangedDimension);
 
         // 手机上"屏幕亮着"那一位的补擦。那一支不需要：它那个组件不落盘，这一支是 NBT，
         // 会跟着存档留下来 —— 开着手机崩一次就永远亮着。理由与擦不到的那一种见类注释
