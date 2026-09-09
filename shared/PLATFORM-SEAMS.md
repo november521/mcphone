@@ -284,7 +284,7 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 
 判据在这批上相对可信。
 
-- `compat.WaystonesCompat`
+- `compat.WaystonesCompat`　**★ 被共用代码引用**
 - `feature.terminal.integration.ae2.Ae2Integration`
 - `feature.terminal.integration.ae2.Ae2wtlibSupport`
 - `feature.terminal.integration.ae2.TerminalSlotLocator`
@@ -294,31 +294,25 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 - `platform.Slots`　**★ 被共用代码引用**
 - `platform.StackCodecs`　**★ 被共用代码引用**
 
-#### 客户端渲染路径（21）
+#### 客户端渲染路径（15）
 
 **判据在这批上最不可信** —— 签名漂移正集中在这里，逐个人工核过再搬。
 
-- `api.client.app.IPhoneApp`　**★ 被共用代码引用**
 - `api.client.ui.PhoneMultiLineEditBox`
-- `core.client.ImageFolder`　**★ 被共用代码引用**
 - `core.client.PhoneItemProperties`
 - `core.client.PhoneScreen`　**★ 被共用代码引用**
 - `core.client.PlayerAvatar`　**★ 被共用代码引用**
-- `feature.browser.client.BrowserApp`
-- `feature.browser.client.BrowserScreen`
-- `feature.camera.client.CameraApp`
+- `feature.browser.client.BrowserScreen`　**★ 被共用代码引用**
 - `feature.camera.client.CameraFlash`　**★ 被共用代码引用**
 - `feature.camera.client.CameraMode`　**★ 被共用代码引用**
 - `feature.music.client.MusicPage`
 - `feature.music.client.playback.OggDecoder`　**★ 被共用代码引用**
 - `feature.notes.client.NoteEditor`
-- `feature.reader.client.source.ExternalBookSource`　**★ 被共用代码引用**
 - `feature.settings.client.DeviceNameEditor`
 - `feature.settings.client.PhoneHudEditor`
 - `feature.terminal.client.TerminalApp`
-- `feature.waystone.client.WaystoneApp`
 - `platform.client.Draw`　**★ 被共用代码引用**
-- `platform.client.SystemFiles`
+- `platform.client.SystemFiles`　**★ 被共用代码引用**
 
 <!-- 乙 · 1.21.1-neoforge 结束 -->
 
@@ -386,7 +380,7 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 
 判据在这批上相对可信。
 
-- `compat.WaystonesCompat`
+- `compat.WaystonesCompat`　**★ 被共用代码引用**
 - `core.PhoneItem`　**★ 被共用代码引用**
 - `core.PhoneItemData`
 - `core.PhoneLocation`　**★ 被共用代码引用**
@@ -453,35 +447,29 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 - `feature.terminal.net.SyncTerminalSlotPacket`
 - `feature.terminal.net.TerminalActionPacket`　**★ 被共用代码引用**
 - `feature.terminal.net.TerminalNetworking`
-- `feature.waystone.net.OpenWaystoneSelectionPacket`
+- `feature.waystone.net.OpenWaystoneSelectionPacket`　**★ 被共用代码引用**
 - `platform.CuriosInventories`　**★ 被共用代码引用**
 - `platform.Slots`　**★ 被共用代码引用**
 - `platform.StackCodecs`　**★ 被共用代码引用**
 
-#### 客户端渲染路径（21）
+#### 客户端渲染路径（15）
 
 **判据在这批上最不可信** —— 签名漂移正集中在这里，逐个人工核过再搬。
 
-- `api.client.app.IPhoneApp`　**★ 被共用代码引用**
-- `core.client.ImageFolder`　**★ 被共用代码引用**
 - `core.client.PhoneItemProperties`
 - `core.client.PhoneScreen`　**★ 被共用代码引用**
 - `core.client.PlayerAvatar`　**★ 被共用代码引用**
-- `feature.browser.client.BrowserApp`
-- `feature.browser.client.BrowserScreen`
-- `feature.camera.client.CameraApp`
+- `feature.browser.client.BrowserScreen`　**★ 被共用代码引用**
 - `feature.camera.client.CameraFlash`　**★ 被共用代码引用**
 - `feature.camera.client.CameraMode`　**★ 被共用代码引用**
 - `feature.music.client.MusicPage`
 - `feature.music.client.playback.OggDecoder`　**★ 被共用代码引用**
 - `feature.notes.client.NoteEditor`
-- `feature.reader.client.source.ExternalBookSource`　**★ 被共用代码引用**
 - `feature.settings.client.DeviceNameEditor`
 - `feature.settings.client.PhoneHudEditor`
 - `feature.terminal.client.TerminalApp`
 - `feature.terminal.client.TerminalSlotClient`
-- `feature.waystone.client.WaystoneApp`
 - `platform.client.Draw`　**★ 被共用代码引用**
-- `platform.client.SystemFiles`
+- `platform.client.SystemFiles`　**★ 被共用代码引用**
 
 <!-- 乙 · 1.20.1-forge 结束 -->
