@@ -81,6 +81,30 @@ def thirdPartyJson = readTrackedJson('versions/third-party-apis.json')
 if (!(thirdPartyJson.allowed instanceof Map)) {
     throw new GradleException("versions/third-party-apis.json 里的 allowed 不是对象 —— 取不到白名单，这道闸就成了空转。")
 }
+// 【每一条都必须带证据】。这张表的全部价值就是那道门槛：包名在两个版本上都在，
+// 是查过的还是想当然的，只有证据能区分。而碰到这道闸的人最省事的动作恰好是
+// 往表里加一个空 key —— 不检查的话，加一行 "appeng.menu.locator": {} 就放行了。
+//
+// 同一个仓库里 targets.json 的 unverified 是同类的「带门槛的声明」，它有四道
+// CI 检查盯着；这张表原先零道。而这一轮刚好证明了门槛会松：Curios 那条证据
+// 上一轮就写错了，是靠 1.20.1 真编译才暴露的 —— 人写证据会写错，那就更该
+// 至少检查「有没有写」。
+thirdPartyJson.allowed.each { pkg, spec ->
+    if (!(spec instanceof Map)) {
+        throw new GradleException("versions/third-party-apis.json 里 allowed.\"${pkg}\" 不是对象。")
+    }
+    ['mod', 'evidence'].each { field ->
+        def v = spec[field]
+        if (!(v instanceof CharSequence) || v.toString().trim().isEmpty()) {
+            throw new GradleException(
+                    "versions/third-party-apis.json 里 allowed.\"${pkg}\" 缺 ${field}，或者写成了空的。\n" +
+                    "这张表的全部价值就是那道门槛：那个包在矩阵里【每一个】Minecraft 版本上\n" +
+                    "都存在且签名一致 —— 是查过的还是想当然的，只有证据能区分。\n" +
+                    "取证的办法：拿 origin/1.20.1-forge 的同名文件比，去注释后那个包的 import\n" +
+                    "两支是否一致、正文是否逐字相同。查不动就别加，把文件搬回 platforms/。")
+        }
+    }
+}
 ext.mcphoneAllowedThirdParty = (thirdPartyJson.allowed.keySet() as List).asImmutable()
 
 // 认出自己是哪个目标：按 targets.json 里的 project 字段反查，不靠目录名猜。

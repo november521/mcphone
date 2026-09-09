@@ -70,5 +70,30 @@ public interface TerminalIntegration {
      * 由 {@link Terminals#discover()} 在 FMLCommonSetup 里统一调用，两端都调，且在任何菜单
      * 打开之前。Tom's 那家不需要这一步（它没有位置的概念），所以这里有默认实现。
      */
+/**
+     * 这一家的终端<b>装得进手机卡槽</b>吗。
+     *
+     * 默认装得进。会答"不能"的只有 Forge 1.20.1 上的 Refined Storage：那个版本的 RS 用
+     * {@code PlayerSlot} 表达"东西在哪儿"，而它是个<b>具体类</b>、只认"背包第 n 格"与
+     * Curios 的槽位，没有留任何注册点 —— 手机卡槽这种位置它表达不了，理由与实测见
+     * {@code RefinedStorageIntegration}。
+     *
+     * 这一问与 {@link #canOpen} 是两件事，别合并：RS 的终端<b>能</b>被隔空打开（它在背包
+     * 里时这一格照常开得了它），只是不能<b>住</b>在卡槽里。合并的后果是背包里那台也一起
+     * 被判死。
+     *
+     * 由 {@code TerminalSlotMenu} 的 mayPlace 问，问在放进去之前 —— 放得进去却点不开，比
+     * 放不进去更难解释。
+     */
+    default boolean canLiveInPhoneSlot() {
+        return true;
+    }
+
+    // ⚠ 【1.21.1 那一侧还没用上这个方法】。并 1.20.1 时发现：那一支的
+    // Terminals.isInstallable 会拿它过滤，RefinedStorageIntegration 答 false，
+    // 便携网格因此进不了手机卡槽；而 1.21.1 的 Terminals.isOpenable 不看它 ——
+    // 同一件东西在 1.21.1 上装得进去却点不开。那支的注释管这叫「功能上的降级」。
+    // 方法先收进共用层（两边都编得过），这处行为差异单独记着，不在"让它编过"里顺手改。
+
     default void setup() {}
 }

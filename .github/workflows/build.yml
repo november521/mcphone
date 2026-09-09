@@ -573,6 +573,41 @@ jobs:
             done < <(jq -r '.renames | to_entries[] | "\(.key)\t\(.value)"' "$R")
           done <<< "$DPROWS"
 
+          # 十、【第三方 API 白名单的每一条都要带证据】
+          #
+          # 那张表的全部价值就是这道门槛：包名在两个版本上都在，是查过的还是想当然的，
+          # 只有证据能区分。而碰到那道闸的人最省事的动作恰好是往表里加一个空 key ——
+          # 不检查的话 "appeng.menu.locator": {} 就放行了，实测过。
+          #
+          # targets.json 的 unverified 是同类的「带门槛的声明」，它有四道检查盯着；
+          # 这张表原先零道。这一轮还刚好证明了门槛会松：Curios 那条证据上一轮写错了，
+          # 是靠 1.20.1 真编译才暴露的 —— 人写证据会写错，那更该检查「有没有写」。
+          TP=versions/third-party-apis.json
+          jq -e . "$TP" > /dev/null || { echo "::error::$TP 不是合法 JSON"; exit 1; }
+          BADTP=$(jq -r '
+            .allowed | to_entries[]
+            | select((.value | type) != "object")
+              // empty
+            | "  \(.key)  不是对象"
+          ' "$TP"); RC=$?
+          [ "$RC" = "0" ] || { echo "::error::查第三方白名单的 jq 跑挂了（退出码 $RC）"; exit 1; }
+          MISSTP=$(jq -r '
+            .allowed | to_entries[]
+            | . as $e
+            | ["mod","evidence"]
+            | map(select((($e.value[.]? // "") | tostring | gsub("^\\s+|\\s+$";"")) == ""))
+            | select(length > 0)
+            | "  \($e.key)  缺：\(join("、"))"
+          ' "$TP"); RC=$?
+          [ "$RC" = "0" ] || { echo "::error::查第三方白名单字段的 jq 跑挂了（退出码 $RC）"; exit 1; }
+          if [ -n "$BADTP$MISSTP" ]; then
+            echo "::error::versions/third-party-apis.json 的 allowed 里有条目没写全："
+            printf '%s\n' "$BADTP$MISSTP"
+            echo "每一条都要写 mod 与 evidence。取证：拿 origin/1.20.1-forge 的同名文件比，"
+            echo "去注释后那个包的 import 两支是否一致、正文是否逐字相同。查不动就别加。"
+            FAIL=1
+          fi
+
           [ "$FAIL" = "0" ] || exit 1
           N=$(q '[to_entries[] | select((.value|type)=="object")] | length') || exit 1
           echo "targets.json 校验通过：$N 个目标，矩阵齐全"

@@ -127,4 +127,24 @@ public final class Wire {
         }
         return out;
     }
+
+    // ── 字节数组 ─────────────────────────────────────────────
+    //
+    // 【这两个是并 1.20.1 时补回来的】。它们原本只在那一支的 Wire 里，
+    // 1.21.1 这边的聊天图片走的是 ByteBufCodecs.BYTE_ARRAY —— 那是 1.20.5+ 才有的，
+    // 1.20.1 上只能手写。两支的 Wire 合成一份之后，这一对必须在：
+    // 只碰 FriendlyByteBuf，两个版本上都成立。
+
+/** 写一段字节，超过上限直接抛。理由同 {@link #writeList} */
+    public static void writeBytes(FriendlyByteBuf buf, byte[] data, int max) {
+        if (data.length > max) {
+            throw new EncoderException("要发的字节数超过上限 " + max + ": " + data.length);
+        }
+        buf.writeByteArray(data);
+    }
+
+    /** 读一段字节。上限由 {@code readByteArray} 自己拦，同样在分配之前 */
+    public static byte[] readBytes(FriendlyByteBuf buf, int max) {
+        return buf.readByteArray(max);
+    }
 }
