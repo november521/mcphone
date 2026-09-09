@@ -2,7 +2,7 @@
 
 把一部能用的智能手机塞进 Minecraft —— 拍照、翻相册、换壁纸、听歌、聊天、装 App。
 
-**Minecraft 1.21.1** · **NeoForge 21.1.200+** · 客户端与服务端都需安装
+**Minecraft 1.21.1**（NeoForge 21.1.200+）· **Minecraft 1.20.1**（Forge 47.4.0+）· 客户端与服务端都需安装
 
 [下载：Modrinth](https://modrinth.com/mod/mcphone) ·
 [CurseForge](https://www.curseforge.com/minecraft/mc-mods/mcphone) ·
@@ -39,7 +39,7 @@ wiki 是文档的唯一真源，仓库里不再另存一份。
 | 目标 | Minecraft | 加载器 | 状态 |
 |---|---|---|---|
 | `1.21.1-neoforge` | 1.21.1 | NeoForge | 产物进 Release |
-| `1.20.1-forge` | 1.20.1 | Forge | CI 在编，产物尚不进 Release |
+| `1.20.1-forge` | 1.20.1 | Forge | 产物进 Release |
 
 代码按共用范围分层：`shared/` 全部目标共用，`layers/` 下按 Minecraft 版本或加载器
 再分，`platforms/<目标名>/` 是目标专有。各目标的 Gradle、Java 版本可以不同，
