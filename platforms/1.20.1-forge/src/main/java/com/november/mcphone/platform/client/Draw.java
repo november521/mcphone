@@ -1,4 +1,4 @@
-package com.november.mcphone.platform;
+package com.november.mcphone.platform.client;
 
 import com.mojang.blaze3d.vertex.BufferBuilder;
 import com.mojang.blaze3d.vertex.BufferUploader;
@@ -24,6 +24,11 @@ import org.joml.Matrix4f;
  * 扫 import 与扫类型名都发现不了，只有真编一遍才知道。
  *
  * <h2>这个包放什么</h2>
+ *
+ * {@code platform.client} 下装的是「各目标做同一件事、但写法不同」【且碰客户端类型】
+ * 的东西。<b>包名里那个 client 是硬要求</b>：dist 隔离那道闸只准路径里带 /client/ 的类
+ * 引用 {@code net.minecraft.client.*}，别处引用了就会在专用服务器上一加载就崩服 ——
+ * 这个类第一版放在 platform/ 下，当场被那道闸拦下。
  *
  * {@code platform} 下装的是「各目标做同一件事、但写法不同」的东西。
  * <b>不要往这里放业务逻辑</b> —— 「浏览器把网页画在哪一块」是业务，属于那个界面；

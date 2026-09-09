@@ -1,6 +1,6 @@
 package com.november.mcphone.feature.browser.client;
 
-import com.november.mcphone.platform.Draw;
+import com.november.mcphone.platform.client.Draw;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.BufferBuilder;
 import com.mojang.blaze3d.vertex.BufferUploader;

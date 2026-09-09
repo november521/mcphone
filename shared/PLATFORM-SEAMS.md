@@ -271,7 +271,7 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 - `platform.Slots`　**★ 被共用代码引用**
 - `platform.StackCodecs`　**★ 被共用代码引用**
 
-#### 客户端渲染路径（25）
+#### 客户端渲染路径（26）
 
 **判据在这批上最不可信** —— 签名漂移正集中在这里，逐个人工核过再搬。
 
@@ -300,6 +300,7 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 - `feature.terminal.client.TerminalApp`
 - `feature.terminal.client.TerminalSlotScreen`
 - `feature.waystone.client.WaystoneApp`
+- `platform.client.Draw`
 
 <!-- 乙 · 1.21.1-neoforge 结束 -->
 
@@ -439,7 +440,7 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 - `platform.Slots`　**★ 被共用代码引用**
 - `platform.StackCodecs`　**★ 被共用代码引用**
 
-#### 客户端渲染路径（25）
+#### 客户端渲染路径（26）
 
 **判据在这批上最不可信** —— 签名漂移正集中在这里，逐个人工核过再搬。
 
@@ -468,5 +469,6 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 - `feature.terminal.client.TerminalSlotClient`
 - `feature.terminal.client.TerminalSlotScreen`
 - `feature.waystone.client.WaystoneApp`
+- `platform.client.Draw`
 
 <!-- 乙 · 1.20.1-forge 结束 -->
