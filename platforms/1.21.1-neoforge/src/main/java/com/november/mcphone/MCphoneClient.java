@@ -69,7 +69,8 @@ public class MCphoneClient {
 
         // 「这会儿开着的是哪一台」每 tick 算一次，变了才发包。排在 PhoneHud 之后：
         // 同一 tick 里挂上的那台立刻就能报上去
-        NeoForge.EVENT_BUS.addListener(PhoneScreenOnSync::onClientTick);
+        NeoForge.EVENT_BUS.addListener(
+                (net.neoforged.neoforge.client.event.ClientTickEvent.Post event) -> PhoneScreenOnSync.tick());
 
         // 挂在 HUD 上看书时的两个翻页键。手机成了 mc.screen 就走不动路，
         // 而边走边看正是这个功能最想要的场景，见 ReaderKeyHandler

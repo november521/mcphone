@@ -4,7 +4,6 @@ import com.november.mcphone.core.PhoneLocation;
 import com.november.mcphone.core.net.MCphoneNetwork;
 import com.november.mcphone.core.net.PhoneScreenOnPacket;
 import net.minecraft.client.Minecraft;
-import net.neoforged.neoforge.client.event.ClientTickEvent;
 
 import java.util.Optional;
 
@@ -44,12 +43,15 @@ public final class PhoneScreenOnSync {
     private static Optional<PhoneLocation> lastSent = Optional.empty();
 
     /**
-     * 由 MCphoneClient 构造函数挂到游戏总线。
+     * 每客户端 tick 调一次，由各平台的 MCphoneClient 从自己那套事件里接过来 —— 这个类住在
+     * {@code shared/}，而 tick 事件三个加载器各不相同（NeoForge 是 {@code ClientTickEvent.Post}，
+     * 1.20.1 的 Forge 是 {@code TickEvent.ClientTickEvent} 加一个 phase 判断），
+     * 那一层差异留在 {@code platforms/} 下，这里只收"又过了一 tick"这个事实。
      *
-     * 排在 {@link PhoneHud#onClientTick} 之后只是为了同一 tick 内就能报上，早一 tick 晚一 tick
+     * 排在 {@code PhoneHud#onClientTick} 之后只是为了同一 tick 内就能报上，早一 tick 晚一 tick
      * 都不影响正确性——下一 tick 照样会算出同一个答案。
      */
-    public static void onClientTick(ClientTickEvent.Post event) {
+    public static void tick() {
         send(litNow());
     }
 

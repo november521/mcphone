@@ -197,7 +197,7 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 
 （无）
 
-#### 仅加载器轴（26）
+#### 仅加载器轴（27）
 
 同一加载器的各个 Minecraft 版本可共用；三个加载器之间必然分叉。
 
@@ -222,6 +222,7 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 - `feature.music.client.playback.LocalPlayback` —— 加载器导入　**★ 被共用代码引用**
 - `feature.music.net.MusicNetworking` —— 加载器导入　**★ 被共用代码引用**
 - `feature.notes.net.NotesNetworking` —— 加载器导入
+- `feature.reader.client.ReaderKeyHandler` —— 加载器导入
 - `feature.settings.client.AppManagerDetail` —— 加载器导入
 - `feature.store.net.StoreNetworking` —— 加载器导入
 - `feature.terminal.integration.Terminals` —— 加载器导入　**★ 被共用代码引用**
@@ -269,7 +270,7 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 - `feature.terminal.integration.refinedstorage.RefinedStorageIntegration`
 - `feature.terminal.integration.refinedstorage.TerminalSlotReference`　**★ 被共用代码引用**
 
-#### 客户端渲染路径（31）
+#### 客户端渲染路径（33）
 
 **判据在这批上最不可信** —— 签名漂移正集中在这里，逐个人工核过再搬。
 
@@ -285,6 +286,7 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 - `feature.camera.client.CameraApp`
 - `feature.camera.client.CameraFlash`　**★ 被共用代码引用**
 - `feature.camera.client.CameraMode`　**★ 被共用代码引用**
+- `feature.camera.client.CameraStamp`
 - `feature.chat.client.ChatMediaPicker`
 - `feature.gallery.client.Gallery`
 - `feature.music.client.DiscBayScreen`
@@ -296,6 +298,7 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 - `feature.reader.client.source.ExternalBookSource`　**★ 被共用代码引用**
 - `feature.reader.client.source.GuideMeSource`　**★ 被共用代码引用**
 - `feature.reader.client.source.PatchouliSource`　**★ 被共用代码引用**
+- `feature.reader.client.source.TxtBookSource`　**★ 被共用代码引用**
 - `feature.settings.client.AboutPage`
 - `feature.settings.client.DeviceNameEditor`
 - `feature.settings.client.PhoneHudEditor`
