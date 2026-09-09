@@ -1,5 +1,6 @@
 package com.november.mcphone.feature.music.client;
 
+import com.november.mcphone.platform.client.Draw;
 import com.november.mcphone.core.client.PhoneChassis;
 import com.november.mcphone.core.client.PhoneScreen;
 import com.november.mcphone.core.client.PhoneScreenOpener;
@@ -36,8 +37,7 @@ public class DiscBayScreen extends AbstractContainerScreen<DiscBayMenu> {
 
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
-        // 1.20.1 的 renderBackground 只收 GuiGraphics
-        renderBackground(g);
+        Draw.screenBackground(this, g, mouseX, mouseY, partialTick);
         super.render(g, mouseX, mouseY, partialTick);
 
         // 外壳必须画在格子与物品之后：内圈圆角要盖住背景才看得见

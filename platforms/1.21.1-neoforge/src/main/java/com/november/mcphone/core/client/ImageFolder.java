@@ -1,5 +1,6 @@
 package com.november.mcphone.core.client;
 
+import com.november.mcphone.platform.client.SystemFiles;
 import com.mojang.blaze3d.platform.NativeImage;
 import com.november.mcphone.MCphone;
 import net.minecraft.Util;
@@ -149,6 +150,16 @@ public final class ImageFolder {
             MCphone.LOGGER.warn("[MCphone] 建目录失败 {}: {}", dir, e.getMessage());
         }
         return dir;
+    }
+
+    /**
+     * 交给系统自己的文件管理器打开一个目录。
+     *
+     * 三处「打开文件夹」（相册、表情、壁纸）都走这里，免得同一句写三遍；
+     * 而「这个版本怎么打开」两支不同，关在 {@link SystemFiles} 里。
+     */
+    public static void openInFileManager(Path dir) {
+        SystemFiles.openInFileManager(dir);
     }
 
     /**

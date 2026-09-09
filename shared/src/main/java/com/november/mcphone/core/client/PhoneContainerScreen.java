@@ -1,5 +1,6 @@
 package com.november.mcphone.core.client;
 
+import com.november.mcphone.platform.client.Draw;
 import com.november.mcphone.core.menu.PhoneContainerMenu;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
@@ -42,7 +43,7 @@ public class PhoneContainerScreen extends AbstractContainerScreen<PhoneContainer
 
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
-        renderBackground(g, mouseX, mouseY, partialTick);
+        Draw.screenBackground(this, g, mouseX, mouseY, partialTick);
         super.render(g, mouseX, mouseY, partialTick);
 
         // 外壳画在格子与物品之后：它只覆盖机身外的那一圈（格子都在里面），

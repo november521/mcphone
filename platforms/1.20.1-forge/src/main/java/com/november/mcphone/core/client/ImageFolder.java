@@ -1,5 +1,6 @@
 package com.november.mcphone.core.client;
 
+import com.november.mcphone.platform.client.SystemFiles;
 import com.mojang.blaze3d.platform.NativeImage;
 import com.november.mcphone.MCphone;
 import net.minecraft.Util;
@@ -55,114 +56,13 @@ import java.util.function.Supplier;
 public final class ImageFolder {
 
     /**
-     * 目录里的一个文件。不含像素——像素按需加载，见 {@link #thumbnail}。
-     *
-     * @param path         文件绝对路径
-     * @param fileName     文件名（含后缀）
-     * @param lastModified 修改时间戳，用于排序与缓存键
-     */
-    public record Entry(Path path, String fileName, long lastModified) {
-
-        /** 缓存键带上修改时间：同名文件被覆盖后键会变，不会读到旧贴图 */
-        public String cacheKey() { return fileName + ":" + lastModified; }
-    }
-
-    /** 与原版截图的命名风格一致：年-月-日_时.分.秒 */
-    private static final DateTimeFormatter TIMESTAMP =
-            DateTimeFormatter.ofPattern("yyyy-MM-dd_HH.mm.ss");
-
-    /** 同时在飞的加载数上限，防止快速翻页时打出 IO 风暴 */
-    private static final int MAX_IN_FLIGHT = 4;
-
-    /** 目录现算现取：游戏目录、配置目录都要等 Minecraft 起来之后才有 */
-    private final Supplier<Path> directory;
-
-    private final Set<String> extensions;
-    private final int thumbMaxSide;
-    private final int minCached;
-    private final String texturePrefix;
-
-    private final List<Entry> entries = new ArrayList<>();
-    private boolean scanned;
-
-    /**
-     * 访问序 LinkedHashMap：每次 thumbnail() 命中都会把该项移到最新，
-     * 于是"当前页"始终是热的，被逐出的必然是翻过去很久的旧页。
-     */
-    private final Map<String, ImageCodec.Texture> thumbnails;
-
-    /** 正在加载中的缓存键，避免同一张图被重复提交 */
-    private final Set<String> loading = new HashSet<>();
-
-    /** 加载失败的缓存键，避免每帧重试同一个坏文件 */
-    private final Set<String> failed = new HashSet<>();
-
-    /**
-     * 缓存上限。必须始终大于"一页的张数"，否则同一页里先加载的会被后加载的挤掉，
-     * 下一帧又重新加载，陷入加载—逐出的死循环，画面持续闪烁。每页张数由界面按屏幕高度算出，
-     * 不是定值，因此由界面调 {@link #ensureCacheFor} 把上限顶上去。
-     */
-    private int maxCached;
-
-    /**
-     * 缓存世代，每次 {@link #releaseAll} 递增。
-     *
-     * 界面退出后仍在飞的那几张加载，回来时世代已经变了，直接丢弃——否则它们会在刚清空的
-     * 缓存里重新注册出几张没人回收的贴图。
-     */
-    private int generation;
-
-    public ImageFolder(Supplier<Path> directory, Set<String> extensions,
-                       int thumbMaxSide, int minCached, String texturePrefix) {
-        this.directory = directory;
-        this.extensions = extensions;
-        this.thumbMaxSide = thumbMaxSide;
-        this.minCached = minCached;
-        this.maxCached = minCached;
-        this.texturePrefix = texturePrefix;
-        this.thumbnails = new LinkedHashMap<>(minCached + 1, 0.75f, true) {
-            @Override
-            protected boolean removeEldestEntry(Map.Entry<String, ImageCodec.Texture> eldest) {
-                if (size() <= maxCached) return false;
-                // 逐出的同时归还显存，否则贴图会一直留在 TextureManager 里
-                ImageCodec.release(eldest.getValue());
-                return true;
-            }
-        };
-    }
-
-    public Path directory() {
-        return directory.get();
-    }
-
-    /**
-     * 确保目录存在，返回它。
-     *
-     * 「打开文件夹」那个键要用：目录还不存在时交给系统的文件管理器，多半是弹一个"路径不存在"，
-     * 而玩家点它的目的恰恰是"我还没有表情，想放几张进去"。
-     */
-    public Path ensureDirectory() {
-        Path dir = directory.get();
-        try {
-            Files.createDirectories(dir);
-        } catch (IOException e) {
-            MCphone.LOGGER.warn("[MCphone] 建目录失败 {}: {}", dir, e.getMessage());
-        }
-        return dir;
-    }
-
-    /**
      * 交给系统自己的文件管理器打开一个目录。
      *
-     * 1.21.1 那边写的是 {@code Util.getPlatform().openPath(path)}。1.20.1 的
-     * {@code Util.OS} 上【没有 openPath】——那是 1.20.2 才加的，这个版本只有
-     * 收 {@link java.io.File} 的 {@code openFile}。两者做的是同一件事
-     * （最终都走 xdg-open / explorer / open），差的只是参数类型。
-     *
-     * 三处「打开文件夹」（相册、表情、壁纸）都走这里，免得同一句 toFile 写三遍。
+     * 三处「打开文件夹」（相册、表情、壁纸）都走这里，免得同一句写三遍；
+     * 而「这个版本怎么打开」两支不同，关在 {@link SystemFiles} 里。
      */
     public static void openInFileManager(Path dir) {
-        Util.getPlatform().openFile(dir.toFile());
+        SystemFiles.openInFileManager(dir);
     }
 
     /**

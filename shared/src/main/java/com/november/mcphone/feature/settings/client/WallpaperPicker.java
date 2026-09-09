@@ -1,15 +1,15 @@
 package com.november.mcphone.feature.settings.client;
 
+import com.november.mcphone.core.client.ImageFolder;
 import com.november.mcphone.core.client.FontPalette;
 import com.november.mcphone.core.client.PhoneTheme;
+import com.november.mcphone.core.net.MCphoneNetwork;
 import com.november.mcphone.feature.settings.net.SetWallpaperPacket;
 import com.november.mcphone.core.client.GuiUtil;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
-import com.november.mcphone.core.net.MCphoneNetwork;
-import com.november.mcphone.core.client.ImageFolder;
 
 import java.util.List;
 

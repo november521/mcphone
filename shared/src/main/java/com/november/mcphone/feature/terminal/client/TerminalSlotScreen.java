@@ -1,8 +1,10 @@
 package com.november.mcphone.feature.terminal.client;
 
+import com.november.mcphone.platform.client.Draw;
 import com.november.mcphone.core.client.FontPalette;
 import com.november.mcphone.core.client.PhoneChassis;
 import com.november.mcphone.core.client.PhoneScreenOpener;
+import com.november.mcphone.core.net.MCphoneNetwork;
 import com.november.mcphone.feature.terminal.integration.Terminals;
 import com.november.mcphone.feature.terminal.menu.TerminalSlotMenu;
 import com.november.mcphone.feature.terminal.net.TerminalActionPacket;
@@ -12,7 +14,6 @@ import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.player.Inventory;
-import com.november.mcphone.core.net.MCphoneNetwork;
 
 /**
  * 终端卡槽的界面 —— 一个终端格 ＋ 玩家背包，外加一个「打开终端」按钮。
@@ -116,8 +117,7 @@ public class TerminalSlotScreen extends AbstractContainerScreen<TerminalSlotMenu
 
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
-        // 1.20.1 的 renderBackground 只收 GuiGraphics，1.21 多了鼠标坐标与 partialTick
-        renderBackground(g);
+        Draw.screenBackground(this, g, mouseX, mouseY, partialTick);
         super.render(g, mouseX, mouseY, partialTick);
 
         // 外壳画在格子与物品之后：它只覆盖机身外的那一圈，而贴图在内圈画的圆角要盖住

@@ -94,6 +94,29 @@ Minecraft 版本便多一层，而那些层的内容一致。
 > 补测试时先问一句「哪个目标会跑到它」。该例已补 `docs/WireBytesTest.java`，
 > 放在中立的 `docs/` 下，每个目标都跑。
 
+### 待办：覆写签名，helper 门面接不住
+
+已有的门面（`ModPresence` / `Slots` / `StackCodecs` / `CuriosInventories` /
+`Draw`）都是**静态 helper**：调用点换成一句门面调用，差别关进方法体。这一招对
+「调用某个换了签名的方法」有效，对**覆写某个换了签名的方法**无效 ——
+子类的方法签名必须与父类一致，没有中间层可插。
+
+现存两处：
+
+| 位置 | 差异 | 波及 |
+|---|---|---|
+| `Screen.mouseScrolled` | 1.21 多一个 `scrollX` 参数 | `PhoneScreen`、`BrowserScreen`、`PhoneHudEditor` |
+| `SavedData.save` | 1.20.5 起多收 `HolderLookup.Provider` | `ChatData`、`FriendData` |
+
+**做法是平台侧的抽象基类**：基类替各目标写那个覆写，转调一个中立的抽象方法，
+子类只实现中立那一半，于是子类可以进共用层。
+
+没有立刻做，是因为第一处会动到 `PhoneScreen`——一千四百行的中心类，
+它的 `mouseScrolled` 里串着十几个页面的分发。那一刀值得单独做、单独验，
+不该跟别的改动混在一次提交里。
+
+在那之前，这五个类留在各自该在的层/平台，**不是判据没看出来，是有意留的**。
+
 ### 现有的层
 
 | 层 | 种类 | 边界 | 内容 |
@@ -271,14 +294,13 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 - `platform.Slots`　**★ 被共用代码引用**
 - `platform.StackCodecs`　**★ 被共用代码引用**
 
-#### 客户端渲染路径（26）
+#### 客户端渲染路径（21）
 
 **判据在这批上最不可信** —— 签名漂移正集中在这里，逐个人工核过再搬。
 
 - `api.client.app.IPhoneApp`　**★ 被共用代码引用**
 - `api.client.ui.PhoneMultiLineEditBox`
 - `core.client.ImageFolder`　**★ 被共用代码引用**
-- `core.client.PhoneContainerScreen`
 - `core.client.PhoneItemProperties`
 - `core.client.PhoneScreen`　**★ 被共用代码引用**
 - `core.client.PlayerAvatar`　**★ 被共用代码引用**
@@ -287,20 +309,16 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 - `feature.camera.client.CameraApp`
 - `feature.camera.client.CameraFlash`　**★ 被共用代码引用**
 - `feature.camera.client.CameraMode`　**★ 被共用代码引用**
-- `feature.chat.client.ChatMediaPicker`
-- `feature.gallery.client.Gallery`
-- `feature.music.client.DiscBayScreen`
 - `feature.music.client.MusicPage`
 - `feature.music.client.playback.OggDecoder`　**★ 被共用代码引用**
 - `feature.notes.client.NoteEditor`
 - `feature.reader.client.source.ExternalBookSource`　**★ 被共用代码引用**
 - `feature.settings.client.DeviceNameEditor`
 - `feature.settings.client.PhoneHudEditor`
-- `feature.settings.client.WallpaperPicker`
 - `feature.terminal.client.TerminalApp`
-- `feature.terminal.client.TerminalSlotScreen`
 - `feature.waystone.client.WaystoneApp`
-- `platform.client.Draw`
+- `platform.client.Draw`　**★ 被共用代码引用**
+- `platform.client.SystemFiles`
 
 <!-- 乙 · 1.21.1-neoforge 结束 -->
 
@@ -421,7 +439,7 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 - `feature.notes.net.SyncNoteListPacket`
 - `feature.notes.net.SyncNotePacket`
 - `feature.settings.net.SetDeviceNamePacket`
-- `feature.settings.net.SetWallpaperPacket`
+- `feature.settings.net.SetWallpaperPacket`　**★ 被共用代码引用**
 - `feature.settings.net.SyncWallpaperPacket`
 - `feature.store.PurchasedApps`　**★ 被共用代码引用**
 - `feature.store.net.PurchaseAppPacket`　**★ 被共用代码引用**
@@ -433,20 +451,19 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 - `feature.terminal.integration.ae2.TerminalSlotLocator`
 - `feature.terminal.integration.refinedstorage.RefinedStorageIntegration`
 - `feature.terminal.net.SyncTerminalSlotPacket`
-- `feature.terminal.net.TerminalActionPacket`
+- `feature.terminal.net.TerminalActionPacket`　**★ 被共用代码引用**
 - `feature.terminal.net.TerminalNetworking`
 - `feature.waystone.net.OpenWaystoneSelectionPacket`
 - `platform.CuriosInventories`　**★ 被共用代码引用**
 - `platform.Slots`　**★ 被共用代码引用**
 - `platform.StackCodecs`　**★ 被共用代码引用**
 
-#### 客户端渲染路径（26）
+#### 客户端渲染路径（21）
 
 **判据在这批上最不可信** —— 签名漂移正集中在这里，逐个人工核过再搬。
 
 - `api.client.app.IPhoneApp`　**★ 被共用代码引用**
 - `core.client.ImageFolder`　**★ 被共用代码引用**
-- `core.client.PhoneContainerScreen`
 - `core.client.PhoneItemProperties`
 - `core.client.PhoneScreen`　**★ 被共用代码引用**
 - `core.client.PlayerAvatar`　**★ 被共用代码引用**
@@ -455,20 +472,16 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 - `feature.camera.client.CameraApp`
 - `feature.camera.client.CameraFlash`　**★ 被共用代码引用**
 - `feature.camera.client.CameraMode`　**★ 被共用代码引用**
-- `feature.chat.client.ChatMediaPicker`
-- `feature.gallery.client.Gallery`
-- `feature.music.client.DiscBayScreen`
 - `feature.music.client.MusicPage`
 - `feature.music.client.playback.OggDecoder`　**★ 被共用代码引用**
 - `feature.notes.client.NoteEditor`
 - `feature.reader.client.source.ExternalBookSource`　**★ 被共用代码引用**
 - `feature.settings.client.DeviceNameEditor`
 - `feature.settings.client.PhoneHudEditor`
-- `feature.settings.client.WallpaperPicker`
 - `feature.terminal.client.TerminalApp`
 - `feature.terminal.client.TerminalSlotClient`
-- `feature.terminal.client.TerminalSlotScreen`
 - `feature.waystone.client.WaystoneApp`
-- `platform.client.Draw`
+- `platform.client.Draw`　**★ 被共用代码引用**
+- `platform.client.SystemFiles`
 
 <!-- 乙 · 1.20.1-forge 结束 -->
