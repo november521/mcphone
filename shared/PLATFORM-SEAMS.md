@@ -160,7 +160,7 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 
 （无）
 
-#### 仅加载器轴（31）
+#### 仅加载器轴（26）
 
 同一加载器的各个 Minecraft 版本可共用；三个加载器之间必然分叉。
 
@@ -173,18 +173,13 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 - `core.ModCreativeTabs` —— 加载器导入
 - `core.ModSounds` —— 加载器导入　**★ 被共用代码引用**
 - `core.ServerConfig` —— 加载器导入　**★ 被共用代码引用**
-- `core.client.AppHotkeyHandler` —— 加载器导入
 - `core.client.AppHotkeys` —— 加载器导入　**★ 被共用代码引用**
 - `core.client.ClientConfig` —— 加载器导入　**★ 被共用代码引用**
-- `core.client.MCphoneKeyBindings` —— 加载器导入　**★ 被共用代码引用**
 - `core.client.PhoneHud` —— 加载器导入　**★ 被共用代码引用**
 - `core.client.PhoneKeyHandler` —— 加载器导入
 - `core.menu.ModMenus` —— 加载器导入　**★ 被共用代码引用**
 - `core.net.NetworkHandler` —— 加载器导入　**★ 被共用代码引用**
-- `core.net.RequestThrottle` —— 加载器导入
 - `feature.camera.client.CameraHandler` —— 加载器导入
-- `feature.chat.ChatImageStore` —— 加载器导入　**★ 被共用代码引用**
-- `feature.chat.ChatImageUploads` —— 加载器导入
 - `feature.chat.client.ChatImageSender` —— 加载器导入　**★ 被共用代码引用**
 - `feature.chat.net.ChatNetworking` —— 加载器导入
 - `feature.music.client.playback.LocalPlayback` —— 加载器导入　**★ 被共用代码引用**

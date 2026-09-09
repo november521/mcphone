@@ -512,13 +512,14 @@ jobs:
             HAS=0
             [ -d "$DIR/src/main/java" ] && HAS=1
             [ -d "$DIR/src/main/resources" ] && HAS=1
+            [ -d "$DIR/docs" ] && HAS=1        # 一个层可以只有 docs/（断言测试按被测对象分层）
             if [ "$POP" = "true" ] && [ "$HAS" = "0" ]; then
-              echo "::error::共享层 $NAME 声明了 populated: true，但 $DIR 下 src/main/java 与 src/main/resources 都不存在（在这次干净检出里）。"
+              echo "::error::共享层 $NAME 声明了 populated: true，但 $DIR 下 src/main/java、src/main/resources 与 docs 都不存在（在这次干净检出里）。"
               echo "要么内容丢了，要么 layers.json 里的 dir 写错了。这一层确实还没开始填的话，把 populated 改成 false。"
               FAIL=1
             fi
             if [ "$POP" = "false" ] && [ "$HAS" = "1" ]; then
-              COUNT=$(find "$DIR/src/main" -type f 2>/dev/null | wc -l | tr -d " ")
+              COUNT=$(find "$DIR/src/main" "$DIR/docs" -type f 2>/dev/null | wc -l | tr -d " ")
               if [ "$COUNT" != "0" ]; then
                 echo "::error::共享层 $NAME 声明了 populated: false，却有 $COUNT 个文件。声明过期了，把 populated 改成 true。"
                 FAIL=1

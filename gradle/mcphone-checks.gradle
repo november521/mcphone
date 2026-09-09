@@ -244,7 +244,21 @@ tasks.named('jar').configure { finalizedBy tasks.named('pruneOldJars') }
 def assertTestsClasses = layout.buildDirectory.dir('classes/assert-tests')
 // 递归而不是只扫顶层：把测试挪进子目录是个再自然不过的整理动作，而顶层写死的
 // '*.java' 遇上它是【静默少跑几份】，不是报错。
-def assertTestsSource = fileTree('../../docs') { include '**/*.java' }
+// 【docs/ 也按层分】
+//
+// docs/ 是仓库级一份，却被【每个平台】编。而里面那几份钉字节的断言测试是照
+// 1.21.1 写的：StreamCodec 那一套 1.20.1 上根本没有，被测的类也住在 1.20.5+ 层里 ——
+// 1.20.1 那个目标一编就是 100 个错，全在 docs/。
+//
+// 判据是【被测对象住在哪一层】，不是测试文件自己有没有版本标记：
+// ChatMessageCodecTest 与 PhoneLocationCodecTest 自己一个标记都没有，但它们测的
+// ChatMessage / PhoneLocation 在 1.20.5+ 层里，1.20.1 不挂那层，自然找不到。
+//
+// 所以每一层都可以有自己的 docs/，跟源码一样按 targets.json 的 layers 接进来。
+def assertTestsSource = files(
+        fileTree('../../docs') { include '**/*.java' },
+        *mcphoneLayers.collect { layer -> fileTree(layer.docsDir) { include '**/*.java' } }
+)
 def projectToolchain = java.toolchain
 
 // 哪几份带 main()：读文件头现判，【不要】在这里维护一张手写清单。
@@ -589,6 +603,14 @@ abstract class SharedNeutralityTask extends DefaultTask {
      * 推不出来，于是资源数按 0 算，populated: true 的层就会被误判成空。踩过。
      */
     @InputDirectory @Optional abstract DirectoryProperty getResourcesDir()
+    /**
+     * 这一层的 docs 目录（带 main() 的断言测试）。
+     *
+     * 一个层可以【只有 docs/】：neoforge 层眼下就是这样，里面只有
+     * AddonApiExamples —— 附属接口文档那份可编译副本，它 import 的 Tags 是
+     * NeoForge 专有的。所以「这一层有没有内容」必须把 docs 也算进去。
+     */
+    @InputDirectory @Optional abstract DirectoryProperty getDocsDir()
     /** 这一层禁哪些轴：'版本' / '加载器'。 */
     @Input          abstract ListProperty<String> getForbiddenAxes()
     /**
@@ -622,12 +644,16 @@ abstract class SharedNeutralityTask extends DefaultTask {
         if (resourceDir != null && resourceDir.isDirectory()) {
             resourceDir.eachFileRecurse { if (it.isFile()) resourceCount++ }
         }
-        boolean hasContent = !files.isEmpty() || resourceCount > 0
+        int docsCount = 0
+        if (docsDir.isPresent() && docsDir.get().asFile.isDirectory()) {
+            docsDir.get().asFile.eachFileRecurse { if (it.isFile()) docsCount++ }
+        }
+        boolean hasContent = !files.isEmpty() || resourceCount > 0 || docsCount > 0
 
         if (populated.get() && !hasContent) {
             throw new GradleException(
                     "${layer}声明了 populated: true，但它的 src/main 下" +
-                    "一个文件都没有（java 0 个、资源 0 个）。\n" +
+                    "一个文件都没有（java 0 个、资源 0 个、docs 0 个）。\n" +
                     "要么内容丢了、要么 layers.json 里的 dir 写错指到了别处 —— " +
                     "'一个都没扫到' 不等于 '没有问题'。\n" +
                     "这一层确实还没开始填的话，把 layers.json 里的 populated 改成 false。")
@@ -635,7 +661,7 @@ abstract class SharedNeutralityTask extends DefaultTask {
         if (!populated.get() && hasContent) {
             throw new GradleException(
                     "${layer}声明了 populated: false，却有内容" +
-                    "（java ${files.size()} 个、资源 ${resourceCount} 个）。\n" +
+                    "（java ${files.size()} 个、资源 ${resourceCount} 个、docs ${docsCount} 个）。\n" +
                     "声明过期了，把 layers.json 里的 populated 改成 true。")
         }
         if (files.isEmpty()) {
@@ -676,7 +702,8 @@ abstract class SharedNeutralityTask extends DefaultTask {
             throw new GradleException(sb.toString())
         }
 
-        logger.lifecycle("${layer}校验通过：${files.size()} 个文件，禁 ${forbidden.join('、')}轴")
+        logger.lifecycle("${layer}校验通过：${files.size()} 个文件，" +
+                (forbidden.isEmpty() ? "两个轴都钉住了，不禁" : "禁 ${forbidden.join('、')}轴"))
     }
 }
 
@@ -711,13 +738,17 @@ tasks.named('check').configure { dependsOn tasks.named('verifySharedIsTargetNeut
 mcphoneLayers.each { layer ->
     def taskName = 'verifyLayer' + layer.name.replaceAll(/[^A-Za-z0-9]/, '_')
     tasks.register(taskName, SharedNeutralityTask) {
-        description = "校验共享层 ${layer.name}（${layer.kind}）里没有" + (layer.kind == '版本层' ? '绑加载器' : '绑版本') + "的东西"
+        description = "校验共享层 ${layer.name}（${layer.kind}）" +
+                (layer.forbiddenAxes.isEmpty() ? '（两个轴都钉住了，不禁）'
+                                               : "里没有绑${layer.forbiddenAxes.join('、')}的东西")
         group = 'verification'
         if (layer.javaDir.isDirectory()) sharedDir.set(layer.javaDir)
         if (layer.resourcesDir.isDirectory()) resourcesDir.set(layer.resourcesDir)
+        if (layer.docsDir.isDirectory()) docsDir.set(layer.docsDir)
         // 【禁的是另一个轴】：版本层挡加载器专有的东西，加载器层挡版本专有的东西。
         // 两种层是对称的，装的正好是对方挡掉的那一半。
-        forbiddenAxes.set(layer.kind == '版本层' ? ['加载器'] : ['版本'])
+        // 禁哪些轴由 mcphone-layers.gradle 按「哪个轴没被钉住」算好，这里只用结果
+        forbiddenAxes.set(layer.forbiddenAxes)
         // 空不空由 layers.json 的 populated 显式声明，不是默认容忍
         populated.set(layer.populated)
         layerName.set("共享层 ${layer.name}")

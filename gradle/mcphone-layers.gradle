@@ -135,29 +135,48 @@ ext.mcphoneLayers = (myEntry.value.layers ?: []).collect { name ->
                 "versions/layers.json 里的层 \"${name}\" 没写 populated。" +
                 "这一层现在该不该有内容必须显式声明 —— 默认容忍空的层等于没有闸。")
     }
-    // 二选一：写 since 是版本层（同版本、三个加载器共用），写 loader 是加载器层
-    // （同加载器、各版本共用）。都不写就不知道该禁哪个轴。
-    if ((spec.since == null) == (spec.loader == null)) {
+    // 【一个层就是对目标的一个谓词】
+    //
+    //   since   钉住版本：Minecraft >= 这个版本的目标才挂
+    //   loader  钉住加载器：这个加载器的目标才挂
+    //
+    // 【禁哪个轴 = 哪个轴没被钉住】：
+    //
+    //   只有 since   该批版本的三个加载器共用 → 禁加载器轴
+    //   只有 loader  该加载器的各个版本共用   → 禁版本轴
+    //   两个都有     该加载器 × 该批版本      → 都不禁（两个轴都钉住了）
+    //   都没有       全部目标                → 都禁，那就是 shared/，不是层
+    //
+    // 【原先禁掉"两个都写"是定窄了】。那不是"两件事挤在一层"，那是【交集层】：
+    // 既绑加载器又绑版本的代码，眼下只能各平台各写一份 —— 而 NeoForge 1.21.1 与
+    // 将来的 NeoForge 1.21.x 之间，那批东西是一样的。第二个同加载器同版本档的目标
+    // 一进来就要复制，正是层要消掉的那种复制。
+    //
+    // 交集层今天【一个都没有】，因为现有两个目标不共用加载器，也不共用版本档。
+    // 规则先放开，目录到有第一个占用者时再建 —— 不预先造空目录。
+    if (spec.since == null && spec.loader == null) {
         throw new GradleException(
-                "versions/layers.json 里的层 \"${name}\" 必须【二选一】写 since 或 loader。" +
-                "两个都没有就不知道这一层该禁哪个轴，两个都写是两件事挤在一层。")
+                "versions/layers.json 里的层 \"${name}\" 既没有 since 也没有 loader。\n" +
+                "层是对目标的谓词，两个都没有就是「全部目标」—— 那是 shared/，不是层。")
     }
-    boolean isVersionLayer = spec.since != null
+    boolean pinsVersion = spec.since != null
+    boolean pinsLoader  = spec.loader != null
 
-    // 两种层分开放，光看目录树就该分得出哪个是哪个
-    def wantSub = isVersionLayer ? 'layers/version/' : 'layers/loader/'
+    // 三种层分开放，光看目录树就该分得出是哪一种
+    def wantSub = (pinsVersion && pinsLoader) ? 'layers/both/'
+                : pinsVersion ? 'layers/version/' : 'layers/loader/'
     if (!spec.dir.startsWith(wantSub)) {
         throw new GradleException(
-                "共享层 \"${name}\" 是${isVersionLayer ? '版本层' : '加载器层'}，" +
+                "共享层 \"${name}\" 是${(pinsVersion && pinsLoader) ? '交集层' : (pinsVersion ? '版本层' : '加载器层')}，" +
                 "它的 dir 应当在 ${wantSub} 下，实际是 ${spec.dir}。")
     }
-    if (!isVersionLayer && spec.loader != myEntry.value.loader) {
+    if (pinsLoader && spec.loader != myEntry.value.loader) {
         throw new GradleException(
                 "目标 ${myEntry.key} 的加载器是 ${myEntry.value.loader}，" +
                 "却挂了加载器层 \"${name}\"（${spec.loader} 的）。\n" +
                 "加载器层里装的是那一个加载器专有的东西，挂错了编不过。")
     }
-    if (isVersionLayer && McphoneVersions.cmp(myEntry.value.minecraft, spec.since) < 0) {
+    if (pinsVersion && McphoneVersions.cmp(myEntry.value.minecraft, spec.since) < 0) {
         throw new GradleException(
                 "目标 ${myEntry.key} 是 Minecraft ${myEntry.value.minecraft}，" +
                 "却挂了共享层 \"${name}\"（自 ${spec.since} 起才有）。\n" +
@@ -167,6 +186,9 @@ ext.mcphoneLayers = (myEntry.value.layers ?: []).collect { name ->
 
     def javaDir = new File(layersRepoRoot, "${spec.dir}/src/main/java")
     def resDir  = new File(layersRepoRoot, "${spec.dir}/src/main/resources")
+    // docs/ 也算这一层的内容：带 main() 的断言测试按「被测对象住在哪一层」分层放，
+    // 一个层可以只有 docs/（neoforge 层眼下就是这样）
+    def docsDir = new File(layersRepoRoot, "${spec.dir}/docs")
     // 【目录在不在，由 populated 说了算】
     //
     // populated: true  —— java 与 resources 至少要有一个在，两个都没有就是内容丢了
@@ -182,23 +204,27 @@ ext.mcphoneLayers = (myEntry.value.layers ?: []).collect { name ->
     // 跨语言（Groovy 与 shell）合不成一份，改这里就要改那里。那一份跑在 CI 的干净
     // 检出上 —— 本地这些目录是 mkdir 出来的一直都在，只有那儿才验得到"克隆下来
     // 有没有"。实测踩过：这里放宽了、那里没跟上，本地全绿而 CI 红。
-    if (spec.populated && !javaDir.isDirectory() && !resDir.isDirectory()) {
+    if (spec.populated && !javaDir.isDirectory() && !resDir.isDirectory() && !docsDir.isDirectory()) {
         throw new GradleException(
                 "共享层 \"${name}\" 声明了 populated: true，但 ${spec.dir} 下" +
-                "src/main/java 与 src/main/resources 都不存在。\n" +
+                "src/main/java、src/main/resources 与 docs 都不存在。\n" +
                 "要么内容丢了，要么 layers.json 里的 dir 写错了（写的是 ${spec.dir}）。\n" +
                 "这一层确实还没开始填的话，把 populated 改成 false。")
     }
 
     [
             name            : name,
-            kind            : isVersionLayer ? '版本层' : '加载器层',
+            kind            : (pinsVersion && pinsLoader) ? '交集层' : (pinsVersion ? '版本层' : '加载器层'),
+            // 禁的是【没被钉住】的那些轴
+            forbiddenAxes   : ((pinsVersion ? [] : ['版本']) + (pinsLoader ? [] : ['加载器'])).asImmutable(),
             javaDir         : javaDir,
             resourcesDir    : resDir,
+            docsDir         : docsDir,
             populated       : spec.populated,
             since           : spec.since,
             // 版本层按自己的 since 判，加载器层跟着挂它的目标走
+            // 数据包单复数：钉住版本就按 since，否则跟着挂它的目标走
             datapackSingular: McphoneVersions.datapackSingular(
-                    isVersionLayer ? spec.since : myEntry.value.minecraft, renamesJson.since),
+                    pinsVersion ? spec.since : myEntry.value.minecraft, renamesJson.since),
     ]
 }

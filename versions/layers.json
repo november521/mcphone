@@ -61,14 +61,14 @@
   "forge": {
     "dir": "layers/loader/forge",
     "loader": "Forge",
-    "populated": false,
-    "note": "Forge 各个 Minecraft 版本共用的代码。与版本轴那几层对称：那边是「同版本、三个加载器共用」，这边是「同加载器、各版本共用」。眼下是空的 —— 本仓只有一个目标建得起来，没有第二个 Forge 目标可以对照，哪些代码在 Forge 的两个版本之间真的一样是猜不出来的。等第二个 Forge 目标并进来，拿它逐文件比对，逐字相同的才搬进来。"
+    "populated": true,
+    "note": "Forge 各个 Minecraft 版本共用的代码。这五个的【正文跨 1.20.1 与 1.21.1 逐字相同】，差异只在加载器 import —— 也就是同一段代码已经在两个 Minecraft 版本上各自编译通过，版本中立是证出来的，剩下那一行 import 正是加载器轴。第二个同加载器目标进来时它们不用再抄一遍。"
   },
   "neoforge": {
     "dir": "layers/loader/neoforge",
     "loader": "NeoForge",
-    "populated": false,
-    "note": "NeoForge 各个 Minecraft 版本共用的代码。与版本轴那几层对称：那边是「同版本、三个加载器共用」，这边是「同加载器、各版本共用」。眼下是空的 —— 本仓只有一个目标建得起来，没有第二个 NeoForge 目标可以对照，哪些代码在 NeoForge 的两个版本之间真的一样是猜不出来的。等第二个 NeoForge 目标并进来，拿它逐文件比对，逐字相同的才搬进来。"
+    "populated": true,
+    "note": "NeoForge 各个 Minecraft 版本共用的代码。这五个的【正文跨 1.20.1 与 1.21.1 逐字相同】，差异只在加载器 import —— 也就是同一段代码已经在两个 Minecraft 版本上各自编译通过，版本中立是证出来的，剩下那一行 import 正是加载器轴。第二个同加载器目标进来时它们不用再抄一遍。 docs/ 里另有 AddonApiExamples —— 附属接口文档那份可编译副本，它 import 的 Tags 是 NeoForge 专有的。"
   },
   "fabric": {
     "dir": "layers/loader/fabric",
