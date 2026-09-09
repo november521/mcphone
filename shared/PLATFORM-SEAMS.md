@@ -187,7 +187,7 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 
 按轴分三组。仅版本轴的一组若不为空，说明有类型应当迁入版本层。
 
-<!-- 下面这段由 ./gradlew updateSeamsDoc 生成，别手改：甲 -->
+<!-- 下面这段由 ./gradlew updateSeamsDoc 生成，别手改：甲 · 1.21.1-neoforge -->
 
 #### 仅版本轴（0）
 
@@ -236,7 +236,7 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 - `feature.music.DiscService` —— 1.20.5+ 原版、加载器导入　**★ 被共用代码引用**
 - `feature.terminal.TerminalCharger` —— 加载器导入、注入的方法　**★ 被共用代码引用**
 
-<!-- 甲 结束 -->
+<!-- 甲 · 1.21.1-neoforge 结束 -->
 
 ### 契约
 
@@ -254,7 +254,7 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 判据自身声明的失效范围内。按清单自上而下迁移，恰好先遇到最需要人工核对的一批，
 故下面将客户端路径单独分组。
 
-<!-- 下面这段由 ./gradlew updateSeamsDoc 生成，别手改：乙 -->
+<!-- 下面这段由 ./gradlew updateSeamsDoc 生成，别手改：乙 · 1.21.1-neoforge -->
 
 #### 非客户端（6）
 
@@ -303,4 +303,179 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 - `feature.terminal.client.TerminalSlotScreen`
 - `feature.waystone.client.WaystoneApp`
 
-<!-- 乙 结束 -->
+<!-- 乙 · 1.21.1-neoforge 结束 -->
+
+---
+
+## 1.20.1-forge
+
+这一节与上面同构，算的是该目标 `platforms/1.20.1-forge/` 下的类型。
+两个目标的数字不同是正常的：1.20.1 不挂 `1.20.5+` 与 `1.21+` 两层，那些类型它自己带一份。
+
+### 甲 · 每个平台各写一份
+
+<!-- 下面这段由 ./gradlew updateSeamsDoc 生成，别手改：甲 · 1.20.1-forge -->
+
+#### 仅版本轴（0）
+
+同一 Minecraft 版本的三个加载器可逐字共用；与 1.20.1 之间必然分叉。
+
+（无）
+
+#### 仅加载器轴（37）
+
+同一加载器的各个 Minecraft 版本可共用；三个加载器之间必然分叉。
+
+- `MCphone` —— 加载器导入　**★ 被共用代码引用**
+- `MCphoneClient` —— 加载器导入
+- `api.client.app.IPhoneApp` —— 加载器导入　**★ 被共用代码引用**
+- `compat.CompatModule` —— 加载器导入
+- `compat.CompatModules` —— 加载器导入
+- `compat.CuriosCompat` —— 加载器导入
+- `compat.IntegratedDynamicsCompat` —— 加载器导入
+- `compat.WaystonesCompat` —— 加载器导入
+- `compat.WaystonesWarpItemModule` —— 加载器导入
+- `core.ModCreativeTabs` —— 加载器导入
+- `core.ModItems` —— 加载器导入
+- `core.ModSounds` —— 加载器导入　**★ 被共用代码引用**
+- `core.PhonePlayerData` —— 加载器导入　**★ 被共用代码引用**
+- `core.PhoneScreenOnCleanup` —— 加载器导入
+- `core.ServerConfig` —— 加载器导入　**★ 被共用代码引用**
+- `core.client.AppHotkeys` —— 加载器导入　**★ 被共用代码引用**
+- `core.client.ClientConfig` —— 加载器导入　**★ 被共用代码引用**
+- `core.client.PhoneHud` —— 加载器导入　**★ 被共用代码引用**
+- `core.client.PhoneKeyHandler` —— 加载器导入
+- `core.menu.ModMenus` —— 加载器导入　**★ 被共用代码引用**
+- `core.net.MCphoneNetwork` —— 加载器导入　**★ 被共用代码引用**
+- `feature.camera.client.CameraHandler` —— 加载器导入
+- `feature.chat.client.ChatImageSender` —— 加载器导入　**★ 被共用代码引用**
+- `feature.music.DiscService` —— 加载器导入　**★ 被共用代码引用**
+- `feature.music.client.playback.LocalPlayback` —— 加载器导入　**★ 被共用代码引用**
+- `feature.reader.client.compat.BookQuirk` —— 加载器导入　**★ 被共用代码引用**
+- `feature.reader.client.source.BookSource` —— 加载器导入　**★ 被共用代码引用**
+- `feature.reader.client.source.GuideMeSource` —— 加载器导入　**★ 被共用代码引用**
+- `feature.reader.client.source.PatchouliSource` —— 加载器导入　**★ 被共用代码引用**
+- `feature.settings.client.AboutPage` —— 加载器导入
+- `feature.settings.client.AppManagerDetail` —— 加载器导入
+- `feature.store.client.CompanionApps` —— 加载器导入
+- `feature.terminal.TerminalSlotSync` —— 加载器导入
+- `feature.terminal.integration.Terminals` —— 加载器导入　**★ 被共用代码引用**
+- `feature.terminal.integration.ae2.Ae2Integration` —— 加载器导入
+- `feature.terminal.integration.ae2.TerminalSlotLocator` —— 加载器导入
+- `platform.ModPresence` —— 加载器导入　**★ 被共用代码引用**
+
+#### 两轴都有（2）
+
+六个目标各不相同。
+
+- `core.ModCapabilities` —— 加载器导入、注入的方法
+- `feature.terminal.TerminalCharger` —— 加载器导入、注入的方法　**★ 被共用代码引用**
+
+<!-- 甲 · 1.20.1-forge 结束 -->
+
+### 乙 · 自动判据没找到阻断
+
+<!-- 下面这段由 ./gradlew updateSeamsDoc 生成，别手改：乙 · 1.20.1-forge -->
+
+#### 非客户端（67）
+
+判据在这批上相对可信。
+
+- `core.PhoneItem`　**★ 被共用代码引用**
+- `core.PhoneItemData`
+- `core.PhoneLocation`　**★ 被共用代码引用**
+- `core.net.NetworkHandler`　**★ 被共用代码引用**
+- `core.net.PhoneScreenOnPacket`　**★ 被共用代码引用**
+- `feature.chat.ChatData`　**★ 被共用代码引用**
+- `feature.chat.ChatMessage`　**★ 被共用代码引用**
+- `feature.chat.FriendData`　**★ 被共用代码引用**
+- `feature.chat.ImageBody`　**★ 被共用代码引用**
+- `feature.chat.MessageBody`
+- `feature.chat.MessageKind`
+- `feature.chat.TextBody`　**★ 被共用代码引用**
+- `feature.chat.net.ChatImageDataPacket`
+- `feature.chat.net.ChatNetworking`
+- `feature.chat.net.ConversationSummary`　**★ 被共用代码引用**
+- `feature.chat.net.FriendRequestPacket`　**★ 被共用代码引用**
+- `feature.chat.net.MarkReadPacket`　**★ 被共用代码引用**
+- `feature.chat.net.NewMessagePacket`
+- `feature.chat.net.OnlinePlayer`　**★ 被共用代码引用**
+- `feature.chat.net.Relation`　**★ 被共用代码引用**
+- `feature.chat.net.RemoveFriendPacket`　**★ 被共用代码引用**
+- `feature.chat.net.RequestChatImagePacket`　**★ 被共用代码引用**
+- `feature.chat.net.RequestConversationsPacket`　**★ 被共用代码引用**
+- `feature.chat.net.RequestMessagesPacket`　**★ 被共用代码引用**
+- `feature.chat.net.RequestOnlinePlayersPacket`　**★ 被共用代码引用**
+- `feature.chat.net.RespondFriendRequestPacket`　**★ 被共用代码引用**
+- `feature.chat.net.SendChatImagePacket`
+- `feature.chat.net.SendChatMessagePacket`　**★ 被共用代码引用**
+- `feature.chat.net.SyncConversationsPacket`
+- `feature.chat.net.SyncMessagesPacket`
+- `feature.chat.net.SyncOnlinePlayersPacket`
+- `feature.chat.net.TeleportToFriendPacket`　**★ 被共用代码引用**
+- `feature.enderchest.net.OpenEnderChestPacket`　**★ 被共用代码引用**
+- `feature.music.DiscState`　**★ 被共用代码引用**
+- `feature.music.NetSong`　**★ 被共用代码引用**
+- `feature.music.menu.DiscBayMenu`
+- `feature.music.net.DiscActionPacket`
+- `feature.music.net.MusicNetworking`
+- `feature.music.net.OpenDiscBayPacket`
+- `feature.music.net.PlayNetSongPacket`
+- `feature.music.net.StopNetSongPacket`
+- `feature.music.net.SyncDiscStatePacket`
+- `feature.notes.Note`　**★ 被共用代码引用**
+- `feature.notes.NotePrinter`　**★ 被共用代码引用**
+- `feature.notes.NoteSummary`　**★ 被共用代码引用**
+- `feature.notes.net.DeleteNotePacket`
+- `feature.notes.net.NotesNetworking`
+- `feature.notes.net.PrintNotePacket`　**★ 被共用代码引用**
+- `feature.notes.net.RequestNoteListPacket`　**★ 被共用代码引用**
+- `feature.notes.net.RequestNotePacket`
+- `feature.notes.net.SaveNotePacket`
+- `feature.notes.net.SyncNoteListPacket`
+- `feature.notes.net.SyncNotePacket`
+- `feature.settings.net.SetDeviceNamePacket`
+- `feature.settings.net.SetWallpaperPacket`
+- `feature.settings.net.SyncWallpaperPacket`
+- `feature.store.PurchasedApps`　**★ 被共用代码引用**
+- `feature.store.net.PurchaseAppPacket`　**★ 被共用代码引用**
+- `feature.store.net.RequestPurchasedAppsPacket`　**★ 被共用代码引用**
+- `feature.store.net.StoreNetworking`
+- `feature.store.net.SyncPurchasedAppsPacket`
+- `feature.terminal.integration.ae2.Ae2wtlibSupport`
+- `feature.terminal.integration.refinedstorage.RefinedStorageIntegration`
+- `feature.terminal.net.SyncTerminalSlotPacket`
+- `feature.terminal.net.TerminalActionPacket`
+- `feature.terminal.net.TerminalNetworking`
+- `feature.waystone.net.OpenWaystoneSelectionPacket`
+
+#### 客户端渲染路径（24）
+
+**判据在这批上最不可信** —— 签名漂移正集中在这里，逐个人工核过再搬。
+
+- `core.client.ImageFolder`　**★ 被共用代码引用**
+- `core.client.PhoneContainerScreen`
+- `core.client.PhoneItemProperties`
+- `core.client.PhoneScreen`　**★ 被共用代码引用**
+- `core.client.PlayerAvatar`　**★ 被共用代码引用**
+- `feature.browser.client.BrowserApp`
+- `feature.browser.client.BrowserScreen`
+- `feature.camera.client.CameraApp`
+- `feature.camera.client.CameraFlash`　**★ 被共用代码引用**
+- `feature.camera.client.CameraMode`　**★ 被共用代码引用**
+- `feature.chat.client.ChatMediaPicker`
+- `feature.gallery.client.Gallery`
+- `feature.music.client.DiscBayScreen`
+- `feature.music.client.MusicPage`
+- `feature.music.client.playback.OggDecoder`　**★ 被共用代码引用**
+- `feature.notes.client.NoteEditor`
+- `feature.reader.client.source.ExternalBookSource`　**★ 被共用代码引用**
+- `feature.settings.client.DeviceNameEditor`
+- `feature.settings.client.PhoneHudEditor`
+- `feature.settings.client.WallpaperPicker`
+- `feature.terminal.client.TerminalApp`
+- `feature.terminal.client.TerminalSlotClient`
+- `feature.terminal.client.TerminalSlotScreen`
+- `feature.waystone.client.WaystoneApp`
+
+<!-- 乙 · 1.20.1-forge 结束 -->

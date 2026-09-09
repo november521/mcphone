@@ -797,10 +797,23 @@ abstract class SeamsDocTask extends DefaultTask {
     @Input          abstract Property<Boolean> getUpdating()
 
     static final String PREFIX = 'com.november.mcphone.'
-    static final String A_BEGIN = '<!-- 下面这段由 ./gradlew updateSeamsDoc 生成，别手改：甲 -->'
-    static final String A_END   = '<!-- 甲 结束 -->'
-    static final String B_BEGIN = '<!-- 下面这段由 ./gradlew updateSeamsDoc 生成，别手改：乙 -->'
-    static final String B_END   = '<!-- 乙 结束 -->'
+
+    /**
+     * 【每个目标一段，不是全仓一段】。
+     *
+     * 这份清单算的是「这个目标的 platforms/ 下有哪些类型」—— 那本来就是<b>按目标</b>的：
+     * 1.21.1-neoforge 算出甲 31 / 乙 37，1.20.1-forge 算出甲 39 / 乙 91，两者都对。
+     * 原先只有一对标记，两个平台各自重写同一段，谁后跑谁说了算，另一个当场红 ——
+     * 第二个目标并进来那天就炸了。
+     *
+     * 现在标记带目标名，每个平台只认、也只改自己那一段。
+     */
+    @Input abstract Property<String> getTargetKey()
+
+    String aBegin() { "<!-- 下面这段由 ./gradlew updateSeamsDoc 生成，别手改：甲 · ${targetKey.get()} -->" }
+    String aEnd()   { "<!-- 甲 · ${targetKey.get()} 结束 -->" }
+    String bBegin() { "<!-- 下面这段由 ./gradlew updateSeamsDoc 生成，别手改：乙 · ${targetKey.get()} -->" }
+    String bEnd()   { "<!-- 乙 · ${targetKey.get()} 结束 -->" }
 
     static String fqcnOf(File root, File f) {
         (root.toPath().relativize(f.toPath()).toString().replace(File.separator, '.')) - ~/\.java$/
@@ -936,12 +949,12 @@ abstract class SeamsDocTask extends DefaultTask {
         return sb.toString().trim() + "\n"
     }
 
-    /** 从文档里读回上一次记下的甲清单（短名）。 */
-    static List<String> recordedA(String doc, File f) {
-        int i = doc.indexOf(A_BEGIN), j = doc.indexOf(A_END)
+    /** 从文档里读回上一次记下的甲清单（短名），只看这个目标那一段。 */
+    List<String> recordedA(String doc, File f) {
+        int i = doc.indexOf(aBegin()), j = doc.indexOf(aEnd())
         if (i < 0 || j < 0 || j < i) return null
         def out = []
-        doc.substring(i + A_BEGIN.length(), j).eachLine { line ->
+        doc.substring(i + aBegin().length(), j).eachLine { line ->
             def m = line =~ /^-\s+`([^`]+)`/
             if (m) out << m[0][1]
         }
@@ -1004,22 +1017,22 @@ abstract class SeamsDocTask extends DefaultTask {
         }
 
         def wanted = replaceBlock(
-                replaceBlock(doc, A_BEGIN, A_END, renderA(r.a), f),
-                B_BEGIN, B_END, renderB(r.b), f)
+                replaceBlock(doc, aBegin(), aEnd(), renderA(r.a), f),
+                bBegin(), bEnd(), renderB(r.b), f)
 
         if (updating.get()) {
             if (doc == wanted) {
-                logger.lifecycle("接缝清单已是最新：甲 ${r.a.size()} 个、乙 ${r.b.size()} 个")
+                logger.lifecycle("接缝清单 ${targetKey.get()} 已是最新：甲 ${r.a.size()} 个、乙 ${r.b.size()} 个")
             } else {
                 f.setText(wanted, 'UTF-8')
-                logger.lifecycle("接缝清单已重写：甲 ${r.a.size()} 个、乙 ${r.b.size()} 个 → ${f}")
+                logger.lifecycle("接缝清单 ${targetKey.get()} 已重写：甲 ${r.a.size()} 个、乙 ${r.b.size()} 个 → ${f}")
             }
             return
         }
 
         if (doc != wanted) {
             throw new GradleException(
-                    "shared/PLATFORM-SEAMS.md 跟源码对不上了。\n" +
+                    "shared/PLATFORM-SEAMS.md 里【${targetKey.get()}】那两段跟源码对不上了。\n" +
                     "现算出来：甲 ${r.a.size()} 个（版本轴 ${r.a.count { TargetNeutrality.axisOf(it[1]) == '版本' }}、" +
                     "加载器轴 ${r.a.count { TargetNeutrality.axisOf(it[1]) == '加载器' }}、" +
                     "两轴 ${r.a.count { TargetNeutrality.axisOf(it[1]) == '两轴' }}）、乙 ${r.b.size()} 个。\n\n" +
@@ -1031,7 +1044,7 @@ abstract class SeamsDocTask extends DefaultTask {
                     "（最后那种里「搬进 shared/」这一半有单独的闸拦着，不会走到这儿。）\n" +
                     "都值得看一眼再提交，不要闭眼重写。")
         }
-        logger.lifecycle("接缝清单与源码一致：甲 ${r.a.size()} 个、乙 ${r.b.size()} 个")
+        logger.lifecycle("接缝清单 ${targetKey.get()} 与源码一致：甲 ${r.a.size()} 个、乙 ${r.b.size()} 个")
     }
 }
 
@@ -1238,6 +1251,7 @@ tasks.register('verifySeamsDocCurrent', SeamsDocTask) {
     layerDirs.setFrom(mcphoneLayers.collect { it.javaDir })
     platformDir.set(file('src/main/java'))
     docFile.set(seamsDoc)
+    targetKey.set(mcphoneTarget.key)
     updating.set(false)
 }
 
@@ -1248,6 +1262,7 @@ tasks.register('updateSeamsDoc', SeamsDocTask) {
     layerDirs.setFrom(mcphoneLayers.collect { it.javaDir })
     platformDir.set(file('src/main/java'))
     docFile.set(seamsDoc)
+    targetKey.set(mcphoneTarget.key)
     updating.set(true)
 }
 
