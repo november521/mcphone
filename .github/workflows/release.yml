@@ -80,9 +80,6 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v5
 
-      - name: Make Gradle wrapper executable
-        run: chmod +x ./gradlew
-
       # ---------------- 版本号 ----------------
       - name: 算出新版本号
         id: ver
