@@ -23,7 +23,13 @@
     "【layers：这个目标挂哪几层共享代码】",
     "层的定义在 versions/layers.json。层名是「这套 API 从哪个 Minecraft 版本开始有」，",
     "所以 1.21.1 与将来的 26.x 都挂 1.20.5+，而 1.20.1 在它之前，一层都不挂。",
-    "各平台的 build.gradle 读这个字段拼出 srcDir，CI 校验这里写的层在 layers.json 里都有。"
+    "各平台的 build.gradle 读这个字段拼出 srcDir，CI 校验这里写的层在 layers.json 里都有。",
+    "",
+    "【buildable 管的是「发不发」，不是「编不编」】",
+    "工程目录存在 = CI 就编它。代码进了仓库却没有任何地方编，等于躺着一份没人验证的",
+    "源码：本地不编（它不是你当前那个平台），CI 也跳过 —— 正是这套结构要消掉的静默。",
+    "buildable: true 另外表示「产物进 Release」。所以一个刚并进来、还没编通的目标是",
+    "buildable: false + 工程目录存在：CI 会编它、会红，但不会把半成品发出去。"
   ],
   "1.20.1-forge": {
     "minecraft": "1.20.1",

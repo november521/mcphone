@@ -1,0 +1,140 @@
+modLoader="javafml"
+loaderVersion="${loader_version_range}"
+license="${mod_license}"
+
+[[mods]]
+modId="${mod_id}"
+version="${mod_version}"
+displayName="${mod_name}"
+authors="${mod_authors}"
+# 描述写在这儿而不是 gradle.properties —— 那个文件按规范是 ISO-8859-1 解码的，
+# 中文放进去取出来就是乱码。理由写在 gradle.properties 里那段注释
+description='''
+把一部能用的智能手机塞进 Minecraft —— 拍照、翻相册、换壁纸、听歌、装 App，
+还能给自己那一部手机起个名。
+
+【这一支是从 Minecraft 1.21.1 + NeoForge 移植过来的，功能已全部就位。】
+'''
+
+# 版本范围从 gradle.properties 来，不写死在这儿：两处各写一份必然会漂，
+# 而漂了的后果是"玩家装的 Forge 明明够新，却被拦下"这种最难查的状态。
+[[dependencies.${mod_id}]]
+    modId="forge"
+    mandatory=true
+    versionRange="${forge_version_range}"
+    ordering="NONE"
+    side="BOTH"
+
+[[dependencies.${mod_id}]]
+    modId="minecraft"
+    mandatory=true
+    versionRange="[${minecraft_version}]"
+    ordering="NONE"
+    side="BOTH"
+
+# 可选联动。mandatory=false 表示"装了就用，没装照跑"，
+# ordering=AFTER 是【必须的】：我们在自己的构造期就要问 ModList 它在不在，
+# 装载顺序若排在它前面，那一问会得到假。漏了这几段不报错，
+# 症状是"明明装了 Curios，手机却挂不上饰品栏"。
+[[dependencies.${mod_id}]]
+    modId="curios"
+    mandatory=false
+    versionRange="[5.14.0,)"
+    ordering="AFTER"
+    side="BOTH"
+
+[[dependencies.${mod_id}]]
+    modId="netmusic"
+    mandatory=false
+    versionRange="*"
+    ordering="AFTER"
+    side="BOTH"
+
+[[dependencies.${mod_id}]]
+    modId="patchouli"
+    mandatory=false
+    versionRange="*"
+    ordering="AFTER"
+    side="BOTH"
+
+# Waystones（传送石碑）—— 装了就多一个「传送石」App，没装则该 App 连应用商店
+# 里都不会出现。
+#
+# 不写下限：兼容层里兜着 Throwable，真碰上对方改了 API，最坏结果是这一个 App
+# 用不了，不是崩服。钉死版本只会误伤用旧版的服主。
+[[dependencies.${mod_id}]]
+    modId="waystones"
+    mandatory=false
+    versionRange="*"
+    ordering="AFTER"
+    side="BOTH"
+
+# Balm —— Waystones 的前置。它自己会把 Balm 拉上，我们不必声明；这里列出来
+# 只是为了 ordering：我们在 FMLCommonSetupEvent 里往 Balm 的事件表上挂东西。
+[[dependencies.${mod_id}]]
+    modId="balm"
+    mandatory=false
+    versionRange="*"
+    ordering="AFTER"
+    side="BOTH"
+
+# MCEF —— 装了就多一个「浏览器」App。
+#
+# side="CLIENT"：它是纯客户端库，专用服务端上根本不该要求它在场。
+# 写 BOTH 的话，服主装了这个模组却没装 MCEF 也不会有事（mandatory=false），
+# 但那句声明本身就是错的 —— 服务端那一侧我们一个字节都不碰它。
+[[dependencies.${mod_id}]]
+    modId="mcef"
+    mandatory=false
+    versionRange="*"
+    ordering="AFTER"
+    side="CLIENT"
+
+# ---- 「终端」App 的三家存储模组 ----
+#
+# 为什么三条都是 mandatory=false 而不是把 AE2 写成必需：这一格要的是"有一家就行"，
+# 而 mods.toml 表达不了"三选一"。三条必需是要求全装；只把 AE2 写成必需又等于把另外
+# 两家降级成陪衬。"至少要有一家"这件事由 TerminalApp.isAvailable() 兜。
+#
+# 都不写下限，和上面 Curios、Waystones 同一个道理：我们用的是各家"替玩家打开这台
+# 终端"的入口（AE2 的 openFromInventory、RS 的 INetworkItemManager.open、
+# Tom's 的 WirelessTerminal.open），都是存在很久的东西，钉死版本只会误伤用旧版的
+# 服主 —— 而版本对不上的代价是"游戏拒绝启动"，比"这一个 App 不好使"严重得多。
+[[dependencies.${mod_id}]]
+    modId="ae2"
+    mandatory=false
+    versionRange="*"
+    # 必须在它之后加载：我们要往它的 locator 注册表里登记"终端在手机卡槽里"
+    ordering="AFTER"
+    side="BOTH"
+
+# AE2WTLib（AE2 无线终端）—— 可选依赖里的可选依赖。没装它照样能开 AE2 自己的
+# 无线终端；装了就必须认它，否则它的终端会被开成【普通】ME 终端（没有合成格），
+# 不崩不报错。见 Ae2wtlibSupport。
+[[dependencies.${mod_id}]]
+    modId="ae2wtlib"
+    mandatory=false
+    versionRange="*"
+    ordering="AFTER"
+    side="BOTH"
+
+# Refined Storage —— 1.20.1 上是 1.12.x（RS 1）。装了就能打开背包里的无线网格、
+# 无线合成监视器与便携网格。
+#
+# 【这一支上 RS 的终端装不进手机卡槽】，那是 RS 1 的 PlayerSlot 没有注册点造成的，
+# 不是配置问题，理由见 RefinedStorageIntegration 的类注释。
+[[dependencies.${mod_id}]]
+    modId="refinedstorage"
+    mandatory=false
+    versionRange="*"
+    ordering="AFTER"
+    side="BOTH"
+
+# Tom's Simple Storage —— 装了就能打开高级无线终端。
+# 基础无线终端认得出但远程开不了，那是它自己的设计，见 TomsStorageIntegration。
+[[dependencies.${mod_id}]]
+    modId="toms_storage"
+    mandatory=false
+    versionRange="*"
+    ordering="AFTER"
+    side="BOTH"

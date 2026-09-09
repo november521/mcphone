@@ -1,0 +1,306 @@
+plugins {
+    id 'eclipse'
+    id 'idea'
+    id 'maven-publish'
+    id 'net.minecraftforge.gradle' version '[6.0.54,6.2)'
+}
+
+// ============================================================
+//  仓库级身份与共用代码
+// ============================================================
+//
+// 这个目标是仓库里的一个平台工程，不是独立仓库。身份信息与共用源码都在上面两级。
+def repoRoot = file('../..')
+def repoPropsFile = new File(repoRoot, 'gradle.properties')
+if (!repoPropsFile.exists()) {
+    throw new GradleException(
+            "找不到 ${repoPropsFile.canonicalPath}。仓库级身份（mod_version 等）在那儿，" +
+            "各平台不许自己定义 —— 所有目标必须是同一个版本号。")
+}
+def repoProps = new Properties()
+repoPropsFile.withInputStream { repoProps.load(it) }
+['mod_id','mod_name','mod_license','mod_group_id','mod_version'].each { k ->
+    if (!repoProps.containsKey(k)) { throw new GradleException("仓库根的 gradle.properties 缺 ${k}") }
+    ext[k] = repoProps.getProperty(k)
+}
+
+// 共享层由配置文件说了算，解析在 gradle/mcphone-layers.gradle 里（只有那一份）
+apply from: "${projectDir}/../../gradle/mcphone-layers.gradle"
+
+
+version = mod_version
+group = mod_group_id
+
+base {
+    archivesName = mod_id
+}
+
+// 17，不是 21。Minecraft 1.20.1 跑在 Java 17 上，用 21 编出来的 class 文件
+// 版本低版本客户端加载不了——而且报的错不会提到 Java 版本。
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(17)
+}
+
+repositories {
+    // Curios 与 NetMusic 都发在 Modrinth 上，官方 maven 与发布同源。
+    // 用 content 把它限定在 maven.modrinth 这一个 group：不限定的话，
+    // 每解析一个依赖都要先来问它一次，构建平白慢一截。
+    // javamp3 在中央仓库
+    mavenCentral()
+
+    maven {
+        name = "Modrinth"
+        url = "https://api.modrinth.com/maven"
+        content {
+            includeGroup "maven.modrinth"
+        }
+    }
+}
+
+// 共用代码：shared/ 全部目标共用，加上这个目标挂的层（见 versions/targets.json）
+sourceSets.main.java.srcDir '../../shared/src/main/java'
+mcphoneLayers.each { layer ->
+    if (layer.javaDir.isDirectory()) sourceSets.main.java.srcDir layer.javaDir
+}
+sourceSets.main.resources {
+    srcDir '../../shared/src/main/resources'
+    mcphoneLayers.each { layer -> srcDir layer.resourcesDir }
+}
+
+minecraft {
+    // 官方混淆表。NeoForge 那一支用的是 Parchment（带参数名，读反编译代码舒服得多），
+    // 这里先不上：Parchment 在 ForgeGradle 上要额外挂 librarian 插件，
+    // 而这个工程眼下最需要的是"能稳定编过"。要加见 docs/PORTING.md。
+    mappings channel: 'official', version: minecraft_version
+
+    runs {
+        client {
+            workingDirectory project.file('run')
+            property 'forge.logging.markers', ''
+            property 'forge.logging.console.level', 'debug'
+            mods {
+                "${mod_id}" {
+                    source sourceSets.main
+                }
+            }
+        }
+
+        server {
+            workingDirectory project.file('run')
+            property 'forge.logging.markers', ''
+            property 'forge.logging.console.level', 'debug'
+            args '--nogui'
+            mods {
+                "${mod_id}" {
+                    source sourceSets.main
+                }
+            }
+        }
+    }
+}
+
+sourceSets.main.resources {
+    srcDir 'src/generated/resources'
+    exclude 'src/generated/**/.cache'
+}
+
+repositories {
+    mavenCentral()
+}
+
+// jarJar 的产物必须是【默认那一个】，否则会出事
+//
+// 开了 jarJar 之后 build/libs 下会有两个 jar：jar 任务出的那个不含内嵌依赖，
+// jarJar 出的那个才含。两条 CI 都是 `find build/libs -name "*.jar" | head -1`
+// 取件的 —— 那个 head -1 挑到谁完全看文件系统顺序，挑错就发出一个
+// 放 mp3 必崩的包，而构建全绿、测试也全绿，没有任何东西会告诉你。
+//
+// 所以把没嵌依赖的那个改名带上 -slim，让它落在 CI 的排除名单里，
+// 内嵌那个占住默认名字。两份 workflow 的 find 也一并加了 -slim 排除。
+tasks.named('jar') {
+    archiveClassifier = 'slim'
+}
+tasks.named('jarJar') {
+    archiveClassifier = ''
+}
+
+
+dependencies {
+
+    // Curios（饰品栏）—— 可选联动：装了就能把手机挂腰上，没装则一切照旧。
+    //
+    // compileOnly 而不是 implementation：只在运行时【如果】Curios 在场才去调它，
+    // 编译期有类型就够了。写成 implementation 会把它变成必需品，没装的玩家
+    // 直接加载失败。所有真调用都关在 CuriosCompat 的 *Internal 方法里，
+    // 由 ModList 在外层判在不在场——那套隔离与 NeoForge 那一支逐字相同。
+    //
+    // fg.deobf 是 ForgeGradle 的规矩：Modrinth 上的是生产 jar，里面对 Minecraft
+    // 的引用是 SRG 名，不过一遍 deobf 就与开发环境的官方混淆表对不上。
+    // 【这一条与 NeoForge 那一支不同】，那边的 ModDevGradle 不需要。
+    //
+    // 不写运行期依赖：ForgeGradle 6 没有 localRuntime 这个配置（那是
+    // ModDevGradle/NeoGradle 的东西）。真要跑饰品栏那条路，把 jar 手动丢进
+    // run/mods 即可。
+    compileOnly fg.deobf("maven.modrinth:curios:${curios_version}")
+
+    // NetMusic（网络音乐机）—— 可选联动：装了就能把它刻出来的 CD 塞进唱片仓。
+    //
+    // 要当心的是它【没有对外的 API 包】：用到的 ItemMusicCD 在它的内部包里。
+    // 所以接触面必须小，别顺手用它别的东西。它改版时断的地方越少越好，而断了
+    // 会是 NoSuchMethodError 这类 Error —— 兼容层里兜的是 Throwable 不是
+    // Exception，正是为了这个。
+    compileOnly fg.deobf("maven.modrinth:net-music:${netmusic_version}")
+
+    // Waystones（传送石碑）—— 可选联动：装了就多一个「传送石」App。
+    //
+    // 【与 NeoForge 那一支不是同一套 API】。那边用的 WaystoneSelectionListBuilder
+    // 在 14.x 上不存在，ModMenus 里也没有 warpStoneSelection，"这次算哪种来源"
+    // 改由 WarpMode 枚举表示。整条路是照着 14.x 的字节码重写的，逐条记在
+    // WaystonesCompat 的类注释里。
+    //
+    // 编译对着【最老】的 1.20.1 可用版本 14.0.0：可选联动挑版本的方向和别处
+    // 相反，往新编译、往旧运行会 NoSuchMethodError，反过来则几乎不会出事。
+    // 用到的 createWaystoneSelection、WarpMode、WaystoneTeleportEvent.Pre、
+    // IWaystoneTeleportContext.setWarpItem 从 14.0.0 到 14.1.20 签名一字未变，
+    // 两头都核过。
+    compileOnly fg.deobf("maven.modrinth:waystones:${waystones_version}")
+
+    // Balm —— Waystones 的前置库，开菜单与挂事件走的都是它。
+    //
+    // 【必须单独列】：它是独立模组，Waystones 的 jar 里没有 net.blay09.mods.balm.*，
+    // 只写 waystones 一条，编译期就找不到 Balm.getNetworking()。
+    compileOnly fg.deobf("maven.modrinth:balm:${balm_version}")
+
+    // MCEF —— 可选联动：装了就多一个「浏览器」App。它把 Chromium 渲染成一张
+    // GL 纹理交给我们，贴四边形那一步是我们自己的事，而【那一步的 API 两边
+    // 完全不同】，重写的就是它，见 BrowserScreen.drawBrowser。
+    //
+    // MCEF 自己的 API 两边一模一样，McefBackend 是逐字搬过来的。
+    //
+    // 不写运行期依赖：它首次运行要下载约 200 MB 的原生库，不该由一次
+    // ./gradlew runClient 顺带触发。真要试浏览器，把 jar 手动丢进 run/mods。
+    compileOnly fg.deobf("maven.modrinth:mcef:${mcef_version}")
+
+    // Patchouli（教程手册）—— 可选联动：装了就多一个「阅读」App。
+    //
+    // 接触面里有三样是它的【内部】类，所以版本挑的是 1.20.1 上最老的那个，
+    // 理由写在 gradle.properties 里。
+    compileOnly fg.deobf("maven.modrinth:patchouli:${patchouli_version}")
+
+    // ---- 「终端」App 的三家存储模组，全是可选联动：装了任意一家这一格才出现 ----
+    //
+    // 三条都编译对着【最老】的 1.20.1 release，理由与 Waystones 那条相同：
+    // 往新编译、往旧运行会 NoSuchMethodError，反过来则几乎不会出事。
+    // 用到的入口在各自的两头都核过字节码，记在各自的联动类注释里。
+
+    // Applied Energistics 2 —— 无线终端、无线合成终端、无线样板访问终端。
+    //
+    // 【与 NeoForge 那一支不是同一代 API】。19.x 把"东西在哪儿"合成了一个
+    // ItemMenuHostLocator；15.x 还是分开的两套（MenuLocator 开菜单，
+    // IMenuItem.getMenuHost 只认背包槽位号），卡槽那条路因此要自己拼一个
+    // WirelessTerminalMenuHost，见 TerminalSlotLocator。
+    compileOnly fg.deobf("maven.modrinth:ae2:${ae2_version}")
+
+    // AE2WTLib（AE2 无线终端）—— 可选联动里的可选联动。
+    //
+    // 【这边直接对整个模组 jar 编译，那边编的是 ae2wtlib_api 构件】：15.x 还没
+    // 把 api 拆成单独的子包与单独的构件（de.mari_023.ae2wtlib.api.* 是后来才有
+    // 的），modmaven 上也就没有 15.x 的 ae2wtlib_api。接触面仍然只有
+    // Ae2wtlibSupport 一个类，与那边一样窄。
+    compileOnly fg.deobf("maven.modrinth:applied-energistics-2-wireless-terminals:${ae2wtlib_version}")
+
+    // Refined Storage —— 1.20.1 上是 1.12.x，也就是 RS【1】。
+    //
+    // 那边对的是 RS 2（2.0.x），两代之间 API 全换了。最要紧的一处后果是
+    // RS 的终端在这一支上【装不进手机卡槽】——1.12 的 PlayerSlot 是个具体类，
+    // 没有注册点。整段推理与实测见 RefinedStorageIntegration 的类注释。
+    compileOnly fg.deobf("maven.modrinth:refined-storage:${refinedstorage_version}")
+
+    // Tom's Simple Storage —— 高级无线终端。
+    //
+    // 三家里唯一一家两支逐字相同的：WirelessTerminal 那个接口在 1.6.1 与 2.4.2
+    // 上是同样三个方法，基础无线终端的 open 仍是一句 return。
+    compileOnly fg.deobf("maven.modrinth:toms-storage:${toms_version}")
+
+    // JavaMP3 —— MP3 解码。【必需】依赖，不是可选联动。
+    //
+    // jarJar 而不是 implementation：模组 jar 不会自动带上第三方库，只写
+    // implementation 的话开发环境跑得起来、发出去的 jar 一放 mp3 就
+    // NoClassDefFoundError。这一条 PORTING.md 里原先列在"还没做的构建侧"。
+    //
+    // 区间写法是 jarJar 的要求：它要知道可接受的版本范围，好在多个模组都
+    // 嵌了同一个库时挑一个共用，而不是各带各的。
+    jarJar(implementation("fr.delthas:javamp3:[${javamp3_version},2.0)")) {
+        jarJar.ranged(it, "[${javamp3_version},2.0)")
+    }
+    minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
+
+    // 还没接的可选联动：FTB Quests。
+    // 它在 1.20.1 上是另一套坐标与另一套 API，见 docs/PORTING.md。
+}
+
+// 整个代码库的注释与 mods.toml 的 description 都是中文，编码必须钉死。
+//
+// 不设的话 javac 与 Gradle 的资源过滤都走【平台默认编码】，而那个值在开发机
+// 与 CI 上未必一样。第一次构建出来的 jar 里 description 就是
+// "æä¸é¨è½ç¨çæºè½ææºå¡è¿ Minecraft" —— UTF-8 的字节被当成 Latin-1
+// 读了一遍，模组列表里显示成一串乱码。
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
+
+// mods.toml 里的版本号从 gradle.properties 来，两处各写一份必然会漂
+tasks.named('processResources', ProcessResources).configure {
+    // 这一行就是治乱码的那一行。expand 会把文件读进来再写出去，
+    // 不指定字符集它用平台默认，中文必然翻车
+    filteringCharset = 'UTF-8'
+
+    var replaceProperties = [
+            minecraft_version      : minecraft_version,
+            forge_version_range    : forge_version_range,
+            loader_version_range   : loader_version_range,
+            mod_id                 : mod_id,
+            mod_name               : mod_name,
+            mod_license            : mod_license,
+            mod_version            : mod_version,
+            mod_authors            : mod_authors,
+    ]
+    inputs.properties replaceProperties
+
+    filesMatching(['META-INF/mods.toml']) {
+        expand replaceProperties
+    }
+}
+
+tasks.named('jar', Jar).configure {
+    manifest {
+        attributes([
+                'Specification-Title'     : mod_id,
+                'Specification-Vendor'    : mod_authors,
+                'Specification-Version'   : '1',
+                'Implementation-Title'    : project.name,
+                'Implementation-Version'  : project.jar.archiveVersion,
+                'Implementation-Vendor'   : mod_authors,
+        ])
+    }
+    finalizedBy 'reobfJar'
+}
+
+// 打包后只留最新三个【版本】的 jar，别让 build/libs 越堆越多。
+//
+// 与 NeoForge 那一支的差别：那边一次构建只出一个 jar，"留最新三个文件"
+// 就等于"留三个版本"。这边开了 jarJar 之后一次出两个（本体 + -slim），
+// 照抄那条规则只够留一轮半 —— 上一个版本的 jar 会被留下来，
+// 而 CI 若还按 find | head -1 取件就可能发出旧版本。
+//
+// 所以这里按【版本】分组再数。CI 那边也一并改成按确切文件名取，
+// ============================================================
+//  共用的构建校验
+// ============================================================
+//
+// SPI 服务文件、dist 隔离、Java 17 兼容、接缝清单、旧 jar 清理、断言测试 ——
+// 这几道闸与 Minecraft 版本、加载器都无关，写在 gradle/mcphone-checks.gradle 里，
+// 各平台共用一份。这个工程原先各有一份内联的，并进来时删掉了：
+// 留着就是两份长得像但会各自长歪的东西，而闸不响正是最难发现的那种坏。
+
+apply from: "${projectDir}/../../gradle/mcphone-checks.gradle"

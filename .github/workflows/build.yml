@@ -52,12 +52,31 @@ jobs:
           echo "仓库版本号：$VERSION"
           mkdir -p dist
 
-          TARGETS=$(jq -r 'to_entries[] | select((.value | type) == "object" and .value.buildable == true) | .key' versions/targets.json)
-          if [ -z "$TARGETS" ]; then
-            echo "::error::versions/targets.json 里一个 buildable 的目标都没有。"
+          # 【编哪些 ≠ 发哪些】
+          #
+          #   工程目录存在  → 编。代码进了仓库就该编得过，不编它等于仓库里躺着
+          #                   一份没有任何地方验证的源码。
+          #   buildable:true → 产物进 dist/，也就是进 Release。
+          #
+          # 原先两件事由 buildable 一个字段管，于是一个"工程已并入、还没建起来"的
+          # 目标【任何地方都不编】—— 本地不编（它不是当前平台）、CI 也跳过。
+          # 那正是这套结构要消掉的那种静默：某个目标没跟上应该当场可见。
+          ALL=$(jq -r 'to_entries[] | select((.value | type) == "object") | .key' versions/targets.json)
+          if [ -z "$ALL" ]; then
+            echo "::error::versions/targets.json 里一个目标都没有。"
             echo "这不是'没有目标'，是那个文件坏了或者被改空了 —— 就这么放行的话这个 job 会永远绿。"
             exit 1
           fi
+          TARGETS=""
+          for T in $ALL; do
+            PROJ=$(jq -r --arg t "$T" '.[$t].project' versions/targets.json)
+            if [ -d "$PROJ" ]; then TARGETS="$TARGETS $T"; fi
+          done
+          if [ -z "$TARGETS" ]; then
+            echo "::error::声明的目标里没有一个的工程目录存在。"
+            exit 1
+          fi
+          echo "要编的目标：$TARGETS"
 
           for T in $TARGETS; do
             PROJ=$(jq -r --arg t "$T" '.[$t].project' versions/targets.json)
@@ -82,10 +101,18 @@ jobs:
             # 残缺包，而构建全绿、测试全绿，没有任何东西会告诉你。
             # mod_version 是这次构建的唯一真值，直接拿它拼名字。
             JAR="$PROJ/build/libs/mcphone-${VERSION}.jar"
-            if [ ! -f "$JAR" ]; then
+            if [ ! -f "$JAR" ] && [ "$(jq -r --arg t "$T" '.[$t].buildable' versions/targets.json)" = "true" ]; then
               echo "::error::没找到 $JAR。$PROJ/build/libs 下现有："
               ls -la "$PROJ/build/libs" || true
               exit 1
+            fi
+            # 【只有 buildable 的产物进 dist/】。编是为了知道它编不编得过，
+            # 发是另一件事：还没建稳的目标不该混进 Release。
+            BUILDABLE=$(jq -r --arg t "$T" '.[$t].buildable' versions/targets.json)
+            if [ "$BUILDABLE" != "true" ]; then
+              echo "编过了，但 buildable 还是 false —— 不进 dist/"
+              echo "::endgroup::"
+              continue
             fi
             # 各目标的 jar 在工程里同名（都是 mcphone-<版本>.jar），收进 dist 时
             # 必须带上目标名，否则后一个会把前一个覆盖掉，而且不报错
