@@ -1,5 +1,6 @@
 package com.november.mcphone.feature.music.menu;
 
+import com.november.mcphone.platform.Slots;
 import com.november.mcphone.core.PhoneItem;
 import com.november.mcphone.core.menu.ModMenus;
 import com.november.mcphone.feature.music.DiscService;
@@ -93,9 +94,7 @@ public class DiscBayMenu extends AbstractContainerMenu {
             if (!moveItemStackTo(moving, DiscBayContainer.SIZE, this.slots.size(), true)) {
                 return ItemStack.EMPTY;
             }
-            // 1.21.1 那边 setByPlayer 收两个参数（新栈 + 旧栈，用来算耐久/音效），
-            // 1.20.1 只收新栈
-            slot.setByPlayer(moving);
+            Slots.setByPlayer(slot, moving, original);
             return original;
         }
 

@@ -258,7 +258,7 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 
 <!-- 下面这段由 ./gradlew updateSeamsDoc 生成，别手改：乙 · 1.21.1-neoforge -->
 
-#### 非客户端（6）
+#### 非客户端（7）
 
 判据在这批上相对可信。
 
@@ -268,6 +268,7 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 - `feature.terminal.integration.ae2.TerminalSlotLocator`
 - `feature.terminal.integration.refinedstorage.RefinedStorageIntegration`
 - `feature.terminal.integration.refinedstorage.TerminalSlotReference`　**★ 被共用代码引用**
+- `platform.Slots`　**★ 被共用代码引用**
 
 #### 客户端渲染路径（31）
 
