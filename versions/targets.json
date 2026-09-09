@@ -1,0 +1,45 @@
+{
+  "_comment": [
+    "支持哪些目标，一处声明。发版时 CI 遍历这里所有 buildable 的条目，逐个构建，",
+    "把全部 jar 挂在同一个 Release 上 —— 一次发版就是所有版本各出一个包。",
+    "",
+    "为什么不用多分支：老版本永远慢半拍。功能落在主力分支上，再靠一轮轮「追平」",
+    "补过去，而那一轮什么时候来没人保证。同一个分支之后，某个版本适配没跟上是",
+    "【当场可见】的，不是过三个月才发现。",
+    "",
+    "各目标的 Gradle 不必相同：java 与 gradle 字段就是用来记这件事的。它们各建各的，",
+    "CI 逐个跑，不必凑成一个构建。"
+  ],
+
+  "1.21.1-neoforge": {
+    "minecraft": "1.21.1",
+    "loader": "NeoForge",
+    "loader_version": "21.1.248",
+    "java": 21,
+    "gradle": "9.2.1",
+    "project": "platforms/1.21.1-neoforge",
+    "buildable": true
+  },
+
+  "1.20.1-forge": {
+    "minecraft": "1.20.1",
+    "loader": "Forge",
+    "loader_version": "47.4.23",
+    "java": 17,
+    "gradle": "8.8",
+    "project": "platforms/1.20.1-forge",
+    "buildable": false,
+    "note": "工程还没搬进来；代码在 1.20.1-forge 分支上，那一支停在 0.12.0-beta.1"
+  },
+
+  "1.21.1-fabric": {
+    "minecraft": "1.21.1",
+    "loader": "Fabric",
+    "loader_version": "0.19.5",
+    "java": 21,
+    "gradle": "9.7.1",
+    "project": "platforms/1.21.1-fabric",
+    "buildable": false,
+    "note": "还没开始。Loom 1.17.20 要求 Gradle >= 9.5，实测 9.7.1 可用"
+  }
+}

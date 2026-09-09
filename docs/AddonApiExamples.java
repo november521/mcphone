@@ -34,12 +34,10 @@ import java.util.function.Consumer;
  * 靠人记得回去改文档是靠不住的，那份文档已经烂过一次——整整一版只写了 IPhoneApp，
  * 而 IPhonePage / PhoneCanvas / 商店 / 代价那几套一个字都没有。
  *
- * 跑法（先 ./gradlew compileJava 生成 build/moddev 的类路径文件）：
- *
- *   CP="build/classes/java/main:build/moddev/artifacts/neoforge-21.1.248-merged.jar:$(tr '\n' ':' < build/moddev/serverLegacyClasspath.txt)"
- *   javac -cp "$CP" -d /tmp/doccheck docs/AddonApiExamples.java
- *
- * 换 NeoForge 版本时上面那个 jar 名要跟着改，它写在 gradle.properties 的 neo_version 里。
+ * 跑法：./gradlew assertTests（在 platforms/<目标名>/ 下），它会把 docs/ 里
+ * 带 main() 的都编好跑一遍。不必手工拼类路径 —— 仓库改成多平台目录之后，
+ * 手工那套写死的相对路径会指向搬家前遗留的旧 build/，编译进去的是过期的类，
+ * 而且不报错。
  */
 public final class AddonApiExamples {
 

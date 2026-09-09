@@ -1,0 +1,379 @@
+// ============================================================
+//  各平台共用的构建校验
+// ============================================================
+//
+// 这个文件由每个平台的 build.gradle 用 apply from 引入，只写一次。
+//
+// 为什么不留在各平台里
+//
+// 这几道闸（SPI 服务文件、dist 隔离、断言测试、Java 17 兼容、旧 jar 清理）与
+// Minecraft 版本、加载器都无关 —— 它们守的是本仓自己的规矩。留在各平台的
+// build.gradle 里，第二个平台进来时就会被复制粘贴一份，然后两份慢慢长歪：
+// 改了一处忘了另一处，而闸不响正是最难发现的那种坏。
+//
+// 【路径约定】这个脚本假定平台工程在 platforms/<目标名>/ 下，即仓库根是 ../..。
+// 下面用 repoRoot 显式算出来并校验，挪了位置会当场失败而不是静默扫空目录 ——
+// 扫空目录的闸永远是绿的。
+def repoRoot = file('../..')
+if (!new File(repoRoot, 'gradle.properties').exists()) {
+    throw new GradleException(
+            "从 ${projectDir} 往上两级找不到仓库根（${repoRoot.canonicalPath} 里没有 " +
+            "gradle.properties）。这个脚本假定平台工程在 platforms/<目标名>/ 下。")
+}
+
+// ============================================================
+//  SPI 服务文件校验
+// ============================================================
+//
+// META-INF/services/ 里写的是全限定类名，纯文本，编译器一个字都不看。类改名
+// 或搬包之后忘了同步这里，构建照样成功，jar 照样能装——只是运行时 ServiceLoader
+// 一个实现都找不到，手机里空空如也，而且不报错。
+//
+// 1.2.11 那次把 128 个文件重排包结构时就差点这么发出去。这个失败模式没有任何
+// 现成的东西挡得住，只能自己在构建期校验一遍：文件里写的每一个类，编译产物里
+// 必须真的存在。
+//
+// 挂在 check 上而不是只在发版时跑：这种错要在本地 build 就炸出来，而不是等到
+// CI 或者玩家装上之后。
+tasks.register('verifyServiceFiles') {
+    description = '校验 META-INF/services 里写的类都真实存在'
+    group = 'verification'
+
+    dependsOn tasks.named('compileJava')
+
+    def servicesDir = file('../../shared/src/main/resources/META-INF/services')
+    def classesDir = layout.buildDirectory.dir('classes/java/main')
+
+    inputs.dir(servicesDir).optional()
+    inputs.dir(classesDir).optional()
+
+    doLast {
+        // 目录不在就是【发现逻辑坏了】，不是"没有 SPI 文件"。
+        //
+        // 这道闸刚刚跨过一次目录边界（services 从平台挪进了 shared），还会再跨：
+        // 1.20.1 那支可能要自己的一份。悄悄早退的话，这道闸会一声不响地全绿，
+        // 唯一的信号是末尾那行"校验通过：N 个类"消失 —— 而没有任何东西盯着它出现。
+        //
+        // 它守的东西比别的闸更狠：SPI 文件里写的是全限定类名，编译器一个字都不看，
+        // 对不上的后果是运行时 ServiceLoader 一个实现都找不到、手机里空空如也，
+        // 【而且不报错】。与 assertTests 那条"一份都没找到就抛"同一个道理。
+        // 实测：目录整个不在时，Gradle 自己的输入校验会先于这里报错（信息也够清楚），
+        // 所以下面这句实际只在输入校验被放宽时才轮得到。留着不删 —— 它是这条判据的
+        // 落笔处，而"目录在但空了"那条（见下面 total == 0）用的就是同一个理由。
+        if (!servicesDir.exists()) {
+            throw new GradleException(
+                    "找不到 ${servicesDir}。这不是\"没有 SPI 文件\"，是这道闸的路径过期了 —— " +
+                    "services 目录挪过位置，闸没跟上。就这么放行的话它会永远全绿。")
+        }
+
+        def missing = []
+        def total = 0
+        servicesDir.eachFile { f ->
+            f.eachLine('UTF-8') { line ->
+                def cls = line.replaceAll('#.*', '').trim()
+                if (cls.isEmpty()) return
+                total++
+                def classFile = classesDir.get().file(cls.replace('.', '/') + '.class').asFile
+                if (!classFile.exists()) {
+                    missing << "${f.name} -> ${cls}"
+                }
+            }
+        }
+
+        if (!missing.isEmpty()) {
+            throw new GradleException(
+                    "META-INF/services 里有 ${missing.size()} 个类不存在（多半是改名或搬包后忘了同步）:\n  "
+                            + missing.join('\n  '))
+        }
+        if (total == 0) {
+            throw new GradleException(
+                    "${servicesDir} 里一个类名都没读到。理由同上：空目录的闸永远是绿的。")
+        }
+        logger.lifecycle("SPI 服务文件校验通过：${total} 个类全部存在")
+    }
+}
+
+tasks.named('check').configure { dependsOn tasks.named('verifyServiceFiles') }
+
+// ============================================================
+//  dist 隔离校验
+// ============================================================
+//
+// 专用服务器上没有客户端类。NeoForge 的 RuntimeDistCleaner 在加载
+// net.minecraft.client.* 时直接抛异常——而触发它的不是"执行到了那句代码"，
+// 是"JVM 校验那个类"。一个类只要【常量池里写着】客户端类型，哪怕那段代码被
+// isClientSide() 挡得死死的、服务端永远执行不到，只要它在服务端被加载，
+// 就会当场崩服。1.0.44 就是这么把一台 453 个模组的服务器打崩的。
+//
+// 1.2.11 重排包结构之后，这条界线终于能用一条规则表达：
+//
+//     路径里有 /client/ 的类才准引用客户端类型，其余一概不准。
+//
+// 原来靠 gui/ 与 client/ 两个顶层包名判断，而 gui/app/BrowserApp 这种东西
+// 靠包名根本推断不出该不该算客户端——现在是断言，不是推断。
+//
+// 校验直接在 .class 字节里搜常量池：类型名在常量池里以 modified-UTF8 存着，
+// 原样搜字符串就够，不必解析 class 结构。这比读源码可靠——import 看不出
+// 校验期会加载什么。
+tasks.register('verifyDistIsolation') {
+    description = '校验非 client 包的类没有引用客户端类型'
+    group = 'verification'
+
+    dependsOn tasks.named('compileJava')
+
+    // 客户端专属的标记：常量池里出现这些就说明这个类碰了客户端
+    def clientMarkers = [
+            'net/minecraft/client/',
+            'com/mojang/blaze3d/',
+            'com/cinemamod/mcef',
+            'org/cef/',
+    ]
+
+    // 白名单。加进来的每一条都要写清楚为什么它是安全的
+    def allowed = [
+            // 客户端入口，@Mod(dist = Dist.CLIENT) 标注，服务端根本不会构造它
+            'com/november/mcphone/MCphoneClient.class',
+    ]
+
+    def classesDir = layout.buildDirectory.dir('classes/java/main')
+    inputs.dir(classesDir).optional()
+
+    doLast {
+        def root = classesDir.get().asFile
+        if (!root.exists()) return
+
+        def offenders = []
+        def checked = 0
+
+        root.eachFileRecurse { f ->
+            if (!f.name.endsWith('.class')) return
+            def rel = root.toPath().relativize(f.toPath()).toString().replace('\\', '/')
+            if (rel.contains('/client/')) return          // 这些包本来就准
+            if (allowed.contains(rel)) return
+            checked++
+
+            def bytes = f.getBytes()
+            def text = new String(bytes, 'ISO-8859-1')    // 逐字节，不解码
+            def hit = clientMarkers.find { text.contains(it) }
+            if (hit != null) {
+                offenders << "${rel}  （引用了 ${hit}）"
+            }
+        }
+
+        if (!offenders.isEmpty()) {
+            throw new GradleException(
+                    "dist 隔离被破坏：${offenders.size()} 个非 client 包的类引用了客户端类型。\n"
+                            + "这些类一旦在专用服务器上被加载就会当场崩服。\n  "
+                            + offenders.join('\n  '))
+        }
+        logger.lifecycle("dist 隔离校验通过：${checked} 个非 client 类，无一引用客户端类型")
+    }
+}
+
+tasks.named('check').configure { dependsOn tasks.named('verifyDistIsolation') }
+
+// ============================================================
+//  build/libs 只留最新三个 jar
+// ============================================================
+//
+// 每个改动都会把补丁号 +1，而 jar 任务从不清理旧产物：一天下来 build/libs 里
+// 躺着十几个只差一个补丁号的 jar。往服务器传的时候要在里面认哪个是最新的，
+// 认错一次就是把旧版本发上去，而那种事在服务器上表现成"改的东西没生效"，
+// 没人会想到是传错了文件。
+//
+// 留三个而不是一个：最新的那个是要传的，前两个是出事时立刻退回去的退路。
+//
+// 按文件时间排，不按版本号——版本号在这里是字符串，1.7.9 会排到 1.7.36 后面去。
+// 挂在 jar 的 finalizedBy 上：不管是 jar、assemble 还是 build，只要真打出了包就顺手清一次。
+tasks.register('pruneOldJars') {
+    description = 'build/libs 里只留最新的三个 jar'
+    group = 'build'
+
+    // 这两个要在配置期取好：doLast 里碰 project 会让配置缓存失效
+    def libsDir = layout.buildDirectory.dir('libs')
+    def prefix = "${mod_id}-"
+    def keep = 3
+
+    doLast {
+        def dir = libsDir.get().asFile
+        if (!dir.exists()) return
+
+        def jars = dir.listFiles({ File f ->
+            f.isFile() && f.name.startsWith(prefix) && f.name.endsWith('.jar')
+        } as FileFilter)
+        if (jars == null || jars.length <= keep) return
+
+        jars.toList()
+                .sort { a, b -> b.lastModified() <=> a.lastModified() }
+                .drop(keep)
+                .each {
+                    logger.lifecycle("删掉旧 jar：${it.name}")
+                    it.delete()
+                }
+    }
+}
+
+tasks.named('jar').configure { finalizedBy tasks.named('pruneOldJars') }
+
+// ============================================================
+//  断言测试
+// ============================================================
+//
+// docs/ 下那几份 *Test.java 是带 main() 的独立断言测试。不用 JUnit 是因为
+// 它们要的是【真实的 Minecraft 类路径】——NbtOps、FriendlyByteBuf、UUIDUtil
+// 都是真货，测的就是"这些东西凑在一起对不对"，换成 mock 就什么都没测到。
+// 每份自己数断言、自己汇总，失败时 System.exit(1)。
+//
+// 它们守的是没有别的守卫的地方：ChatMessage 的存档格式（整份聊天记录是一个
+// Codec 解出来的，中间一条读不懂，结果不是"少一条消息"而是全服记录一起消失）、
+// GIF 拆帧、图片编码、会话键、天气与世界时钟的取值。这几样出事时都是静默的。
+//
+// 【问题是它们一直没进构建】。跑法写在各自的类注释里，靠人手动 javac + java
+// 跑一遍——也就是说没人跑的时候，它们等于不存在。十二万条断言全绿过，但那是
+// 某一次、某个人、在自己机器上的事。
+//
+// 现在挂在 check 上，跟着每一次 ./gradlew build 跑。
+//
+// ⚠ 仓库改成 platforms/<目标名>/ 之后，workflow 还没跟上（它们仍在找仓库根的
+// ./gradlew）。发版要改成"遍历 versions/targets.json 里所有 buildable 的目标、
+// 逐个构建、把全部 jar 挂在同一个 Release 上"，那一轮之前 CI 是红的。
+//
+// docs/AddonApiExamples.java 没有 main()，所以只编不跑——而"编得过"本身就是
+// 它该受的那道校验：对外 API 的示例代码不能是编不过的。
+
+def assertTestsClasses = layout.buildDirectory.dir('classes/assert-tests')
+// 递归而不是只扫顶层：把测试挪进子目录是个再自然不过的整理动作，而顶层写死的
+// '*.java' 遇上它是【静默少跑几份】，不是报错。
+def assertTestsSource = fileTree('../../docs') { include '**/*.java' }
+def projectToolchain = java.toolchain
+
+// 哪几份带 main()：读文件头现判，【不要】在这里维护一张手写清单。
+// 加了一份测试却忘了往清单里补，症状是"构建绿的，但那份根本没跑"——
+// 而这整节存在的理由，就是不再让"没人跑"这件事悄悄发生。
+def assertTestMains = assertTestsSource.files.toSorted { it.name }.findResults { f ->
+    def text = f.getText('UTF-8')
+    // 修饰符顺序不固定（static public void main 一样合法），所以两个词分开断言，
+    // 不写成一串固定顺序——写死的那种漏掉时也是静默的
+    if (!(text =~ /(?m)^\s*(?=[^\n]*\bpublic\b)(?=[^\n]*\bstatic\b)[^\n]*\bvoid\s+main\s*\(/)) return null
+    def pkg = (text =~ /(?m)^\s*package\s+([\w.]+)\s*;/)
+    def simple = f.name - '.java'
+    // 没写 package 的就是默认包，类名本身即全限定名。这里【不能】返回 null 悄悄丢掉它 ——
+    // 那等于给这一节留了个"有测试但不跑"的后门
+    (pkg ? "${pkg[0][1]}.${simple}" : simple).toString()
+}
+
+// 一份都没找到时怎么办，见下面 assertTests 的 doFirst：
+// 【绝不能】当成"没有测试"往下走。
+
+tasks.register('compileAssertTests', JavaCompile) {
+    description = '编译 docs/ 下的断言测试与 API 示例'
+    group = 'verification'
+
+    source = assertTestsSource
+    // 主源码的产物 + 它的编译类路径：与各测试类注释里那条手写的 javac 命令等价
+    classpath = files(sourceSets.main.output, sourceSets.main.compileClasspath)
+    destinationDirectory = assertTestsClasses
+    javaCompiler = javaToolchains.compilerFor(projectToolchain)
+}
+
+// 一份测试一个 JavaExec 任务，而不是在 doLast 里 javaexec ——
+// 后者在配置缓存下不成立（本工程 org.gradle.configuration-cache=true）。
+def assertTestTasks = assertTestMains.collect { fqcn ->
+    def simple = fqcn.substring(fqcn.lastIndexOf('.') + 1)
+    tasks.register("assertTest${simple}", JavaExec) {
+        description = "跑 ${simple}"
+        group = 'verification'
+        dependsOn tasks.named('compileAssertTests')
+        classpath = files(assertTestsClasses, sourceSets.main.output, sourceSets.main.compileClasspath)
+        mainClass = fqcn
+        javaLauncher = javaToolchains.launcherFor(projectToolchain)
+    }
+}
+
+tasks.register('assertTests') {
+    description = '跑 docs/ 下所有带 main() 的断言测试'
+    group = 'verification'
+    dependsOn assertTestTasks
+
+    def names = assertTestMains.collect { it.substring(it.lastIndexOf('.') + 1) }
+
+    // 一份都没发现，绝不能当成"没有测试"就放行。
+    //
+    // 发现逻辑坏掉的方式不需要多离奇：docs/ 改个名、测试整体搬走、上面那个正则被
+    // 一次格式化打断。而它坏掉之后 compileAssertTests 是 NO-SOURCE、这个任务没有
+    // 任何依赖，check 照样全绿 —— 十二万条断言一条没跑，没有任何东西会告诉你。
+    // 「手写清单漏一条」与「整张清单为空」是同一个病的两种得法，这一节两种都要堵。
+    //
+    // 放在 doFirst 而不是配置期：配置期抛会连 ./gradlew tasks 和 IDE 的工程同步
+    // 一起打死，而这道断言只在"真要跑测试"时才有意义。挂在 check 上，CI 照样跑得到。
+    doFirst {
+        if (names.isEmpty()) {
+            throw new GradleException(
+                    'docs/ 下一份带 main() 的断言测试都没找到。\n' +
+                    '这不是"没有测试"，是发现逻辑坏了：文件被挪走或改名，或者判 main() 的那个正则失效了。\n' +
+                    '就这么放行的话 check 会全绿，而断言一条都没跑。')
+        }
+    }
+
+    // 把"跑了几份、跑了哪几份"印出来。上面那条只挡得住"一份都没有"，
+    // 少跑几份仍然是静默的 —— 这一行是留给人看的那道防线，CI 日志里翻得到
+    doLast { logger.lifecycle("断言测试 ${names.size()} 份跑完：${names.join('、')}") }
+}
+
+tasks.named('check').configure { dependsOn tasks.named('assertTests') }
+
+// ============================================================
+//  Java 17 兼容校验
+// ============================================================
+//
+// 1.20.1 那一支跑在 Java 17 上。源码里一旦出现 18~21 才有的东西，那一支就编不过，
+// 而这边（21）编得好好的，什么都不会说。
+//
+// 做法：同一份源码、同一份类路径，加 --release 17 再编一遍。
+//
+// 为什么是 --release，不是 -source/-target，也不是 grep
+//
+// -source 17 -target 17 【只管语法】。实测（JDK 21 的 javac）：List.getFirst()、
+// Math.ceilDiv、HashMap.newHashMap、Math.clamp、StringBuilder.repeat 这五个
+// 18~21 新增的库方法，-source/-target 一个都不拦，--release 17 五个全拦 ——
+// 差别在于 --release 会把 java.* 的签名换成 17 那一版，前者仍拿当前 JDK 的解析。
+//
+// 这里原先是五条正则（Math.clamp、记录模式、类型模式、when 守卫、字符串模板）。
+// 它有三个躲不掉的毛病：
+//
+//   覆盖不全  SequencedCollection 那一组（IDE 会主动建议把 get(0) 换成 getFirst()）、
+//             instanceof 里的记录模式、case null、case List<String> l 这种带泛型的、
+//             以及 18~21 一堆别的库方法 —— 每一条都得单独追一遍，追漏了是静默的
+//   会误报    扫的是原始行，注释里举个反例说明"别这么写"就把 CI 弄红了
+//   会写歪    正则本身没有任何东西守着，而它是唯一的守卫
+//
+// javac 三样都没有：它认的是真正的语法树和真正的 java.* 签名。
+//
+// 一条曾经的顾虑，实测不成立：以为"MC 的类文件是 65 版，--release 17 用不了"。
+// --release 只换 java.* 的签名，不碰用户 classpath —— 拿真的
+// neoforge-21.1.248-merged.jar 加 --release 17 编全树，266 个文件，退出码 0。
+//
+// 这个任务只保证【能编】，不保证行为一致：两个版本上同一段代码可能编得过、
+// 跑出来不一样（1.20.1 上没有 ByteBufCodecs/StreamCodec 这类东西，那些地方仍然
+// 要各写各的）。真正的等价性靠那一支自己的 build 与断言测试。
+// ⚠ 【拆分完成后要把它收窄到 shared/】。现在 sourceSets.main.java 既含 shared/
+// 也含平台自己那 240 个文件，一起扫是对的 —— 那 240 个绝大多数最终都要进 shared。
+// 但等平台目录里真的只剩 NeoForge 1.21.1 专有代码时，再禁止它用 Java 21 的东西
+// 就是纯成本：那些代码 1.20.1 永远看不见，而这一支本来就跑在 21 上。
+// 到那时把 source 改成只扫 shared/ 与 docs/。
+//
+// 写在这儿是因为：将来有人被这道闸拦住时，第一反应会是"这闸没道理，关掉吧"。
+tasks.register('verifyJava17Compatible', JavaCompile) {
+    description = '拿 --release 17 把源码再编一遍：1.20.1 那一支跑在 17 上'
+    group = 'verification'
+
+    // docs/ 一起编：AddonApiExamples 是给附属作者照抄的示例，那几份断言测试也要
+    // 跟着移植过去，它们带头用 21 的东西一样是坑
+    source = files(sourceSets.main.java, assertTestsSource)
+    classpath = sourceSets.main.compileClasspath
+    destinationDirectory = layout.buildDirectory.dir('classes/java17-check')
+    options.release = 17
+    javaCompiler = javaToolchains.compilerFor(projectToolchain)
+}
+
+tasks.named('check').configure { dependsOn tasks.named('verifyJava17Compatible') }

@@ -23,14 +23,12 @@ import java.util.UUID;
  * 读不懂，解出来的就不是"少一条消息"，而是一个 error —— 全服的聊天记录一起消失，
  * 而且是在服主升级或回退版本的那一刻，谁也没看着。
  *
- * 这个测试要 Minecraft 的类（UUIDUtil、NbtOps），所以不能像 ConversationKeyTest 那样
- * 光用 javac 编。跑法（先 ./gradlew compileJava 生成 build/moddev 的类路径文件）：
+ * 这个测试要 Minecraft 的类（UUIDUtil、NbtOps），所以不能像 ConversationKeyTest 那样光用 javac 编。
  *
- *   CP="build/classes/java/main:build/moddev/artifacts/neoforge-21.1.248-merged.jar:$(tr '\n' ':' < build/moddev/serverLegacyClasspath.txt)"
- *   javac -cp "$CP" -d /tmp/cmc docs/ChatMessageCodecTest.java
- *   java -cp "/tmp/cmc:$CP" com.november.mcphone.feature.chat.ChatMessageCodecTest
- *
- * 换 NeoForge 版本时上面那个 jar 名要跟着改，它写在 gradle.properties 的 neo_version 里。
+ * 跑法：./gradlew assertTests（在 platforms/<目标名>/ 下），它会把 docs/ 里
+ * 带 main() 的都编好跑一遍。不必手工拼类路径 —— 仓库改成多平台目录之后，
+ * 手工那套写死的相对路径会指向搬家前遗留的旧 build/，编译进去的是过期的类，
+ * 而且不报错。
  */
 public class ChatMessageCodecTest {
 

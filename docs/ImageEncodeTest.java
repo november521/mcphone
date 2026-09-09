@@ -31,18 +31,11 @@ import java.util.Random;
 /**
  * 发图那条路的断言测试：压缩的结果、透明通道、以及"同一张只压一次"的缓存。
  * 要 Minecraft 的类路径（ImageCodec 引了 NativeImage），照着下面两行跑：
- *   CP="build/classes/java/main:build/moddev/artifacts/neoforge-21.1.248-merged.jar:$(tr '\n' ':' &lt; build/moddev/serverLegacyClasspath.txt)"
- *   javac -cp "$CP" -d /tmp/ie docs/ImageEncodeTest.java &amp;&amp; java -cp "/tmp/ie:$CP" com.november.mcphone.feature.chat.client.ImageEncodeTest
  *
- * 守着的几件事：
- *   1. 表情的透明底不能变成黑底——玩家在表情页看到的与发出去的必须是同一张；
- *   2. 截图不能白留一个 alpha 通道，这条路上每个字节都要过网络；
- *   3. 压不进上限的自动降档，最后一定 ≤ MAX_BYTES、长边 ≤ MAX_SIDE；
- *   4. 同一个文件第二次发直接拿缓存，文件被换掉之后缓存要失效；
- *   5. 动图拆帧之后，第几帧就摆在第几格——发件人怎么摆，收件人就怎么取，差一列满屏错位；
- *   6. 压出来的东西服务端收得下（ChatImageStore.looksLikePng）——两边各有一套上限，对不上就发不出去。
- *
- * 测不了的：所有会写日志的失败路径。MCphone.LOGGER 一碰就要初始化模组主类，而那要 FML。
+ * 跑法：./gradlew assertTests（在 platforms/<目标名>/ 下），它会把 docs/ 里
+ * 带 main() 的都编好跑一遍。不必手工拼类路径 —— 仓库改成多平台目录之后，
+ * 手工那套写死的相对路径会指向搬家前遗留的旧 build/，编译进去的是过期的类，
+ * 而且不报错。
  */
 public class ImageEncodeTest {
 

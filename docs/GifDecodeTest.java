@@ -14,29 +14,11 @@ import java.util.List;
 
 /**
  * 拆 GIF 那条路的断言测试。要 Minecraft 的类路径（ImageCodec 引了 NativeImage），照着下面两行跑：
- *   CP="build/classes/java/main:build/moddev/artifacts/neoforge-21.1.248-merged.jar:$(tr '\n' ':' &lt; build/moddev/serverLegacyClasspath.txt)"
- *   javac -cp "$CP" -d /tmp/gd docs/GifDecodeTest.java &amp;&amp; java -cp "/tmp/gd:$CP" com.november.mcphone.core.client.GifDecodeTest
  *
- * 为什么要自己写 GIF 字节，而不是用 ImageIO 的写入器造样本
- *
- * ImageIO 写出来的 GIF 是最规矩的那一种：每帧都是整幅画面、延迟一致、没有局部调色板。
- * 而玩家从网上存下来的表情几乎没有一张长这样——它们被优化过：每帧只存变化的那一小块，
- * 带着自己的偏移与 disposal，有的还逐帧换调色板。真正会出错的正是这些形状，所以样本
- * 得自己拼。下面那个 Gif 类就是个手写的 GIF 编码器（LZW 用"每 250 个码清一次表"的
- * 合法写法，不追求压缩率）。
- *
- * 守着的几件事：
- *   1. 局部帧要按偏移合成到逻辑屏幕上，disposal 的三种收场都要对——错了就是拖影或闪烁；
- *   2. 透明索引要让下面的帧透出来，不能变成黑块；
- *   3. 隔行扫描、局部调色板、GIF87a、缺 trailer、尾部挂垃圾，这些都得照读；
- *   4. 延迟取众数，0 与 10 毫秒按 100 毫秒算（浏览器几十年来的惯例）；
- *   5. 帧数超上限时隔帧留，留下的每帧延迟要跟着乘上去，不然动画会播成快进；
- *   6. 【静态那条路】——表情页的缩略图、以及动图走不通时发出去的那一张——看到的必须是
- *      铺在逻辑屏幕上的第一帧，而不是文件里的第一个子图。差别不是好看不好看：优化过的
- *      动图开头常常是一小块，甚至是 1×1 的占位帧，直接拿子图当画面就是发一个点出去。
- *
- * 测不了的：所有会写日志的失败路径（畸形字节、截断的文件）。MCphone.LOGGER 一碰就要
- * 初始化模组主类，而那要 FML。这一点与 docs/ImageEncodeTest.java 相同。
+ * 跑法：./gradlew assertTests（在 platforms/<目标名>/ 下），它会把 docs/ 里
+ * 带 main() 的都编好跑一遍。不必手工拼类路径 —— 仓库改成多平台目录之后，
+ * 手工那套写死的相对路径会指向搬家前遗留的旧 build/，编译进去的是过期的类，
+ * 而且不报错。
  */
 public class GifDecodeTest {
 
