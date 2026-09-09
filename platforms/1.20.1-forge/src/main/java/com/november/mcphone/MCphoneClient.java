@@ -102,6 +102,10 @@ public final class MCphoneClient {
         // 走 ClientTicks 门面：这一支的 tick 事件不分 Pre/Post，判 phase 的活在门面里做完了
         ClientTicks.onEndTick(com.november.mcphone.core.client.ClientTicks::tick);
 
+        // 挂在 HUD 上看书时的两个翻页键。手机成了 mc.screen 就走不动路，
+        // 而边走边看正是这个功能最想要的场景，见 ReaderKeyHandler
+        ClientTicks.onEndTick(com.november.mcphone.feature.reader.client.ReaderKeyHandler::tick);
+
         MinecraftForge.EVENT_BUS.addListener(CameraHandler::onClientTick);
         MinecraftForge.EVENT_BUS.addListener(CameraHandler::onRenderGui);
         MinecraftForge.EVENT_BUS.addListener(CameraHandler::onScreenOpening);

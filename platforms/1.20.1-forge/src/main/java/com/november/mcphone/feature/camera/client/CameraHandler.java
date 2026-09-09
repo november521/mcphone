@@ -45,9 +45,14 @@ public final class CameraHandler {
         // 上一帧已是不含取景框的干净画面，可以抓取了
         if (CameraMode.shouldGrabNow()) {
             CameraMode.finishCapture();
-            Screenshot.grab(mc.gameDirectory, mc.getMainRenderTarget(), msg -> {
-                if (mc.player != null) mc.player.displayClientMessage(msg, true);
-            });
+            // 坐标写进文件名：相册那一行读的就是它（见 CameraStamp.coordsIn）。
+            // 这一支还画不了烧进像素的那一半，理由见本类注释里 hideGui 那一段
+            Screenshot.grab(mc.gameDirectory,
+                    CameraStamp.fileName(mc.gameDirectory, mc.player),
+                    mc.getMainRenderTarget(),
+                    msg -> {
+                        if (mc.player != null) mc.player.displayClientMessage(msg, true);
+                    });
         }
 
         // 退出优先于拍照：同一 tick 内两键同时按下时以退出为准
