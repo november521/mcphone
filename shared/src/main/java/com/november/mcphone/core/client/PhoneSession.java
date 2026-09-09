@@ -53,11 +53,12 @@ public final class PhoneSession {
         // 加好友是个临时页，它的搜索框每次 open 都清空，续开会停在一个空搜索页上，
         // 看着像坏了。记成它的上一级——会话列表。
         //
-        // 正在读的那本 txt 同理记成书架：那一页攥着整本书的文本，关机时必须放掉
-        // （见 TxtReaderPage.close），下次开机没有可续的东西，停在书架上最贴近
+        // 【子页记成它的上一级，这一步在调用方做】：不是每个目标都有同一批 Mode
+        // （正在读的那本 txt 就只有一部分目标有那一页），而"哪些 Mode 存在"是那一侧的知识。
+        // 这里点名一个别的目标没有的常量，那个目标连 shared/ 都编不过。所以调用方传进来的
+        // 已经是"能续开的那一页"，见各目标 PhoneScreen 里调 save 的那一句。
         savedMode = switch (mode) {
             case CHAT_ADD_CONTACT -> PhoneScreen.Mode.CHAT;
-            case TXT_BOOK -> PhoneScreen.Mode.READER;
             default -> mode;
         };
         savedPeer = savedMode == PhoneScreen.Mode.CHAT_CONVERSATION ? conversationPeer : null;
@@ -98,7 +99,7 @@ public final class PhoneSession {
     private static ResourceLocation appOf(PhoneScreen.Mode mode) {
         return switch (mode) {
             case CHAT, CHAT_ADD_CONTACT, CHAT_CONVERSATION -> CHAT_APP;
-            case READER, TXT_BOOK -> READER_APP;
+            case READER -> READER_APP;
             default -> null;
         };
     }

@@ -2,7 +2,6 @@ package com.november.mcphone.feature.settings.client;
 
 import com.november.mcphone.core.client.FontPalette;
 import com.november.mcphone.core.client.GuiUtil;
-import com.november.mcphone.core.client.MCphoneKeyBindings;
 import com.november.mcphone.core.client.PhoneHudPlacement;
 import com.november.mcphone.core.client.PhoneKeys;
 import com.november.mcphone.core.client.PhoneSkin;

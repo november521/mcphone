@@ -1,6 +1,5 @@
 package com.november.mcphone.feature.reader.client;
 
-import com.november.mcphone.core.client.MCphoneKeyBindings;
 import com.november.mcphone.core.client.PhoneHud;
 import com.november.mcphone.core.client.PhoneKeys;
 import com.november.mcphone.core.client.PhoneScreen;

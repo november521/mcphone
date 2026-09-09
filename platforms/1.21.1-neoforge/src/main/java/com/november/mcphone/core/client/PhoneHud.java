@@ -32,7 +32,7 @@ import org.lwjgl.glfw.GLFW;
  *
  * 自动那条是"手机放进副手就亮"。但手机也可以挂在 Curios 的饰品槽里，那时候副手是空的
  * ——挂饰品栏的意思本来就是"腾出两只手"——自动那条规矩根本够不着它。所以另给一个键
- * （{@link MCphoneKeyBindings#HUD_TOGGLE}，默认 G）：手机收在饰品栏、背包、主手上时
+ * （{@link PhoneKeys#HUD_TOGGLE}，默认 G）：手机收在饰品栏、背包、主手上时
  * 同样叫得出来。
  *
  * 两条不是并列的，手动那条【顶掉】自动那条，见 {@link Override}。
@@ -63,7 +63,7 @@ import org.lwjgl.glfw.GLFW;
  * 因为 {@link Minecraft#setScreen} 在开界面的同时会调 {@code KeyMapping.releaseAll()}。
  * 用 {@code KeyMapping.isDown()} 判断的话，界面开起来的那一刻它就变成 false——而本类靠
  * "按下去的那一沿"来切换开关，一个永远回不到按下状态的键切不动任何东西。
- * 所以问的是 GLFW："这个键此刻按着没有"，那个答案不受界面影响。键位仍然来自 {@link MCphoneKeyBindings#HUD_INTERACT}，玩家照样
+ * 所以问的是 GLFW："这个键此刻按着没有"，那个答案不受界面影响。键位仍然来自 {@link PhoneKeys#HUD_INTERACT}，玩家照样
  * 能在原版按键设置里改。
  *
  * <h2>它什么时候不画</h2>

@@ -1513,7 +1513,10 @@ public final class PhoneScreen extends Screen {
         // 这部手机从 mc.screen / PhoneHud 上消失，下一 tick 它自然就灭了
 
         // 先记再关：下面这几个 close() 会把页面状态清掉
-        PhoneSession.save(mode, pendingConversationPeer);
+        // 正在读的那本 txt 记成书架：那一页攥着整本书的文本，关机时必须放掉
+        // （见 TxtReaderPage.close），下次开机没有可续的东西，停在书架上最贴近。
+        // 这一步在这里做而不在 PhoneSession 里：TXT_BOOK 这个常量只有本目标有
+        PhoneSession.save(mode == Mode.TXT_BOOK ? Mode.READER : mode, pendingConversationPeer);
 
         if (mode == Mode.GALLERY) gallery.close();
         if (mode == Mode.CHAT_PHOTO_PICKER) chatPhotoPicker.close();

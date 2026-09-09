@@ -2,6 +2,7 @@ package com.november.mcphone;
 
 import com.november.mcphone.core.client.AppHotkeyHandler;
 import com.november.mcphone.core.client.ClientConfig;
+import com.november.mcphone.core.client.ClientTicks;
 import com.november.mcphone.core.client.MCphoneKeyBindings;
 import com.november.mcphone.core.client.PhoneHud;
 import com.november.mcphone.core.client.PhoneContainerScreen;
@@ -67,10 +68,11 @@ public class MCphoneClient {
         // 手机进出副手、Alt 按下松开都在这条 tick 里判，见 PhoneHud
         NeoForge.EVENT_BUS.addListener(PhoneHud::onClientTick);
 
-        // 「这会儿开着的是哪一台」每 tick 算一次，变了才发包。排在 PhoneHud 之后：
-        // 同一 tick 里挂上的那台立刻就能报上去
+        // 共用侧每 tick 要做的事，全在 ClientTicks 里排队 —— 这条订阅是它们唯一的入口，
+        // 共用侧再加功能这里一行都不用改。排在 PhoneHud 之后：同一 tick 里挂上的那台
+        // 设备，本 tick 就能被报上去
         NeoForge.EVENT_BUS.addListener(
-                (net.neoforged.neoforge.client.event.ClientTickEvent.Post event) -> PhoneScreenOnSync.tick());
+                (net.neoforged.neoforge.client.event.ClientTickEvent.Post event) -> ClientTicks.tick());
 
         // 挂在 HUD 上看书时的两个翻页键。手机成了 mc.screen 就走不动路，
         // 而边走边看正是这个功能最想要的场景，见 ReaderKeyHandler

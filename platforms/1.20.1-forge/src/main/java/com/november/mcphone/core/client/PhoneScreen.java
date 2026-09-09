@@ -719,7 +719,7 @@ public final class PhoneScreen extends Screen {
             case UI_SCALE          -> uiScalePage.render(g, phoneLeft, phoneTop,
                     DeviceMetrics.PHONE.screenW(), DeviceMetrics.PHONE.screenH(),
                     PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT,
-                    mouseX, mouseY, font, this.width, this.height);
+                    mouseX, mouseY, font, DeviceMetrics.PHONE, this.width, this.height);
             case HUD               -> hudPage.render(g, phoneLeft, phoneTop,
                     DeviceMetrics.PHONE.screenW(), DeviceMetrics.PHONE.screenH(),
                     PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT,
@@ -1004,7 +1004,7 @@ public final class PhoneScreen extends Screen {
             return true;
         }
 
-        switch (PhoneChassis.hitTestNavBar(mx, my, phoneLeft, phoneTop)) {
+        switch (PhoneChassis.hitTestNavBar(mx, my, phoneLeft, phoneTop, DeviceMetrics.PHONE)) {
             case BACK -> {
                 // 主屏上按返回不关机
                 goBackOneLevel();

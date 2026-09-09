@@ -1,6 +1,5 @@
 package com.november.mcphone.feature.camera.client;
 
-import com.november.mcphone.core.client.MCphoneKeyBindings;
 import com.november.mcphone.core.client.PhoneKeys;
 import com.november.mcphone.core.client.PhoneTheme;
 import net.minecraft.client.gui.Font;

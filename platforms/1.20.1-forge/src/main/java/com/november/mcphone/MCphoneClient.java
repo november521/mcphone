@@ -2,6 +2,7 @@ package com.november.mcphone;
 
 import com.november.mcphone.core.client.AppHotkeyHandler;
 import com.november.mcphone.core.client.ClientConfig;
+import com.november.mcphone.core.client.ClientTicks;
 import com.november.mcphone.core.client.MCphoneKeyBindings;
 import com.november.mcphone.core.client.PhoneHud;
 import com.november.mcphone.core.client.PhoneKeyHandler;
@@ -96,11 +97,13 @@ public final class MCphoneClient {
         // 手机进出副手、Alt 与 G 的按下松开都在这条 tick 里判，见 PhoneHud
         MinecraftForge.EVENT_BUS.addListener(PhoneHud::onClientTick);
 
-        // 「这会儿开着的是哪一台」每 tick 算一次，变了才发包。排在 PhoneHud 之后：
-        // 同一 tick 里挂上的那台立刻能报上去。1.20.1 的 tick 事件不分 Pre/Post，
-        // 要自己判 phase —— 不判就是一 tick 触发两次，见 PhoneKeyHandler
+        // 共用侧每 tick 要做的事，全在 ClientTicks 里排队 —— 这条订阅是它们唯一的入口，
+        // 共用侧再加功能这里一行都不用改。排在 PhoneHud 之后：同一 tick 里挂上的那台
+        // 设备，本 tick 就能被报上去。
+        // 这一支的 tick 事件不分 Pre/Post，要自己判 phase —— 不判就是一 tick 触发两次，
+        // 见 PhoneKeyHandler
         MinecraftForge.EVENT_BUS.addListener((TickEvent.ClientTickEvent event) -> {
-            if (event.phase == TickEvent.Phase.END) PhoneScreenOnSync.tick();
+            if (event.phase == TickEvent.Phase.END) ClientTicks.tick();
         });
 
         MinecraftForge.EVENT_BUS.addListener(CameraHandler::onClientTick);
