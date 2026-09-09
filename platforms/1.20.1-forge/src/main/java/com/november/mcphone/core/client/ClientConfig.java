@@ -140,8 +140,6 @@ public final class ClientConfig {
                         "true 是默认。坐标是【画进照片里】的，相册与截图文件夹里那张 png 都带着，",
                         "发给没装本模组的人也看得到；关掉之后拍的照片不再有，已经拍下的擦不掉。",
                         "在游戏里改：设置 → App 管理器 → 相机 → 坐标水印。",
-                        "这个目标上眼下只写进文件名（相册那一行读得到），照片像素里还没有 ——",
-                        "拍照那几帧整个 GUI 都被藏掉了，画不上去，见 CameraHandler 的类注释。",
                         "Stamp the capture coordinates onto the bottom-right of each photo.",
                         "The text is baked into the image, so it survives sharing the png.",
                         "In-game: Settings -> App Manager -> Camera -> Coordinate stamp.")

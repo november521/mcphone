@@ -13,6 +13,8 @@ import net.minecraft.world.entity.player.Player;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.File;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -87,6 +89,25 @@ public final class CameraStamp {
     /** true = 印坐标。值的真身在配置里，这里是渲染每帧要读的那一份 */
     private static boolean enabled = true;
 
+    /** 内建的那一项：坐标。它跟着 {@link #enabled} 走，关掉就这一项不印，别的项照旧 */
+    private static final PhotoStamp COORDS_STAMP = player -> enabled ? text(player) : null;
+
+    /**
+     * 要印的那几项，按登记顺序自下而上排 —— 第一项贴着取景框的底边，后来的往上叠。
+     *
+     * 坐标是内建的第一项；别的项由各自的功能 {@link #register} 进来。这里只管
+     * "有哪些项、怎么排"，不管每一项印什么。
+     */
+    private static final List<PhotoStamp> STAMPS = new ArrayList<>(List.of(COORDS_STAMP));
+
+    /**
+     * 登记一项。在客户端初始化时调一次即可 —— 与 {@code AppOptions.register} 同一套路数：
+     * 登记的是"能印什么"，印不印由那一项自己每帧回答。
+     */
+    public static void register(PhotoStamp stamp) {
+        STAMPS.add(stamp);
+    }
+
     //  开关
 
     public static boolean isEnabled() {
@@ -124,25 +145,41 @@ public final class CameraStamp {
      * 两边共用同一个数，玩家换分辨率、改 GUI 缩放时这一行才会跟着卡尺一起动。
      */
     public static void render(GuiGraphics g, Font font, int w, int h) {
-        if (!enabled) return;
-
         Player player = Minecraft.getInstance().player;
         if (player == null) return;   // 相机模式下不该发生，真发生了也只是这一帧没有戳
 
-        String text = text(player);
+        List<String> lines = new ArrayList<>(STAMPS.size());
+        for (PhotoStamp stamp : STAMPS) {
+            String line = stamp.line(player);
+            if (line != null && !line.isEmpty()) lines.add(line);
+        }
+        if (lines.isEmpty()) return;
+
         int scale = scaleOf(h);
         int margin = CameraOverlay.margin(w, h);
 
-        int x = w - margin - INSET - font.width(text) * scale;
-        int y = h - margin - INSET - font.lineHeight * scale;
+        // 自下而上：第 0 项贴着底边（只有一项时，位置与从前逐像素相同），后面的往上叠。
+        // 每一行各自右对齐 —— 右边那条线是取景框的边，字都从它往左长
+        for (int i = 0; i < lines.size(); i++) {
+            String text = lines.get(i);
+            int x = w - margin - INSET - font.width(text) * scale;
+            int y = h - margin - INSET - (i + 1) * font.lineHeight * scale;
+            drawOutlined(g, font, text, x, y, scale);
+        }
+    }
 
+    /**
+     * 一行字，四面描边。
+     *
+     * 描边而不是阴影：阴影只往右下偏一像素，白字压在雪地、沙漠、夕阳上时，左上那两条边
+     * 仍然与底色糊在一起；照片的底是任意一块世界，只能四面都圈住。八次 drawString 的
+     * 代价在一个满屏渲染世界的地方可以忽略。
+     */
+    private static void drawOutlined(GuiGraphics g, Font font, String text, int x, int y, int scale) {
         g.pose().pushPose();
         g.pose().translate(x, y, 0);
         g.pose().scale(scale, scale, 1);
 
-        // 描边而不是阴影。阴影只往右下偏一像素，白字压在雪地、沙漠、夕阳上时，
-        // 左上那两条边仍然与底色糊在一起；照片的底是任意一块世界，只能四面都圈住。
-        // 八次 drawString 的代价在一个满屏渲染世界的地方可以忽略
         for (int dx = -1; dx <= 1; dx++) {
             for (int dy = -1; dy <= 1; dy++) {
                 if (dx != 0 || dy != 0) g.drawString(font, text, dx, dy, OUTLINE, false);

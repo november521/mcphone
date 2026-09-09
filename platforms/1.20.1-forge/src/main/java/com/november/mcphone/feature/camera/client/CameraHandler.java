@@ -27,8 +27,9 @@ import net.minecraftforge.event.TickEvent;
  *   藏 HUD    逐个取消 RenderGuiOverlayEvent（26 个原版 overlay 全在内）
  *   画取景框  hideGui 强制为 false，让 RenderGuiEvent 照常派发
  *
- * 拍照那几帧再把 hideGui 临时打开 —— 那时候连 toast 都要一起藏掉，
- * 而 toast 不走 overlay 体系，只认 hideGui。详见下面两个 RenderTick 监听器。
+ * 拍照那几帧也不动 hideGui 的这个安排 —— 那时候连 toast 都要一起藏掉，而 toast 不走
+ * overlay 体系、只认 hideGui。办法是把翻它的那一下【推迟到 gui.render 之后】：toast
+ * 自己读 hideGui 的时刻在那之后，于是印记先画进这一帧，toast 再闭嘴。见 onRenderGui。
  */
 public final class CameraHandler {
 
@@ -79,29 +80,26 @@ public final class CameraHandler {
      * onRenderTickStart → GameRenderer.render → onRenderTickEnd，
      * 所以这里改的值当帧就生效。
      *
-     * 取值只有两种：
-     *   平时     false —— 让 gui.render 跑起来，RenderGuiEvent 才会派发，
-     *                     取景框画得出来；HUD 由 overlay 那个监听器藏
-     *   拍照期间 true  —— 整条 HUD 链路连同 toast 一起跳过。toast 不走
-     *                     overlay 体系、只认 hideGui，不这么做就可能有个
-     *                     成就弹窗被拍进照片
+     * 【一律 false，拍照那几帧也是】。gui.render 必须跑起来 —— RenderGuiEvent 是
+     * ForgeGui 在它里头派发的，而 GameRenderer 那句 {@code if (!hideGui || screen != null)}
+     * 一旦挡住它，我们这一帧什么都画不成，照片印记也跟着没有。
+     *
+     * 拍照期间要藏的 toast 另有办法：它不走 overlay 体系、只认 hideGui，但它自己读
+     * hideGui 的时刻在 gui.render 【之后】（ToastComponent.render 的第一句）。所以把
+     * 那一下推迟到 {@link #onRenderGui} 的末尾，先画完印记再翻 —— 见那边的注释。
      */
     public static void onRenderTickStart(TickEvent.RenderTickEvent event) {
         if (event.phase != TickEvent.Phase.START) return;
         if (!CameraMode.isActive()) return;
 
-        Minecraft.getInstance().options.hideGui = CameraMode.suppressOverlay();
+        Minecraft.getInstance().options.hideGui = false;
     }
 
     /**
      * 一帧画完了。拍照期间这意味着"刚刚过去的这一帧是干净的"。
      *
-     * 【这个判定必须放在这里，不能留在 RenderGuiEvent 里】：拍照那几帧
-     * hideGui 是 true，gui.render 整个被跳过，RenderGuiEvent 压根不派发 ——
-     * 留在那边的话 markCleanFrame 永远等不到，快门按下去就再也不响。
-     *
-     * 放在帧尾还更准：那边判的是"这一帧没画取景框"，这边判的是
-     * "这一整帧都渲染完了且没画取景框"。
+     * 【放在帧尾而不是 RenderGuiEvent 里】：那边判的是"这一帧没画取景框"，这边判的是
+     * "这一整帧都渲染完了且没画取景框"。抓取读的是整个主渲染目标，判据该跟着那个范围走。
      */
     public static void onRenderTickEnd(TickEvent.RenderTickEvent event) {
         if (event.phase != TickEvent.Phase.END) return;
@@ -126,16 +124,31 @@ public final class CameraHandler {
     public static void onRenderGui(RenderGuiEvent.Post event) {
         if (!CameraMode.isActive()) return;
 
-        // 拍照期间不画取景框，否则会被拍进照片。
-        // （此时 hideGui 已被置真，本方法其实根本不会被调到，这一行是双保险）
-        if (CameraMode.suppressOverlay()) return;
-
         Minecraft mc = Minecraft.getInstance();
+        int w = mc.getWindow().getGuiScaledWidth();
+        int h = mc.getWindow().getGuiScaledHeight();
+
+        // 印记是相机里【唯一】允许入镜的一层，所以画在取景框那道 return 之前 ——
+        // 要被抓的正是这一帧，见 CameraStamp 的类注释
+        CameraStamp.render(event.getGuiGraphics(), mc.font, w, h);
+
+        if (CameraMode.suppressOverlay()) {
+            // 拍照期间不画取景框，否则会被拍进照片。
+            //
+            // 【hideGui 在这一句翻真，不在帧首】：toast 只认 hideGui，而它读这个值
+            // 是在本帧稍后（ToastComponent.render 的第一句），gui.render 已经跑完。
+            // 于是这一帧的顺序成了：印记画上 → 这里翻真 → toast 自己闭嘴 → 抓取。
+            // 帧首翻真的话 gui.render 整个被跳过，连印记都画不上。
+            // 帧首那个监听器下一帧会把它翻回 false
+            mc.options.hideGui = true;
+            return;
+        }
+
         CameraOverlay.render(
                 event.getGuiGraphics(),
                 mc.font,
-                mc.getWindow().getGuiScaledWidth(),
-                mc.getWindow().getGuiScaledHeight(),
+                w,
+                h,
                 System.currentTimeMillis(),
                 // 模糊后处理要它来插值。1.21.1 那边这个 getter 给的是 DeltaTracker，
                 // 还要再问它要一个 getGameTimeDeltaPartialTick(false)；1.20.1 上

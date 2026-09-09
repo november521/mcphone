@@ -18,7 +18,8 @@ package com.november.mcphone.platform.client;
  *
  * 所以这一支反过来：{@code hideGui} 强制为 false 让渲染链路照常走，HUD 改由
  * {@code CameraHandler} 逐个取消 {@code RenderGuiOverlayEvent} 来藏。
- * 拍照那几帧另说，见 {@code CameraHandler.onRenderTickStart}。
+ * 拍照那几帧也照旧 false，让印记画得进照片；那时候 toast 靠推迟翻 hideGui 来藏，
+ * 见 {@code CameraHandler.onRenderGui}。
  *
  * <h2>为什么不是一个 if</h2>
  *

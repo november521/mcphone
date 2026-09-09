@@ -66,7 +66,7 @@
     "gradle": "8.8",
     "project": "platforms/1.20.1-forge",
     "buildable": true,
-    "note": "本仓第二个建得起来的目标，产物进 Release。这些值由构建本身验着：gradle.properties 里 forge_version=47.4.23 / forge_version_range=[47.4.0,)，wrapper 是 gradle-8.8-bin.zip，build.gradle 里 toolchain 是 17，构建插件是 ForgeGradle 6（[6.0.54,6.2)）。功能上还差一处：照片的坐标水印在这个目标上只写进文件名，像素里没有 —— 拍照那几帧整个 GUI 被 hideGui 藏掉，见 CameraHandler 的类注释。",
+    "note": "本仓第二个建得起来的目标，产物进 Release。这些值由构建本身验着：gradle.properties 里 forge_version=47.4.23 / forge_version_range=[47.4.0,)，wrapper 是 gradle-8.8-bin.zip，build.gradle 里 toolchain 是 17，构建插件是 ForgeGradle 6（[6.0.54,6.2)）。",
     "layers": [
       "forge"
     ]
