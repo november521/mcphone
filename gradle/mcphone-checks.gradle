@@ -1163,6 +1163,24 @@ abstract class SeamsDocTask extends DefaultTask {
      * 文件系统读出来，跟"当前是哪个平台"无关。
      */
     @Input          abstract ListProperty<Object> getAllTargets()
+
+    /**
+     * 上面那份清单里装的是 File，而 Gradle 只把它们的<b>路径</b>当输入 —— 目录里
+     * 多一个文件、少一个文件，输入哈希一个字都不变。
+     *
+     * 【这不是洁癖，是实测踩过】：Terminals 从 platforms/ 挪进 layers/loader/ 之后，
+     * updateSeamsDoc 与 verifySeamsDocCurrent 双双判成 UP-TO-DATE 直接跳过，
+     * 清单里还留着那一行，而 check 全绿 —— 这道闸恰好在它该管的东西变了的那一刻被跳过。
+     *
+     * 复现：让一切都是最新，往 platforms/<目标>/src/main/java 下扔一个新类，
+     * 只跑 verifySeamsDocCurrent，Gradle 报 UP-TO-DATE。
+     *
+     * 所以要再声明一次，这回声明的是内容。与 layers.json 那次的
+     * providers.fileContents 是同一个教训：<b>没被追踪的输入等于没有的闸</b>。
+     */
+    @InputFiles @PathSensitive(PathSensitivity.RELATIVE)
+    abstract ConfigurableFileCollection getScannedDirs()
+
     @OutputFile     abstract RegularFileProperty getDocFile()
     /** true 改文档，false 只对比 */
     @Input          abstract Property<Boolean> getUpdating()
@@ -1550,6 +1568,10 @@ tasks.register('verifySeamsDocCurrent', SeamsDocTask) {
     group = 'verification'
     sharedDir.set(new File(repoRoot, 'shared/src/main/java'))
     allTargets.set(mcphoneAllTargets)
+    // 目录【内容】也要当输入，理由见 SeamsDocTask.scannedDirs
+    scannedDirs.from(mcphoneAllTargets.collectMany { t ->
+        [t.projectJavaDir] + ((t.layerJavaDirs ?: []) as List)
+    }.findAll { (it as File).isDirectory() })
     docFile.set(seamsDoc)
     updating.set(false)
 }
@@ -1559,6 +1581,10 @@ tasks.register('updateSeamsDoc', SeamsDocTask) {
     group = 'documentation'
     sharedDir.set(new File(repoRoot, 'shared/src/main/java'))
     allTargets.set(mcphoneAllTargets)
+    // 目录【内容】也要当输入，理由见 SeamsDocTask.scannedDirs
+    scannedDirs.from(mcphoneAllTargets.collectMany { t ->
+        [t.projectJavaDir] + ((t.layerJavaDirs ?: []) as List)
+    }.findAll { (it as File).isDirectory() })
     docFile.set(seamsDoc)
     updating.set(true)
 }

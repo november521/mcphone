@@ -239,7 +239,7 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 
 <!-- 下面这段由 ./gradlew updateSeamsDoc 生成，别手改：1.21.1-neoforge -->
 
-#### 共用代码引用了的（35）
+#### 共用代码引用了的（34）
 
 **新平台必须提供同名类型**，否则 shared/ 与共享层编不过。全限定名是硬约束；方法体是抄现成的一份还是自己写，看那个文件。
 
@@ -261,7 +261,6 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 - `feature.music.DiscService`　—— 1.20.5+ 原版、加载器导入
 - `feature.music.net.MusicNetworking`　—— 加载器导入
 - `feature.terminal.TerminalCharger`　—— 加载器导入、注入的方法
-- `feature.terminal.integration.Terminals`　—— 加载器导入
 - `feature.terminal.integration.ae2.Ae2Integration`
 - `feature.terminal.integration.refinedstorage.RefinedStorageIntegration`
 - `feature.terminal.integration.refinedstorage.TerminalSlotReference`
@@ -308,7 +307,7 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 
 <!-- 下面这段由 ./gradlew updateSeamsDoc 生成，别手改：1.20.1-forge -->
 
-#### 共用代码引用了的（75）
+#### 共用代码引用了的（74）
 
 **新平台必须提供同名类型**，否则 shared/ 与共享层编不过。全限定名是硬约束；方法体是抄现成的一份还是自己写，看那个文件。
 
@@ -369,7 +368,6 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 - `feature.store.net.PurchaseAppPacket`
 - `feature.store.net.RequestPurchasedAppsPacket`
 - `feature.terminal.TerminalCharger`　—— 加载器导入、注入的方法
-- `feature.terminal.integration.Terminals`　—— 加载器导入
 - `feature.terminal.integration.ae2.Ae2Integration`
 - `feature.terminal.integration.refinedstorage.RefinedStorageIntegration`
 - `feature.terminal.net.TerminalActionPacket`
