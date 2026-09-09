@@ -25,7 +25,7 @@ public class PhoneItem extends Item {
     }
 
     /** 这一堆物品是不是手机。判定只写一遍，各处共用 */
-    public static boolean isPhone(ItemStack stack) {
+    public static boolean isDevice(ItemStack stack) {
         return stack.getItem() instanceof PhoneItem;
     }
 
@@ -51,9 +51,9 @@ public class PhoneItem extends Item {
     public static boolean isCarriedBy(Player player) {
         var inventory = player.getInventory();
         for (int slot = 0; slot < inventory.getContainerSize(); slot++) {
-            if (isPhone(inventory.getItem(slot))) return true;
+            if (isDevice(inventory.getItem(slot))) return true;
         }
-        return CuriosCompat.isEquipped(player, PhoneItem::isPhone);
+        return CuriosCompat.isEquipped(player, PhoneItem::isDevice);
     }
 
     @Override

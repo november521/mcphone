@@ -1,6 +1,7 @@
 package com.november.mcphone.feature.camera.client;
 
 import com.november.mcphone.core.client.MCphoneKeyBindings;
+import com.november.mcphone.core.client.PhoneKeys;
 import com.november.mcphone.core.client.PhoneTheme;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
@@ -47,7 +48,7 @@ public final class CameraOverlay {
     }
 
     /**
-     * 取景框离屏幕边缘留多少。{@link CameraStamp} 也要这个数——坐标戳贴着同一条线
+     * 取景框离屏幕边缘留多少。{@code CameraStamp} 也要这个数——坐标戳贴着同一条线
      * 往里让，看着才像被取景框框住的一行字。留白按屏幕短边算，所以它得是个方法。
      */
     static int margin(int w, int h) {
@@ -90,8 +91,8 @@ public final class CameraOverlay {
 
         // 按键名取自玩家的实际绑定，改键后提示自动跟着变
         Component hint = Component.translatable("mcphone.camera.hint",
-                MCphoneKeyBindings.CAMERA_SHUTTER.getTranslatedKeyMessage(),
-                MCphoneKeyBindings.CAMERA_EXIT.getTranslatedKeyMessage());
+                PhoneKeys.CAMERA_SHUTTER.translatedName(),
+                PhoneKeys.CAMERA_EXIT.translatedName());
 
         String text = hint.getString();
         int tw = font.width(text);

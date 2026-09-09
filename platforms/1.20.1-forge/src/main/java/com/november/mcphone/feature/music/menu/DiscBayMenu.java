@@ -115,7 +115,7 @@ public class DiscBayMenu extends AbstractContainerMenu {
     /** 手机不在身上就关掉。判据必须与开菜单那道校验同一个方法；光标上那一份要单独查，玩家可能正把手机拿起来挪位置 */
     @Override
     public boolean stillValid(Player player) {
-        return PhoneItem.isPhone(getCarried()) || PhoneItem.isCarriedBy(player);
+        return PhoneItem.isDevice(getCarried()) || PhoneItem.isCarriedBy(player);
     }
 
     /** 关掉菜单时把唱片仓的最新样子推给客户端：菜单走原版容器同步，手机界面读的还是进菜单前的快照 */

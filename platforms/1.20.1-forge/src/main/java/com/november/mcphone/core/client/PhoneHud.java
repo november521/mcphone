@@ -154,11 +154,11 @@ public final class PhoneHud {
 
         // 按沿判定要在所有提前返回之前做完，否则在那些分支里按下的一次会被吞掉，
         // 玩家会遇到"按了一下没反应，再按一下才开"
-        boolean interactDown = keyDown(mc, MCphoneKeyBindings.HUD_INTERACT);
+        boolean interactDown = keyDown(mc, PhoneKeys.HUD_INTERACT.mapping());
         boolean interactPressed = interactDown && !interactKeyWasDown;
         interactKeyWasDown = interactDown;
 
-        boolean toggleDown = keyDown(mc, MCphoneKeyBindings.HUD_TOGGLE);
+        boolean toggleDown = keyDown(mc, PhoneKeys.HUD_TOGGLE.mapping());
         boolean togglePressed = toggleDown && !toggleKeyWasDown;
         toggleKeyWasDown = toggleDown;
 
@@ -250,7 +250,7 @@ public final class PhoneHud {
         // 界面开着就开着，不会因为物品没了自己合上
         if (phone != null && mc.screen == phone && !phone.isHudMode()) return phone.location();
 
-        boolean auto = PhoneHudPlacement.enabled() && PhoneItem.isPhone(player.getOffhandItem());
+        boolean auto = PhoneHudPlacement.enabled() && PhoneItem.isDevice(player.getOffhandItem());
 
         // 自动那条翻了面就把手动那份作废，理由见 Override 的注释
         if (auto != lastAuto) {
@@ -267,7 +267,7 @@ public final class PhoneHud {
 
         if (phone != null) {
             // 还在记着的那个位置上，最常见的情形，什么都不用做
-            if (PhoneItem.isPhone(phone.location().resolve(player))) return phone.location();
+            if (PhoneItem.isDevice(phone.location().resolve(player))) return phone.location();
 
             // 不在了。自动那条盯的就是副手那一格，那儿空了就是空了
             if (manual != Override.SHOW) return null;
@@ -391,10 +391,10 @@ public final class PhoneHud {
         int guiH = window.getGuiScaledHeight();
         if (guiW <= 0 || guiH <= 0) return;
 
-        double centerX = PhoneHudPlacement.originX(guiW, guiH)
-                + PhoneHudPlacement.width(guiW, guiH) / 2.0;
-        double centerY = PhoneHudPlacement.originY(guiW, guiH)
-                + PhoneHudPlacement.height(guiW, guiH) / 2.0;
+        double centerX = PhoneHudPlacement.originX(DeviceMetrics.PHONE, guiW, guiH)
+                + PhoneHudPlacement.width(DeviceMetrics.PHONE, guiW, guiH) / 2.0;
+        double centerY = PhoneHudPlacement.originY(DeviceMetrics.PHONE, guiW, guiH)
+                + PhoneHudPlacement.height(DeviceMetrics.PHONE, guiW, guiH) / 2.0;
 
         GLFW.glfwSetCursorPos(window.getWindow(),
                 centerX * window.getScreenWidth() / guiW,

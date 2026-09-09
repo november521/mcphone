@@ -36,7 +36,7 @@ public final class PhoneKeyHandler {
 
         boolean pressed = false;
         // 无论如何都要把积压的点击取空，否则关掉界面后会补触发一次
-        while (MCphoneKeyBindings.OPEN_PHONE.consumeClick()) pressed = true;
+        while (PhoneKeys.OPEN_PHONE.consumeClick()) pressed = true;
 
         if (!pressed || mc.player == null) return;
 

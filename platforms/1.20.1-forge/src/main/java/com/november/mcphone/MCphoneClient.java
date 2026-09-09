@@ -5,6 +5,7 @@ import com.november.mcphone.core.client.ClientConfig;
 import com.november.mcphone.core.client.MCphoneKeyBindings;
 import com.november.mcphone.core.client.PhoneHud;
 import com.november.mcphone.core.client.PhoneKeyHandler;
+import com.november.mcphone.core.client.PhoneScreenOnSync;
 import com.november.mcphone.core.client.PhoneScreenRegistry;
 import com.november.mcphone.core.client.PhoneSession;
 import com.november.mcphone.core.client.PhoneSkin;
@@ -32,6 +33,7 @@ import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.client.event.ClientPlayerNetworkEvent;
 import net.minecraftforge.client.event.RegisterClientReloadListenersEvent;
 import net.minecraftforge.common.MinecraftForge;
+import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.eventbus.api.IEventBus;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
@@ -94,6 +96,13 @@ public final class MCphoneClient {
         // 手机进出副手、Alt 与 G 的按下松开都在这条 tick 里判，见 PhoneHud
         MinecraftForge.EVENT_BUS.addListener(PhoneHud::onClientTick);
 
+        // 「这会儿开着的是哪一台」每 tick 算一次，变了才发包。排在 PhoneHud 之后：
+        // 同一 tick 里挂上的那台立刻能报上去。1.20.1 的 tick 事件不分 Pre/Post，
+        // 要自己判 phase —— 不判就是一 tick 触发两次，见 PhoneKeyHandler
+        MinecraftForge.EVENT_BUS.addListener((TickEvent.ClientTickEvent event) -> {
+            if (event.phase == TickEvent.Phase.END) PhoneScreenOnSync.tick();
+        });
+
         MinecraftForge.EVENT_BUS.addListener(CameraHandler::onClientTick);
         MinecraftForge.EVENT_BUS.addListener(CameraHandler::onRenderGui);
         MinecraftForge.EVENT_BUS.addListener(CameraHandler::onScreenOpening);
@@ -126,7 +135,7 @@ public final class MCphoneClient {
 
                     // 去重用的记忆跟着世界走：不清的话，进新世界开手机会因为"和上次一样"
                     // 被判成没变，那部手机在别人眼里就不亮
-                    com.november.mcphone.core.client.PhoneScreenOnSync.forget();
+                    PhoneScreenOnSync.forget();
 
                     ChatClientCache.clear();
                     ChatImageCache.clear();

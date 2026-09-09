@@ -1,6 +1,7 @@
 package com.november.mcphone.feature.camera.client;
 
 import com.november.mcphone.core.client.MCphoneKeyBindings;
+import com.november.mcphone.core.client.PhoneKeys;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Screenshot;
 import net.minecraftforge.client.event.RenderGuiEvent;
@@ -52,13 +53,13 @@ public final class CameraHandler {
 
         // 退出优先于拍照：同一 tick 内两键同时按下时以退出为准
         boolean exitPressed = false;
-        while (MCphoneKeyBindings.CAMERA_EXIT.consumeClick()) exitPressed = true;
+        while (PhoneKeys.CAMERA_EXIT.consumeClick()) exitPressed = true;
         if (exitPressed) {
             CameraMode.exit();
             return;
         }
 
-        while (MCphoneKeyBindings.CAMERA_SHUTTER.consumeClick()) {
+        while (PhoneKeys.CAMERA_SHUTTER.consumeClick()) {
             CameraMode.requestCapture();
         }
     }

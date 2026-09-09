@@ -4,6 +4,7 @@ import com.november.mcphone.core.client.FontPalette;
 import com.november.mcphone.core.client.GuiUtil;
 import com.november.mcphone.core.client.MCphoneKeyBindings;
 import com.november.mcphone.core.client.PhoneHudPlacement;
+import com.november.mcphone.core.client.PhoneKeys;
 import com.november.mcphone.core.client.PhoneSkin;
 import com.november.mcphone.core.client.PhoneTheme;
 import net.minecraft.client.gui.Font;
@@ -119,7 +120,7 @@ public final class HudPage {
         //  说明：自动那条怎么算、手动那个键是哪个。两句合成一段而不是各占一段——
         //  这块屏幕只有 120×200，每空一行都是从下面挤出来的
         for (var line : font.split(Component.translatable("mcphone.hud.enabled_hint",
-                MCphoneKeyBindings.HUD_TOGGLE.getTranslatedKeyMessage()), w)) {
+                PhoneKeys.HUD_TOGGLE.translatedName()), w)) {
             if (y + font.lineHeight > bottom) break;
             g.drawString(font, line, x, y, FontPalette.dim(), false);
             y += font.lineHeight;
@@ -178,7 +179,7 @@ public final class HudPage {
 
         //  怎么唤出鼠标、唤出之后能干什么。键名取自玩家的实际绑定，改键后提示自动跟着变
         for (var line : font.split(Component.translatable("mcphone.hud.interact_hint",
-                MCphoneKeyBindings.HUD_INTERACT.getTranslatedKeyMessage()), w)) {
+                PhoneKeys.HUD_INTERACT.translatedName()), w)) {
             if (y + font.lineHeight > bottom) break;
             g.drawString(font, line, x, y, FontPalette.dim(), false);
             y += font.lineHeight;

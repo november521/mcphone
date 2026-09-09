@@ -79,7 +79,7 @@ public final class Gallery {
     private int hoveredPager = 0;
 
     /** 上一帧算出的每页容量，供点击与翻页复用 */
-    private int perPage = PhotoGridPainter.COLS * 5;
+    private int perPage = 3 * 5;   // 首帧之前按手机那套估一个，下一帧就按可用宽度重算
 
     // ---- 单张查看 ----
 
@@ -186,8 +186,9 @@ public final class Gallery {
         final int gridTop = y;
         final int gridBottom = phoneTop + screenH - navH - pagerH - 2;
 
-        // 行数按可用高度算，改主题尺寸时不必回来改这里
-        this.perPage = PhotoGridPainter.COLS * PhotoGridPainter.rowsFor(gridBottom - gridTop);
+        // 行列都按可用宽高算，改主题尺寸时不必回来改这里
+        int cols = PhotoGridPainter.colsFor(w);
+        this.perPage = cols * PhotoGridPainter.rowsFor(gridBottom - gridTop);
 
         // 缓存必须装得下一整页，否则同页内先加载的会被后加载的挤掉，
         // 下一帧又重新加载，画面持续闪烁。行数随手机屏幕高度变，
@@ -200,7 +201,7 @@ public final class Gallery {
         if (page < 0) page = 0;
 
         // 整个网格在内容区里居中
-        int gridX = x + (w - PhotoGridPainter.gridWidth()) / 2;
+        int gridX = x + (w - PhotoGridPainter.gridWidth(cols)) / 2;
 
         hoveredIdx = -1;
         int first = page * perPage;
@@ -208,8 +209,8 @@ public final class Gallery {
 
         for (int i = first; i < last; i++) {
             int slot = i - first;
-            int cx = PhotoGridPainter.cellX(gridX, slot);
-            int cy = PhotoGridPainter.cellY(gridTop, slot);
+            int cx = PhotoGridPainter.cellX(gridX, slot, cols);
+            int cy = PhotoGridPainter.cellY(gridTop, slot, cols);
 
             boolean hovered = PhotoGridPainter.cellHit(cx, cy, mouseX, mouseY);
             if (hovered) hoveredIdx = i;

@@ -146,11 +146,11 @@ public final class PhoneHud {
 
         // 按沿判定要在所有提前返回之前做完，否则在那些分支里按下的一次会被吞掉，
         // 玩家会遇到"按了一下没反应，再按一下才开"
-        boolean interactDown = keyDown(mc, MCphoneKeyBindings.HUD_INTERACT);
+        boolean interactDown = keyDown(mc, PhoneKeys.HUD_INTERACT.mapping());
         boolean interactPressed = interactDown && !interactKeyWasDown;
         interactKeyWasDown = interactDown;
 
-        boolean toggleDown = keyDown(mc, MCphoneKeyBindings.HUD_TOGGLE);
+        boolean toggleDown = keyDown(mc, PhoneKeys.HUD_TOGGLE.mapping());
         boolean togglePressed = toggleDown && !toggleKeyWasDown;
         toggleKeyWasDown = toggleDown;
 

@@ -2,6 +2,7 @@ package com.november.mcphone.feature.reader.client;
 
 import com.november.mcphone.core.client.MCphoneKeyBindings;
 import com.november.mcphone.core.client.PhoneHud;
+import com.november.mcphone.core.client.PhoneKeys;
 import com.november.mcphone.core.client.PhoneScreen;
 import net.minecraft.client.Minecraft;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
@@ -32,10 +33,10 @@ public final class ReaderKeyHandler {
     public static void onClientTick(ClientTickEvent.Post event) {
         // 无论如何都要把积压的点击取空，否则关掉界面后会补翻好几页
         boolean prev = false;
-        while (MCphoneKeyBindings.READER_PREV.consumeClick()) prev = true;
+        while (PhoneKeys.READER_PREV.consumeClick()) prev = true;
 
         boolean next = false;
-        while (MCphoneKeyBindings.READER_NEXT.consumeClick()) next = true;
+        while (PhoneKeys.READER_NEXT.consumeClick()) next = true;
 
         if (!prev && !next) return;
 

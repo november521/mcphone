@@ -168,8 +168,6 @@ public final class PhoneScreen extends Screen {
         this.openTimeMs = System.currentTimeMillis();
         this.animationDone = PhoneTheme.OPEN_ANIMATION_MS <= 0;
 
-        // 开机了：手上那部的屏幕该亮起来，而且要让【别人】也看得见，见 PhoneScreenOnSync
-        PhoneScreenOnSync.turnedOn(location);
     }
 
     public void navigateTo(Mode target) {
@@ -450,11 +448,11 @@ public final class PhoneScreen extends Screen {
         }
 
         int contentY = phoneTop + PhoneTheme.STATUS_BAR_HEIGHT;
-        int contentH = PhoneTheme.PHONE_HEIGHT
+        int contentH = DeviceMetrics.PHONE.screenH()
                 - PhoneTheme.STATUS_BAR_HEIGHT - PhoneTheme.NAV_BAR_HEIGHT;
 
         PhoneCanvas canvas = new PhoneCanvas(g, font,
-                phoneLeft, contentY, PhoneTheme.PHONE_WIDTH, contentH,
+                phoneLeft, contentY, DeviceMetrics.PHONE.screenW(), contentH,
                 mouseX, mouseY, partialTick, ThemeStyle.INSTANCE);
 
         try {
@@ -589,8 +587,8 @@ public final class PhoneScreen extends Screen {
 
         if (!layoutDirty) return;
 
-        final int phoneW = PhoneTheme.PHONE_TOTAL_WIDTH;
-        final int phoneH = PhoneTheme.PHONE_TOTAL_HEIGHT;
+        final int phoneW = DeviceMetrics.PHONE.totalWidth();
+        final int phoneH = DeviceMetrics.PHONE.totalHeight();
 
         this.phoneLeft = (this.width - phoneW) / 2 + PhoneTheme.PHONE_BORDER;
         this.phoneTop = (this.height - phoneH) / 2 + PhoneTheme.PHONE_BORDER + PhoneTheme.SCREEN_Y_OFFSET;
@@ -613,13 +611,13 @@ public final class PhoneScreen extends Screen {
      * 它绕的是同一个中心，于是手机从中心长大，框的位置不动。
      */
     private void layoutHud() {
-        final float s = PhoneHudPlacement.effectiveScale(this.width, this.height);
+        final float s = PhoneHudPlacement.effectiveScale(DeviceMetrics.PHONE, this.width, this.height);
         final int b = PhoneTheme.PHONE_BORDER;
-        final float halfW = PhoneTheme.PHONE_WIDTH / 2.0F;
-        final float halfH = PhoneTheme.PHONE_HEIGHT / 2.0F;
+        final float halfW = DeviceMetrics.PHONE.screenW() / 2.0F;
+        final float halfH = DeviceMetrics.PHONE.screenH() / 2.0F;
 
-        int originX = PhoneHudPlacement.originX(this.width, this.height);
-        int originY = PhoneHudPlacement.originY(this.width, this.height);
+        int originX = PhoneHudPlacement.originX(DeviceMetrics.PHONE, this.width, this.height);
+        int originY = PhoneHudPlacement.originY(DeviceMetrics.PHONE, this.width, this.height);
 
         this.phoneLeft = Math.round(originX - halfW + (b + halfW) * s);
         this.phoneTop = Math.round(originY - halfH + (b + halfH) * s) + PhoneTheme.SCREEN_Y_OFFSET;
@@ -689,8 +687,8 @@ public final class PhoneScreen extends Screen {
         final int mouseY = (int) Math.round(unscaledY(rawMouseY));
 
         float scale = renderScale();
-        int cx = phoneLeft + PhoneTheme.PHONE_WIDTH / 2;
-        int cy = phoneTop + PhoneTheme.PHONE_HEIGHT / 2;
+        int cx = phoneLeft + DeviceMetrics.PHONE.screenW() / 2;
+        int cy = phoneTop + DeviceMetrics.PHONE.screenH() / 2;
 
         g.pose().pushPose();
         g.pose().translate(cx, cy, 0);
@@ -701,102 +699,102 @@ public final class PhoneScreen extends Screen {
         renderStatusBar(g);
 
         switch (mode) {
-            case MAIN              -> homeGrid.render(g, phoneLeft, phoneTop, font,
+            case MAIN              -> homeGrid.render(g, phoneLeft, phoneTop, DeviceMetrics.PHONE, font,
                     nowMs, mouseX, mouseY, partialTick);
             case SETTINGS          -> {
                 buildSettingItems();
                 settingsList.render(g, phoneLeft, phoneTop,
-                        PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
+                        DeviceMetrics.PHONE.screenW(), DeviceMetrics.PHONE.screenH(),
                         PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT,
                         mouseX, mouseY, font);
             }
             case WALLPAPER_PICKER  -> wallpaperPicker.render(g, phoneLeft, phoneTop,
-                    PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
+                    DeviceMetrics.PHONE.screenW(), DeviceMetrics.PHONE.screenH(),
                     PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT,
                     mouseX, mouseY, font);
             case FONT_COLOR_PICKER -> fontColorPicker.render(g, phoneLeft, phoneTop,
-                    PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
+                    DeviceMetrics.PHONE.screenW(), DeviceMetrics.PHONE.screenH(),
                     PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT,
                     mouseX, mouseY, font);
             case UI_SCALE          -> uiScalePage.render(g, phoneLeft, phoneTop,
-                    PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
+                    DeviceMetrics.PHONE.screenW(), DeviceMetrics.PHONE.screenH(),
                     PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT,
                     mouseX, mouseY, font, this.width, this.height);
             case HUD               -> hudPage.render(g, phoneLeft, phoneTop,
-                    PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
+                    DeviceMetrics.PHONE.screenW(), DeviceMetrics.PHONE.screenH(),
                     PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT,
                     mouseX, mouseY, font);
             case APP_MANAGER       -> appManagerPage.render(g, phoneLeft, phoneTop,
-                    PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
+                    DeviceMetrics.PHONE.screenW(), DeviceMetrics.PHONE.screenH(),
                     PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT,
                     mouseX, mouseY, partialTick, font);
             case APP_MANAGER_DETAIL -> appManagerDetail.render(g, phoneLeft, phoneTop,
-                    PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
+                    DeviceMetrics.PHONE.screenW(), DeviceMetrics.PHONE.screenH(),
                     PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT,
                     mouseX, mouseY, partialTick, font);
             case MUSIC_PLAYER      -> musicPage.render(g, phoneLeft, phoneTop,
-                    PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
+                    DeviceMetrics.PHONE.screenW(), DeviceMetrics.PHONE.screenH(),
                     PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT,
                     mouseX, mouseY, font);
             case APP_STORE         -> appStore.render(g, phoneLeft, phoneTop,
-                    PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
+                    DeviceMetrics.PHONE.screenW(), DeviceMetrics.PHONE.screenH(),
                     PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT,
                     mouseX, mouseY, font);
             case APP_DETAIL        -> appDetail.render(g, phoneLeft, phoneTop,
-                    PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
+                    DeviceMetrics.PHONE.screenW(), DeviceMetrics.PHONE.screenH(),
                     PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT,
                     mouseX, mouseY, font);
             case ADDON_PAGE        -> renderAddonPage(g, mouseX, mouseY, partialTick);
             case COMPANION_APPS    -> companionApps.render(g, phoneLeft, phoneTop,
-                    PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
+                    DeviceMetrics.PHONE.screenW(), DeviceMetrics.PHONE.screenH(),
                     PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT,
                     mouseX, mouseY, font);
             case ABOUT             -> aboutPage.render(g, phoneLeft, phoneTop,
-                    PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
+                    DeviceMetrics.PHONE.screenW(), DeviceMetrics.PHONE.screenH(),
                     PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT, font);
             case GALLERY           -> gallery.render(g, phoneLeft, phoneTop,
-                    PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
+                    DeviceMetrics.PHONE.screenW(), DeviceMetrics.PHONE.screenH(),
                     PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT,
                     mouseX, mouseY, font);
             case DEVICE_NAME       -> deviceNameEditor.render(g, phoneLeft, phoneTop,
-                    PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
+                    DeviceMetrics.PHONE.screenW(), DeviceMetrics.PHONE.screenH(),
                     PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT,
                     mouseX, mouseY, partialTick, font);
             case CHAT              -> chatList.render(g, phoneLeft, phoneTop,
-                    PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
+                    DeviceMetrics.PHONE.screenW(), DeviceMetrics.PHONE.screenH(),
                     PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT,
                     mouseX, mouseY, font);
             case CHAT_ADD_CONTACT  -> chatAddContact.render(g, phoneLeft, phoneTop,
-                    PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
+                    DeviceMetrics.PHONE.screenW(), DeviceMetrics.PHONE.screenH(),
                     PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT,
                     mouseX, mouseY, font);
             case CHAT_CONVERSATION -> chatConversation.render(g, phoneLeft, phoneTop,
-                    PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
+                    DeviceMetrics.PHONE.screenW(), DeviceMetrics.PHONE.screenH(),
                     PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT,
                     mouseX, mouseY, partialTick, font);
             case CHAT_PHOTO_PICKER -> chatPhotoPicker.render(g, phoneLeft, phoneTop,
-                    PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
+                    DeviceMetrics.PHONE.screenW(), DeviceMetrics.PHONE.screenH(),
                     PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT,
                     mouseX, mouseY, font);
             case CHAT_STICKER_PICKER -> chatStickerPicker.render(g, phoneLeft, phoneTop,
-                    PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
+                    DeviceMetrics.PHONE.screenW(), DeviceMetrics.PHONE.screenH(),
                     PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT,
                     mouseX, mouseY, font);
             case NOTES             -> notesList.render(g, phoneLeft, phoneTop,
-                    PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
+                    DeviceMetrics.PHONE.screenW(), DeviceMetrics.PHONE.screenH(),
                     PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT, mouseX, mouseY, font);
             case CLOCK             -> ClockPage.render(g, phoneLeft, phoneTop,
-                    PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
+                    DeviceMetrics.PHONE.screenW(), DeviceMetrics.PHONE.screenH(),
                     PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT, font);
             case WEATHER           -> WeatherPage.render(g, phoneLeft, phoneTop,
-                    PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
+                    DeviceMetrics.PHONE.screenW(), DeviceMetrics.PHONE.screenH(),
                     PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT, font);
             case READER            -> bookList.render(g, phoneLeft, phoneTop,
-                    PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
+                    DeviceMetrics.PHONE.screenW(), DeviceMetrics.PHONE.screenH(),
                     PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT,
                     mouseX, mouseY, partialTick, font);
             case NOTE_EDIT         -> noteEditor.render(g, phoneLeft, phoneTop,
-                    PhoneTheme.PHONE_WIDTH, PhoneTheme.PHONE_HEIGHT,
+                    DeviceMetrics.PHONE.screenW(), DeviceMetrics.PHONE.screenH(),
                     PhoneTheme.STATUS_BAR_HEIGHT, PhoneTheme.NAV_BAR_HEIGHT,
                     mouseX, mouseY, partialTick, font);
         }
@@ -804,18 +802,18 @@ public final class PhoneScreen extends Screen {
         renderNavBar(g, mouseX, mouseY);
 
         // 外壳最后画，盖在不透明的状态栏与导航栏之上；仍在 pushPose 内，开机动画要一起缩放
-        PhoneChassis.drawFrame(g, phoneLeft, phoneTop);
+        PhoneChassis.drawFrame(g, phoneLeft, phoneTop, DeviceMetrics.PHONE.screenW(), DeviceMetrics.PHONE.screenH());
 
         g.pose().popPose();
 
     }
 
     private void renderScreenBackground(GuiGraphics g) {
-        PhoneChassis.drawScreenBackground(g, phoneLeft, phoneTop);
+        PhoneChassis.drawScreenBackground(g, phoneLeft, phoneTop, DeviceMetrics.PHONE.screenW(), DeviceMetrics.PHONE.screenH());
     }
 
     private void renderStatusBar(GuiGraphics g) {
-        PhoneChassis.drawStatusBar(g, font, phoneLeft, phoneTop);
+        PhoneChassis.drawStatusBar(g, font, phoneLeft, phoneTop, DeviceMetrics.PHONE);
     }
 
     /** 建一次就够。标签在这一刻定死；PhoneScreen 每次开机都是新造的，换语言重开就跟上 */
@@ -867,7 +865,7 @@ public final class PhoneScreen extends Screen {
     }
 
     private void renderNavBar(GuiGraphics g, int mouseX, int mouseY) {
-        PhoneChassis.drawNavBar(g, font, phoneLeft, phoneTop, mouseX, mouseY);
+        PhoneChassis.drawNavBar(g, font, phoneLeft, phoneTop, DeviceMetrics.PHONE, mouseX, mouseY);
     }
 
     /**
@@ -880,8 +878,8 @@ public final class PhoneScreen extends Screen {
      */
     private float renderScale() {
         float base = hudMode
-                ? PhoneHudPlacement.effectiveScale(this.width, this.height)
-                : PhoneScale.effective(this.width, this.height);
+                ? PhoneHudPlacement.effectiveScale(DeviceMetrics.PHONE, this.width, this.height)
+                : PhoneScale.effective(DeviceMetrics.PHONE, this.width, this.height);
         return getAnimationScale() * base;
     }
 
@@ -903,12 +901,12 @@ public final class PhoneScreen extends Screen {
      * 界面放大之后画面变了、它们算命中的那套数没变，不换算的话点哪儿都不对。
      */
     private double unscaledX(double mx) {
-        int cx = phoneLeft + PhoneTheme.PHONE_WIDTH / 2;
+        int cx = phoneLeft + DeviceMetrics.PHONE.screenW() / 2;
         return (mx - cx) / renderScale() + cx;
     }
 
     private double unscaledY(double my) {
-        int cy = phoneTop + PhoneTheme.PHONE_HEIGHT / 2;
+        int cy = phoneTop + DeviceMetrics.PHONE.screenH() / 2;
         return (my - cy) / renderScale() + cy;
     }
 
@@ -916,8 +914,8 @@ public final class PhoneScreen extends Screen {
     private boolean isInsidePhone(double lx, double ly) {
         int fl = phoneLeft - PhoneTheme.PHONE_BORDER;
         int ft = phoneTop - PhoneTheme.PHONE_BORDER;
-        return lx >= fl && lx < fl + PhoneTheme.PHONE_TOTAL_WIDTH
-            && ly >= ft && ly < ft + PhoneTheme.PHONE_TOTAL_HEIGHT;
+        return lx >= fl && lx < fl + DeviceMetrics.PHONE.totalWidth()
+            && ly >= ft && ly < ft + DeviceMetrics.PHONE.totalHeight();
     }
 
     /**
@@ -936,8 +934,8 @@ public final class PhoneScreen extends Screen {
     private boolean isOnHudHandle(double lx, double ly) {
         if (!hudMode || !isInsidePhone(lx, ly)) return false;
 
-        boolean inScreen = lx >= phoneLeft && lx < phoneLeft + PhoneTheme.PHONE_WIDTH
-                && ly >= phoneTop && ly < phoneTop + PhoneTheme.PHONE_HEIGHT;
+        boolean inScreen = lx >= phoneLeft && lx < phoneLeft + DeviceMetrics.PHONE.screenW()
+                && ly >= phoneTop && ly < phoneTop + DeviceMetrics.PHONE.screenH();
 
         // 边框那一圈；或者屏幕里最上面那条状态栏
         return !inScreen || ly < phoneTop + PhoneTheme.STATUS_BAR_HEIGHT;
@@ -952,7 +950,7 @@ public final class PhoneScreen extends Screen {
      * @param commit 松手了没有。拖的过程中只改不落盘，几十步拖动只对应一次写盘
      */
     private void dragHudTo(double rawX, double rawY, boolean commit) {
-        PhoneHudPlacement.Placement p = PhoneHudPlacement.place(
+        PhoneHudPlacement.Placement p = PhoneHudPlacement.place(DeviceMetrics.PHONE,
                 (int) Math.round(rawX) - hudGrabX,
                 (int) Math.round(rawY) - hudGrabY,
                 this.width, this.height);
@@ -1001,8 +999,8 @@ public final class PhoneScreen extends Screen {
         // 各页的 mouseClicked 一律把点击吞掉，放到后面就永远轮不到
         if (isOnHudHandle(mx, my)) {
             hudDragging = true;
-            hudGrabX = (int) Math.round(rawX) - PhoneHudPlacement.originX(this.width, this.height);
-            hudGrabY = (int) Math.round(rawY) - PhoneHudPlacement.originY(this.width, this.height);
+            hudGrabX = (int) Math.round(rawX) - PhoneHudPlacement.originX(DeviceMetrics.PHONE, this.width, this.height);
+            hudGrabY = (int) Math.round(rawY) - PhoneHudPlacement.originY(DeviceMetrics.PHONE, this.width, this.height);
             return true;
         }
 
@@ -1262,7 +1260,7 @@ public final class PhoneScreen extends Screen {
 
             // 调大之后机身可能顶出窗口，拉回来。没顶出去时这一句不写盘，见 setPlacement
             PhoneHudPlacement.Placement p =
-                    PhoneHudPlacement.clampIntoWindow(this.width, this.height);
+                    PhoneHudPlacement.clampIntoWindow(DeviceMetrics.PHONE, this.width, this.height);
             PhoneHudPlacement.setPlacement(p.anchor(), p.offsetX(), p.offsetY());
             return true;
         }
@@ -1374,9 +1372,6 @@ public final class PhoneScreen extends Screen {
      * （手机离开副手）。它不是幂等的，重复调会把已经清过的状态再清一遍。
      */
     void shutdown() {
-        // 关机了：屏幕灭掉。放在最前面，下面那串 close() 与这件事无关
-        PhoneScreenOnSync.turnedOff(this);
-
         // 先记再关：下面这几个 close() 会把页面状态清掉
         PhoneSession.save(mode, pendingConversationPeer);
 
@@ -1428,7 +1423,5 @@ public final class PhoneScreen extends Screen {
         if (moved == null) return;
         this.location = moved;
 
-        // 从背包挪到手上（或者反过来）时，亮着的那件物品跟着换，见 PhoneScreenOnSync
-        PhoneScreenOnSync.turnedOn(moved);
     }
 }
