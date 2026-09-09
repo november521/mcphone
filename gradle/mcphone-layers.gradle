@@ -74,6 +74,15 @@ if (renamesJson.since == null) {
 }
 ext.mcphoneDatapackRenames = renamesJson.renames.asImmutable()
 
+// shared/ 里允许出现哪些第三方模组的 API 包。四条判据一条都不覆盖第三方包，
+// 而一刀切禁掉会把真能共用的联动代码（Curios）赶出 shared/ ——
+// 「这个第三方 API 跨版本稳不稳定」只能一条条查过再写下来，所以是一张声明表。
+def thirdPartyJson = readTrackedJson('versions/third-party-apis.json')
+if (!(thirdPartyJson.allowed instanceof Map)) {
+    throw new GradleException("versions/third-party-apis.json 里的 allowed 不是对象 —— 取不到白名单，这道闸就成了空转。")
+}
+ext.mcphoneAllowedThirdParty = (thirdPartyJson.allowed.keySet() as List).asImmutable()
+
 // 认出自己是哪个目标：按 targets.json 里的 project 字段反查，不靠目录名猜。
 // 目录挪了而 JSON 没跟着改，这里当场失败 —— 而不是安静地一层都不接。
 def myRelPath = layersRepoRoot.toPath().relativize(projectDir.toPath()).toString().replace(File.separator, '/')

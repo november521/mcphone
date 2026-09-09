@@ -226,11 +226,16 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 
 <!-- 下面这段由 ./gradlew updateSeamsDoc 生成，别手改：乙 -->
 
-#### 非客户端（1）
+#### 非客户端（6）
 
 判据在这批上相对可信。
 
 - `compat.WaystonesCompat`
+- `feature.terminal.integration.ae2.Ae2Integration`
+- `feature.terminal.integration.ae2.Ae2wtlibSupport`
+- `feature.terminal.integration.ae2.TerminalSlotLocator`
+- `feature.terminal.integration.refinedstorage.RefinedStorageIntegration`
+- `feature.terminal.integration.refinedstorage.TerminalSlotReference`　**★ 被共用代码引用**
 
 #### 客户端渲染路径（31）
 

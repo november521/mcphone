@@ -1005,6 +1005,87 @@ abstract class SeamsDocTask extends DefaultTask {
 }
 
 // ============================================================
+//  shared/ 的第三方模组 API 白名单
+// ============================================================
+//
+// 目标中立那四条判据（加载器导入、1.20.5+ 原版、注入的方法、组件读写）
+// 【一条都不覆盖第三方模组的包】。实测代价：AE2 的 appeng.menu.locator 与
+// Refined Storage 的 com.refinedmods.* 躺在 shared/ 里，1.20.1 那个目标一编
+// 就是 30 个错 —— 那两个包在 1.20.1 上根本不存在。
+//
+// 【但不能一刀切禁掉】。Curios 的 top.theillusivec4.curios.api 两个版本上都在，
+// 禁了会把真能共用的联动代码赶出 shared/。「这个第三方 API 跨版本稳不稳定」
+// 是个矩阵问题，只能一条条查过再写下来 —— 表在 versions/third-party-apis.json，
+// 加一条要连证据一起写。
+abstract class ThirdPartyImportsTask extends DefaultTask {
+
+    @InputDirectory abstract DirectoryProperty getSharedDir()
+    @Input abstract ListProperty<String> getAllowedPrefixes()
+
+    /** 本模组与原版、加载器之外的顶层包，就当成第三方。 */
+    static final java.util.regex.Pattern IMPORT =
+            ~/(?m)^[ \t]*import[ \t]+(?:static[ \t]+)?([\w.]+)[ \t]*;/
+    static final List<String> OURS = [
+            'com.november.mcphone.', 'net.minecraft.', 'net.neoforged.',
+            'net.minecraftforge.', 'net.fabricmc.', 'cpw.mods.',
+            'java.', 'javax.', 'org.w3c.', 'org.xml.',   // 这几个是 JDK 自带的，不是第三方
+            'com.mojang.', 'org.jetbrains.', 'org.slf4j',
+            'io.netty.', 'org.joml.', 'it.unimi.dsi.', 'com.google.',
+            'org.apache.', 'org.lwjgl.',
+    ].asImmutable()
+
+    @TaskAction
+    void run() {
+        File dir = sharedDir.get().asFile
+        if (!dir.isDirectory()) {
+            throw new GradleException("找不到 ${dir.canonicalPath} —— 这道闸就成了空转。")
+        }
+        def allowed = allowedPrefixes.get()
+        def offenders = [:]
+        int checked = 0
+        dir.eachFileRecurse { f ->
+            if (!f.isFile() || !f.name.endsWith('.java')) return
+            checked++
+            def code = TargetNeutrality.strip(f.getText('UTF-8'))
+            def m = IMPORT.matcher(code)
+            while (m.find()) {
+                def imp = m.group(1)
+                if (OURS.any { imp.startsWith(it) }) continue
+                if (allowed.any { imp.startsWith(it) }) continue
+                offenders.computeIfAbsent(f, { [] as List }) << imp
+            }
+        }
+        if (offenders) {
+            def sb = new StringBuilder()
+            sb << "shared/ 里 import 了没有声明过的第三方模组包，${offenders.size()} 个文件：\n"
+            offenders.each { f, imps ->
+                sb << "\n  ${dir.toPath().relativize(f.toPath())}\n"
+                imps.toSorted().unique().each { sb << "      ${it}\n" }
+            }
+            sb << "\nshared/ 要求每个目标都编得过。第三方模组的 API 包在不同 Minecraft 版本上\n"
+            sb << "未必存在、未必同名 —— 实测 AE2 的 appeng.menu.locator 与 Refined Storage 的\n"
+            sb << "com.refinedmods.* 在 1.20.1 上都不存在，一编就是 30 个错。\n"
+            sb << "\n两条路：\n"
+            sb << "  * 把这个文件搬回 platforms/<目标名>/，各平台各写一份；\n"
+            sb << "  * 确认那个包在矩阵里【每一个】Minecraft 版本上都存在且签名一致，\n"
+            sb << "    把证据写进 versions/third-party-apis.json 的 allowed 里。\n"
+            sb << "\n查不动就走第一条 —— 放进 shared/ 的代价是老版本编不过，\n"
+            sb << "而那要等那个目标真开始建才发现。\n"
+            throw new GradleException(sb.toString())
+        }
+        logger.lifecycle("shared/ 第三方 API 校验通过：${checked} 个文件，白名单 ${allowed.size()} 条")
+    }
+}
+
+tasks.register('verifySharedThirdPartyImports', ThirdPartyImportsTask) {
+    description = '校验 shared/ 只 import 声明过的第三方模组 API 包'
+    group = 'verification'
+    sharedDir.set(new File(repoRoot, 'shared/src/main/java'))
+    allowedPrefixes.set(mcphoneAllowedThirdParty)
+}
+tasks.named('check').configure { dependsOn tasks.named('verifySharedThirdPartyImports') }
+
+// ============================================================
 //  数据包目录名校验
 // ============================================================
 //
