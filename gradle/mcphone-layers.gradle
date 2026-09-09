@@ -131,6 +131,12 @@ ext.mcphoneTargetDatapackSingular = McphoneVersions.datapackSingular(myEntry.val
 //
 // 这些信息全都能从 JSON 与文件系统读出来，跟"当前是哪个平台"无关。所以任何一个
 // 平台都能把整份清单刷全。
+// 全部加载器层的 java 根 —— 孪生校验要看的是【所有】加载器层，不只是当前目标挂的那个。
+ext.mcphoneAllLoaderLayerDirs = layersJson.findAll { k, v ->
+    v instanceof Map && v.loader != null
+}.collect { k, v -> [name: k, dir: new File(layersRepoRoot, "${v.dir}/src/main/java")] }
+        .toSorted { it.name }
+
 ext.mcphoneAllTargets = targetsJson.findAll { k, v ->
     v instanceof Map && v.project != null && new File(layersRepoRoot, v.project).isDirectory()
 }.collect { k, v ->

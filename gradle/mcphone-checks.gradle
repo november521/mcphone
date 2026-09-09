@@ -763,6 +763,111 @@ mcphoneLayers.each { layer ->
 
 
 // ============================================================
+//  加载器层孪生校验
+// ============================================================
+//
+// 加载器层里同一个类会有几份 —— forge 一份、neoforge 一份，fabric 进来就是三份。
+// 它们本该<b>只差那一行加载器 import</b>，因为进这一层的判据就是「正文跨版本逐字相同、
+// 差异只在 import」。
+//
+// 【为什么这一处非要一道闸不可】
+//
+// 门面（ModPresence / Slots / StackCodecs / CuriosInventories）也是每个平台各一份，
+// 却不需要闸 —— 因为 shared/ 必须在【所有目标】上都编过，门面签名一漂移当场断构建：
+// 有一个编译单元同时看见了两份。
+//
+// 加载器层的孪生没有这个性质：每个目标只编自己那一份，两份各自都合法。实测过 ——
+// 把 neoforge 那份 RequestThrottle 的三个限流常量从 500/250 改成 999999，forge 那份
+// 一个字不动，两个目标【都是 BUILD SUCCESSFUL】。而那是一个活的行为差异：
+// 同一个模组在两个加载器上的请求限流差两千倍，玩家感觉得到，编译器一声不吭。
+//
+// 差别不在「是不是复制」，在「有没有一个编译单元同时看见两份」。
+//
+// 判据就是当初手工挑这几个文件用的那一条，现在它同时是【准入】与【保持】：
+// 去注释之后，正文必须逐字相同，import 只准差在加载器包名上。
+abstract class LoaderTwinsTask extends DefaultTask {
+
+    /** 全部加载器层的 java 根，每条 {name, dir}。 */
+    @Input abstract ListProperty<Object> getLoaderLayers()
+
+    static final java.util.regex.Pattern LOADER_PKG =
+            ~/^import\s+(?:static\s+)?(?:net\.neoforged|net\.minecraftforge|net\.fabricmc|cpw\.mods)\./
+
+    static List<String> lines(File f) {
+        TargetNeutrality.strip(f.getText('UTF-8')).split('\n').collect { it.trim() }.findAll { it }
+    }
+
+    @TaskAction
+    void run() {
+        def layers = loaderLayers.get()
+        if (layers.isEmpty()) {
+            throw new GradleException("一个加载器层都没读到 —— 扫空清单的闸永远是绿的。")
+        }
+        // FQCN -> [层名: 文件]
+        def byFqcn = [:]
+        layers.each { layer ->
+            File root = layer.dir as File
+            if (!root.isDirectory()) return
+            root.eachFileRecurse { f ->
+                if (!f.isFile() || !f.name.endsWith('.java')) return
+                def fq = root.toPath().relativize(f.toPath()).toString()
+                        .replace(File.separator, '.') - ~/\.java$/
+                byFqcn.computeIfAbsent(fq, { [:] })[layer.name] = f
+            }
+        }
+        def twins = byFqcn.findAll { fq, m -> m.size() > 1 }
+        def problems = []
+        twins.each { fq, m ->
+            def names = m.keySet().toSorted()
+            def base = names[0]
+            def baseLines = lines(m[base] as File)
+            def baseBody = baseLines.findAll { !it.startsWith('import ') }
+            def baseImp  = baseLines.findAll { it.startsWith('import ') && !LOADER_PKG.matcher(it).find() }.toSorted()
+            names.drop(1).each { other ->
+                def ls = lines(m[other] as File)
+                def body = ls.findAll { !it.startsWith('import ') }
+                def imp  = ls.findAll { it.startsWith('import ') && !LOADER_PKG.matcher(it).find() }.toSorted()
+                if (body != baseBody) {
+                    def d = []
+                    int n = Math.max(body.size(), baseBody.size())
+                    for (int i = 0; i < n && d.size() < 6; i++) {
+                        def a = i < baseBody.size() ? baseBody[i] : '（没有这一行）'
+                        def b = i < body.size() ? body[i] : '（没有这一行）'
+                        if (a != b) d << "        ${base}: ${a.take(90)}\n        ${other}: ${b.take(90)}"
+                    }
+                    problems << "  ${fq}  正文不一致（${base} ↔ ${other}）\n" + d.join('\n')
+                }
+                if (imp != baseImp) {
+                    def only = ((baseImp - imp).collect { "${base} 独有: ${it}" } +
+                                (imp - baseImp).collect { "${other} 独有: ${it}" })
+                    problems << "  ${fq}  import 差在加载器包之外（${base} ↔ ${other}）\n" +
+                                only.collect { "        ${it}" }.join('\n')
+                }
+            }
+        }
+        if (problems) {
+            throw new GradleException(
+                    "加载器层里的孪生文件漂移了，${problems.size()} 处：\n\n" +
+                    problems.join('\n\n') + "\n\n" +
+                    "进加载器层的判据是「正文跨版本逐字相同、差异只在加载器 import」——\n" +
+                    "那既是准入条件，也是【进去之后一直要满足】的条件。\n\n" +
+                    "两份各自都编得过，所以编译器不会说话：每个目标只编自己那一份，\n" +
+                    "没有任何一个编译单元同时看见它们。这道闸就是那个缺席的编译单元。\n\n" +
+                    "要么把改动同步到每一份，要么这个类根本不该在加载器层 —— \n" +
+                    "它如果开始各家各的样，那就是平台专有的东西，回 platforms/<目标名>/。")
+        }
+        logger.lifecycle("加载器层孪生校验通过：${twins.size()} 组，各 ${layers.size()} 层里的同名文件正文一致")
+    }
+}
+
+tasks.register('verifyLoaderTwins', LoaderTwinsTask) {
+    description = '校验加载器层里同名的几份除加载器 import 外逐字相同'
+    group = 'verification'
+    loaderLayers.set(mcphoneAllLoaderLayerDirs)
+}
+tasks.named('check').configure { dependsOn tasks.named('verifyLoaderTwins') }
+
+// ============================================================
 //  平台接缝清单
 // ============================================================
 //
