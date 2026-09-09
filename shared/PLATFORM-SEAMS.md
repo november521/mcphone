@@ -454,7 +454,7 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 - `feature.terminal.net.TerminalNetworking`
 - `feature.waystone.net.OpenWaystoneSelectionPacket`
 
-#### 客户端渲染路径（24）
+#### 客户端渲染路径（25）
 
 **判据在这批上最不可信** —— 签名漂移正集中在这里，逐个人工核过再搬。
 
@@ -475,6 +475,7 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 - `feature.music.client.playback.OggDecoder`　**★ 被共用代码引用**
 - `feature.notes.client.NoteEditor`
 - `feature.reader.client.source.ExternalBookSource`　**★ 被共用代码引用**
+- `feature.reader.client.source.TxtBookSource`　**★ 被共用代码引用**
 - `feature.settings.client.DeviceNameEditor`
 - `feature.settings.client.PhoneHudEditor`
 - `feature.settings.client.WallpaperPicker`
