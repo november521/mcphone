@@ -318,7 +318,101 @@ jobs:
             FAIL=1
           fi
 
-          # 六、层声明的目录必须真的在
+          # 六、【目标的 Minecraft 版本必须够到层的 since】
+          #
+          # 这条是本地构建查不到的那一半：buildable: false 的目标根本不会被建，
+          # 给 1.20.1-forge 挂上 1.20.5+ 在前面五道检查里完全合法（层存在、目录也在），
+          # 编译器也不说话 —— 错要等那个目标真开始建的那天才炸。
+          #
+          # 版本比较：拆成数字数组比。jq 比数组是逐元素比、再比长度，
+          # 所以 [1,21] < [1,21,1] 成立，正是想要的语义。
+          TOOOLD=$(jq -r --slurpfile L "$L" '
+            def ver: split(".") | map(tonumber);
+            to_entries[] | select((.value|type)=="object")
+            | . as $e
+            | ($e.value.layers // [])
+            | map(. as $n
+                  | $L[0][$n] as $spec
+                  | select($spec != null and $spec.since != null
+                           and (($e.value.minecraft | ver) < ($spec.since | ver)))
+                  | "\($n)（自 \($spec.since) 起）")
+            | select(length > 0)
+            | "  \($e.key)  是 \($e.value.minecraft)，却挂了：\(join("、"))"
+          ' "$F"); RC=$?
+          if [ "$RC" != "0" ]; then
+            echo "::error::比对 since 的 jq 跑挂了（退出码 $RC），这道检查没能跑起来"
+            exit 1
+          fi
+          if [ -n "$TOOOLD" ]; then
+            echo "::error::有目标挂了它的 Minecraft 版本还没有的层："
+            printf '%s\n' "$TOOOLD"
+            echo "层里装的东西在那个版本上不存在。把这一层从该目标的 layers 里去掉，"
+            echo "或者确认 layers.json 里的 since 写对了。"
+            FAIL=1
+          fi
+
+          # 六点五、【每一层必须二选一写 since 或 loader；加载器层要挂对】
+          #
+          # 写 since 的是版本层（同版本、三个加载器共用），写 loader 的是加载器层
+          # （同加载器、各版本共用）。两个都没有，构建就不知道该禁哪个轴 ——
+          # 而"不知道禁哪个轴"的层等于一道不设防的门。
+          BADKIND=$(jq -r '
+            to_entries[] | select((.value|type)=="object")
+            | select((.value.since == null) == (.value.loader == null))
+            | "  \(.key)  since=\(.value.since // "无")  loader=\(.value.loader // "无")"
+          ' "$L"); RC=$?
+          [ "$RC" = "0" ] || { echo "::error::查层类型的 jq 跑挂了（退出码 $RC）"; exit 1; }
+          if [ -n "$BADKIND" ]; then
+            echo "::error::这些层没有二选一写 since 或 loader："
+            printf '%s\n' "$BADKIND"
+            echo "写 since 是版本层，写 loader 是加载器层。都不写就不知道该禁哪个轴，都写是两件事挤在一层。"
+            FAIL=1
+          fi
+
+          WRONGLOADER=$(jq -r --slurpfile L "$L" '
+            to_entries[] | select((.value|type)=="object")
+            | . as $e
+            | ($e.value.layers // [])
+            | map(. as $n | $L[0][$n] as $spec
+                  | select($spec != null and $spec.loader != null and $spec.loader != $e.value.loader)
+                  | "\($n)（\($spec.loader) 的）")
+            | select(length > 0)
+            | "  \($e.key)  是 \($e.value.loader)，却挂了：\(join("、"))"
+          ' "$F"); RC=$?
+          [ "$RC" = "0" ] || { echo "::error::比对加载器层的 jq 跑挂了（退出码 $RC）"; exit 1; }
+          if [ -n "$WRONGLOADER" ]; then
+            echo "::error::有目标挂了别的加载器的层："
+            printf '%s\n' "$WRONGLOADER"
+            FAIL=1
+          fi
+
+          # 七、【声明了却没有任何目标挂的层 = 孤儿层】
+          #
+          # 层里的文件只有被某个目标挂上才会进构建。没人挂的层是一整个目录的死代码，
+          # 而且完全静默：构建绿、测试绿、jar 里少了那批文件也没有任何东西会说话。
+          # 实测踩过：改 targets.json 时用旧备份覆盖回去，1.21+ 那一层的 5 个数据包
+          # 文件当场全部退出构建，六道闸没有一道响。
+          ORPHAN=$(jq -r --slurpfile T "$F" '
+            . as $layers
+            | [$T[0] | to_entries[] | select((.value|type)=="object") | (.value.layers // [])[]]
+            | . as $used
+            | $layers | to_entries[] | select((.value|type)=="object")
+            | select(.key as $k | ($used | index($k)) == null)
+            | "  \(.key)  （目录 \(.value.dir)）"
+          ' "$L"); RC=$?
+          if [ "$RC" != "0" ]; then
+            echo "::error::查孤儿层的 jq 跑挂了（退出码 $RC），这道检查没能跑起来"
+            exit 1
+          fi
+          if [ -n "$ORPHAN" ]; then
+            echo "::error::这些层在 layers.json 里声明了，但没有任何目标挂它："
+            printf '%s\n' "$ORPHAN"
+            echo "层里的文件只有被挂上才进构建。没人挂 = 整个目录是死代码，而且不报错。"
+            echo "给该挂的目标补上 layers，或者把这一层从 layers.json 里删掉。"
+            FAIL=1
+          fi
+
+          # 八、层声明的目录必须真的在
           MISSDIR=$(jq -r 'to_entries[] | select((.value|type)=="object") | .value.dir' "$L") || exit 1
           for d in $MISSDIR; do
             if [ ! -d "$d" ]; then

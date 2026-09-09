@@ -583,10 +583,29 @@ abstract class SharedNeutralityTask extends DefaultTask {
     @InputDirectory abstract DirectoryProperty getSharedDir()
     /** 这一层禁哪些轴：'版本' / '加载器'。 */
     @Input          abstract ListProperty<String> getForbiddenAxes()
-    /** 这一层允不允许一个 java 都没有（按版本那层可以是空的，shared/ 不行）。 */
-    @Input          abstract Property<Boolean> getAllowEmpty()
+    /**
+     * 这一层【现在该不该有内容】。
+     *
+     * 【不是「允不允许为空」】。层可以先声明后填，但"空"要是显式声明的状态：
+     * 声明了有内容却扫不到文件要红，声明了没内容却扫到了也要红（声明过期了）。
+     * 默认容忍空的话，本该有内容的层被清空、或者 dir 写错指到一个恰好存在的
+     * 空目录，都只会在日志里留一行，而这个文件里别处（assertTests、
+     * verifyServiceFiles、shared/）对同一个问题给的答案都是"抛"。
+     */
+    @Input          abstract Property<Boolean> getPopulated()
     /** 报错里怎么称呼这一层。 */
     @Input          abstract Property<String> getLayerName()
+    /** 这一层自哪个 Minecraft 版本起（shared/ 没有，留空）。 */
+    @Input @Optional abstract Property<String> getSince()
+
+    static int cmpVersion(String a, String b) {
+        def x = a.tokenize('.')*.toInteger(), y = b.tokenize('.')*.toInteger()
+        for (int i = 0; i < Math.max(x.size(), y.size()); i++) {
+            int c = (i < x.size() ? x[i] : 0) <=> (i < y.size() ? y[i] : 0)
+            if (c != 0) return c
+        }
+        return 0
+    }
 
     @TaskAction
     void run() {
@@ -602,13 +621,70 @@ abstract class SharedNeutralityTask extends DefaultTask {
         }
         def files = []
         dir.eachFileRecurse { if (it.isFile() && it.name.endsWith('.java')) files << it }
-        if (files.isEmpty()) {
-            if (!allowEmpty.get()) {
-                throw new GradleException(
-                        "${dir.canonicalPath} 下一个 .java 都没有。" +
-                        "'一个都没扫到' 不等于 '没有问题'。")
+        // 资源也算内容：一个层可以只放数据包、一个 java 都没有
+        def resourceDir = new File(dir.parentFile, 'resources')
+        def resourceCount = 0
+        if (resourceDir.isDirectory()) {
+            resourceDir.eachFileRecurse { if (it.isFile()) resourceCount++ }
+        }
+        boolean hasContent = !files.isEmpty() || resourceCount > 0
+
+        if (populated.get() && !hasContent) {
+            throw new GradleException(
+                    "${layer}声明了 populated: true，但 ${dir.parentFile.canonicalPath} 下" +
+                    "一个文件都没有（java 0 个、资源 0 个）。\n" +
+                    "要么内容丢了、要么 layers.json 里的 dir 写错指到了别处 —— " +
+                    "'一个都没扫到' 不等于 '没有问题'。\n" +
+                    "这一层确实还没开始填的话，把 layers.json 里的 populated 改成 false。")
+        }
+        if (!populated.get() && hasContent) {
+            throw new GradleException(
+                    "${layer}声明了 populated: false，却有内容" +
+                    "（java ${files.size()} 个、资源 ${resourceCount} 个）。\n" +
+                    "声明过期了，把 layers.json 里的 populated 改成 true。")
+        }
+        // ── 【数据包目录名要与这一层的 since 对得上】
+        //
+        // 1.21（数据包格式 48）把这些目录从复数改成了单数。放错的后果是静默的：
+        // 那条配方 / 进度 / 战利品表只是不存在，构建全绿，游戏也不报错。
+        // 资源那半边没有 import 可查，这是唯一能机器判的一条，所以必须查。
+        if (since.isPresent() && resourceDir.isDirectory()) {
+            def renamedAt121 = [
+                    'recipes': 'recipe', 'advancements': 'advancement',
+                    'loot_tables': 'loot_table', 'functions': 'function',
+                    'tags/items': 'tags/item', 'tags/blocks': 'tags/block',
+                    'tags/entity_types': 'tags/entity_type', 'tags/fluids': 'tags/fluid',
+            ]
+            boolean singular = cmpVersion(since.get(), '1.21') >= 0
+            def wrong = []
+            resourceDir.eachFileRecurse { f ->
+                if (!f.isFile()) return
+                def rel = resourceDir.toPath().relativize(f.toPath()).toString().replace(File.separator, '/')
+                // 只看 data/<命名空间>/ 之后那一段
+                def m = rel =~ /^data\/[^\/]+\/(.+)$/
+                if (!m) return
+                def tail = m[0][1]
+                renamedAt121.each { plural, singularName ->
+                    if (singular && (tail.startsWith(plural + '/'))) {
+                        wrong << [rel, plural, singularName, "这一层自 ${since.get()} 起，该用单数"]
+                    } else if (!singular && tail.startsWith(singularName + '/')) {
+                        wrong << [rel, singularName, plural, "这一层自 ${since.get()} 起，1.21 之前该用复数"]
+                    }
+                }
             }
-            logger.lifecycle("${layer}：还是空的，没有可校验的文件")
+            if (wrong) {
+                def sb = new StringBuilder()
+                sb << "${layer}的数据包目录名与这一层的版本对不上，共 ${wrong.size()} 处：\n"
+                wrong.each { w -> sb << "\n  ${w[0]}\n      ${w[1]}/ 应为 ${w[2]}/ —— ${w[3]}\n" }
+                sb << "\n1.21（数据包格式 48）把这些目录从复数改成了单数。放错【不会报错】——\n"
+                sb << "那条配方 / 进度 / 战利品表只是静默地不存在，构建和游戏都不会说话。\n"
+                sb << "\n目录名对不上通常说明这批文件放错了层：两条边界不是同一条，就该是两层。\n"
+                throw new GradleException(sb.toString())
+            }
+        }
+
+        if (files.isEmpty()) {
+            logger.lifecycle("${layer}：没有 java（资源 ${resourceCount} 个）")
             return
         }
         files = files.toSorted { it.path }
@@ -666,15 +742,18 @@ abstract class SharedNeutralityTask extends DefaultTask {
 // 它们与加载器无关，第二个同版本目标并入时会被复制三份，而没有任何机制要求这三份
 // 一致 —— 多分支的病换了个尺度，从跨分支缩到跨目录，并且连"当场可见"都没有。
 // 加一层目录之后根本不产生三份，也就不需要一道"这几份必须逐字相同"的闸。
-def layersFile  = new File(repoRoot, 'versions/layers.json')
-def targetsFile = new File(repoRoot, 'versions/targets.json')
-[layersFile, targetsFile].each { f ->
-    if (!f.exists()) {
-        throw new GradleException("找不到 ${f} —— 共享层的声明在那儿，读不到就只能静默少校验一层。")
+// 【必须用 providers.fileContents 读，不能 JsonSlurper.parse(File)】
+// 后者不是被跟踪的配置输入：开着配置缓存时改了 JSON，缓存照旧命中，
+// 这些校验一条都不跑，构建还是绿的。实测过。
+def readTrackedJson = { String relFromProject, String shownPath ->
+    def content = providers.fileContents(layout.projectDirectory.file(relFromProject)).asText.orNull
+    if (content == null) {
+        throw new GradleException("找不到 ${shownPath} —— 共享层的声明在那儿，读不到就只能静默少校验一层。")
     }
+    return new groovy.json.JsonSlurper().parseText(content)
 }
-def layersJson  = new groovy.json.JsonSlurper().parse(layersFile)
-def targetsJson = new groovy.json.JsonSlurper().parse(targetsFile)
+def layersJson  = readTrackedJson('../../versions/layers.json',  'versions/layers.json')
+def targetsJson = readTrackedJson('../../versions/targets.json', 'versions/targets.json')
 
 def myRelPath = repoRoot.toPath().relativize(projectDir.toPath()).toString().replace(File.separator, '/')
 def myTarget = targetsJson.find { k, v -> v instanceof Map && v.project == myRelPath }
@@ -688,7 +767,18 @@ def myLayerDirs = (myTarget.value.layers ?: []).collect { name ->
     if (spec == null) {
         throw new GradleException("目标 ${myTarget.key} 声明的共享层 \"${name}\" 不在 versions/layers.json 里。")
     }
-    [name: name, dir: new File(repoRoot, "${spec.dir}/src/main/java")]
+    if (spec.populated == null) {
+        throw new GradleException(
+                "versions/layers.json 里的层 \"${name}\" 没写 populated。" +
+                "这一层现在该不该有内容必须显式声明 —— 默认容忍空的层等于没有闸。")
+    }
+    if ((spec.since == null) == (spec.loader == null)) {
+        throw new GradleException(
+                "versions/layers.json 里的层 \"${name}\" 必须二选一写 since 或 loader，" +
+                "否则不知道这一层该禁哪个轴。")
+    }
+    [name: name, dir: new File(repoRoot, "${spec.dir}/src/main/java"),
+     populated: spec.populated, since: spec.since, loader: spec.loader]
 }
 
 tasks.register('verifySharedIsTargetNeutral', SharedNeutralityTask) {
@@ -696,7 +786,7 @@ tasks.register('verifySharedIsTargetNeutral', SharedNeutralityTask) {
     group = 'verification'
     sharedDir.set(new File(repoRoot, 'shared/src/main/java'))
     forbiddenAxes.set(['版本', '加载器'])
-    allowEmpty.set(false)
+    populated.set(true)        // shared/ 永远不该是空的
     layerName.set('shared/')
 }
 tasks.named('check').configure { dependsOn tasks.named('verifySharedIsTargetNeutral') }
@@ -705,14 +795,16 @@ tasks.named('check').configure { dependsOn tasks.named('verifySharedIsTargetNeut
 myLayerDirs.each { layer ->
     def taskName = 'verifyLayer' + layer.name.replaceAll(/[^A-Za-z0-9]/, '_')
     tasks.register(taskName, SharedNeutralityTask) {
-        description = "校验共享层 ${layer.name} 里没有绑加载器的东西"
+        description = "校验共享层 ${layer.name} 里没有" + (layer.since != null ? '绑加载器' : '绑版本') + "的东西"
         group = 'verification'
         sharedDir.set(layer.dir)
-        forbiddenAxes.set(['加载器'])
-        // 层可以是空的：某一层可能确实还没有内容。目录本身必须在 ——
-        // 目录没了是配置错，不是"没东西"。
-        allowEmpty.set(true)
+        // 【禁的是另一个轴】：版本层挡加载器专有的东西，加载器层挡版本专有的东西。
+        // 两种层是对称的，装的正好是对方挡掉的那一半。
+        forbiddenAxes.set(layer.since != null ? ['加载器'] : ['版本'])
+        // 空不空由 layers.json 的 populated 显式声明，不是默认容忍
+        populated.set(layer.populated)
         layerName.set("共享层 ${layer.name}")
+        if (layer.since != null) since.set(layer.since)
     }
     tasks.named('check').configure { dependsOn tasks.named(taskName) }
 }

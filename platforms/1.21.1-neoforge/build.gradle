@@ -73,13 +73,18 @@ group = mod_group_id
 // versions/targets.json 每个目标的 layers 字段：这个目标挂哪几层
 //
 // 这两行代码此后不用再动：加一个目标、加一层，都只改 JSON。
-def layersFile  = new File(repoRoot, 'versions/layers.json')
-def targetsFile = new File(repoRoot, 'versions/targets.json')
-[layersFile, targetsFile].each { f ->
-    if (!f.exists()) throw new GradleException("找不到 ${f} —— 共享层的声明在那儿，读不到就只能静默少接一层源码，而那是编译期才炸的错。")
+// 【必须用 providers.fileContents 读，不能 JsonSlurper.parse(File)】
+// 后者不是被跟踪的配置输入：开着配置缓存时改了 JSON，缓存照旧命中，
+// 这些校验一条都不跑，构建还是绿的。实测过。
+def readTrackedJson = { String relFromProject, String shownPath ->
+    def content = providers.fileContents(layout.projectDirectory.file(relFromProject)).asText.orNull
+    if (content == null) {
+        throw new GradleException("找不到 ${shownPath} —— 共享层的声明在那儿，读不到就只能静默少接/少校验一层。")
+    }
+    return new groovy.json.JsonSlurper().parseText(content)
 }
-def layers  = new groovy.json.JsonSlurper().parse(layersFile)
-def targets = new groovy.json.JsonSlurper().parse(targetsFile)
+def layers  = readTrackedJson('../../versions/layers.json',  'versions/layers.json')
+def targets = readTrackedJson('../../versions/targets.json', 'versions/targets.json')
 
 // 认出自己是哪个目标：按 targets.json 里的 project 字段反查，不靠目录名猜。
 // 目录挪了而 JSON 没跟着改，这里当场失败 —— 而不是安静地一层都不接。
@@ -100,6 +105,44 @@ myLayers.each { name ->
                 "目标 ${myEntry.key} 声明挂了共享层 \"${name}\"，但 versions/layers.json 里没有它。\n" +
                 "已有的层：${layers.findAll { k, v -> !k.startsWith('_') }.keySet().join('、')}")
     }
+    // 【目标的 Minecraft 版本必须够到层的 since】
+    //
+    // 层名写着"从哪个版本起有"，since 是它的机器可读形式。不查的话，给一个
+    // 1.20.1 的目标挂上 1.20.5+ 完全合法：JSON 校验只看层存不存在、目录在不在。
+    // 那个目标又常常是 buildable: false，编译器也不说话 —— 错在它真开始建的
+    // 那一天才炸，而那正是最不想调构建的时候。
+    def cmpVer = { String a, String b ->
+        def x = a.tokenize('.')*.toInteger(), y = b.tokenize('.')*.toInteger()
+        for (int i = 0; i < Math.max(x.size(), y.size()); i++) {
+            int c = (i < x.size() ? x[i] : 0) <=> (i < y.size() ? y[i] : 0)
+            if (c != 0) return c
+        }
+        return 0
+    }
+    // 【两种层，各自的挂载前提】
+    //   写 since 的是版本层 —— 目标的 Minecraft 版本要够得到
+    //   写 loader 的是加载器层 —— 目标的加载器要对得上
+    // 二选一：都不写就不知道该禁哪个轴，都写了就是两件事挤在一层。
+    if ((spec.since == null) == (spec.loader == null)) {
+        throw new GradleException(
+                "versions/layers.json 里的层 \"${name}\" 必须【二选一】写 since 或 loader：" +
+                "写 since 是版本层（同版本、三个加载器共用），写 loader 是加载器层" +
+                "（同加载器、各版本共用）。两个都没有就不知道这一层该禁哪个轴。")
+    }
+    if (spec.loader != null && spec.loader != myEntry.value.loader) {
+        throw new GradleException(
+                "目标 ${myEntry.key} 的加载器是 ${myEntry.value.loader}，" +
+                "却挂了加载器层 \"${name}\"（${spec.loader} 的）。\n" +
+                "加载器层里装的是那一个加载器专有的东西，挂错了编不过。")
+    }
+    if (spec.since != null && cmpVer(myEntry.value.minecraft, spec.since) < 0) {
+        throw new GradleException(
+                "目标 ${myEntry.key} 是 Minecraft ${myEntry.value.minecraft}，" +
+                "却挂了共享层 \"${name}\"（自 ${spec.since} 起才有）。\n" +
+                "层里装的东西在这个版本上不存在，编出来的 jar 一装就炸。\n" +
+                "把这一层从该目标的 layers 里去掉，或者确认 layers.json 里的 since 写对了。")
+    }
+
     def dir = new File(repoRoot, "${spec.dir}/src/main/java")
     if (!dir.isDirectory()) {
         throw new GradleException("共享层 \"${name}\" 的目录 ${dir} 不存在。layers.json 里写的是 ${spec.dir}。")
