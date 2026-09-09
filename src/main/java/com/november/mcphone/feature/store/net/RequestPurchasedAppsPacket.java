@@ -1,7 +1,7 @@
 package com.november.mcphone.feature.store.net;
 
 import com.november.mcphone.MCphone;
-import io.netty.buffer.ByteBuf;
+import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
@@ -22,8 +22,16 @@ public record RequestPurchasedAppsPacket() implements CustomPacketPayload {
             new CustomPacketPayload.Type<>(
                     ResourceLocation.fromNamespaceAndPath(MCphone.MODID, "request_purchased_apps"));
 
-    public static final StreamCodec<ByteBuf, RequestPurchasedAppsPacket> STREAM_CODEC =
-            StreamCodec.unit(new RequestPurchasedAppsPacket());
+    public static final StreamCodec<FriendlyByteBuf, RequestPurchasedAppsPacket> STREAM_CODEC =
+            StreamCodec.of((buf, msg) -> encode(msg, buf), RequestPurchasedAppsPacket::decode);
+
+    /** 没有字段，一个字节都不写。多写一个字节，对面就会把它当成下一个包的开头 */
+    public static void encode(RequestPurchasedAppsPacket msg, FriendlyByteBuf buf) {
+    }
+
+    public static RequestPurchasedAppsPacket decode(FriendlyByteBuf buf) {
+        return new RequestPurchasedAppsPacket();
+    }
 
     @Override
     public Type<? extends CustomPacketPayload> type() {

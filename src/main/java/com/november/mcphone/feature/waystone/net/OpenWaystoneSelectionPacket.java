@@ -1,7 +1,7 @@
 package com.november.mcphone.feature.waystone.net;
 
 import com.november.mcphone.MCphone;
-import io.netty.buffer.ByteBuf;
+import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
@@ -16,8 +16,16 @@ public record OpenWaystoneSelectionPacket() implements CustomPacketPayload {
             new CustomPacketPayload.Type<>(
                     ResourceLocation.fromNamespaceAndPath(MCphone.MODID, "open_waystone_selection"));
 
-    public static final StreamCodec<ByteBuf, OpenWaystoneSelectionPacket> STREAM_CODEC =
-            StreamCodec.unit(new OpenWaystoneSelectionPacket());
+    public static final StreamCodec<FriendlyByteBuf, OpenWaystoneSelectionPacket> STREAM_CODEC =
+            StreamCodec.of((buf, msg) -> encode(msg, buf), OpenWaystoneSelectionPacket::decode);
+
+    /** 没有字段，一个字节都不写。多写一个字节，对面就会把它当成下一个包的开头 */
+    public static void encode(OpenWaystoneSelectionPacket msg, FriendlyByteBuf buf) {
+    }
+
+    public static OpenWaystoneSelectionPacket decode(FriendlyByteBuf buf) {
+        return new OpenWaystoneSelectionPacket();
+    }
 
     @Override
     public Type<? extends CustomPacketPayload> type() {

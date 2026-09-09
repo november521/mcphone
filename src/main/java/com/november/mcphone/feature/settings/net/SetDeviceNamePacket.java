@@ -3,8 +3,7 @@ package com.november.mcphone.feature.settings.net;
 import com.november.mcphone.MCphone;
 import com.november.mcphone.core.PhoneLocation;
 import com.november.mcphone.util.TextSanitizer;
-import io.netty.buffer.ByteBuf;
-import net.minecraft.network.codec.ByteBufCodecs;
+import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
@@ -37,16 +36,34 @@ public record SetDeviceNamePacket(String name, PhoneLocation location)
             new CustomPacketPayload.Type<>(
                     ResourceLocation.fromNamespaceAndPath(MCphone.MODID, "set_device_name"));
 
-    public static final StreamCodec<ByteBuf, SetDeviceNamePacket> STREAM_CODEC =
-            StreamCodec.composite(
-                    // 这里的上限是【字符数】而非字节数，UTF-8 的字节余量
-                    // 由 Utf8String 内部按 utf8MaxBytes 自行换算，不必乘 3
-                    ByteBufCodecs.stringUtf8(MAX_NAME_LENGTH),
-                    SetDeviceNamePacket::name,
-                    PhoneLocation.STREAM_CODEC,
-                    SetDeviceNamePacket::location,
-                    SetDeviceNamePacket::new
-            );
+    public static final StreamCodec<FriendlyByteBuf, SetDeviceNamePacket> STREAM_CODEC =
+            StreamCodec.of((buf, msg) -> encode(msg, buf), SetDeviceNamePacket::decode);
+
+    /**
+     * 名字在前、位置在后。
+     *
+     * 名字的上限是【字符数】而非字节数，UTF-8 的字节余量由 {@code Utf8String} 内部
+     * 按 {@code utf8MaxBytes} 自行换算（3 倍），不必在这里乘。
+     */
+    public static void encode(SetDeviceNamePacket msg, FriendlyByteBuf buf) {
+        buf.writeUtf(msg.name(), MAX_NAME_LENGTH);
+        msg.location().writeTo(buf);
+    }
+
+    /**
+     * ⚠ 位置那一半读写<b>走的不是同一套写法</b>，看着不对称：写用
+     * {@code location.writeTo(buf)}（实例方法），读用 {@code PhoneLocation.STREAM_CODEC.decode}
+     * （组合子）。
+     *
+     * 两者仍然是配对的 —— {@code STREAM_CODEC.encode} 的方法体就是转调 {@code writeTo}。
+     * 之所以还没统一，是因为 {@link PhoneLocation} 是个和类型有关的多态结构，它的编解码
+     * 还没换成手写的那一对；换过来之后这里就是 {@code PhoneLocation.encode/decode} 两行对称的。
+     */
+    public static SetDeviceNamePacket decode(FriendlyByteBuf buf) {
+        return new SetDeviceNamePacket(
+                buf.readUtf(MAX_NAME_LENGTH),
+                PhoneLocation.STREAM_CODEC.decode(buf));
+    }
 
     @Override
     public Type<? extends CustomPacketPayload> type() {

@@ -1,8 +1,7 @@
 package com.november.mcphone.feature.terminal.net;
 
 import com.november.mcphone.MCphone;
-import io.netty.buffer.ByteBuf;
-import net.minecraft.network.codec.ByteBufCodecs;
+import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
@@ -40,26 +39,35 @@ public record TerminalActionPacket(Action action) implements CustomPacketPayload
         /** 开终端：卡槽里那台优先，没有就用背包里第一台 */
         OPEN_TERMINAL,
         /** 开终端卡槽界面 */
-        OPEN_SLOT_MENU,
-    }
+        OPEN_SLOT_MENU;
 
-    private static final Action[] BY_ID = Action.values();
+        private static final Action[] VALUES = values();
+
+        /**
+         * 编号读不出来时退回 {@link #OPEN_SLOT_MENU}，而不是抛异常。
+         *
+         * 抛出去的后果是整条连接被判定为协议错误、玩家直接掉线，而起因可能只是对面装了个
+         * 新版本。退回一个无害动作，玩家看到的是"点了开出卡槽"，自己就会去查版本。
+         */
+        static Action decode(int ordinal) {
+            return (ordinal >= 0 && ordinal < VALUES.length) ? VALUES[ordinal] : OPEN_SLOT_MENU;
+        }
+    }
 
     public static final CustomPacketPayload.Type<TerminalActionPacket> TYPE =
             new CustomPacketPayload.Type<>(
                     ResourceLocation.fromNamespaceAndPath(MCphone.MODID, "phone_action"));
 
-    /**
-     * 编号读不出来时退回 {@link Action#OPEN_SLOT_MENU}，而不是抛异常。
-     *
-     * 抛出去的后果是整条连接被判定为协议错误、玩家直接掉线，而起因可能只是对面装了个新版本。
-     * 退回一个无害动作，玩家看到的是"点了没反应／开了卡槽"，自己就会去查版本。
-     */
-    public static final StreamCodec<ByteBuf, TerminalActionPacket> STREAM_CODEC =
-            ByteBufCodecs.VAR_INT.map(
-                    id -> new TerminalActionPacket(id >= 0 && id < BY_ID.length
-                            ? BY_ID[id] : Action.OPEN_SLOT_MENU),
-                    packet -> packet.action().ordinal());
+    public static final StreamCodec<FriendlyByteBuf, TerminalActionPacket> STREAM_CODEC =
+            StreamCodec.of((buf, msg) -> encode(msg, buf), TerminalActionPacket::decode);
+
+    public static void encode(TerminalActionPacket msg, FriendlyByteBuf buf) {
+        buf.writeVarInt(msg.action().ordinal());
+    }
+
+    public static TerminalActionPacket decode(FriendlyByteBuf buf) {
+        return new TerminalActionPacket(Action.decode(buf.readVarInt()));
+    }
 
     @Override
     public Type<? extends CustomPacketPayload> type() {

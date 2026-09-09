@@ -2,8 +2,8 @@ package com.november.mcphone.feature.store;
 
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
-import io.netty.buffer.ByteBuf;
-import net.minecraft.network.codec.ByteBufCodecs;
+import com.november.mcphone.core.net.Wire;
+import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.resources.ResourceLocation;
 
@@ -34,10 +34,23 @@ public record PurchasedApps(Set<ResourceLocation> ids) {
     );
 
     /** 条数上限在编解码器层面封死 */
-    public static final StreamCodec<ByteBuf, PurchasedApps> STREAM_CODEC =
-            ResourceLocation.STREAM_CODEC.apply(ByteBufCodecs.list(MAX_COUNT))
-                    .map(list -> new PurchasedApps(Set.copyOf(list)),
-                            p -> List.copyOf(p.ids()));
+    public static final StreamCodec<FriendlyByteBuf, PurchasedApps> STREAM_CODEC =
+            StreamCodec.of((buf, msg) -> encode(msg, buf), PurchasedApps::decode);
+
+    /**
+     * 上线的顺序<b>不保证</b>：里头是个 Set，{@code Set.copyOf} 的迭代顺序每次 JVM
+     * 启动都可能不同。这不影响正确性（它本来就是集合），但意味着同一份数据两次编码
+     * 出来的字节可以不一样 —— 别拿它做缓存键或者哈希比对。
+     */
+    public static void encode(PurchasedApps value, FriendlyByteBuf buf) {
+        Wire.writeList(buf, value.ids(), MAX_COUNT, (v, b) -> b.writeResourceLocation(v));
+    }
+
+    public static PurchasedApps decode(FriendlyByteBuf buf) {
+        List<ResourceLocation> list =
+                Wire.readList(buf, MAX_COUNT, FriendlyByteBuf::readResourceLocation);
+        return new PurchasedApps(Set.copyOf(list));
+    }
 
     public boolean has(ResourceLocation id) {
         return id != null && ids.contains(id);

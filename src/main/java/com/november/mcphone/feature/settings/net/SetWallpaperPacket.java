@@ -2,8 +2,7 @@ package com.november.mcphone.feature.settings.net;
 
 import com.mojang.logging.LogUtils;
 import com.november.mcphone.MCphone;
-import io.netty.buffer.ByteBuf;
-import net.minecraft.network.codec.ByteBufCodecs;
+import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
@@ -19,12 +18,16 @@ public record SetWallpaperPacket(String wallpaperFileName) implements CustomPack
     public static final CustomPacketPayload.Type<SetWallpaperPacket> TYPE =
             new CustomPacketPayload.Type<>(ResourceLocation.fromNamespaceAndPath(MCphone.MODID, "set_wallpaper"));
 
-    public static final StreamCodec<ByteBuf, SetWallpaperPacket> STREAM_CODEC =
-            StreamCodec.composite(
-                    ByteBufCodecs.STRING_UTF8,
-                    SetWallpaperPacket::wallpaperFileName,
-                    SetWallpaperPacket::new
-            );
+    public static final StreamCodec<FriendlyByteBuf, SetWallpaperPacket> STREAM_CODEC =
+            StreamCodec.of((buf, msg) -> encode(msg, buf), SetWallpaperPacket::decode);
+
+    public static void encode(SetWallpaperPacket msg, FriendlyByteBuf buf) {
+        buf.writeUtf(msg.wallpaperFileName());
+    }
+
+    public static SetWallpaperPacket decode(FriendlyByteBuf buf) {
+        return new SetWallpaperPacket(buf.readUtf());
+    }
 
     @Override
     public Type<? extends CustomPacketPayload> type() {

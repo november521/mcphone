@@ -2,7 +2,7 @@ package com.november.mcphone.feature.store.net;
 
 import com.november.mcphone.MCphone;
 import com.november.mcphone.feature.store.PurchasedApps;
-import io.netty.buffer.ByteBuf;
+import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
@@ -21,9 +21,16 @@ public record SyncPurchasedAppsPacket(PurchasedApps purchased) implements Custom
             new CustomPacketPayload.Type<>(
                     ResourceLocation.fromNamespaceAndPath(MCphone.MODID, "sync_purchased_apps"));
 
-    public static final StreamCodec<ByteBuf, SyncPurchasedAppsPacket> STREAM_CODEC =
-            PurchasedApps.STREAM_CODEC.map(SyncPurchasedAppsPacket::new,
-                    SyncPurchasedAppsPacket::purchased);
+    public static final StreamCodec<FriendlyByteBuf, SyncPurchasedAppsPacket> STREAM_CODEC =
+            StreamCodec.of((buf, msg) -> encode(msg, buf), SyncPurchasedAppsPacket::decode);
+
+    public static void encode(SyncPurchasedAppsPacket msg, FriendlyByteBuf buf) {
+        PurchasedApps.encode(msg.purchased(), buf);
+    }
+
+    public static SyncPurchasedAppsPacket decode(FriendlyByteBuf buf) {
+        return new SyncPurchasedAppsPacket(PurchasedApps.decode(buf));
+    }
 
     @Override
     public Type<? extends CustomPacketPayload> type() {
