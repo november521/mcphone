@@ -111,10 +111,14 @@ jobs:
             echo "buildable=$BUILDABLE"
           } >> "$GITHUB_OUTPUT"
 
-      # 【只有 buildable 的产物往外传】。编是为了知道它编不编得过，
-      # 发是另一件事：还没建稳的目标不该混进 Release。
+      # 【每个编过的目标都要出产物】
+      #
+      # 这一步属于"编"，不属于"发"。原先它也挂在 buildable 上，于是一个刚并进来、
+      # 还没翻 buildable 的目标编过了却没有 jar —— 而下一步恰恰是「确认它跑得起来」，
+      # 那需要那个 jar。把它扣着，等于把验证的路堵死。
+      #
+      # 真正的「发」在 release.yml 里，那边照旧只收 buildable: true 的。
       - name: 收产物
-        if: steps.b.outputs.buildable == 'true'
         run: |
           set -euo pipefail
           mkdir -p dist
@@ -129,11 +133,12 @@ jobs:
           cp "$JAR" "dist/mcphone-${{ steps.b.outputs.version }}-${{ matrix.target }}.jar"
           ls -lh dist/
 
+      # 名字上带出 buildable —— 一个还没翻 buildable 的目标出的 jar 是拿来试跑的，
+      # 不是候选发布包。名字里不说，下载的人分不出来。
       - name: Upload artifacts
-        if: steps.b.outputs.buildable == 'true'
         uses: actions/upload-artifact@v7
         with:
-          name: mcphone-${{ matrix.target }}
+          name: mcphone-${{ matrix.target }}${{ steps.b.outputs.buildable == 'true' && '' || '-未验证' }}
           path: dist/*.jar
           retention-days: 30
 
