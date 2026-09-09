@@ -377,3 +377,420 @@ tasks.register('verifyJava17Compatible', JavaCompile) {
 }
 
 tasks.named('check').configure { dependsOn tasks.named('verifyJava17Compatible') }
+
+
+// ============================================================
+//  目标中立判据（下面两道闸共用一份）
+// ============================================================
+//
+// 「这段代码只在某一个目标上成立吗」—— 这个问题在本文件里有两个用处：
+//
+//   verifySharedIsTargetNeutral  shared/ 里出现这种东西 → 红
+//   verifySeamsDocCurrent        platforms/ 里的类有没有这种东西 → 决定它算甲还是乙
+//
+// 【它们必须是同一份判据】。原先是两份，隔着一百行，其中拦门的那份少两条 ——
+// 于是仓库自己在 shared/PLATFORM-SEAMS.md 里写着 ModPresence 和 PhonePlayerData
+// 是接缝，而拦门的闸对它们一声不吭。ModPresence 尤其荒唐：这个类存在的全部理由
+// 就是"全仓唯一碰 ModList 的地方"，把它搬进 shared/ 是这套结构里最纯粹的错误。
+//
+// 两份判据长得像但不一样，是最难发现的一种坏：两处都在，都像在工作，
+// 只有把它们并排放才看得出少了什么。所以现在只有这一份。
+//
+// 【四条判据，为什么是这四条】
+//
+//   加载器导入   net.neoforged / net.minecraftforge / net.fabricmc / cpw.mods。
+//                最直白的一条，也是唯一能靠扫 import 抓全的。
+//   1.20.5+ 原版  StreamCodec 那一套。1.20.1 上 net.minecraft.network.codec 这个包
+//                根本不存在。
+//   注入的方法    player.getData(...) 是 NeoForge 装在 Entity 上的、getCapability(...)
+//                是 Forge 的。【这一类没有 import，扫 import 一个都看不见】——
+//                PhonePlayerData 就是这么从甲漏进乙的。
+//   组件读写      stack.get(ModDataComponents...)。同上，是 vanilla ItemStack 上的
+//                方法，1.20.5 起才有。【不能只盯 ModDataComponents 这个名字】：
+//                那是本模组自己的类，各平台各给一份是合法接缝；炸的是那个方法本身。
+//
+// 【已知盲区：签名漂移】。方法名没变、签名变了（客户端渲染那套尤其多），名字和
+// 导入都一样。只有拿另一个版本真编一遍才知道，这一层这里补不上 —— 所以这四条
+// 是替身，不是真判据。真判据是 1.20.1 那个目标进来之后由它自己的构建来守。
+//
+// 【为什么写成类】：脚本顶层的方法与闭包在开了配置缓存之后从 doLast 里调不到
+// （实测报 "Could not find method"）。类里的 helper 也不能是 private static ——
+// 闭包走动态派发，看不见私有方法，同样的报错。
+abstract class TargetNeutrality {
+
+    /** 名字 → 形状。名字会原样印进报错和 PLATFORM-SEAMS.md 的清单里。 */
+    static final Map<String, java.util.regex.Pattern> BLOCKERS = [
+            '加载器导入'   : ~/(?m)^[ \t]*import[ \t]+(?:static[ \t]+)?(?:net\.neoforged|net\.minecraftforge|net\.fabricmc|cpw\.mods)\./,
+            '1.20.5+ 原版' : ~/\b(?:StreamCodec|ByteBufCodecs|RegistryFriendlyByteBuf|CustomPacketPayload|DataComponent\w*)\b/,
+            '注入的方法'   : ~/\.\s*(?:getData|setData|hasData|removeData|getCapability)\s*\(/,
+            '组件读写'     : ~/\.\s*(?:getOrDefault|remove|has|get|set)\s*\(\s*[\w$.]*DataComponents?\s*[.<]/,
+    ].asImmutable()
+
+    /**
+     * 去掉块注释、行注释与字符串/字符字面量，只留真代码。换行原样留着，行号才对得上。
+     *
+     * 【为什么必须去】：shared/ 里正有文件在注释里解释 "1.20.1 上没有 StreamCodec"，
+     * 直接扫原始文本会把它们当成违规 —— 那种误报会让人把整道闸关掉。
+     */
+    static String strip(String src) {
+        def out = new StringBuilder(src.length())
+        int i = 0, n = src.length()
+        while (i < n) {
+            char c = src.charAt(i)
+            if (c == ('/' as char) && i + 1 < n && src.charAt(i + 1) == ('*' as char)) {
+                int j = src.indexOf('*/', i + 2)
+                int stop = (j < 0) ? n : j + 2
+                for (int k = i; k < stop; k++) if (src.charAt(k) == ('\n' as char)) out.append('\n')
+                i = stop
+            } else if (c == ('/' as char) && i + 1 < n && src.charAt(i + 1) == ('/' as char)) {
+                int j = src.indexOf('\n', i)
+                i = (j < 0) ? n : j
+            } else if (c == ('"' as char) || c == ("'" as char)) {
+                char quote = c
+                int j = i + 1
+                while (j < n && src.charAt(j) != quote) {
+                    j += (src.charAt(j) == ('\\' as char)) ? 2 : 1
+                }
+                out.append(quote).append(quote)
+                i = j + 1
+            } else {
+                out.append(c)
+                i++
+            }
+        }
+        return out.toString()
+    }
+
+    /** 逐处命中：[[判据名, 行号, 匹配到的文本], …]。传进来的必须是 strip 过的。 */
+    static List<List> hits(String code) {
+        def out = []
+        BLOCKERS.each { name, pattern ->
+            def m = pattern.matcher(code)
+            while (m.find()) {
+                out << [name, code.substring(0, m.start()).count('\n') + 1, m.group().trim()]
+            }
+        }
+        return out.toSorted { a, b -> a[1] <=> b[1] ?: (a[0] <=> b[0]) }
+    }
+
+    /** 这个文件命中了哪几条判据（去重、排序）。 */
+    static List<String> tagsOf(String rawSource) {
+        return hits(strip(rawSource)).collect { it[0] }.unique().toSorted()
+    }
+}
+
+// ============================================================
+//  shared/ 目标中立校验
+// ============================================================
+//
+// shared/ 的定义是【每个目标都能原样编过】。矩阵最老的一档是 1.20.1，加载器有三个 ——
+// shared/ 里出现只在某一个目标上成立的东西，就是把别的目标编炸了，而这边
+// （NeoForge 1.21.1）编得好好的，什么都不会说。
+//
+// 这道闸是怎么补上的：PhoneItemData 曾经被搬进 shared/。它自己的类注释就写着
+// "方法体注定不同"，同时六处用了 ItemStack 的数据组件读写。搬进去、构建全绿、
+// 没有任何东西响 —— 因为当时【没有任何机器判据管这件事】，只有人工判断，而
+// shared/ 正在一批一批地长。
+//
+// 【为什么不叫"版本中立"】。它第一版只管 1.20.5+ 的原版 API，名字就叫版本中立，
+// 于是"加载器导入"和"注入的方法"两条没被写进来 —— 名分挡住了该管的事。
+// shared/ 里出现 import net.neoforged.* 当时是零守卫的：verifyDistIsolation 只看
+// 客户端类型，verifyJava17Compatible 只换 java.* 的签名，接缝清单那道只扫
+// platforms/ 一侧的文件。现在四条判据都在 TargetNeutrality 里，一处定义。
+//
+// 【为什么 verifyJava17Compatible 拦不住】
+//
+// 那道闸的 --release 17 换的是 java.* 的签名。stack.get(DataComponentType) 是
+// net.minecraft.*、player.getData(...) 是 net.neoforged 注入的 —— 用的都是这一支
+// 自己的 classpath，1.21.1 的 jar 里当然有。实测：那道闸把 PhoneItemData 编过了
+// 并且放行了（产物在 build/classes/java17-check/ 下确实有它的 class 文件）。
+//
+// 【这不是真判据，是替身】
+//
+// 真判据只有一条：拿 1.20.1 的类路径把 shared/ 编一遍。等 1.20.1 那个目标进来
+// 就该由它来守，这道闸到那时可以退成冗余。在那之前这条线上一个守卫都没有，
+// 而这恰恰是最需要守卫的阶段 —— 判据要等到最危险的时期过去之后才出现。
+//
+// 【没有豁免名单】。被拦住的正确做法是把文件搬回 platforms/，各平台各给一份
+// （PhonePlayerData / ModDataComponents 就是这么办的）—— 不是往名单里加一行。
+// 加了名单，这道闸就只剩装饰。
+//
+// ⚠ 【接了预处理器之后要改】。等 shared/ 里开始出现按版本切换的标记，
+// 同一个文件里 1.20.5+ 的分支是合法的，这道闸得先按目标裁一遍源码再扫，
+// 而不是直接看原始文本。在那之前它按现在这样是对的。
+abstract class SharedNeutralityTask extends DefaultTask {
+
+    @InputDirectory abstract DirectoryProperty getSharedDir()
+
+    @TaskAction
+    void run() {
+        File dir = sharedDir.get().asFile
+        // 取不到前提要红，不能静默扫空目录 —— 扫空目录的闸永远是绿的
+        if (!dir.isDirectory()) {
+            throw new GradleException(
+                    "找不到 ${dir.canonicalPath}。共享源码目录没了或者挪了位置，" +
+                    "这道闸就成了空转。先把路径修对。")
+        }
+        def files = []
+        dir.eachFileRecurse { if (it.isFile() && it.name.endsWith('.java')) files << it }
+        if (files.isEmpty()) {
+            throw new GradleException(
+                    "${dir.canonicalPath} 下一个 .java 都没有。" +
+                    "'一个都没扫到' 不等于 '没有问题'。")
+        }
+        files = files.toSorted { it.path }
+
+        def offenders = [:]
+        files.each { f ->
+            def hs = TargetNeutrality.hits(TargetNeutrality.strip(f.getText('UTF-8')))
+            if (hs) offenders[f] = hs
+        }
+
+        if (offenders) {
+            int total = offenders.values().sum { it.size() }
+            def sb = new StringBuilder()
+            sb << "shared/ 里出现了只在某一个目标上成立的东西，共 ${total} 处 / ${offenders.size()} 个文件：\n"
+            offenders.each { f, hs ->
+                sb << "\n  ${dir.toPath().relativize(f.toPath())}\n"
+                hs.each { h -> sb << "      :${h[1]}  [${h[0]}]  ${h[2]}\n" }
+            }
+            sb << "\nshared/ 的定义是每个目标都能原样编过：Minecraft 最老一档是 1.20.1，加载器有三个。\n"
+            sb << "这些东西别的目标上不存在，平台侧写什么类都补不出来。\n"
+            sb << "\n把这个文件搬回 platforms/<目标名>/ 下的同一个包，各平台各给一份 ——\n"
+            sb << "签名相同、方法体各写各的（PhonePlayerData 就是这个形状）。\n"
+            sb << "调用它的共享代码不用改：全限定名一样，编译时由各平台的源码集接进来。\n"
+            sb << "\n搬完记得 ./gradlew updateSeamsDoc，它要进 PLATFORM-SEAMS.md 的甲。\n"
+            throw new GradleException(sb.toString())
+        }
+
+        logger.lifecycle("shared/ 目标中立校验通过：${files.size()} 个文件，${TargetNeutrality.BLOCKERS.size()} 条判据全过")
+    }
+}
+
+tasks.register('verifySharedIsTargetNeutral', SharedNeutralityTask) {
+    description = '校验 shared/ 里没有只在某一个目标上成立的东西'
+    group = 'verification'
+    sharedDir.set(new File(repoRoot, 'shared/src/main/java'))
+}
+
+tasks.named('check').configure { dependsOn tasks.named('verifySharedIsTargetNeutral') }
+
+// ============================================================
+//  平台接缝清单
+// ============================================================
+//
+// shared/ 里的代码会引用一批【只定义在 platforms/ 下】的类型。写第二个平台的人
+// 要做的第一件事就是把它们分成两类：
+//
+//   甲  有意的接缝 —— 每个平台各写一份，全限定名与签名相同、方法体各写各的
+//   乙  只是还没搬 —— 不该重新实现，等着搬进 shared/
+//
+// 这张清单原先不存在，树上也看不出来 —— PhoneItemData 被误搬进 shared/ 就是这么来的：
+// 它和 PhonePlayerData 是同一个设计的两半、同一段论证，一个搬了一个没搬，
+// 而没有任何东西能一眼判出它属于哪一类。
+//
+// 分类判据在 TargetNeutrality 里，与 verifySharedIsTargetNeutral 那道闸【共用一份】：
+// 命中任何一条 → 甲，一条都不中 → 乙。所以两处的说法不可能再打架。
+//
+// 【为什么是生成的，不是手写的】
+//
+// 手写的清单会烂。这仓库已经栽过一次：附属接口文档整整一版只写了 IPhoneApp，
+// 别的几套一个字都没有 —— 所以那份文档现在由 docs/AddonApiExamples.java 守着。
+// 同一个办法：清单里那两段由构建现算，对不上就红。人只写旁边的散文。
+//
+//   ./gradlew verifySeamsDocCurrent   对不上就红（挂在 check 上）
+//   ./gradlew updateSeamsDoc          按现状重写那两段
+//
+// 【乙 的意思是"自动判据没找到阻断"，不是"确认可以搬"】。判据看不见签名漂移
+// （方法名没变、签名变了），那一层只有真编一遍才知道。要把一个类型从乙挪进
+// shared/，仍然得人看一眼，并且过 verifySharedIsTargetNeutral 那道闸。
+abstract class SeamsDocTask extends DefaultTask {
+
+    @InputDirectory abstract DirectoryProperty getSharedDir()
+    @InputDirectory abstract DirectoryProperty getPlatformDir()
+    @OutputFile     abstract RegularFileProperty getDocFile()
+    /** true 改文档，false 只对比 */
+    @Input          abstract Property<Boolean> getUpdating()
+
+    static final String PREFIX = 'com.november.mcphone.'
+    static final String A_BEGIN = '<!-- 下面这段由 ./gradlew updateSeamsDoc 生成，别手改：甲 -->'
+    static final String A_END   = '<!-- 甲 结束 -->'
+    static final String B_BEGIN = '<!-- 下面这段由 ./gradlew updateSeamsDoc 生成，别手改：乙 -->'
+    static final String B_END   = '<!-- 乙 结束 -->'
+
+    static String fqcnOf(File root, File f) {
+        (root.toPath().relativize(f.toPath()).toString().replace(File.separator, '.')) - ~/\.java$/
+    }
+
+    static List<File> javaFiles(File dir) {
+        def out = []
+        dir.eachFileRecurse { if (it.isFile() && it.name.endsWith('.java')) out << it }
+        return out
+    }
+
+    Map compute() {
+        File sharedRoot = sharedDir.get().asFile
+        File platRoot = platformDir.get().asFile
+
+        def sharedFiles = javaFiles(sharedRoot)
+        if (sharedFiles.isEmpty()) {
+            throw new GradleException("${sharedRoot} 下一个 .java 都没有 —— 扫空目录算出来的清单永远是空的。")
+        }
+        def platFiles = [:]
+        javaFiles(platRoot).each { platFiles[fqcnOf(platRoot, it)] = it }
+        if (platFiles.isEmpty()) {
+            throw new GradleException("${platRoot} 下一个 .java 都没有。")
+        }
+        def sharedFqcns = sharedFiles.collect { fqcnOf(sharedRoot, it) } as Set
+
+        // shared/ 引用了哪些本模组的类型：显式 import，加上同包里的（同包不写 import）
+        def referenced = [] as Set
+        def samePkg = [:]
+        platFiles.keySet().each { t ->
+            samePkg.computeIfAbsent(t.replaceAll(/\.[^.]+$/, ''), { [] as List }) << t
+        }
+        sharedFiles.each { f ->
+            def src = f.getText('UTF-8')
+            def pkg = fqcnOf(sharedRoot, f).replaceAll(/\.[^.]+$/, '')
+            def m = src =~ /(?m)^[ \t]*import[ \t]+(?:static[ \t]+)?([\w.]+)[ \t]*;/
+            while (m.find()) {
+                if (m.group(1).startsWith(PREFIX)) referenced << m.group(1)
+            }
+            samePkg.getOrDefault(pkg, []).each { cand ->
+                def simple = cand.replaceAll(/^.*\./, '')
+                if (src =~ /\b${java.util.regex.Pattern.quote(simple)}\b/) referenced << cand
+            }
+        }
+
+        def a = [], b = []
+        referenced.findAll { platFiles.containsKey(it) && !sharedFqcns.contains(it) }
+                  .toSorted()
+                  .each { t ->
+            // 与 verifySharedIsTargetNeutral 同一份判据
+            def tags = TargetNeutrality.tagsOf(platFiles[t].getText('UTF-8'))
+            if (tags) { a << [t, tags] } else { b << [t, []] }
+        }
+        return [a: a, b: b, sharedFqcns: sharedFqcns]
+    }
+
+    static String renderBlock(List rows, boolean withTags) {
+        def sb = new StringBuilder()
+        rows.each { r ->
+            sb << "- `" << (r[0] - PREFIX) << "`"
+            if (withTags) sb << " —— " << r[1].join('、')
+            sb << "\n"
+        }
+        return sb.toString()
+    }
+
+    /** 从文档里读回上一次记下的甲清单（短名）。 */
+    static List<String> recordedA(String doc, File f) {
+        int i = doc.indexOf(A_BEGIN), j = doc.indexOf(A_END)
+        if (i < 0 || j < 0 || j < i) return null
+        def out = []
+        doc.substring(i + A_BEGIN.length(), j).eachLine { line ->
+            def m = line =~ /^-\s+`([^`]+)`/
+            if (m) out << m[0][1]
+        }
+        return out
+    }
+
+    static String replaceBlock(String doc, String begin, String end, String body, File f) {
+        int i = doc.indexOf(begin), j = doc.indexOf(end)
+        if (i < 0 || j < 0 || j < i) {
+            throw new GradleException(
+                    "${f} 里找不到成对的标记：\n  ${begin}\n  ${end}\n" +
+                    "生成的两段靠这四行定位，删了就没法再对了。把它们加回去，再跑 ./gradlew updateSeamsDoc。")
+        }
+        return doc.substring(0, i + begin.length()) + "\n\n" + body + "\n" + doc.substring(j)
+    }
+
+    @TaskAction
+    void run() {
+        def r = compute()
+        File f = docFile.get().asFile
+        if (!f.exists()) {
+            throw new GradleException(
+                    "找不到 ${f}。这份清单是这套结构的一部分，不是可有可无的说明 —— " +
+                    "没有它，写新平台的人分不出'必须自己写一份'和'不该重新实现'。")
+        }
+        def doc = f.getText('UTF-8')
+
+        // ── 【甲里的类型整个消失】。这一条要单独拦，两个任务都拦。
+        //
+        // 上一版这里只有"文档跟源码对不上"一句，处方是"重写那两段，然后看一眼 diff"，
+        // 并且只点了"甲↔乙互相跑"两种情况。而误搬长的是第三种样子：一个记在甲里的
+        // 类型从 platforms/ 消失、出现在 shared/ 里，甲的清单缩短一行。
+        //
+        // 那一版的处方对这种情况是【有害】的：跑一遍 updateSeamsDoc，那一行就没了，
+        // 构建转绿，误搬被文档追认。"不要闭眼重写"这句话挡的是人，不是流程。
+        //
+        // 所以在这儿硬拦：要真想把某个接缝并进 shared/，先手动把它那一行从甲里删掉
+        // 再跑 —— 多一步，但那一步是明确的意思表示，不是顺手。
+        def recorded = recordedA(doc, f)
+        if (recorded != null) {
+            def moved = recorded.findAll { r.sharedFqcns.contains(PREFIX + it) }
+            if (moved) {
+                throw new GradleException(
+                        "这些类型记在 PLATFORM-SEAMS.md 的【甲】里（每个平台各写一份），" +
+                        "现在却出现在 shared/ 下：\n" +
+                        moved.collect { "  ${it}" }.join('\n') + "\n\n" +
+                        "甲 的意思是它的方法体在不同目标上注定不同，共用一份必然编不过 —— " +
+                        "这十有八九是搬错了，把它搬回 platforms/。\n\n" +
+                        "如果确实是有意的（那个阻断真没了），先【手动】把它那一行从甲的清单里删掉，" +
+                        "再跑 ./gradlew updateSeamsDoc。\n" +
+                        "多这一步是故意的：直接重写文档会让这次搬动被静默追认，构建还转绿。")
+            }
+        }
+
+        def wanted = replaceBlock(
+                replaceBlock(doc, A_BEGIN, A_END, renderBlock(r.a, true), f),
+                B_BEGIN, B_END, renderBlock(r.b, false), f)
+
+        if (updating.get()) {
+            if (doc == wanted) {
+                logger.lifecycle("接缝清单已是最新：甲 ${r.a.size()} 个、乙 ${r.b.size()} 个")
+            } else {
+                f.setText(wanted, 'UTF-8')
+                logger.lifecycle("接缝清单已重写：甲 ${r.a.size()} 个、乙 ${r.b.size()} 个 → ${f}")
+            }
+            return
+        }
+
+        if (doc != wanted) {
+            throw new GradleException(
+                    "shared/PLATFORM-SEAMS.md 跟源码对不上了。\n" +
+                    "现算出来：甲 ${r.a.size()} 个、乙 ${r.b.size()} 个。\n\n" +
+                    "跑 ./gradlew updateSeamsDoc 重写那两段，然后【看一眼 diff】——\n" +
+                    "  乙 → 甲    它开始碰别的目标上没有的东西了\n" +
+                    "  甲 → 乙    那个阻断没了，可以考虑搬进 shared/\n" +
+                    "  新出现     shared/ 多引用了一个平台类型\n" +
+                    "  整个消失   那个类型被删了，或者被搬进了 shared/\n" +
+                    "（最后那种里「搬进 shared/」这一半有单独的闸拦着，不会走到这儿。）\n" +
+                    "都值得看一眼再提交，不要闭眼重写。")
+        }
+        logger.lifecycle("接缝清单与源码一致：甲 ${r.a.size()} 个、乙 ${r.b.size()} 个")
+    }
+}
+
+def seamsDoc = new File(repoRoot, 'shared/PLATFORM-SEAMS.md')
+
+tasks.register('verifySeamsDocCurrent', SeamsDocTask) {
+    description = '校验 shared/PLATFORM-SEAMS.md 跟源码对得上'
+    group = 'verification'
+    sharedDir.set(new File(repoRoot, 'shared/src/main/java'))
+    platformDir.set(file('src/main/java'))
+    docFile.set(seamsDoc)
+    updating.set(false)
+}
+
+tasks.register('updateSeamsDoc', SeamsDocTask) {
+    description = '按现状重写 shared/PLATFORM-SEAMS.md 里生成的那两段'
+    group = 'documentation'
+    sharedDir.set(new File(repoRoot, 'shared/src/main/java'))
+    platformDir.set(file('src/main/java'))
+    docFile.set(seamsDoc)
+    updating.set(true)
+}
+
+tasks.named('check').configure { dependsOn tasks.named('verifySeamsDocCurrent') }
