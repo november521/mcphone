@@ -258,7 +258,7 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 
 <!-- 下面这段由 ./gradlew updateSeamsDoc 生成，别手改：乙 · 1.21.1-neoforge -->
 
-#### 非客户端（7）
+#### 非客户端（9）
 
 判据在这批上相对可信。
 
@@ -268,7 +268,9 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 - `feature.terminal.integration.ae2.TerminalSlotLocator`
 - `feature.terminal.integration.refinedstorage.RefinedStorageIntegration`
 - `feature.terminal.integration.refinedstorage.TerminalSlotReference`　**★ 被共用代码引用**
+- `platform.CuriosInventories`　**★ 被共用代码引用**
 - `platform.Slots`　**★ 被共用代码引用**
+- `platform.StackCodecs`　**★ 被共用代码引用**
 
 #### 客户端渲染路径（31）
 
@@ -325,7 +327,7 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 
 （无）
 
-#### 仅加载器轴（37）
+#### 仅加载器轴（36）
 
 同一加载器的各个 Minecraft 版本可共用；三个加载器之间必然分叉。
 
@@ -334,7 +336,6 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 - `api.client.app.IPhoneApp` —— 加载器导入　**★ 被共用代码引用**
 - `compat.CompatModule` —— 加载器导入
 - `compat.CompatModules` —— 加载器导入
-- `compat.CuriosCompat` —— 加载器导入
 - `compat.IntegratedDynamicsCompat` —— 加载器导入
 - `compat.WaystonesCompat` —— 加载器导入
 - `compat.WaystonesWarpItemModule` —— 加载器导入
@@ -380,7 +381,7 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 
 <!-- 下面这段由 ./gradlew updateSeamsDoc 生成，别手改：乙 · 1.20.1-forge -->
 
-#### 非客户端（67）
+#### 非客户端（68）
 
 判据在这批上相对可信。
 
@@ -417,7 +418,6 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 - `feature.chat.net.SyncOnlinePlayersPacket`
 - `feature.chat.net.TeleportToFriendPacket`　**★ 被共用代码引用**
 - `feature.enderchest.net.OpenEnderChestPacket`　**★ 被共用代码引用**
-- `feature.music.DiscState`　**★ 被共用代码引用**
 - `feature.music.NetSong`　**★ 被共用代码引用**
 - `feature.music.net.DiscActionPacket`
 - `feature.music.net.MusicNetworking`　**★ 被共用代码引用**
@@ -450,7 +450,9 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 - `feature.terminal.net.TerminalActionPacket`
 - `feature.terminal.net.TerminalNetworking`
 - `feature.waystone.net.OpenWaystoneSelectionPacket`
+- `platform.CuriosInventories`　**★ 被共用代码引用**
 - `platform.Slots`　**★ 被共用代码引用**
+- `platform.StackCodecs`　**★ 被共用代码引用**
 
 #### 客户端渲染路径（24）
 

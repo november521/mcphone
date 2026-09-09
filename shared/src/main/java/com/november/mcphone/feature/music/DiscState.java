@@ -1,5 +1,6 @@
 package com.november.mcphone.feature.music;
 
+import com.november.mcphone.platform.StackCodecs;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.minecraft.world.item.ItemStack;
@@ -21,16 +22,11 @@ public record DiscState(ItemStack disc, long startedTick) {
 
     public static final Codec<DiscState> CODEC = RecordCodecBuilder.create(instance ->
             instance.group(
-                    // 1.21 那边用 ItemStack.OPTIONAL_CODEC —— 1.20.5 才有的东西。
-                    // 1.20.1 只有不接受空栈的 ItemStack.CODEC，而空栈（仓里没唱片）
-                    // 恰恰是常态，所以改成 optionalFieldOf：没唱片就【不写这个字段】，
-                    // 读回来是 Optional.empty，语义与那边的空栈一致
-                    ItemStack.CODEC.optionalFieldOf("disc")
-                            .forGetter(s -> s.disc().isEmpty()
-                                    ? java.util.Optional.<ItemStack>empty()
-                                    : java.util.Optional.of(s.disc())),
+                    // 可空的物品堆字段：两支表达方式不同（连落盘形状都不同），
+                    // 差别关在 StackCodecs 里
+                    StackCodecs.optionalStackField("disc").forGetter(DiscState::disc),
                     Codec.LONG.fieldOf("started_tick").forGetter(DiscState::startedTick)
-            ).apply(instance, (disc, tick) -> new DiscState(disc.orElse(ItemStack.EMPTY), tick))
+            ).apply(instance, DiscState::new)
     );
 
     public boolean hasDisc() {

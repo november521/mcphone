@@ -3,7 +3,7 @@ package com.november.mcphone.compat;
 import com.november.mcphone.platform.ModPresence;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.ItemStack;
-import top.theillusivec4.curios.api.CuriosApi;
+import com.november.mcphone.platform.CuriosInventories;
 
 import java.util.Optional;
 import java.util.function.Predicate;
@@ -55,7 +55,7 @@ public final class CuriosCompat {
      * 别把它并回去。
      */
     private static boolean isEquippedInternal(LivingEntity entity, Predicate<ItemStack> filter) {
-        return CuriosApi.getCuriosInventory(entity)
+        return CuriosInventories.of(entity)
                 .map(inventory -> inventory.isEquipped(filter))
                 .orElse(false);
     }
@@ -77,7 +77,7 @@ public final class CuriosCompat {
 
     private static Optional<CurioSlotRef> findEquippedInternal(LivingEntity entity,
                                                                Predicate<ItemStack> filter) {
-        return CuriosApi.getCuriosInventory(entity)
+        return CuriosInventories.of(entity)
                 .flatMap(inventory -> inventory.findFirstCurio(filter))
                 .map(result -> new CurioSlotRef(
                         result.slotContext().identifier(), result.slotContext().index()));
@@ -90,7 +90,7 @@ public final class CuriosCompat {
     }
 
     private static ItemStack getEquippedInternal(LivingEntity entity, String slotId, int index) {
-        return CuriosApi.getCuriosInventory(entity)
+        return CuriosInventories.of(entity)
                 .flatMap(inventory -> inventory.findCurio(slotId, index))
                 .map(result -> result.stack())
                 .orElse(ItemStack.EMPTY);
@@ -110,7 +110,7 @@ public final class CuriosCompat {
 
     private static void setEquippedInternal(LivingEntity entity, String slotId, int index,
                                             ItemStack stack) {
-        CuriosApi.getCuriosInventory(entity)
+        CuriosInventories.of(entity)
                 .ifPresent(inventory -> inventory.setEquippedCurio(slotId, index, stack));
     }
 }
