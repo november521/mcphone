@@ -1,5 +1,6 @@
 package com.november.mcphone.feature.settings.client;
 
+import com.november.mcphone.platform.ModPresence;
 import com.mojang.blaze3d.platform.InputConstants;
 import com.november.mcphone.MCphone;
 import com.november.mcphone.api.client.app.IPhoneApp;
@@ -16,7 +17,6 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
-import net.minecraftforge.fml.ModList;
 import net.minecraftforge.client.settings.KeyModifier;
 import org.lwjgl.glfw.GLFW;
 
@@ -236,7 +236,7 @@ public final class AppManagerDetail {
     /** 前置 / 联动那几行：模组名 + 装没装 */
     private static int drawModLine(GuiGraphics g, Font font, int x, int y, int w,
                                    String labelKey, RequiredMod mod) {
-        boolean loaded = ModList.get().isLoaded(mod.modId());
+        boolean loaded = ModPresence.isLoaded(mod.modId());
         String label = Component.translatable(labelKey).getString() + " " + mod.displayName();
         String mark = Component.translatable(loaded
                 ? "mcphone.gui.app_mod_present" : "mcphone.gui.app_mod_absent").getString();
@@ -561,9 +561,7 @@ public final class AppManagerDetail {
     /** 这个 App 是哪个模组给的：按 id 的命名空间查，查不到就把命名空间本身显示出来 */
     private String providerName() {
         String namespace = app.getId().getNamespace();
-        return ModList.get().getModContainerById(namespace)
-                .map(c -> c.getModInfo().getDisplayName())
-                .orElse(namespace);
+        return ModPresence.displayName(namespace);
     }
 
     /**

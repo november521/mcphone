@@ -1,5 +1,6 @@
 package com.november.mcphone.compat;
 
+import com.november.mcphone.platform.ModPresence;
 import com.november.mcphone.MCphone;
 import net.blay09.mods.balm.api.Balm;
 import net.blay09.mods.balm.api.menu.BalmMenuProvider;
@@ -18,7 +19,6 @@ import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
-import net.minecraftforge.fml.ModList;
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -140,7 +140,7 @@ public final class WaystonesCompat {
      * 要挑一个"模组列表已经就绪"的时机去填，反而容易在加载早期取到错的值。
      */
     public static boolean isLoaded() {
-        return ModList.get().isLoaded(WAYSTONES_MODID);
+        return ModPresence.isLoaded(WAYSTONES_MODID);
     }
 
     /**

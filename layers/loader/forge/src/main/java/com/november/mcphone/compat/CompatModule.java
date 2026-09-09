@@ -1,7 +1,7 @@
 package com.november.mcphone.compat;
 
+import com.november.mcphone.platform.ModPresence;
 import net.minecraftforge.eventbus.api.IEventBus;
-import net.minecraftforge.fml.ModList;
 
 /**
  * 一个针对某个外部模组的兼容模块。
@@ -33,7 +33,7 @@ public interface CompatModule {
      * 的版本上还去动人家的东西。
      */
     default boolean isNeeded() {
-        return ModList.get().isLoaded(targetModId());
+        return ModPresence.isLoaded(targetModId());
     }
 
     /**

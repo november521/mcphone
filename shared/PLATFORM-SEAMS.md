@@ -197,13 +197,12 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 
 （无）
 
-#### 仅加载器轴（26）
+#### 仅加载器轴（25）
 
 同一加载器的各个 Minecraft 版本可共用；三个加载器之间必然分叉。
 
 - `MCphone` —— 加载器导入　**★ 被共用代码引用**
 - `MCphoneClient` —— 加载器导入
-- `compat.CompatModule` —— 加载器导入
 - `compat.CompatModules` —— 加载器导入
 - `compat.IntegratedDynamicsCompat` —— 加载器导入
 - `core.ModAttachments` —— 加载器导入
@@ -272,7 +271,7 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 - `platform.Slots`　**★ 被共用代码引用**
 - `platform.StackCodecs`　**★ 被共用代码引用**
 
-#### 客户端渲染路径（31）
+#### 客户端渲染路径（25）
 
 **判据在这批上最不可信** —— 签名漂移正集中在这里，逐个人工核过再搬。
 
@@ -294,16 +293,10 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 - `feature.music.client.MusicPage`
 - `feature.music.client.playback.OggDecoder`　**★ 被共用代码引用**
 - `feature.notes.client.NoteEditor`
-- `feature.reader.client.compat.BookQuirk`　**★ 被共用代码引用**
-- `feature.reader.client.source.BookSource`　**★ 被共用代码引用**
 - `feature.reader.client.source.ExternalBookSource`　**★ 被共用代码引用**
-- `feature.reader.client.source.GuideMeSource`　**★ 被共用代码引用**
-- `feature.reader.client.source.PatchouliSource`　**★ 被共用代码引用**
-- `feature.settings.client.AboutPage`
 - `feature.settings.client.DeviceNameEditor`
 - `feature.settings.client.PhoneHudEditor`
 - `feature.settings.client.WallpaperPicker`
-- `feature.store.client.CompanionApps`
 - `feature.terminal.client.TerminalApp`
 - `feature.terminal.client.TerminalSlotScreen`
 - `feature.waystone.client.WaystoneApp`
@@ -327,17 +320,14 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 
 （无）
 
-#### 仅加载器轴（36）
+#### 仅加载器轴（25）
 
 同一加载器的各个 Minecraft 版本可共用；三个加载器之间必然分叉。
 
 - `MCphone` —— 加载器导入　**★ 被共用代码引用**
 - `MCphoneClient` —— 加载器导入
-- `api.client.app.IPhoneApp` —— 加载器导入　**★ 被共用代码引用**
-- `compat.CompatModule` —— 加载器导入
 - `compat.CompatModules` —— 加载器导入
 - `compat.IntegratedDynamicsCompat` —— 加载器导入
-- `compat.WaystonesCompat` —— 加载器导入
 - `compat.WaystonesWarpItemModule` —— 加载器导入
 - `core.ModCreativeTabs` —— 加载器导入
 - `core.ModItems` —— 加载器导入
@@ -355,17 +345,9 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 - `feature.chat.client.ChatImageSender` —— 加载器导入　**★ 被共用代码引用**
 - `feature.music.DiscService` —— 加载器导入　**★ 被共用代码引用**
 - `feature.music.client.playback.LocalPlayback` —— 加载器导入　**★ 被共用代码引用**
-- `feature.reader.client.compat.BookQuirk` —— 加载器导入　**★ 被共用代码引用**
-- `feature.reader.client.source.BookSource` —— 加载器导入　**★ 被共用代码引用**
-- `feature.reader.client.source.GuideMeSource` —— 加载器导入　**★ 被共用代码引用**
-- `feature.reader.client.source.PatchouliSource` —— 加载器导入　**★ 被共用代码引用**
-- `feature.settings.client.AboutPage` —— 加载器导入
 - `feature.settings.client.AppManagerDetail` —— 加载器导入
-- `feature.store.client.CompanionApps` —— 加载器导入
 - `feature.terminal.TerminalSlotSync` —— 加载器导入
 - `feature.terminal.integration.Terminals` —— 加载器导入　**★ 被共用代码引用**
-- `feature.terminal.integration.ae2.Ae2Integration` —— 加载器导入
-- `feature.terminal.integration.ae2.TerminalSlotLocator` —— 加载器导入
 - `platform.ModPresence` —— 加载器导入　**★ 被共用代码引用**
 
 #### 两轴都有（2）
@@ -381,10 +363,11 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 
 <!-- 下面这段由 ./gradlew updateSeamsDoc 生成，别手改：乙 · 1.20.1-forge -->
 
-#### 非客户端（68）
+#### 非客户端（71）
 
 判据在这批上相对可信。
 
+- `compat.WaystonesCompat`
 - `core.PhoneItem`　**★ 被共用代码引用**
 - `core.PhoneItemData`
 - `core.PhoneLocation`　**★ 被共用代码引用**
@@ -444,7 +427,9 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 - `feature.store.net.RequestPurchasedAppsPacket`　**★ 被共用代码引用**
 - `feature.store.net.StoreNetworking`
 - `feature.store.net.SyncPurchasedAppsPacket`
+- `feature.terminal.integration.ae2.Ae2Integration`
 - `feature.terminal.integration.ae2.Ae2wtlibSupport`
+- `feature.terminal.integration.ae2.TerminalSlotLocator`
 - `feature.terminal.integration.refinedstorage.RefinedStorageIntegration`
 - `feature.terminal.net.SyncTerminalSlotPacket`
 - `feature.terminal.net.TerminalActionPacket`
@@ -454,10 +439,11 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 - `platform.Slots`　**★ 被共用代码引用**
 - `platform.StackCodecs`　**★ 被共用代码引用**
 
-#### 客户端渲染路径（24）
+#### 客户端渲染路径（25）
 
 **判据在这批上最不可信** —— 签名漂移正集中在这里，逐个人工核过再搬。
 
+- `api.client.app.IPhoneApp`　**★ 被共用代码引用**
 - `core.client.ImageFolder`　**★ 被共用代码引用**
 - `core.client.PhoneContainerScreen`
 - `core.client.PhoneItemProperties`
