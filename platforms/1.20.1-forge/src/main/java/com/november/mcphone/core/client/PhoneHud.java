@@ -97,7 +97,7 @@ public final class PhoneHud {
      * 给 {@link PhoneScreenOnSync} 判"手上这部亮不亮"用：挂在 HUD 上的那部屏幕是亮着的，
      * 哪怕玩家没按 Alt。
      */
-    static PhoneScreen hudPhone() { return phone; }
+    public static PhoneScreen hudPhone() { return phone; }
 
     /** 正按着 Alt —— 此刻 phone 就是 mc.screen，且仍画在 HUD 那个角上 */
     private static boolean interacting;
