@@ -257,7 +257,12 @@ def assertTestsClasses = layout.buildDirectory.dir('classes/assert-tests')
 // 所以每一层都可以有自己的 docs/，跟源码一样按 targets.json 的 layers 接进来。
 def assertTestsSource = files(
         fileTree('../../docs') { include '**/*.java' },
-        *mcphoneLayers.collect { layer -> fileTree(layer.docsDir) { include '**/*.java' } }
+        *mcphoneLayers.collect { layer -> fileTree(layer.docsDir) { include '**/*.java' } },
+        // 平台自己的 docs/：只对着这一个目标的实现写的测试。
+        // 1.20.1 那支的 ChatImagePacketTest / WallpaperPacketTest 就是 ——
+        // 它们测的是手写的 encode/decode，而 1.21.1 那边那几个类走 StreamCodec，
+        // 同一份测试在那边根本编不过。
+        fileTree('docs') { include '**/*.java' }
 )
 def projectToolchain = java.toolchain
 
