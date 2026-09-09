@@ -4,6 +4,7 @@ import com.november.mcphone.core.PhoneItemData;
 import com.november.mcphone.core.PhoneLocation;
 import com.november.mcphone.core.client.FontPalette;
 import com.november.mcphone.core.client.PhoneTheme;
+import com.november.mcphone.platform.client.EditBoxes;
 import com.november.mcphone.core.net.MCphoneNetwork;
 import com.november.mcphone.feature.settings.net.SetDeviceNamePacket;
 import net.minecraft.client.Minecraft;
@@ -83,7 +84,7 @@ public final class DeviceNameEditor {
         this.hovered = Btn.NONE;
         if (box != null) {
             box.setValue(currentName());
-            box.moveCursorToEnd(false);
+            EditBoxes.moveCursorToEnd(box);
             box.setFocused(true);
         }
         // box 尚未创建时不做事：它在首次 render 里按机身坐标创建，
@@ -128,7 +129,7 @@ public final class DeviceNameEditor {
                     Component.translatable("mcphone.settings.device_name"));
             box.setMaxLength(SetDeviceNamePacket.MAX_NAME_LENGTH);
             box.setValue(currentName());
-            box.moveCursorToEnd(false);
+            EditBoxes.moveCursorToEnd(box);
             box.setFocused(true);
         } else {
             box.setX(x);

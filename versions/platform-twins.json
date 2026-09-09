@@ -7,7 +7,7 @@
   ],
   "pairs": {
     "com/november/mcphone/MCphone.java": 79,
-    "com/november/mcphone/MCphoneClient.java": 85,
+    "com/november/mcphone/MCphoneClient.java": 83,
     "com/november/mcphone/compat/CompatModule.java": 2,
     "com/november/mcphone/compat/CompatModules.java": 5,
     "com/november/mcphone/compat/IntegratedDynamicsCompat.java": 8,
@@ -25,8 +25,6 @@
     "com/november/mcphone/core/client/MCphoneKeyBindings.java": 4,
     "com/november/mcphone/core/client/PhoneHud.java": 24,
     "com/november/mcphone/core/client/PhoneItemProperties.java": 3,
-    "com/november/mcphone/core/client/PhoneKeyHandler.java": 5,
-    "com/november/mcphone/core/client/PlayerAvatar.java": 8,
     "com/november/mcphone/core/menu/ModMenus.java": 5,
     "com/november/mcphone/core/net/MCphoneNetwork.java": 62,
     "com/november/mcphone/core/net/NetworkHandler.java": 66,
@@ -67,8 +65,6 @@
     "com/november/mcphone/feature/enderchest/net/OpenEnderChestPacket.java": 15,
     "com/november/mcphone/feature/music/DiscService.java": 49,
     "com/november/mcphone/feature/music/NetSong.java": 21,
-    "com/november/mcphone/feature/music/client/MusicPage.java": 7,
-    "com/november/mcphone/feature/music/client/playback/OggDecoder.java": 4,
     "com/november/mcphone/feature/music/net/DiscActionPacket.java": 30,
     "com/november/mcphone/feature/music/net/MusicNetworking.java": 37,
     "com/november/mcphone/feature/music/net/OpenDiscBayPacket.java": 20,
@@ -87,7 +83,6 @@
     "com/november/mcphone/feature/notes/net/SaveNotePacket.java": 15,
     "com/november/mcphone/feature/notes/net/SyncNoteListPacket.java": 15,
     "com/november/mcphone/feature/notes/net/SyncNotePacket.java": 18,
-    "com/november/mcphone/feature/settings/client/DeviceNameEditor.java": 4,
     "com/november/mcphone/feature/settings/net/SetDeviceNamePacket.java": 20,
     "com/november/mcphone/feature/settings/net/SetWallpaperPacket.java": 17,
     "com/november/mcphone/feature/settings/net/SyncWallpaperPacket.java": 14,
@@ -111,9 +106,13 @@
     "com/november/mcphone/platform/Slots.java": 2,
     "com/november/mcphone/platform/StackCodecs.java": 5,
     "com/november/mcphone/platform/client/ClientTicks.java": 9,
+    "com/november/mcphone/platform/client/DiscSongs.java": 9,
     "com/november/mcphone/platform/client/Draw.java": 19,
+    "com/november/mcphone/platform/client/EditBoxes.java": 2,
     "com/november/mcphone/platform/client/KeyModifiers.java": 2,
     "com/november/mcphone/platform/client/PhoneScreenBase.java": 6,
-    "com/november/mcphone/platform/client/SystemFiles.java": 2
+    "com/november/mcphone/platform/client/PlayerSkins.java": 4,
+    "com/november/mcphone/platform/client/SystemFiles.java": 2,
+    "com/november/mcphone/platform/client/VanillaAudio.java": 4
   }
 }

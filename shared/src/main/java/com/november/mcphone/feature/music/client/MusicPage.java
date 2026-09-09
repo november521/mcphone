@@ -1,11 +1,12 @@
 package com.november.mcphone.feature.music.client;
 
-import net.minecraft.util.Mth;
 import com.november.mcphone.core.client.ClientConfig;
+import com.november.mcphone.platform.client.DiscSongs;
 import com.november.mcphone.core.client.FontPalette;
 import com.november.mcphone.core.client.GuiUtil;
 import com.november.mcphone.core.client.PhoneSkin;
 import com.november.mcphone.core.client.PhoneTheme;
+import com.november.mcphone.core.net.MCphoneNetwork;
 import com.november.mcphone.feature.music.PlayMode;
 import com.november.mcphone.feature.music.Track;
 import com.november.mcphone.feature.music.client.playback.AudioDecoders;
@@ -16,8 +17,8 @@ import com.november.mcphone.feature.music.net.OpenDiscBayPacket;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
+import net.minecraft.util.Mth;
 import net.minecraft.world.item.ItemStack;
-import com.november.mcphone.core.net.MCphoneNetwork;
 
 import java.util.List;
 
@@ -229,18 +230,9 @@ public final class MusicPage {
         return mc.level == null ? Long.MAX_VALUE : mc.level.getGameTime();
     }
 
-    /**
-     * 优先曲子的名称（"C418 - cat"），取不到才退回物品名。
-     *
-     * 1.21 把唱片曲目抽成了注册表里的 JukeboxSong，要过 registryAccess 去查。
-     * 1.20.1 上没有这个东西，曲名就挂在 RecordItem 自己身上（getDisplayName），
-     * 不需要世界也不需要注册表访问——所以这边比那边还简单一点。
-     */
+    /** 优先曲子的名称（"C418 - cat"），取不到才退回物品名 —— 两支的取法见 {@link DiscSongs}。 */
     private static String discTitle(ItemStack disc) {
-        if (disc.getItem() instanceof net.minecraft.world.item.RecordItem record) {
-            return record.getDisplayName().getString();
-        }
-        return disc.getHoverName().getString();
+        return DiscSongs.title(disc);
     }
 
     private void renderEmpty(GuiGraphics g, Font font, int x, int y, int w) {

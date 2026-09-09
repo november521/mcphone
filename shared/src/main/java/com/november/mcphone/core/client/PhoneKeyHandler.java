@@ -1,7 +1,6 @@
 package com.november.mcphone.core.client;
 
 import net.minecraft.client.Minecraft;
-import net.minecraftforge.event.TickEvent;
 
 /**
  * 快捷键开机。
@@ -24,14 +23,13 @@ public final class PhoneKeyHandler {
 
     private PhoneKeyHandler() {}
 
-    /** 由 MCphoneClient 构造函数挂到游戏总线 */
-    // NeoForge 那边事件本身分 Pre/Post 两个类，订阅 ClientTickEvent.Post 就只收
-    // 结束那一次。1.20.1 上只有一个 TickEvent.ClientTickEvent，Pre 和 Post 都从
-    // 这里进来，靠 phase 字段区分 —— 【不判 phase 就会一 tick 触发两次】。
-    // Post 对应 Phase.END
-    public static void onClientTick(TickEvent.ClientTickEvent event) {
-        if (event.phase != TickEvent.Phase.END) return;
-
+    /**
+     * 每个客户端刻结束时调一次，由 {@code MCphoneClient} 通过
+     * {@link com.november.mcphone.platform.client.ClientTicks#onEndTick} 挂上。
+     *
+     * <p>不收事件参数：两支的「刻结束」不是同一个事件，分辨的活在那个门面里做完了。
+     */
+    public static void tick() {
         Minecraft mc = Minecraft.getInstance();
 
         boolean pressed = false;

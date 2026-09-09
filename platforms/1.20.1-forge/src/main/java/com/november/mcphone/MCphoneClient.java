@@ -90,7 +90,7 @@ public final class MCphoneClient {
         // 1.20.1 上对应的是 RegisterGuiOverlaysEvent，插的位置一样，见 PhoneHud
         modBus.addListener(PhoneHud::onRegisterOverlays);
 
-        MinecraftForge.EVENT_BUS.addListener(PhoneKeyHandler::onClientTick);
+        ClientTicks.onEndTick(PhoneKeyHandler::tick);
 
         // 手机进出副手、Alt 与 G 的按下松开都在这条 tick 里判，见 PhoneHud
         MinecraftForge.EVENT_BUS.addListener(PhoneHud::onClientTick);

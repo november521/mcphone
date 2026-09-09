@@ -1,11 +1,8 @@
 package com.november.mcphone.core.client;
 
-import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
+import com.november.mcphone.platform.client.PlayerSkins;
 import net.minecraft.client.gui.components.PlayerFaceRenderer;
-import net.minecraft.client.multiplayer.PlayerInfo;
-import net.minecraft.client.resources.DefaultPlayerSkin;
-import net.minecraft.resources.ResourceLocation;
 
 import java.util.UUID;
 
@@ -48,7 +45,7 @@ public final class PlayerAvatar {
 
     /** 画头像 */
     public static void draw(GuiGraphics g, UUID player, int x, int y, int size) {
-        PlayerFaceRenderer.draw(g, skin(player), x, y, size);
+        PlayerFaceRenderer.draw(g, PlayerSkins.faceTexture(player), x, y, size);
     }
 
     /**
@@ -65,22 +62,5 @@ public final class PlayerAvatar {
         int dy = y + size - DOT_SIZE;
         g.fill(dx - 1, dy - 1, dx + DOT_SIZE + 1, dy + DOT_SIZE + 1, COLOR_DOT_OUTLINE);
         g.fill(dx, dy, dx + DOT_SIZE, dy + DOT_SIZE, online ? COLOR_ONLINE : COLOR_OFFLINE);
-    }
-
-    /**
-     * 在线的取真皮肤，离线的退回默认皮肤——理由见类注释。
-     *
-     * 1.21.1 那边 PlayerInfo.getSkin() 返回 PlayerSkin 记录（含皮肤、披风、
-     * 模型类型）。PlayerSkin 是 1.20.2 才有的，1.20.1 上只有一个裸的
-     * ResourceLocation，方法名也不同（getSkinLocation / getDefaultSkin）。
-     * 头像只需要皮肤贴图，所以这处退化不影响显示。
-     */
-    private static ResourceLocation skin(UUID player) {
-        Minecraft mc = Minecraft.getInstance();
-        if (mc.getConnection() != null) {
-            PlayerInfo info = mc.getConnection().getPlayerInfo(player);
-            if (info != null) return info.getSkinLocation();
-        }
-        return DefaultPlayerSkin.getDefaultSkin(player);
     }
 }

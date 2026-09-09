@@ -1,7 +1,7 @@
 package com.november.mcphone.feature.music.client.playback;
 
+import com.november.mcphone.platform.client.VanillaAudio;
 import net.minecraft.client.sounds.AudioStream;
-import net.minecraft.client.sounds.JOrbisAudioStream;
 
 import java.io.BufferedInputStream;
 import java.io.IOException;
@@ -35,7 +35,7 @@ public final class OggDecoder implements AudioDecoder {
     @Override
     public AudioStream open(Path file) throws IOException {
         // 包 Buffered：解码器逐小块地读，直接怼文件流的话每次都是一次系统调用
-        return new JOrbisAudioStream(new BufferedInputStream(Files.newInputStream(file)));
+        return VanillaAudio.openOgg(new BufferedInputStream(Files.newInputStream(file)));
     }
 
     @Override

@@ -62,7 +62,7 @@ public class MCphoneClient {
 
         NeoForge.EVENT_BUS.addListener(CameraHandler::onClientTick);
 
-        NeoForge.EVENT_BUS.addListener(PhoneKeyHandler::onClientTick);
+        ClientTicks.onEndTick(PhoneKeyHandler::tick);
 
         // 手机进出副手、Alt 按下松开都在这条 tick 里判，见 PhoneHud
         NeoForge.EVENT_BUS.addListener(PhoneHud::onClientTick);

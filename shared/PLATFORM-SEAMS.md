@@ -225,7 +225,7 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 
 （无）
 
-#### 仅加载器轴（24）
+#### 仅加载器轴（23）
 
 同一加载器的各个 Minecraft 版本可共用；三个加载器之间必然分叉。
 
@@ -240,7 +240,6 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 - `core.client.AppHotkeys` —— 加载器导入　**★ 被共用代码引用**
 - `core.client.ClientConfig` —— 加载器导入　**★ 被共用代码引用**
 - `core.client.PhoneHud` —— 加载器导入　**★ 被共用代码引用**
-- `core.client.PhoneKeyHandler` —— 加载器导入
 - `core.menu.ModMenus` —— 加载器导入　**★ 被共用代码引用**
 - `core.net.NetworkHandler` —— 加载器导入　**★ 被共用代码引用**
 - `feature.camera.client.CameraHandler` —— 加载器导入
@@ -304,17 +303,17 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 
 - `api.client.ui.PhoneMultiLineEditBox`
 - `core.client.PhoneItemProperties`
-- `core.client.PlayerAvatar`　**★ 被共用代码引用**
 - `feature.camera.client.CameraFlash`　**★ 被共用代码引用**
 - `feature.camera.client.CameraMode`　**★ 被共用代码引用**
-- `feature.music.client.MusicPage`　**★ 被共用代码引用**
-- `feature.music.client.playback.OggDecoder`　**★ 被共用代码引用**
 - `feature.notes.client.NoteEditor`　**★ 被共用代码引用**
-- `feature.settings.client.DeviceNameEditor`　**★ 被共用代码引用**
 - `feature.terminal.client.TerminalApp`
+- `platform.client.DiscSongs`　**★ 被共用代码引用**
 - `platform.client.Draw`　**★ 被共用代码引用**
+- `platform.client.EditBoxes`　**★ 被共用代码引用**
 - `platform.client.PhoneScreenBase`　**★ 被共用代码引用**
+- `platform.client.PlayerSkins`　**★ 被共用代码引用**
 - `platform.client.SystemFiles`　**★ 被共用代码引用**
+- `platform.client.VanillaAudio`　**★ 被共用代码引用**
 
 <!-- 乙 · 1.21.1-neoforge 结束 -->
 
@@ -335,7 +334,7 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 
 （无）
 
-#### 仅加载器轴（24）
+#### 仅加载器轴（23）
 
 同一加载器的各个 Minecraft 版本可共用；三个加载器之间必然分叉。
 
@@ -353,7 +352,6 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 - `core.client.AppHotkeys` —— 加载器导入　**★ 被共用代码引用**
 - `core.client.ClientConfig` —— 加载器导入　**★ 被共用代码引用**
 - `core.client.PhoneHud` —— 加载器导入　**★ 被共用代码引用**
-- `core.client.PhoneKeyHandler` —— 加载器导入
 - `core.menu.ModMenus` —— 加载器导入　**★ 被共用代码引用**
 - `core.net.MCphoneNetwork` —— 加载器导入　**★ 被共用代码引用**
 - `feature.camera.client.CameraHandler` —— 加载器导入
@@ -416,9 +414,9 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 - `feature.chat.net.TeleportToFriendPacket`　**★ 被共用代码引用**
 - `feature.enderchest.net.OpenEnderChestPacket`　**★ 被共用代码引用**
 - `feature.music.NetSong`　**★ 被共用代码引用**
-- `feature.music.net.DiscActionPacket`
+- `feature.music.net.DiscActionPacket`　**★ 被共用代码引用**
 - `feature.music.net.MusicNetworking`　**★ 被共用代码引用**
-- `feature.music.net.OpenDiscBayPacket`
+- `feature.music.net.OpenDiscBayPacket`　**★ 被共用代码引用**
 - `feature.music.net.PlayNetSongPacket`
 - `feature.music.net.StopNetSongPacket`
 - `feature.music.net.SyncDiscStatePacket`
@@ -433,7 +431,7 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 - `feature.notes.net.SaveNotePacket`
 - `feature.notes.net.SyncNoteListPacket`
 - `feature.notes.net.SyncNotePacket`
-- `feature.settings.net.SetDeviceNamePacket`
+- `feature.settings.net.SetDeviceNamePacket`　**★ 被共用代码引用**
 - `feature.settings.net.SetWallpaperPacket`　**★ 被共用代码引用**
 - `feature.settings.net.SyncWallpaperPacket`
 - `feature.store.PurchasedApps`　**★ 被共用代码引用**
@@ -458,17 +456,17 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 **判据在这批上最不可信** —— 签名漂移正集中在这里，逐个人工核过再搬。
 
 - `core.client.PhoneItemProperties`
-- `core.client.PlayerAvatar`　**★ 被共用代码引用**
 - `feature.camera.client.CameraFlash`　**★ 被共用代码引用**
 - `feature.camera.client.CameraMode`　**★ 被共用代码引用**
-- `feature.music.client.MusicPage`　**★ 被共用代码引用**
-- `feature.music.client.playback.OggDecoder`　**★ 被共用代码引用**
 - `feature.notes.client.NoteEditor`　**★ 被共用代码引用**
-- `feature.settings.client.DeviceNameEditor`　**★ 被共用代码引用**
 - `feature.terminal.client.TerminalApp`
 - `feature.terminal.client.TerminalSlotClient`
+- `platform.client.DiscSongs`　**★ 被共用代码引用**
 - `platform.client.Draw`　**★ 被共用代码引用**
+- `platform.client.EditBoxes`　**★ 被共用代码引用**
 - `platform.client.PhoneScreenBase`　**★ 被共用代码引用**
+- `platform.client.PlayerSkins`　**★ 被共用代码引用**
 - `platform.client.SystemFiles`　**★ 被共用代码引用**
+- `platform.client.VanillaAudio`　**★ 被共用代码引用**
 
 <!-- 乙 · 1.20.1-forge 结束 -->
