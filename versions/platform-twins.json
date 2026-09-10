@@ -25,7 +25,7 @@
     "com/november/mcphone/core/client/AppHotkeys.java": 9,
     "com/november/mcphone/core/client/ClientConfig.java": 37,
     "com/november/mcphone/core/client/MCphoneKeyBindings.java": 4,
-    "com/november/mcphone/core/client/PhoneHud.java": 25,
+    "com/november/mcphone/core/client/PhoneHud.java": 28,
     "com/november/mcphone/core/menu/ModMenus.java": 5,
     "com/november/mcphone/core/net/MCphoneNetwork.java": 62,
     "com/november/mcphone/core/net/NetworkHandler.java": 64,
