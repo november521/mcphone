@@ -11,7 +11,8 @@ Used for decoding MP3/MP2/MP1 in the Music app.
 
 坐标     fr.delthas:javamp3:1.0.1
 主页     https://github.com/delthas/JavaMP3
-位置     META-INF/jars/javamp3-1.0.1.jar
+位置     META-INF/jars/javamp3-1.0.1.jar（Fabric）
+         META-INF/jarjar/javamp3-1.0.1.jar（NeoForge / Forge）
 
 MIT License
 
@@ -46,7 +47,8 @@ Without it the dialog still works, it just falls back to Swing's Metal look.
 
 坐标     com.formdev:flatlaf:3.7.2
 主页     https://github.com/JFormDesigner/FlatLaf
-位置     META-INF/jars/flatlaf-3.7.2.jar
+位置     META-INF/jars/flatlaf-3.7.2.jar（只有 Fabric 目标打包它；
+         另外两个目标的选择器用系统外观，见下方说明）
 
 Apache License, Version 2.0
 
