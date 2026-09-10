@@ -16,7 +16,6 @@ import net.minecraft.world.level.storage.LevelResource;
 
 import java.io.IOException;
 import java.io.Reader;
-import java.io.Writer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -478,11 +477,9 @@ public final class PhoneScreenRegistry {
         s.installed = INSTALLED.stream().map(ResourceLocation::toString).toList();
         s.known = CATALOG.keySet().stream().map(ResourceLocation::toString).toList();
         try {
-            Path parent = stateFile.getParent();
-            if (parent != null) Files.createDirectories(parent);
-            try (Writer w = Files.newBufferedWriter(stateFile, StandardCharsets.UTF_8)) {
-                GSON.toJson(s, w);
-            }
+            // 【整份替换，不是直写】：直写写到一半崩掉，主屏装了哪些 App 全部回到默认，
+            // 见 AtomicWrite
+            AtomicWrite.replace(stateFile, w -> GSON.toJson(s, w));
         } catch (IOException e) {
             MCphone.LOGGER.warn("[MCphone] 写入 {} 失败: {}", stateFile, e.toString());
         }

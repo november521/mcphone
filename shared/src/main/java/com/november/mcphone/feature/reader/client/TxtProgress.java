@@ -3,10 +3,10 @@ package com.november.mcphone.feature.reader.client;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.november.mcphone.MCphone;
+import com.november.mcphone.core.client.AtomicWrite;
 
 import java.io.IOException;
 import java.io.Reader;
-import java.io.Writer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -126,11 +126,9 @@ public final class TxtProgress {
         }
 
         try {
-            Path parent = FILE.getParent();
-            if (parent != null) Files.createDirectories(parent);
-            try (Writer w = Files.newBufferedWriter(FILE, StandardCharsets.UTF_8)) {
-                GSON.toJson(state, w);
-            }
+            // 【整份替换，不是直写】：直写会先把这个文件截成 0 字节，写到一半崩掉就丢掉
+            // 【所有书】的进度。而这个方法每翻一页调一次 —— 那个窗口开得很勤，见 AtomicWrite
+            AtomicWrite.replace(FILE, w -> GSON.toJson(state, w));
         } catch (IOException e) {
             // 只警告不抛：写不进去最多是这次的进度没记住，不该把界面带崩
             MCphone.LOGGER.warn("[MCphone] 写入阅读进度 {} 失败：{}", FILE, e.toString());
