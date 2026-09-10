@@ -135,7 +135,7 @@ public final class PhoneHud {
 
     /** 由 MCphoneClient 构造函数挂到模组总线 */
     public static void onRegisterOverlays(RegisterGuiOverlaysEvent event) {
-        event.registerAbove(VanillaGuiOverlay.BOSS_EVENT_PROGRESS.id(), OVERLAY_ID, PhoneHud::render);
+        event.registerAbove(VanillaGuiOverlay.HOTBAR.id(), OVERLAY_ID, PhoneHud::render);
     }
 
     //  每 tick 决定挂不挂、要不要唤起鼠标
@@ -230,7 +230,14 @@ public final class PhoneHud {
 
         syncSize(mc);
 
+        gui.setupOverlayRenderState(true, false);
+
+        // Forge 的 overlay 列表层与层之间不推进 z，而快捷栏物品画在 z=150：不推过去，
+        // HUD 里走批处理的文字和图标会被物品挡住。200 是 1.21.1 的 LayeredDraw 每层推的数。
+        g.pose().pushPose();
+        g.pose().translate(0.0F, 0.0F, 200.0F);
         phone.renderAsHud(g, partialTick);
+        g.pose().popPose();
     }
 
     //  开关手机

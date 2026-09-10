@@ -129,22 +129,9 @@ public final class Terminals {
         return owner(stack).filter(integration -> integration.canOpen(stack)).isPresent();
     }
 
-    /**
-     * 这台终端<b>装得进手机卡槽</b>吗 —— 开得了，而且这一家支持「住在卡槽里」。
-     *
-     * 卡槽只收这一种（见 {@code TerminalSlotMenu} 的 mayPlace）：装得进去却点不开的东西
-     * 比装不进去更难解释。比 {@link #isOpenable} 多问一句
-     * {@link TerminalIntegration#canLiveInPhoneSlot}。
-     *
-     * 哪些实现会答不，看各目标自己的 {@code XxxIntegration} —— 眼下只有 Forge 1.20.1 上的
-     * RS 答不：它的终端在背包里照常开得了，只是那个版本的 RS 表达不了「东西在手机卡槽里」
-     * 这种位置。别的目标上没有人答不，这个方法在那儿等价于 {@link #isOpenable}，
-     * <b>但它必须存在</b>：问这一句的 {@code TerminalSlotMenu} 住在 shared/ 里。
-     */
+    /** 只有能从手机打开的终端才能装进卡槽。 */
     public static boolean isInstallable(ItemStack stack) {
-        return owner(stack)
-                .filter(integration -> integration.canOpen(stack) && integration.canLiveInPhoneSlot())
-                .isPresent();
+        return isOpenable(stack);
     }
 
     /**

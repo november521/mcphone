@@ -353,7 +353,7 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 - `feature.store.net.RequestPurchasedAppsPacket`
 - `feature.terminal.TerminalCharger`　—— 加载器导入、注入的方法
 - `feature.terminal.integration.ae2.Ae2Integration`
-- `feature.terminal.integration.refinedstorage.RefinedStorageIntegration`
+- `feature.terminal.integration.refinedstorage.RefinedStorageIntegration`　—— 加载器导入
 - `feature.terminal.net.TerminalActionPacket`
 - `feature.waystone.net.OpenWaystoneSelectionPacket`
 - `platform.CuriosInventories`

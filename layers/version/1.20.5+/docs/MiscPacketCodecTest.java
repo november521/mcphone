@@ -1,6 +1,7 @@
 package com.november.mcphone.feature;
 
 import com.november.mcphone.core.PhoneLocation;
+import com.november.mcphone.core.net.PhoneScreenOnPacket;
 import com.november.mcphone.feature.enderchest.net.OpenEnderChestPacket;
 import com.november.mcphone.feature.settings.net.SetDeviceNamePacket;
 import com.november.mcphone.feature.settings.net.SetWallpaperPacket;
@@ -224,6 +225,17 @@ public class MiscPacketCodecTest {
         eqBytes(SetDeviceNamePacket.STREAM_CODEC,
                 new SetDeviceNamePacket("", new PhoneLocation.InInventory(7)),
                 new byte[]{0, 2, 7}, "SetDeviceName 空名字 + 背包第 7 格");
+
+        // 两只手能同时亮；多余位在构造时清掉。
+        for (int mask = 0; mask <= PhoneScreenOnPacket.ALL_HANDS; mask++) {
+            PhoneScreenOnPacket packet = new PhoneScreenOnPacket(mask);
+            eqBytes(PhoneScreenOnPacket.STREAM_CODEC, packet, new byte[]{(byte) mask},
+                    "PhoneScreenOn 掩码 " + mask);
+            roundTrip(PhoneScreenOnPacket.STREAM_CODEC, packet,
+                    "PhoneScreenOn 往返 " + mask);
+        }
+        eq(new PhoneScreenOnPacket(0xff).litHands(), PhoneScreenOnPacket.ALL_HANDS,
+                "PhoneScreenOn 清理越界位");
 
         //  八、往返与「不多写不少写」
         for (String s : new String[]{"", "a.png", "带中文的.png", "x".repeat(200)}) {

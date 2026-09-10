@@ -135,7 +135,7 @@ public final class PhoneHud {
 
     /** 由 MCphoneClient 构造函数挂到模组总线 */
     public static void onRegisterLayers(RegisterGuiLayersEvent event) {
-        event.registerAbove(VanillaGuiLayers.BOSS_OVERLAY, LAYER_ID, PhoneHud::render);
+        event.registerAbove(VanillaGuiLayers.HOTBAR, LAYER_ID, PhoneHud::render);
     }
 
     //  每 tick 决定挂不挂、要不要唤起鼠标

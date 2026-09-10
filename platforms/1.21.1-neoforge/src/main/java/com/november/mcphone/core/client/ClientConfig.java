@@ -308,25 +308,29 @@ public final class ClientConfig {
         SPEC.save();
     }
 
-    /**
-     * 玩家在 App 管理器的相机那一页上换了快门闪光。
-     *
-     * 与上面几项同一套路数：{@link CameraFlash} 那边已经用上新值了，这里只负责落盘。
-     */
+    /** 保存相机快门闪光模式。 */
     public static void saveCameraSoftFlash(boolean soft) {
         if (!SPEC.isLoaded()) return;
         CAMERA_SOFT_FLASH.set(soft);
+        preserveHud();
         SPEC.save();
     }
 
-    /**
-     * 玩家在相机那一页上开关了坐标水印。与上面几项同一套路数：{@link CameraStamp}
-     * 那边已经用上新值了（下一帧就变），这里只负责落盘。
-     */
+    /** 保存相机坐标水印开关。 */
     public static void saveCameraCoordStamp(boolean value) {
         if (!SPEC.isLoaded()) return;
         CAMERA_COORD_STAMP.set(value);
+        preserveHud();
         SPEC.save();
+    }
+
+    /** 保存相机设置会重载整份配置，所以先把 HUD 当前值写回去。 */
+    private static void preserveHud() {
+        HUD_ENABLED.set(PhoneHudPlacement.enabled());
+        HUD_ANCHOR.set(PhoneHudPlacement.anchor());
+        HUD_OFFSET_X.set(PhoneHudPlacement.offsetX());
+        HUD_OFFSET_Y.set(PhoneHudPlacement.offsetY());
+        HUD_SCALE.set(PhoneHudPlacement.percent());
     }
 
     /**

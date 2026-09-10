@@ -307,6 +307,7 @@
   "mcphone.terminal.hint_installed": "Tapping Terminal opens this one",
   "mcphone.terminal.no_remote": "%s can't be opened remotely - hold it and point at a terminal block instead.",
   "mcphone.terminal.open_failed": "%s errored out; that terminal can't be opened. See the log.",
+  "mcphone.terminal.inventory_space_required": "Free one inventory slot to open this Refined Storage terminal.",
   "mcphone.terminal.list_sep": ", ",
   "mcphone.reader.count": "%s",
   "mcphone.reader.empty": "No books found",

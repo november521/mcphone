@@ -87,7 +87,7 @@ public final class MCphoneClient {
 
         modBus.addListener(MCphoneKeyBindings::register);
 
-        // 副手 HUD 那一层。1.21.1 那边是 RegisterGuiLayersEvent + registerAbove(BOSS_OVERLAY)；
+        // 副手 HUD 那一层。1.21.1 那边是 RegisterGuiLayersEvent + registerAbove(HOTBAR)；
         // 1.20.1 上对应的是 RegisterGuiOverlaysEvent，插的位置一样，见 PhoneHud
         modBus.addListener(PhoneHud::onRegisterOverlays);
 
