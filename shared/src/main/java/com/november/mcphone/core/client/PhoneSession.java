@@ -1,8 +1,11 @@
 package com.november.mcphone.core.client;
 
 import com.november.mcphone.MCphone;
+import com.november.mcphone.core.PhoneLocation;
 import net.minecraft.resources.ResourceLocation;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -18,6 +21,23 @@ import java.util.UUID;
  * 目前是美西螈与阅读：一个一天要开几十次，一个是"翻开书之后手机必然被顶掉"——
  * 那一下不是玩家想关手机，是他正在看书。要给别的 App 开这个待遇，两处一起改——
  * id 加进 {@link #RESUMABLE}，并在 {@link #appOf} 里把它的页面映射到这个 id。
+ *
+ * 一部设备一份，不是全局一份
+ *
+ * 记的是<b>哪一部停在哪一页</b>，按 {@link PhoneLocation} 分开存。原先是两个静态字段、
+ * 全局一份，而这个类的意图从第一句起就是 per-device 的：真手机各记各的。
+ *
+ * 全局一份时的后果：平板挂在副手 HUD 上停在主屏，主手的手机翻到聊天页关掉（记下「续开聊天」），
+ * 然后把平板从副手拿下来 —— {@code PhoneHud.dismiss()} 会替它调一次 {@code shutdown()}，
+ * 于是 {@code save(MAIN)}，而 MAIN 不在白名单里 → 整个记录被清掉。<b>平板一次「什么都没做、
+ * 从主屏直接收起」，静默擦掉了手机刚存的续开状态</b>，不崩不报错，下次开哪一台都回主屏。
+ *
+ * 这条缝比平板早（这个类建于 1.7.34），但那之前要触发得同时带两部一模一样的手机，
+ * 没人会那么干；平板把「两台同时带着」写成了主用法，它才第一次变成家常便饭。
+ *
+ * <b>位置换了就续不上</b>：手机从主手挪进背包，按新位置查不到旧记录，那次开机回主屏。
+ * 这是有意的降级 —— 位置是这个仓库里「哪一部」的既有表达（改设备名、点亮屏幕那些包
+ * 携带的都是它），换一套设备身份要先给物品一个稳定 id，那是另一件事。
  *
  * 只活在这一局
  *
@@ -35,18 +55,31 @@ public final class PhoneSession {
     /** 允许续开的 App。加成员见类注释 */
     private static final Set<ResourceLocation> RESUMABLE = Set.of(CHAT_APP, READER_APP);
 
-    private static PhoneScreen.Mode savedMode;
+    /** 一部设备记一笔。peer 只有 mode 是 CHAT_CONVERSATION 时有意义 */
+    private record Saved(PhoneScreen.Mode mode, UUID peer) {}
 
-    /** 上次停在与谁的会话上；只有 savedMode 是 CHAT_CONVERSATION 时有意义 */
-    private static UUID savedPeer;
+    /**
+     * 哪一部停在哪一页。
+     *
+     * 键是位置，条数因此被玩家身上的槽位数封住；再加上进世界时整张表会清空，
+     * 不会长期堆积。
+     */
+    private static final Map<PhoneLocation, Saved> SAVED = new HashMap<>();
 
     private PhoneSession() {}
 
-    /** 关机时记一笔。白名单外的页面记成"没有"，下次照常从主屏开 */
-    public static void save(PhoneScreen.Mode mode, UUID conversationPeer) {
+    /**
+     * 关机时记一笔。白名单外的页面记成"没有"，下次这一部照常从主屏开。
+     *
+     * <b>只动 {@code where} 这一部的记录</b>：别的设备正记着什么与这次关机无关。
+     */
+    public static void save(PhoneLocation where, PhoneScreen.Mode mode, UUID conversationPeer) {
+        // 拿不到位置就什么都不记 —— 尤其不能顺手清掉别人的
+        if (where == null) return;
+
         ResourceLocation app = appOf(mode);
         if (app == null || !RESUMABLE.contains(app)) {
-            clear();
+            SAVED.remove(where);
             return;
         }
 
@@ -57,42 +90,45 @@ public final class PhoneSession {
         // （正在读的那本 txt 就只有一部分目标有那一页），而"哪些 Mode 存在"是那一侧的知识。
         // 这里点名一个别的目标没有的常量，那个目标连 shared/ 都编不过。所以调用方传进来的
         // 已经是"能续开的那一页"，见各目标 PhoneScreen 里调 save 的那一句。
-        savedMode = switch (mode) {
+        PhoneScreen.Mode saved = switch (mode) {
             case CHAT_ADD_CONTACT -> PhoneScreen.Mode.CHAT;
             default -> mode;
         };
-        savedPeer = savedMode == PhoneScreen.Mode.CHAT_CONVERSATION ? conversationPeer : null;
+        SAVED.put(where, new Saved(saved,
+                saved == PhoneScreen.Mode.CHAT_CONVERSATION ? conversationPeer : null));
     }
 
     /**
      * 这次开机停在哪一页，null 表示回主屏。
      * 白名单与安装状态在这里再查一次：记下之后玩家可能把这个 App 卸了。
      */
-    public static PhoneScreen.Mode resumeMode() {
-        if (savedMode == null) return null;
+    public static PhoneScreen.Mode resumeMode(PhoneLocation where) {
+        Saved s = where == null ? null : SAVED.get(where);
+        if (s == null) return null;
 
-        ResourceLocation app = appOf(savedMode);
+        ResourceLocation app = appOf(s.mode());
         if (app == null || !RESUMABLE.contains(app) || !PhoneScreenRegistry.isInstalled(app)) {
-            clear();
+            SAVED.remove(where);
             return null;
         }
 
         // 对端丢了就退回会话列表：进一个不知道是谁的会话没有意义
-        if (savedMode == PhoneScreen.Mode.CHAT_CONVERSATION && savedPeer == null) {
-            savedMode = PhoneScreen.Mode.CHAT;
+        if (s.mode() == PhoneScreen.Mode.CHAT_CONVERSATION && s.peer() == null) {
+            s = new Saved(PhoneScreen.Mode.CHAT, null);
+            SAVED.put(where, s);
         }
-        return savedMode;
+        return s.mode();
     }
 
-    /** 续开会话时的对端，没有则 null */
-    public static UUID resumePeer() {
-        return savedPeer;
+    /** 这一部续开会话时的对端，没有则 null */
+    public static UUID resumePeer(PhoneLocation where) {
+        Saved s = where == null ? null : SAVED.get(where);
+        return s == null ? null : s.peer();
     }
 
-    /** 进世界时清掉，理由见类注释 */
-    public static void clear() {
-        savedMode = null;
-        savedPeer = null;
+    /** 进世界时把【所有】设备的记录清掉，理由见类注释 */
+    public static void clearAll() {
+        SAVED.clear();
     }
 
     /** 这一页属于哪个 App；null 表示不属于任何可续开的 App（主屏、设置、商店……） */

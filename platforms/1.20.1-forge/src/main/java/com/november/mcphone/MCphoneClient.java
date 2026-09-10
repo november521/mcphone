@@ -164,7 +164,7 @@ public final class MCphoneClient {
                     // 清在【进】世界而不是退出世界：断线时 LoggingOut 先到，
                     // 之后手机界面才被顶掉，那一下 removed() 会把页面再记一笔——
                     // 退出时清等于没清
-                    PhoneSession.clear();
+                    PhoneSession.clearAll();
 
                     StoreClientCache.request();
 

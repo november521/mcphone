@@ -748,10 +748,10 @@ public final class PhoneScreen extends PhoneScreenBase {
 
     /** 续开上次关机时停的那一页，白名单与有效性由 {@link PhoneSession} 把关 */
     private void resumeSession() {
-        Mode target = PhoneSession.resumeMode();
+        Mode target = PhoneSession.resumeMode(location);
         if (target == null || target == Mode.MAIN) return;
 
-        pendingConversationPeer = PhoneSession.resumePeer();
+        pendingConversationPeer = PhoneSession.resumePeer(location);
         navigateTo(target);
     }
 
@@ -1519,7 +1519,7 @@ public final class PhoneScreen extends PhoneScreenBase {
         // 正在读的那本 txt 记成书架：那一页攥着整本书的文本，关机时必须放掉
         // （见 TxtReaderPage.close），下次开机没有可续的东西，停在书架上最贴近。
         // 这一步在这里做而不在 PhoneSession 里：TXT_BOOK 这个常量只有本目标有
-        PhoneSession.save(mode == Mode.TXT_BOOK ? Mode.READER : mode, pendingConversationPeer);
+        PhoneSession.save(location, mode == Mode.TXT_BOOK ? Mode.READER : mode, pendingConversationPeer);
 
         if (mode == Mode.GALLERY) gallery.close();
         if (mode == Mode.CHAT_PHOTO_PICKER) chatPhotoPicker.close();
