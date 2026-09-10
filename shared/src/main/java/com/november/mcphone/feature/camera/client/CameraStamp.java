@@ -229,7 +229,7 @@ public final class CameraStamp {
      * 而 {@code Screenshot.grab} 收到 null 正是这个意思，调用方不必判。
      *
      * 重名时缀 {@code _1}、{@code _2}，与原版 {@code Screenshot.getFile} 一模一样——
-     * 指定了文件名之后原版不再自己让路，同一秒里在同一格上连拍两张就会互相覆盖。
+     * 指定了文件名之后原版不再自己让路，重名的活得自己干。
      */
     @Nullable
     public static String fileName(File gameDirectory, @Nullable Player player) {
@@ -240,11 +240,48 @@ public final class CameraStamp {
                 + "_Y" + Mth.floor(player.getY())
                 + "_Z" + Mth.floor(player.getZ());
 
-        File dir = new File(gameDirectory, "screenshots");
-        String name = base + ".png";
-        for (int n = 1; new File(dir, name).exists(); n++) {
-            name = base + "_" + n + ".png";
+        return nextName(new File(gameDirectory, "screenshots"), base);
+    }
+
+    /** 上一次发出去的基底与序号，见 {@link #nextName} */
+    private static String lastBase;
+    private static int lastIndex;
+
+    /**
+     * 给这个基底挑一个还没被占的文件名。
+     *
+     * <h2>光看 exists() 不够，同一秒连拍两张会互相覆盖</h2>
+     *
+     * 基底的时间戳只精确到秒（{@code Util.getFilenameFormattedDateTime}），坐标是
+     * {@code Mth.floor} 的整数 —— 站着不动连按两下快门，两次算出来的基底一模一样。
+     *
+     * 而原版 {@code Screenshot.grab} 拿到文件名之后，<b>PNG 编码与写盘是丢进
+     * {@code Util.ioPool()} 异步做的</b>（对着 1.20.1 的字节码核过）。所以第二张算名字时，
+     * 第一张<b>还没落到盘上</b>：{@code exists()} 返回 false，两张拿到同一个名字，
+     * 后写的盖掉先写的 —— 一张照片消失，而游戏里弹了两条「保存成功」。
+     *
+     * 门槛低到站着不动就能撞上：{@code CameraMode.finishCapture()} 在调 grab <b>之前</b>
+     * 就把 {@code pendingCapture} 清成了 false，下一次按键隔一 tick 就能发起。
+     *
+     * <h2>做法</h2>
+     *
+     * 除了问盘，还记住<b>本进程刚发出去的那一个</b>。基底相同就从上次的序号往后接，
+     * 基底一变（换了秒、或者人动了一格）就从头开始 —— 那时不可能与之前的撞名。
+     *
+     * 只有一个基底和一个整数：撞名只可能发生在同一个基底里，早一秒的名字永远不会再回来。
+     *
+     * <b>只在客户端主线程上调</b>（抓图发生在 tick 里），所以这两个静态字段不加锁。
+     */
+    static String nextName(File dir, String base) {
+        int n = base.equals(lastBase) ? lastIndex + 1 : 0;
+        String name;
+        while (true) {
+            name = (n == 0) ? base + ".png" : base + "_" + n + ".png";
+            if (!new File(dir, name).exists()) break;
+            n++;
         }
+        lastBase = base;
+        lastIndex = n;
         return name;
     }
 
