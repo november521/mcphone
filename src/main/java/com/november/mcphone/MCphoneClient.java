@@ -154,7 +154,10 @@ public class MCphoneClient implements ClientModInitializer {
         // 必须在 App 目录构建之前：BrowserApp 登记时会问后端在不在
         com.november.mcphone.feature.browser.client.BrowserBackends.installDefault();
 
-        WallpaperStore.scan();
+        // 不能在这儿直接扫：建纹理是 GL 调用，而客户端入口点跑在 Minecraft 构造函数里，
+        // GL 上下文还没就绪，目录里有图会原生崩溃。推迟到第一个客户端 tick，
+        // 理由与实测经过见 WallpaperStore.scheduleInitialScan。
+        WallpaperStore.scheduleInitialScan();
 
         // 触发 PhoneScreenRegistry 延迟加载（内建 + SPI）
         PhoneScreenRegistry.getAppCount();

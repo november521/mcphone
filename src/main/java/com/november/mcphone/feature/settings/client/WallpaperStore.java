@@ -1,6 +1,7 @@
 package com.november.mcphone.feature.settings.client;
 
 import com.mojang.blaze3d.platform.NativeImage;
+import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.resources.ResourceLocation;
@@ -62,6 +63,34 @@ public final class WallpaperStore {
     /** 客户端启动时扫一次，让第一次开机就有壁纸可选 */
     public static void scan() {
         refresh();
+    }
+
+    /** 启动扫描只排一次队；之后每 tick 一次布尔判断是回调的全部开销 */
+    private static boolean initialScanQueued;
+    private static boolean initialScanDone;
+
+    /**
+     * 启动扫描，推迟到第一个客户端 tick 再做。
+     *
+     * <h2>为什么不能在客户端入口点直接扫</h2>
+     *
+     * {@link #loadWallpaper} 每张图都要 new DynamicTexture —— 那是一步 GL 调用
+     * （glGenTextures）。而 Fabric 的客户端入口点跑在 Minecraft 的构造函数里，
+     * 游戏窗口此刻还没建，GL 上下文不存在：目录里只要有一张图，glGenTextures
+     * 就原生崩溃（EXCEPTION_ACCESS_VIOLATION，连 MC 崩溃报告都没有，只有 hs_err）。
+     * 目录空着时扫描什么都不加载，所以这个雷一直埋到玩家第一次往 wallpapers/
+     * 放图才炸（2026-09-10 实测）。
+     *
+     * 第一个客户端 tick 时标题屏已经在渲染，GL 一定可用。
+     */
+    public static void scheduleInitialScan() {
+        if (initialScanQueued) return;
+        initialScanQueued = true;
+        ClientTickEvents.END_CLIENT_TICK.register(mc -> {
+            if (initialScanDone) return;
+            initialScanDone = true;
+            scan();
+        });
     }
 
     /**
