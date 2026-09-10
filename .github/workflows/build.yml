@@ -172,6 +172,57 @@ jobs:
       - name: next-version 的断言
         run: bash .github/next-version.test.sh
 
+      # 发版说明按【基准号】归档：v1.10.2.md 这一份被 1.10.2-beta.1、beta.2、以及正式版
+      # 1.10.2 共用。预发布期间它是可以改的 —— 那正是"一个小版本一份说明"的做法。
+      #
+      # 【但正式版一发出去，那一份就冻结了】。它此刻是一条已经发生过的记录：Release 页面、
+      # CurseForge、Modrinth 上都是那个内容，仓库里再改只会让三处对不上，而且没人会发现。
+      #
+      # 判据是【正式版的 tag 在不在】，不是预发布的 tag：v1.10.2-beta.2 存在时那份还能改，
+      # v1.10.2 存在之后就不能了。
+      #
+      # 实际发生过：v1.10.0 已发布之后它的说明被改过，后来靠一次 revert 复原。
+      - name: 检查已发布版本的说明有没有被改
+        env:
+          BEFORE: ${{ github.event.before }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          BOT: 'github-actions[bot]@users.noreply.github.com'
+        run: |
+          set -uo pipefail
+          if [ -n "${BASE:-}" ]; then
+            RANGE="${BASE}..HEAD"
+          elif [ -n "${BEFORE:-}" ] \
+               && [ "$BEFORE" != "0000000000000000000000000000000000000000" ] \
+               && git cat-file -e "${BEFORE}^{commit}" 2>/dev/null; then
+            RANGE="${BEFORE}..HEAD"
+          else
+            echo "::notice::拿不到对比基准（新分支或强推），只检查最新这一个 commit"
+            RANGE="HEAD~1..HEAD"
+          fi
+
+          FROZEN=""
+          for SHA in $(git rev-list "$RANGE"); do
+            EMAIL=$(git show -s --format='%ae' "$SHA")
+            [ "$EMAIL" = "$BOT" ] && continue
+            for F in $(git show --name-only --format= "$SHA" -- 'docs/release-notes/v*.md'); do
+              V=$(basename "$F" .md)                       # v1.10.2
+              case "$V" in *-*) continue ;; esac           # v1.10.2-beta.2.md 那种旧命名的遗留文件，不管
+              git rev-parse -q --verify "refs/tags/$V" >/dev/null || continue
+              FROZEN="${FROZEN}  $(git show -s --format='%h' "$SHA")  $F（$V 已发布）"$'\n'
+            done
+          done
+
+          if [ -n "$FROZEN" ]; then
+            echo "::error::下面这些改动动了【已经发布的版本】的说明："
+            printf '%s' "$FROZEN"
+            echo ""
+            echo "那份说明是一条已经发生过的记录 —— Release 页面、CurseForge、Modrinth 上"
+            echo "都是当时那个内容，仓库里再改只会让三处对不上，而且没人会发现。"
+            echo "要补充说明就写进下一版：docs/release-notes/next.md。"
+            exit 1
+          fi
+          echo "没有人改过已发布版本的说明"
+
       - name: 检查 mod_version 有没有被人手改
         env:
           BEFORE: ${{ github.event.before }}

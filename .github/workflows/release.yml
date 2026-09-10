@@ -199,26 +199,46 @@ jobs:
 
       # ---------------- 发版说明 ----------------
       #
-      # 版本号现在是 CI 现算的，写说明的人事先不知道自己写的是哪一版。
-      # 所以约定改成：平时把下一版的说明写进 docs/release-notes/next.md，
-      # 发版时这里把它改名成 v<新版本>.md，一起进那个 release commit。
+      # 【一个小版本一份说明，不是一次发布一份】
       #
-      # 也仍然认 v<新版本>.md：知道自己在发哪一版时可以直接写好那个文件名。
+      # 文件名按【基准号】走：1.10.2-beta.1、1.10.2-beta.2、1.10.2 这三次发布共用
+      # docs/release-notes/v1.10.2.md 同一份。预发布期间就往那一份里写，转正时它已经
+      # 是完整的了。
+      #
+      # 原先按完整版本号命名，于是同一条线被切成三份：v1.10.2-beta.1.md、
+      # v1.10.2-beta.2.md、v1.10.2.md，而最后那份是从新的 next.md 起的 ——
+      # beta 阶段写进去的东西在正式版的说明里【全部丢掉】，前两份成了孤儿。
+      #
+      # 【next.md 只用一次】：切第一个预发布时它被改名成 v<基准号>.md，之后直接改那份。
+      # 两个都在会停下来，因为不知道该用哪个 —— 那种情况多半是有人在 next.md 里
+      # 又写了一遍已经写过的东西。
+      #
+      # 【正式版发出去之后那份就冻结了】，build.yml 的 guard-version 会拦住后续修改。
       - name: 准备发版说明
         id: notes
         env:
-          TAG: ${{ steps.ver.outputs.tag }}
+          NEW: ${{ steps.ver.outputs.new }}
         run: |
           set -euo pipefail
-          TARGET="docs/release-notes/${TAG}.md"
+          BASE="${NEW%%-*}"
+          TARGET="docs/release-notes/v${BASE}.md"
+          NEXT=docs/release-notes/next.md
+
+          if [ -f "$TARGET" ] && [ -f "$NEXT" ]; then
+            echo "::error::$TARGET 与 $NEXT 同时存在，不知道该用哪个。"
+            echo "v${BASE} 这条线的说明已经在 $TARGET 里了（上一个预发布时建的），"
+            echo "把 $NEXT 的内容并进去、删掉 $NEXT，再发一次。"
+            exit 1
+          fi
+
           if [ -f "$TARGET" ]; then
-            echo "使用已有的 $TARGET"
-          elif [ -f docs/release-notes/next.md ]; then
+            echo "沿用 $TARGET（v${BASE} 这条线的说明，预发布与正式版共用一份）"
+          elif [ -f "$NEXT" ]; then
             mkdir -p docs/release-notes
-            git mv docs/release-notes/next.md "$TARGET"
-            echo "next.md 改名为 $TARGET"
+            git mv "$NEXT" "$TARGET"
+            echo "next.md 改名为 $TARGET —— 之后 v${BASE} 的说明直接改这一份，别再新建 next.md"
           else
-            echo "::warning::没有 docs/release-notes/next.md，也没有 ${TARGET}。GitHub Release 会退回自动生成的提交列表，而那个玩家读不懂"
+            echo "::warning::没有 $NEXT，也没有 $TARGET。GitHub Release 会退回自动生成的提交列表，而那个玩家读不懂"
             echo "file=" >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -373,7 +393,9 @@ jobs:
 
           # 这两个平台没有"自动生成更新日志"这回事：changelog 留空，版本页就真是
           # 一片空白。所以保证【总有一个文件】，最差也是一条指回 Release 的链接。
-          FILE="docs/release-notes/${TAG}.md"
+          # 按【基准号】找，与上面「准备发版说明」那一步同一个文件 ——
+          # 1.10.2-beta.2 与 1.10.2 共用 v1.10.2.md
+          FILE="docs/release-notes/v$(printf '%s' "${TAG#v}" | cut -d- -f1).md"
           if [ ! -f "$FILE" ]; then
             FILE="changelog.md"
             echo "完整更新内容见 https://github.com/${GITHUB_REPOSITORY}/releases/tag/${TAG}" > "$FILE"
