@@ -230,6 +230,8 @@ public final class PhoneHud {
 
         syncSize(mc);
 
+        // 快捷栏物品会重新启用深度测试，直接续画会让物品挡住 HUD。
+        gui.setupOverlayRenderState(true, false);
         phone.renderAsHud(g, partialTick);
     }
 
