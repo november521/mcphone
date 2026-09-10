@@ -166,6 +166,12 @@ jobs:
         with:
           fetch-depth: 0
 
+      # 发版时算版本号的那个脚本是纯函数（进去三个字符串、出来一个），算错了不报错，
+      # 只会安静地产出一个坏号 —— 而那个号会被写进 gradle.properties、烧进 jar、
+      # 打成 tag、发到两个平台，发现时已经发出去了。所以每次推送都跑一遍它的断言。
+      - name: next-version 的断言
+        run: bash .github/next-version.test.sh
+
       - name: 检查 mod_version 有没有被人手改
         env:
           BEFORE: ${{ github.event.before }}
