@@ -156,11 +156,8 @@
     "java": 21,
     "gradle": "9.7.1",
     "project": "platforms/1.21.1-fabric",
-    "buildable": false,
-    "unverified": [
-      "loader_version"
-    ],
-    "note": "社区 PR #2 已有可跑实现，尚未并入 —— loader_version 抄自那个 PR，本仓没验过。gradle 9.7.1 是实测出来的：fabric-loom 1.17.20 要求 Gradle >= 9.5，而 9.5 没有发行包，往上第一个能用的是 9.7.1（本仓 wrapper 是 9.2.1，所以这个目标不能跟着仓库的 wrapper 走）。",
+    "buildable": true,
+    "note": "社区 PR #2 的移植实现，已按本仓结构收进 platforms/1.21.1-fabric/。loader_version 0.19.5 由构建本身验着（Fabric Loader 就装在这个版本上编过）。gradle 9.7.1 是实测出来的：fabric-loom 1.17.20 要求 Gradle >= 9.5，往上第一个能用的发行版是 9.7.1 —— 这个目标不能跟着仓库根的 wrapper（那个是给 1.20.1-forge 的 8.8 与 neoforge 的共用档），平台自带 wrapper。",
     "layers": [
       "1.20.5+",
       "1.21+",

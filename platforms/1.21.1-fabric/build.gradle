@@ -1,0 +1,159 @@
+plugins {
+    id 'java-library'
+    id 'maven-publish'
+    id 'fabric-loom' version "${loom_version}"
+    id 'idea'
+}
+
+// ============================================================
+//  仓库级身份与共用代码
+// ============================================================
+//
+// 这个目标是仓库里的一个平台工程，不是独立仓库。身份信息与共用源码都在上面两级。
+def repoRoot = file('../..')
+def repoPropsFile = new File(repoRoot, 'gradle.properties')
+if (!repoPropsFile.exists()) {
+    throw new GradleException(
+            "找不到 ${repoPropsFile.canonicalPath}。仓库级身份（mod_version 等）在那儿，" +
+            "各平台不许自己定义 —— 所有目标必须是同一个版本号。")
+}
+def repoProps = new Properties()
+repoPropsFile.withInputStream { repoProps.load(it) }
+['mod_id','mod_name','mod_license','mod_group_id','mod_version'].each { k ->
+    if (!repoProps.containsKey(k)) { throw new GradleException("仓库根的 gradle.properties 缺 ${k}") }
+    ext[k] = repoProps.getProperty(k)
+}
+
+// 共享层由配置文件说了算，解析在 gradle/mcphone-layers.gradle 里（只有那一份）
+apply from: "${projectDir}/../../gradle/mcphone-layers.gradle"
+
+version = mod_version
+group = mod_group_id
+
+base {
+    archivesName = mod_id
+}
+
+// 21。Minecraft 1.21.1 跑在 Java 21 上，用 17 编出来的 class 文件高版本客户端
+// 反而不认（no class file versions 那类错不会提到 Java 版本）。
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(21)
+}
+
+repositories {
+    // 可选联动（Waystones/Balm/MCEF/NetMusic/Patchouli/RS/Tom's/AE2）都发在
+    // Modrinth 上，官方 maven 与发布同源。用 content 把它限定在 maven.modrinth
+    // 这一个 group：不限定的话，每解析一个依赖都要先来问它一次，构建平白慢一截。
+    maven {
+        name = "Modrinth"
+        url = "https://api.modrinth.com/maven"
+        content {
+            includeGroup "maven.modrinth"
+        }
+    }
+    // ae2wtlib 的 api 模块（de.mari_023）只发布在 modmaven
+    maven {
+        name = "modmaven"
+        url = "https://modmaven.dev"
+        content {
+            includeGroup "de.mari_023"
+        }
+    }
+    mavenCentral()
+}
+
+// 共用代码：shared/ 全部目标共用，加上这个目标挂的层（见 versions/targets.json）
+sourceSets.main.java.srcDir '../../shared/src/main/java'
+mcphoneLayers.each { layer ->
+    if (layer.javaDir.isDirectory()) sourceSets.main.java.srcDir layer.javaDir
+}
+sourceSets.main.resources {
+    srcDir '../../shared/src/main/resources'
+    mcphoneLayers.each { layer -> srcDir layer.resourcesDir }
+}
+
+loom {
+    // mixins 声明在 fabric.mod.json 里，Loom 只需要知道配置文件在哪儿
+    // 的问题不存在；这里不额外配 accessWidener / runs，缺什么补什么。
+}
+
+dependencies {
+    // Fabric Loom 必须的三件套
+    minecraft "com.mojang:minecraft:${minecraft_version}"
+    mappings loom.officialMojangMappings()
+    modImplementation "net.fabricmc:fabric-loader:${loader_version}"
+    modImplementation "net.fabricmc.fabric-api:fabric-api:${fabric_version}"
+
+    // JavaMP3 —— MP3 解码，【必需】依赖，不是可选联动。
+    // include（fabric-loader 的 jar-in-jar）而不是 implementation：只写
+    // implementation 的话开发环境跑得起来、发出去的 jar 一放 mp3 就
+    // NoClassDefFoundError。对应 NeoForge 侧的 jarJar。
+    include implementation("fr.delthas:javamp3:${javamp3_version}")
+
+    // FlatLaf —— 文件选择器（ImagePicker）的观感，同样 include 内嵌。
+    include implementation("com.formdev:flatlaf:${flatlaf_version}")
+
+    // === 可选联动依赖（编译期）—— 装了的就多一个 App/功能，没装则不出现 ===
+    // Curios 在 1.21.1 Fabric 上【没有运行时构建】，但 shared/ 的 CuriosCompat
+    // 里那些 lambda 的接收者类型是 Curios 的接口，javac 解析成员需要它的 jar
+    // 在编译类路径上 —— 取 NeoForge 构建，plain compileOnly（与 AE2 同一招）：
+    // 运行期永远不在场，ModPresence 把所有调用挡在外面，死代码但无害。
+    // 手机"挂腰"功能在 Fabric 版因此暂缺，见 CuriosInventories 门面。
+    compileOnly "maven.modrinth:curios:9.5.1+1.21.1"
+    // FTB Quests 走反射，无需编译依赖。
+    modCompileOnly "maven.modrinth:waystones:${waystones_version}"
+    modCompileOnly "maven.modrinth:balm:${balm_version}"
+    modCompileOnly "maven.modrinth:mcef:${mcef_version}"
+    modCompileOnly "maven.modrinth:net-music:${netmusic_version}"
+    modCompileOnly "maven.modrinth:patchouli:${patchouli_version}"
+
+    // AE2 与 ae2wtlib 在 1.21.1 上【只有 NeoForge 构建】，取 NeoForge jar 只为
+    // javac —— 它已经是 Mojang 名，正是我们的编译名，用 plain compileOnly
+    // 而不是 modCompileOnly：NeoForge jar 没有 intermediary 映射，交给 Loom
+    // remap 反而会炸。运行期 Fabric 上它们不存在，对应集成永远不会激活。
+    compileOnly "maven.modrinth:ae2:${ae2_version}"
+    compileOnly "de.mari_023:ae2wtlib_api:${ae2wtlib_api_version}"
+    // RS 与 Tom's 都有 Fabric 构建，是 Fabric 版「终端」的两家真实后端。
+    // 这两个 jar 是 intermediary 名，要 Loom remap 成 Mojang 名。
+    modCompileOnly "maven.modrinth:refined-storage:${refinedstorage_version}"
+    modCompileOnly "maven.modrinth:toms-storage:${toms_version}"
+
+    // TR Energy —— TerminalCharger 给手机卡槽里的终端供电用（RS 的 Fabric 版走它）。
+    // 从 RS 发布包里嵌的 jar 提取（teamreborn maven 本机不可达），见 libs/ 下那个文件。
+    modCompileOnly files("libs/energy-4.1.0.jar")
+}
+
+// 整个代码库的注释与 fabric.mod.json 的描述都是中文，编码必须钉死。
+// 不设的话 javac 与资源处理都走【平台默认编码】，开发机与 CI 上未必一样。
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.release = 21
+}
+
+// fabric.mod.json 里的版本号从 gradle.properties 来，两处各写一份必然会漂
+processResources {
+    filteringCharset = 'UTF-8'
+    var replaceProperties = [
+            minecraft_version: minecraft_version,
+            loader_version   : loader_version,
+            fabric_version   : fabric_version,
+            mod_id           : mod_id,
+            mod_name         : mod_name,
+            mod_license      : mod_license,
+            mod_version      : mod_version,
+            mod_authors      : 'november521',
+    ]
+    inputs.properties replaceProperties
+    filesMatching(['fabric.mod.json']) {
+        expand replaceProperties
+    }
+}
+
+// ============================================================
+//  共用的构建校验
+// ============================================================
+// SPI 服务文件、dist 隔离、接缝清单、旧 jar 清理、断言测试 ——
+// 这几道闸与 Minecraft 版本、加载器都无关，写在 gradle/mcphone-checks.gradle 里，
+// 各平台共用一份。
+
+apply from: "${projectDir}/../../gradle/mcphone-checks.gradle"

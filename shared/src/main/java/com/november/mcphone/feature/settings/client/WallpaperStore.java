@@ -12,6 +12,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -199,6 +200,39 @@ public final class WallpaperStore {
 
         } catch (IOException e) {
             LOGGER.warn("加载壁纸失败: {} - {}", fileName, e.getMessage());
+        }
+    }
+
+    //  导入
+
+    /**
+     * 把玩家选中的一张图复制进壁纸目录，返回最终文件名；失败返回 null。
+     *
+     * 复制而不是记住原路径：原图在别处，玩家随时可能挪走或删掉，而壁纸是要长期用的。
+     * 重名时挂序号而不覆盖——玩家看到的是两张都在，而不是"我导入了一张，原来那张不见了"。
+     *
+     * 只收 PNG：加载这条路走的是 {@code ImageIO.read}，别的格式读出来也能转纹理，
+     * 但壁纸目录的约定一直是 PNG（见类注释），混着放会让"为什么这张能认那张不能"变得难解释。
+     */
+    public static String importFile(Path source) {
+        if (source == null || !Files.isRegularFile(source)) return null;
+
+        String name = source.getFileName().toString();
+        if (!name.toLowerCase(java.util.Locale.ROOT).endsWith(".png")) return null;
+
+        try {
+            Path dir = directory();
+            Path target = dir.resolve(name);
+            for (int i = 2; Files.exists(target); i++) {
+                name = name.substring(0, name.length() - 4) + "-" + i + ".png";
+                target = dir.resolve(name);
+            }
+            Files.copy(source, target, StandardCopyOption.COPY_ATTRIBUTES);
+            LOGGER.info("已导入壁纸: {}", target);
+            return target.getFileName().toString();
+        } catch (IOException e) {
+            LOGGER.warn("导入壁纸失败 {}: {}", source, e.getMessage());
+            return null;
         }
     }
 

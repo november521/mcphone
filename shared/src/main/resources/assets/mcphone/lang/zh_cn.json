@@ -8,6 +8,9 @@
   "key.mcphone.reader_next": "看书：下一页",
   "key.mcphone.hud_interact": "操作手机 HUD",
   "key.mcphone.hud_toggle": "唤出/收起手机 HUD",
+  "key.mcphone.modifier.control": "Ctrl + %s",
+  "key.mcphone.modifier.shift": "Shift + %s",
+  "key.mcphone.modifier.alt": "Alt + %s",
   "mcphone.camera.hint": "按 %s 拍照  ·  按 %s 退出相机",
   "mcphone.camera.flash": "快门闪光",
   "mcphone.camera.flash_white": "白闪",
@@ -26,6 +29,7 @@
   "mcphone.gui.about": "关于",
   "mcphone.gui.wallpaper_title": "更换壁纸",
   "mcphone.gui.wallpaper_default": "恢复默认背景",
+  "mcphone.gui.pick_image": "选择图片",
   "mcphone.gui.wallpaper_empty": "暂无壁纸",
   "mcphone.gui.wallpaper_hint1": "放入PNG到",
   "mcphone.gui.wallpaper_hint2": "config/mcphone/",
@@ -335,5 +339,9 @@
   "mcphone.reader.tab_store": "书城",
   "mcphone.reader.shelf_empty": "书架还是空的",
   "mcphone.reader.shelf_empty_hint": "把 txt 小说放进 config/mcphone/reader/books/（点右上角「文件夹」直接打开它），或者把文件拖进游戏窗口——放进去就在这儿了，不用再去书城收藏。模组的教程手册在「书城」，点右边的 ☆ 收到这儿来。",
-  "mcphone.reader.shelf_empty_hint_no_txt": "去「书城」点书右边的 ☆，它就放到这儿了。常翻的那几本收进来，以后不用每次从几十本里翻。"
+  "mcphone.reader.shelf_empty_hint_no_txt": "去「书城」点书右边的 ☆，它就放到这儿了。常翻的那几本收进来，以后不用每次从几十本里翻。",
+  "mcphone.picker.title": "选择一张图片",
+  "mcphone.picker.filter.image": "图片文件",
+  "mcphone.picker.preview.none": "未选择",
+  "mcphone.picker.preview.loading": "载入中…"
 }
