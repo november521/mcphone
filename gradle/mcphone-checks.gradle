@@ -341,45 +341,17 @@ tasks.register('assertTests') {
 
 tasks.named('check').configure { dependsOn tasks.named('assertTests') }
 
-// ============================================================
-//  Java 17 兼容校验 —— 【已删】，2026-09-09
-// ============================================================
+// 【这里没有 Java 17 兼容校验】。shared/ 的 Java 17 兼容性由 1.20.1-forge 在 CI 里
+// 真编一遍守着；那个前提本身由 build.yml 的 guard-version「六点八」拦着。
 //
-// 这里原先有一道 verifyJava17Compatible：同一份源码加 --release 17 再编一遍，
-// 守的是「shared/ 里别出现 18~21 才有的东西，否则 1.20.1 那一支编不过」。
+// 真要重新加一道，先看这两条实测，别重新踩：
 //
-// 【为什么删】
+//   拦库方法只有 --release 有效。-source 17 -target 17 只管语法：JDK 21 的 javac 对
+//   List.getFirst / Math.ceilDiv / HashMap.newHashMap / Math.clamp / StringBuilder.repeat
+//   这五个 18~21 新增的方法一个都不拦，--release 五个全拦。
 //
-// 它注册在这个共用文件里，两个平台都 apply，而两边都不该要它：
-//
-//   1.20.1-forge    那个目标的 toolchain 就是 17（build.gradle:41），
-//                   source / classpath / 编译器与 compileJava 逐字相同 —— 纯重复。
-//   1.21.1-neoforge 它连 layers/version/* 一起编。那两层【只被 Java 21 的目标挂】，
-//                   拿 --release 17 编它们等于禁止只跑在 21 上的代码使用 21。
-//
-// 它想守的那件事，由 1.20.1-forge 在 CI 里真编一遍守着，而且更强：那是真的
-// JDK 17 编真的源码，不是把 java.* 的签名换一版来模拟。
-//
-// 【删它引入的前提，已经变成一道闸】
-//
-// 上面那句成立的前提是「CI 里真的有一个 Java 17 的目标在编」。这个前提要是哪天
-// 不成立了（那个平台目录被挪走、被删），shared/ 的 Java 17 兼容性就一个守卫都没有，
-// 而且是静默的。所以 .github/workflows/build.yml 的 guard-version 里加了一条：
-// targets.json 里至少要有一个 java: 17 且工程目录存在的目标。
-//
-// 【删之前留下的两条实测，别再重新踩】
-//
-//   --release 17 才拦得住库方法。-source 17 -target 17 只管语法：实测 JDK 21 的
-//   javac 对 List.getFirst / Math.ceilDiv / HashMap.newHashMap / Math.clamp /
-//   StringBuilder.repeat 这五个 18~21 新增的方法一个都不拦，--release 五个全拦。
-//
-//   --release 不碰用户 classpath。曾以为「MC 的类文件是 65 版，--release 17 用不了」——
-//   拿真的 neoforge-21.1.248-merged.jar 加 --release 17 编全树，266 个文件，退出码 0。
-//
-// 这两条只在「有人想重新加一道这样的闸」时才用得上。真要加，先想清楚它比
-// 「让那个目标自己编一遍」多守了什么。
-
-
+//   --release 不碰用户 classpath。拿 neoforge-21.1.248-merged.jar 加 --release 17
+//   编全树，266 个文件，退出码 0。
 
 // ============================================================
 //  目标中立判据（下面两道闸共用一份）

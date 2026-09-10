@@ -11,16 +11,7 @@
 这个分组是**编译期事实**，不是判断：前者由「共用代码里有没有这个 import / 同包简单名」
 算出来，答错了当场编不过。
 
-### 这里原先还有一个「甲 / 乙」的分类，已经删掉
-
-那个二分说的是「这是有意的接缝」还是「只是还没搬」，而做判断的是下文那四条判据 ——
-**它们看不出来**。四个门面（`platform.Slots` / `platform.StackCodecs` /
-`platform.CuriosInventories` / `platform.client.Draw`）判据一条都不中，于是全被归进
-「还没搬」，而它们恰恰是最典型的有意接缝；反过来「必须提供」与「不得重新实现」
-曾经同时挂在同一批条目上 —— 六十条。
-
-现在只报事实：共用代码引不引用它（编译期可查），以及它命中了哪几条判据（证据，
-不是判决）。该抄一份还是该自己写，打开那个文件看。
+条目后面是它命中的判据，判据见下文「判据」一节。
 
 ---
 
@@ -101,28 +92,21 @@ Minecraft 版本便多一层，而那些层的内容一致。
 > 补测试时先问一句「哪个目标会跑到它」。该例已补 `docs/WireBytesTest.java`，
 > 放在中立的 `docs/` 下，每个目标都跑。
 
-### 待办：覆写签名，helper 门面接不住
+### 覆写签名：静态 helper 接不住，要抽象基类
 
-已有的门面（`ModPresence` / `Slots` / `StackCodecs` / `CuriosInventories` /
-`Draw`）都是**静态 helper**：调用点换成一句门面调用，差别关进方法体。这一招对
-「调用某个换了签名的方法」有效，对**覆写某个换了签名的方法**无效 ——
+`ModPresence` / `Slots` / `StackCodecs` / `Draw` 这类门面是**静态 helper**：调用点换成
+一句门面调用，差别关进方法体。这一招对「调用某个换了签名的方法」有效，对**覆写**它无效 ——
 子类的方法签名必须与父类一致，没有中间层可插。
 
-现存两处：
+做法是**平台侧的抽象基类**：基类替各目标写那个覆写，转调一个两支同形的方法，
+子类只实现后者，于是子类可以进共用层。
 
-| 位置 | 差异 | 波及 |
-|---|---|---|
-| `Screen.mouseScrolled` | 1.21 多一个 `scrollX` 参数 | `PhoneScreen`、`BrowserScreen`、`PhoneHudEditor` |
-| `SavedData.save` | 1.20.5 起多收 `HolderLookup.Provider` | `ChatData`、`FriendData` |
+`platform/client/PhoneScreenBase` 是这么做的：1.21 的 `Screen.mouseScrolled` 比 1.20.1
+多一个 `scrollX` 参数，基类各支覆写各自的形状，转调 `onScroll(mouseX, mouseY, scrollX, scrollY)`。
+`PhoneScreen`、`BrowserScreen`、`PhoneHudEditor` 因此进了 `shared/`。
 
-**做法是平台侧的抽象基类**：基类替各目标写那个覆写，转调一个中立的抽象方法，
-子类只实现中立那一半，于是子类可以进共用层。
-
-没有立刻做，是因为第一处会动到 `PhoneScreen`——一千四百行的中心类，
-它的 `mouseScrolled` 里串着十几个页面的分发。那一刀值得单独做、单独验，
-不该跟别的改动混在一次提交里。
-
-在那之前，这五个类留在各自该在的层/平台，**不是判据没看出来，是有意留的**。
+还剩一处：`SavedData.save` 自 1.20.5 起多收一个 `HolderLookup.Provider`，
+`ChatData` 与 `FriendData` 各留两份。
 
 ### 现有的层
 
