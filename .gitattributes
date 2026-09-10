@@ -4,3 +4,6 @@
 # 同样要 **/ 开头：各版本的工程都在子目录下，锚在仓库根的模式匹配不到
 **/src/generated/**/.cache/* text eol=lf
 **/src/generated/**/*.json text eol=lf
+# 接缝清单由 updateSeamsDoc 生成，只吐 LF；不钉死的话 autocrlf 会把它变 CRLF，
+# 混行尾会让 verifySeamsDocCurrent 的字符串比对失败（Windows 上必现）
+shared/PLATFORM-SEAMS.md text eol=lf
