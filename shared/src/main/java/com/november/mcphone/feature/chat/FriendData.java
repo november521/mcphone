@@ -2,25 +2,23 @@ package com.november.mcphone.feature.chat;
 
 import com.mojang.serialization.Codec;
 import com.november.mcphone.MCphone;
-import net.minecraft.core.HolderLookup;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtOps;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.world.level.saveddata.SavedData;
+import com.november.mcphone.core.PhoneSavedData;
 
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 
 /**
  * 好友关系、待处理申请、玩家名缓存：服务端全局 SavedData，存在世界存档里。
  * 不用玩家附件：好友关系属于两个人，而且给离线玩家发申请不该去加载改写他的存档。
  */
-public class FriendData extends SavedData {
+public class FriendData extends PhoneSavedData {
 
     private static final String FILE_NAME = MCphone.MODID + "_friends";
 
@@ -64,9 +62,7 @@ public class FriendData extends SavedData {
 
     /** 必须挂在主世界的 DataStorage：它按维度分，挂错了玩家去下界好友就"消失"且不报错 */
     public static FriendData get(MinecraftServer server) {
-        return server.overworld().getDataStorage().computeIfAbsent(
-                new SavedData.Factory<>(FriendData::new, FriendData::load, null),
-                FILE_NAME);
+        return getOrCreate(server, FILE_NAME, FriendData::new, FriendData::load);
     }
 
     public boolean areFriends(UUID a, UUID b) {
@@ -137,7 +133,7 @@ public class FriendData extends SavedData {
     }
 
     @Override
-    public CompoundTag save(CompoundTag tag, HolderLookup.Provider registries) {
+    protected CompoundTag write(CompoundTag tag) {
         encode(FRIENDSHIPS_CODEC, friends.toPairKeys(), tag, "friendships");
         encode(REQUESTS_CODEC, pendingRequests, tag, "requests");
         encode(NAMES_CODEC, knownNames, tag, "names");
@@ -150,7 +146,7 @@ public class FriendData extends SavedData {
                 .ifPresent(encoded -> tag.put(key, encoded));
     }
 
-    private static FriendData load(CompoundTag tag, HolderLookup.Provider registries) {
+    private static FriendData load(CompoundTag tag) {
         FriendGraph friends = FriendGraph.fromPairKeys(
                 decode(FRIENDSHIPS_CODEC, tag, "friendships", List.of()));
 

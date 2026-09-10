@@ -223,7 +223,7 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 
 <!-- 下面这段由 ./gradlew updateSeamsDoc 生成，别手改：1.21.1-neoforge -->
 
-#### 共用代码引用了的（34）
+#### 共用代码引用了的（35）
 
 **新平台必须提供同名类型**，否则 shared/ 与共享层编不过。全限定名是硬约束；方法体是抄现成的一份还是自己写，看那个文件。
 
@@ -234,6 +234,7 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 - `core.ModItems`　—— 加载器导入
 - `core.ModSounds`　—— 加载器导入
 - `core.PhonePlayerData`　—— 注入的方法
+- `core.PhoneSavedData`
 - `core.ServerConfig`　—— 加载器导入
 - `core.client.AppHotkeys`　—— 加载器导入
 - `core.client.ClientConfig`　—— 加载器导入
@@ -291,7 +292,7 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 
 <!-- 下面这段由 ./gradlew updateSeamsDoc 生成，别手改：1.20.1-forge -->
 
-#### 共用代码引用了的（74）
+#### 共用代码引用了的（73）
 
 **新平台必须提供同名类型**，否则 shared/ 与共享层编不过。全限定名是硬约束；方法体是抄现成的一份还是自己写，看那个文件。
 
@@ -304,6 +305,7 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 - `core.PhoneItemData`
 - `core.PhoneLocation`
 - `core.PhonePlayerData`　—— 加载器导入
+- `core.PhoneSavedData`
 - `core.ServerConfig`　—— 加载器导入
 - `core.client.AppHotkeys`　—— 加载器导入
 - `core.client.ClientConfig`　—— 加载器导入
@@ -313,9 +315,7 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 - `core.net.NetworkHandler`
 - `core.net.PhoneScreenOnPacket`
 - `feature.camera.client.CameraFlash`
-- `feature.chat.ChatData`
 - `feature.chat.ChatMessage`
-- `feature.chat.FriendData`
 - `feature.chat.ImageBody`
 - `feature.chat.TextBody`
 - `feature.chat.net.ConversationSummary`

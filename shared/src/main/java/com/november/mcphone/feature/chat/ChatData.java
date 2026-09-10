@@ -2,11 +2,10 @@ package com.november.mcphone.feature.chat;
 
 import com.mojang.serialization.Codec;
 import com.november.mcphone.MCphone;
-import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtOps;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.world.level.saveddata.SavedData;
+import com.november.mcphone.core.PhoneSavedData;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -21,7 +20,7 @@ import java.util.UUID;
  * 聊天记录存储：服务端全局 SavedData，存在世界存档里。
  * 不用玩家附件：消息属于两个玩家之间，离线投递也不该去加载改写收件人的存档。每对会话只留最近 {@link #MAX_MESSAGES_PER_CONVERSATION} 条。
  */
-public class ChatData extends SavedData {
+public class ChatData extends PhoneSavedData {
 
     private static final String FILE_NAME = MCphone.MODID + "_chat";
 
@@ -45,9 +44,7 @@ public class ChatData extends SavedData {
 
     /** 必须挂在主世界的 DataStorage：它按维度分，挂错了玩家去下界就看不到消息 */
     public static ChatData get(MinecraftServer server) {
-        return server.overworld().getDataStorage().computeIfAbsent(
-                new SavedData.Factory<>(ChatData::new, ChatData::load, null),
-                FILE_NAME);
+        return getOrCreate(server, FILE_NAME, ChatData::new, ChatData::load);
     }
 
     /** 归一化：A→B 与 B→A 必须落进同一个会话 */
@@ -127,7 +124,7 @@ public class ChatData extends SavedData {
 
     /** 用 TreeMap 让输出顺序稳定，存档不会无故变化 */
     @Override
-    public CompoundTag save(CompoundTag tag, HolderLookup.Provider registries) {
+    protected CompoundTag write(CompoundTag tag) {
         Map<String, List<ChatMessage>> encodable = new TreeMap<>();
         conversations.forEach((key, list) -> encodable.put(key.toStorageKey(), list));
 
@@ -137,7 +134,7 @@ public class ChatData extends SavedData {
         return tag;
     }
 
-    private static ChatData load(CompoundTag tag, HolderLookup.Provider registries) {
+    private static ChatData load(CompoundTag tag) {
         Map<String, List<ChatMessage>> loaded = CONVERSATIONS_CODEC
                 .parse(NbtOps.INSTANCE, tag.get("conversations"))
                 .resultOrPartial(err -> MCphone.LOGGER.error("聊天记录读取失败: {}", err))
