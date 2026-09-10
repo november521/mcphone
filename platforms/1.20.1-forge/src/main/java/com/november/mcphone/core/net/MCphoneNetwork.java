@@ -62,7 +62,8 @@ public final class MCphoneNetwork {
     //
     // "4"：手机屏幕亮不亮那个 C2S 包（PhoneScreenOnPacket）。它插在设备名之后而不是
     // 追加在末尾，后面所有包的序号跟着平移了，两端版本对不上必须拒绝连接。
-    private static final String PROTOCOL_VERSION = "4";
+    // "5"：PhoneScreenOnPacket 改为两只手的位掩码，旧客户端不能按旧格式解码。
+    private static final String PROTOCOL_VERSION = "5";
 
     private static final SimpleChannel CHANNEL = NetworkRegistry.newSimpleChannel(
             ResourceLocation.fromNamespaceAndPath(MCphone.MODID, "main"),

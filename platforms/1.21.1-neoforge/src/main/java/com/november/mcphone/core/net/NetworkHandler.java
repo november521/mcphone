@@ -1,8 +1,8 @@
 package com.november.mcphone.core.net;
 
 import com.november.mcphone.MCphone;
-import com.november.mcphone.core.PhoneItemData;
 import com.november.mcphone.core.PhoneItem;
+import com.november.mcphone.core.PhoneItemData;
 import com.november.mcphone.core.PhonePlayerData;
 import com.november.mcphone.core.menu.ModMenus;
 import com.november.mcphone.core.menu.PhoneContainerMenu;
@@ -16,8 +16,6 @@ import com.november.mcphone.feature.waystone.net.OpenWaystoneSelectionPacket;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
-import com.november.mcphone.core.PhoneItemData;
-import com.november.mcphone.core.PhoneLocation;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.SimpleMenuProvider;
@@ -58,7 +56,7 @@ public final class NetworkHandler {
 
     // ---- 由 MCphone 构造函数调用 ----
     public static void register(final RegisterPayloadHandlersEvent event) {
-        PayloadRegistrar registrar = event.registrar("1");
+        PayloadRegistrar registrar = event.registrar("2");
 
         // C2S: 玩家选了壁纸
         MCphoneNetwork.registerToServer(
@@ -123,32 +121,16 @@ public final class NetworkHandler {
 
     //  处理函数
 
-    /**
-     * 服务端收到：把"亮着的那部"记到物品堆上，别人看到的模型才会跟着变。
-     *
-     * 只认<b>拿在手上</b>的。手机在背包或饰品栏里时那件物品在别人眼里根本不渲染，点亮它
-     * 没有任何人看得见——客户端那边同样不会为这种情况发包，这里再挡一道是因为包可以伪造。
-     *
-     * 两只手都先清一遍再点亮，无状态：不去记"上次点亮了谁"。记下来的那个位置随时会失效
-     * （换手、放回背包、丢出去），而清两格的代价是零。
-     *
-     * 极端情况下会残留：开着手机的那一瞬间被别的东西（指令、别的模组）把手里那部挪走，
-     * 关机时就清不到它了。组件不落盘（见 {@code ModDataComponents.SCREEN_ON}），所以那点
-     * 残留在下次读档时自己消失，不值得为它多记一份状态。
-     */
+    /** 两只手必须逐一更新，否则同时打开 HUD 和全屏设备时会误灭其中一台。 */
     private static void handlePhoneScreenOn(PhoneScreenOnPacket packet, ServerPlayer player) {
-        ItemStack lit = packet.lit()
-                .filter(location -> location instanceof PhoneLocation.InHand)
-                .map(location -> location.resolve(player))
-                .filter(PhoneItem::isDevice)
-                .orElse(ItemStack.EMPTY);
-
         for (InteractionHand hand : InteractionHand.values()) {
             ItemStack held = player.getItemInHand(hand);
-            if (held != lit) PhoneItemData.clearScreenOn(held);
+            if (packet.isLit(hand) && PhoneItem.isDevice(held)) {
+                PhoneItemData.setScreenOn(held);
+            } else {
+                PhoneItemData.clearScreenOn(held);
+            }
         }
-
-        if (!lit.isEmpty()) PhoneItemData.setScreenOn(lit);
     }
 
     /** 服务端收到：记录壁纸选择，广播给该玩家的客户端 */

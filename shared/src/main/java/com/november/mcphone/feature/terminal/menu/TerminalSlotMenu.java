@@ -104,12 +104,6 @@ public class TerminalSlotMenu extends AbstractContainerMenu {
              * false，{@code open} 的方法体是一句 return）。装得进去却点不开，比装不进去
              * 更难解释，所以它在这一步就被挡住。
              *
-             * {@code isInstallable} 比"开得了"再多问一句
-             * {@link com.november.mcphone.feature.terminal.integration.TerminalIntegration#canLiveInPhoneSlot}：
-             * Forge 1.20.1 上的 RS 答不 —— 它那个版本表达不了"东西在手机卡槽里"这种位置。
-             * <b>这一句一度被丢过</b>：这个文件合进 shared/ 时调用点被换成了 isOpenable，
-             * 于是那条限制在 1.20.1 上静默失效，两边构建照样全绿。
-             *
              * 认哪些牌子由 {@link Terminals} 现问现答，这里不认识任何一家存储模组——三家
              * 全是软前置，这个类要在一家都没装的情况下也能加载。
              */
