@@ -88,8 +88,12 @@ public final class NetSongSound extends AbstractTickableSoundInstance {
     /**
      * 必须在后台线程上开：这一句会真的去连网络。
      * 开不出来抛 CompletionException，声源静静地不响，而不是把异常甩进渲染线程。
+     *
+     * 【为什么不写 @Override】这个钩子是 Forge / NeoForge 给 SoundInstance 补的方法，
+     * 原版（Fabric 编译对着的那份）没有 —— 写了注解在这边编不过。注解只是编译期检查，
+     * 删掉不影响 NeoForge：那边的 SoundEngine 是虚派发，照样落到这里。Fabric 侧由
+     * 平台自己的 SoundEngineMixin 把播放引到这里，见 platforms/1.21.1-fabric 的 mixin。
      */
-    @Override
     public CompletableFuture<AudioStream> getStream(SoundBufferLibrary buffers,
                                                     Sound sound, boolean looping) {
         return CompletableFuture.supplyAsync(() -> {

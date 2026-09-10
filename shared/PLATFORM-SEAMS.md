@@ -223,7 +223,7 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 
 <!-- 下面这段由 ./gradlew updateSeamsDoc 生成，别手改：1.21.1-neoforge -->
 
-#### 共用代码引用了的（35）
+#### 共用代码引用了的（34）
 
 **新平台必须提供同名类型**，否则 shared/ 与共享层编不过。全限定名是硬约束；方法体是抄现成的一份还是自己写，看那个文件。
 
@@ -248,7 +248,6 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 - `feature.terminal.TerminalCharger`　—— 加载器导入、注入的方法
 - `feature.terminal.integration.ae2.Ae2Integration`
 - `feature.terminal.integration.refinedstorage.RefinedStorageIntegration`
-- `feature.terminal.integration.refinedstorage.TerminalSlotReference`
 - `platform.CuriosInventories`
 - `platform.ModPresence`　—— 加载器导入
 - `platform.Slots`
@@ -408,3 +407,80 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 - `platform.client.ClientTicks`　—— 加载器导入
 
 <!-- 1.20.1-forge 结束 -->
+
+<!-- 下面这段由 ./gradlew updateSeamsDoc 生成，别手改：1.21.1-fabric -->
+
+#### 共用代码引用了的（36）
+
+**新平台必须提供同名类型**，否则 shared/ 与共享层编不过。全限定名是硬约束；方法体是抄现成的一份还是自己写，看那个文件。
+
+- `MCphone`　—— 加载器导入
+- `api.client.ui.PhoneMultiLineEditBox`
+- `compat.WaystonesCompat`
+- `core.ModDataComponents`　—— 1.20.5+ 原版
+- `core.ModItems`
+- `core.ModSounds`
+- `core.PhonePlayerData`
+- `core.PhoneSavedData`
+- `core.ServerConfig`
+- `core.client.AppHotkeys`
+- `core.client.ClientConfig`　—— 加载器导入
+- `core.client.PhoneHud`
+- `core.menu.ModMenus`
+- `core.net.MCphoneNetwork`　—— 1.20.5+ 原版、加载器导入
+- `core.net.NetworkHandler`
+- `feature.camera.client.CameraFlash`
+- `feature.chat.ChatImageStore`
+- `feature.music.DiscService`　—— 1.20.5+ 原版
+- `feature.music.net.MusicNetworking`
+- `feature.terminal.TerminalCharger`　—— 加载器导入
+- `feature.terminal.integration.Terminals`
+- `feature.terminal.integration.ae2.Ae2Integration`
+- `feature.terminal.integration.refinedstorage.RefinedStorageIntegration`
+- `platform.CuriosInventories`
+- `platform.ModPresence`　—— 加载器导入
+- `platform.Slots`
+- `platform.StackCodecs`
+- `platform.client.CameraGui`
+- `platform.client.DiscSongs`
+- `platform.client.Draw`
+- `platform.client.EditBoxes`
+- `platform.client.KeyModifiers`
+- `platform.client.PhoneScreenBase`
+- `platform.client.PlayerSkins`
+- `platform.client.SystemFiles`
+- `platform.client.VanillaAudio`
+
+#### 平台内部的（27）
+
+只在这个平台自己的代码里用到。新平台不必提供同名类型。
+
+- `MCphoneClient`　—— 加载器导入
+- `compat.CompatModule`
+- `compat.CompatModules`
+- `core.ModAttachments`　—— 加载器导入
+- `core.ModCreativeTabs`
+- `core.client.AppHotkeyHandler`
+- `core.client.ClientNetworking`　—— 1.20.5+ 原版、加载器导入
+- `core.client.KeyModifier`
+- `core.client.MCphoneKeyBindings`　—— 加载器导入
+- `core.net.RequestThrottle`
+- `core.net.SyncPhoneTerminalPacket`　—— 1.20.5+ 原版
+- `core.net.SyncServerConfigPacket`　—— 1.20.5+ 原版
+- `feature.camera.client.CameraHandler`
+- `feature.chat.ChatImageUploads`
+- `feature.chat.net.ChatNetworking`
+- `feature.notes.net.NotesNetworking`
+- `feature.store.net.StoreNetworking`
+- `feature.terminal.client.TerminalClientState`　—— 加载器导入
+- `feature.terminal.integration.ae2.Ae2wtlibSupport`
+- `feature.terminal.integration.ae2.TerminalSlotLocator`
+- `feature.terminal.net.TerminalNetworking`
+- `mixin.client.KeyMappingAccessor`
+- `mixin.client.KeyboardHandlerMixin`
+- `mixin.client.MouseHandlerMixin`
+- `mixin.client.SoundEngineMixin`
+- `platform.Holder`
+- `platform.client.ClientTicks`　—— 加载器导入
+
+<!-- 1.21.1-fabric 结束 -->

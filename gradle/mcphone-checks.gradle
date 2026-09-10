@@ -961,7 +961,22 @@ abstract class PlatformTwinsTask extends DefaultTask {
                 }
             }
         }
-        return byPath.findAll { k, v -> v.size() > 1 }
+        // 【同一个文件被两个目标看到，不是"两份拷贝"】。
+        //
+        // 一条 rel 对应两个目标，有两种成因：两个目标各有一份同名的【不同文件】
+        // （这才是要盯的拷贝），或者它们读的是【同一个文件】—— 挂在共享层上的文件
+        // 对每个挂它的目标都是同一个绝对路径。后者本身就是共享，拿它去比"差多少行"
+        // 恒为 0，于是会被判成"一字不差，还没搬进 shared/"——而它已经在共享层里了，
+        // 那句指令无处可搬。
+        //
+        // 这个假阳性在只有一个 1.21.1 目标时显不出来（那时没有第二个目标读同一个层
+        // 文件）；加进第二个同版本目标的第一天就冒出来。所以按【绝对路径去重后还剩几份】
+        // 判，而不是按"有几个目标看见了它"。
+        return byPath.findAll { k, v ->
+            if (v.size() <= 1) return false
+            def distinct = v.values().collect { (it as File).canonicalPath }.unique()
+            return distinct.size() > 1
+        }
     }
 
     /** 一对（或一组）的分数：以字典序第一个目标为基准，与其余各家的分数之和。 */

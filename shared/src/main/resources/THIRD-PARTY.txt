@@ -11,7 +11,8 @@ Used for decoding MP3/MP2/MP1 in the Music app.
 
 坐标     fr.delthas:javamp3:1.0.1
 主页     https://github.com/delthas/JavaMP3
-位置     META-INF/jarjar/javamp3-1.0.1.jar
+位置     META-INF/jars/javamp3-1.0.1.jar（Fabric）
+         META-INF/jarjar/javamp3-1.0.1.jar（NeoForge / Forge）
 
 MIT License
 
@@ -34,3 +35,37 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+================================================================
+FlatLaf
+================================================================
+
+用途     文件选择器（壁纸「选择图片」）的界面外观。
+         不装它也能用，只是对话框退回 Swing 默认的灰色 Metal 风格。
+Used for the look and feel of the file chooser (Wallpaper -> Pick image).
+Without it the dialog still works, it just falls back to Swing's Metal look.
+
+坐标     com.formdev:flatlaf:3.7.2
+主页     https://github.com/JFormDesigner/FlatLaf
+位置     META-INF/jars/flatlaf-3.7.2.jar（只有 Fabric 目标打包它；
+         另外两个目标的选择器用系统外观，见下方说明）
+
+Apache License, Version 2.0
+
+Copyright 2024 FormDev Software GmbH
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
+本模组未修改 FlatLaf 的任何代码，只以未修改的二进制形式打包并调用它的公开 API
+（{@code UIManager.setLookAndFeel(new FlatLightLaf())}）。
+The library is bundled unmodified and used only through its public API.
