@@ -90,10 +90,14 @@ public final class AdapterProvider implements ICurrencyProvider {
 
     @Override
     public TxnResult transfer(UUID from, UUID to, long amount, TxnReason reason) {
-        if (!wallet.available()) return TxnResult.UNAVAILABLE;
-        if (from == null || to == null) return TxnResult.INVALID;
+        // 两端与金额先判：这两条与"外部钱包在不在"无关（E25）。
+        // 这一档是 withdraw + deposit 两次实时操作，自己转自己净效果为零、不造币，
+        // 但仍然当场拒 —— 四种 provider 对同一个非法调用要给同一个码
+        TxnResult parties = com.november.mcphone.api.economy.Balances.checkParties(from, to);
+        if (parties != TxnResult.OK) return parties;
         TxnResult bad = com.november.mcphone.api.economy.Balances.checkAmount(amount);
         if (bad != TxnResult.OK) return bad;
+        if (!wallet.available()) return TxnResult.UNAVAILABLE;
         if (!wallet.withdraw(from, amount)) return TxnResult.INSUFFICIENT;
         if (!wallet.deposit(to, amount)) {
             // 外部模组的两步之间崩了：把扣掉的加回去，不留中间态
@@ -143,6 +147,10 @@ public final class AdapterProvider implements ICurrencyProvider {
     private TxnResult settle(EscrowId id, boolean toBeneficiary) {
         EscrowLedger.Entry e = escrow.get(id);
         if (e == null) return TxnResult.UNKNOWN_ESCROW;
+        // 托管号要认货币（E25）
+        TxnResult wrongCurrency =
+                com.november.mcphone.api.economy.Balances.checkEscrowCurrency(e.currencyId(), id());
+        if (wrongCurrency != TxnResult.OK) return wrongCurrency;
         if (e.settled()) return TxnResult.ALREADY_SETTLED;
         if (!wallet.available()) return TxnResult.UNAVAILABLE;
         UUID target = toBeneficiary ? e.beneficiary() : e.owner();

@@ -1,5 +1,6 @@
 package com.november.mcphone.core.script.server.economy;
 
+import com.november.mcphone.api.economy.Balances;
 import com.november.mcphone.api.economy.Currency;
 import com.november.mcphone.api.economy.EscrowId;
 import com.november.mcphone.api.economy.HoldResult;
@@ -81,9 +82,17 @@ public final class LegacyWalletProvider implements ICurrencyProvider {
         return Long.MAX_VALUE;
     }
 
-    /** 旧接口没有存入这一侧，转账做不到。 */
+    /**
+     * 旧接口没有存入这一侧，转账做不到。
+     *
+     * <p>两端的判定仍然先走一遍（E25）：那一条说的是<b>参数合不合法</b>，与这一档
+     * 做不做得到无关。四种 provider 对同一个非法调用要给同一个码，
+     * 否则调用方还得按 provider 分情况记住谁给 INVALID、谁给 UNAVAILABLE。
+     */
     @Override
     public TxnResult transfer(UUID from, UUID to, long amount, TxnReason reason) {
+        TxnResult parties = Balances.checkParties(from, to);
+        if (parties != TxnResult.OK) return parties;
         return TxnResult.UNAVAILABLE;
     }
 

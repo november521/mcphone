@@ -24,6 +24,7 @@ public final class MCphoneApi {
      *   3  —— api.chat：PhoneChat / PhoneContact / PhoneConversation / ContactRelation / SendResult
      *   4  —— api.economy 与 api.sdk（A 档六项 + B 档五项占位，施工方案 §23）；AppInfo.blockedReason
      *   5  —— AppInfo.Signature 与 AppInfo.signature()；IAppSource.confirmSignature（§12.4）
+     *   6  —— Balances.checkParties 与 Balances.checkEscrowCurrency（勘误 E25）
      *
      * 【这个值是在静态块里赋的，别改成 {@code = 3}】
      *
@@ -51,7 +52,7 @@ public final class MCphoneApi {
 
     static {
         // 【别把这一句挪回上面的声明里】——那样它就成了编译期常量，会被内联进附属，理由见上
-        VERSION = 5;
+        VERSION = 6;
     }
 
 }

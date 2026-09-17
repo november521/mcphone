@@ -269,13 +269,11 @@ public final class ScoreboardProvider implements ICurrencyProvider {
 
     @Override
     public TxnResult transfer(UUID from, UUID to, long amount, TxnReason reason) {
-        // 【金额判定排在可用性判定之前】：amount <= 0 一律 INVALID（§22.9），
-        // 不许因为"这会儿正好用不了"就变成 UNAVAILABLE —— 那让调用方以为重试一下就能过
-        if (from == null || to == null || Balances.checkAmount(amount) != TxnResult.OK) {
-            return record(TxnLog.Kind.TRANSFER, from, to, amount, reason, TxnResult.INVALID);
-        }
-        if (from.equals(to)) {
-            // 自己转给自己：两端读的是同一格分值，写回时后一笔覆盖前一笔，净效果是凭空多出 amount
+        // 【金额与两端的判定排在可用性判定之前】：amount <= 0 与"自己转自己"一律 INVALID
+        // （§22.9、E25），不许因为"这会儿正好用不了"就变成 UNAVAILABLE ——
+        // 那让调用方以为重试一下就能过。两条判据都在 Balances 那一份里，不各写一遍
+        if (Balances.checkAmount(amount) != TxnResult.OK
+                || Balances.checkParties(from, to) != TxnResult.OK) {
             return record(TxnLog.Kind.TRANSFER, from, to, amount, reason, TxnResult.INVALID);
         }
         MinecraftServer s = ready();
@@ -415,11 +413,9 @@ public final class ScoreboardProvider implements ICurrencyProvider {
         synchronized (lock) {
             EscrowLedger.Entry e = escrow.get(eid);
             if (e == null) return record(kind, null, null, 0, reason, TxnResult.UNKNOWN_ESCROW);
-            if (!id().equals(e.currencyId())) {
-                // 【托管号要认货币】：一本 EscrowLedger 可以管多种货币（Entry 带着 currencyId、
-                // held(currencyId) 也按货币分开算）。不比对的话，把 A 币的托管号递给 B 币的
-                // provider，就是把 A 币销毁、等额铸出 B 币 —— 两本账同时不守恒
-                return record(kind, e.owner(), e.beneficiary(), e.amount(), reason, TxnResult.UNKNOWN_ESCROW);
+            TxnResult wrongCurrency = Balances.checkEscrowCurrency(e.currencyId(), id());
+            if (wrongCurrency != TxnResult.OK) {
+                return record(kind, e.owner(), e.beneficiary(), e.amount(), reason, wrongCurrency);
             }
             if (e.settled()) {
                 return record(kind, e.owner(), e.beneficiary(), e.amount(), reason, TxnResult.ALREADY_SETTLED);

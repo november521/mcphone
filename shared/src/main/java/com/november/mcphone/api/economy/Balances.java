@@ -1,5 +1,7 @@
 package com.november.mcphone.api.economy;
 
+import java.util.UUID;
+
 /**
  * §22.9 那张不变量表，写成代码。<b>纯算术，各实现共用这一份。</b>
  *
@@ -10,6 +12,37 @@ package com.november.mcphone.api.economy;
 public final class Balances {
 
     private Balances() {
+    }
+
+    /**
+     * 转账两端必须是<b>两个不同的人</b>（勘误 E25）。
+     *
+     * <p>不是的话就是凭空造币：几乎每种实现都先把两端的余额读成两个快照、判完再分别写回，
+     * 而 {@code from == to} 时两个快照是同一个数，后一笔写覆盖前一笔 ——
+     * 净效果 {@code v → v + amount}。脚本侧
+     * {@code ctx.currency.pay(id, ctx.player.uuid, ctx.currency.balance(id))}
+     * 每调一次余额翻倍，不需要任何能力位。
+     *
+     * <p><b>判在最前面、当场返回</b>：走到读-判-写里再拦就晚了，那时已经有一端被改过。
+     */
+    public static TxnResult checkParties(UUID from, UUID to) {
+        if (from == null || to == null) return TxnResult.INVALID;
+        return from.equals(to) ? TxnResult.INVALID : TxnResult.OK;
+    }
+
+    /**
+     * 托管号必须属于这种货币（勘误 E25）。
+     *
+     * <p>一本托管账可以管多种货币（{@code EscrowLedger.Entry} 带着 currencyId、
+     * {@code held(currencyId)} 也按货币分开算）。不比对的话，把 A 币的托管号递给 B 币的
+     * 提供者就是 <b>A 币销毁、等额铸出 B 币</b>，两本账同时不守恒。
+     *
+     * <p>不符返回 {@link TxnResult#UNKNOWN_ESCROW} —— 对调用方来说，
+     * 这个号在这种货币里本来就不存在。
+     */
+    public static TxnResult checkEscrowCurrency(String escrowCurrencyId, String providerCurrencyId) {
+        if (escrowCurrencyId == null || providerCurrencyId == null) return TxnResult.UNKNOWN_ESCROW;
+        return escrowCurrencyId.equals(providerCurrencyId) ? TxnResult.OK : TxnResult.UNKNOWN_ESCROW;
     }
 
     /**

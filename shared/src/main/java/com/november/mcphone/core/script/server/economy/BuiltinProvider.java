@@ -105,7 +105,12 @@ public final class BuiltinProvider implements ICurrencyProvider {
 
     @Override
     public TxnResult transfer(UUID from, UUID to, long amount, TxnReason reason) {
-        if (from == null || to == null) return record(TxnLog.Kind.TRANSFER, from, to, amount, reason, TxnResult.INVALID);
+        // 【早退，不走读-判-写】：两端是同一个人时下面那两个快照是同一个数，
+        // 后一笔写会覆盖前一笔，净效果是凭空多出 amount（E25）
+        TxnResult parties = Balances.checkParties(from, to);
+        if (parties != TxnResult.OK) {
+            return record(TxnLog.Kind.TRANSFER, from, to, amount, reason, parties);
+        }
         synchronized (lock) {
             long a = balances.get(from, id());
             long b = balances.get(to, id());
@@ -181,6 +186,11 @@ public final class BuiltinProvider implements ICurrencyProvider {
         TxnLog.Kind kind = toBeneficiary ? TxnLog.Kind.RELEASE : TxnLog.Kind.REFUND;
         EscrowLedger.Entry e = escrow.get(id);
         if (e == null) return record(kind, null, null, 0, reason, TxnResult.UNKNOWN_ESCROW);
+        // 托管号要认货币，否则就是拿 A 币的号在 B 币上放款（E25）
+        TxnResult wrongCurrency = Balances.checkEscrowCurrency(e.currencyId(), id());
+        if (wrongCurrency != TxnResult.OK) {
+            return record(kind, e.owner(), e.beneficiary(), e.amount(), reason, wrongCurrency);
+        }
         if (e.settled()) return record(kind, e.owner(), e.beneficiary(), e.amount(), reason, TxnResult.ALREADY_SETTLED);
 
         UUID target = toBeneficiary ? e.beneficiary() : e.owner();

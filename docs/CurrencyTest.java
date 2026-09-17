@@ -7,6 +7,7 @@ import java.util.Map;
 import com.november.mcphone.core.script.server.economy.Amounts;
 import com.november.mcphone.core.script.server.economy.BalanceStore;
 import com.november.mcphone.core.script.server.economy.BuiltinProvider;
+import com.november.mcphone.core.script.server.economy.AdapterProvider;
 import com.november.mcphone.core.script.server.economy.CurrencyRegistry;
 import com.november.mcphone.core.script.server.economy.CurrencySpec;
 import com.november.mcphone.core.script.server.economy.ScoreboardProvider;
@@ -505,8 +506,20 @@ public class CurrencyTest {
         eq(reg.defaultCurrency(), null, "注册了但没标默认，还是 null");
         eq(reg.list().size(), 1, "list() 有一个");
 
-        reg.register(new LegacyWalletProvider(coin()), true);
-        eq(reg.defaultCurrency(), "myserver:coin", "标了默认就有了");
+        // 【一种货币只许一个实例】（E25）：守恒靠"串行化"与"唯一实例"两条一起成立。
+        // 静默覆盖的话先注册的那个还在别处被引用着，两个实例各拿各的锁写同一份账
+        var first = reg.get("myserver:coin");
+        check(!reg.register(new LegacyWalletProvider(coin()), true),
+                "同一种货币的第二个提供者要拒掉");
+        check(reg.get("myserver:coin") == first, "被拒之后注册表原封不动");
+        eq(reg.defaultCurrency(), null, "被拒的那次也不许把自己标成默认");
+        eq(reg.list().size(), 1, "list() 还是一个");
+        check(reg.register(reg.get("myserver:coin"), false), "同一个实例再注册一次是幂等的，不拒");
+
+        // 换一种货币才谈得上标默认
+        reg.register(new LegacyWalletProvider(coin("gold", 2)), true);
+        eq(reg.defaultCurrency(), "myserver:gold", "标了默认就有了");
+        eq(reg.list().size(), 2, "两种货币");
         check(reg.get("myserver:coin") != null, "按 id 取得到");
         check(reg.get("nope:none") == null, "取不到的返回 null");
     }
@@ -793,6 +806,131 @@ public class CurrencyTest {
         eq(p.balance(UUID.randomUUID()), 0L, "服务器不在时余额读成 0，不抛");
     }
 
+
+    // ================================================================ E25 两条共用不变量
+
+    /** 一个只会记账、永远可用的假钱包，给 AdapterProvider 用。 */
+    static final class MemWallet implements AdapterProvider.ExternalWallet {
+        final Map<UUID, Long> m = new HashMap<>();
+
+        public boolean available() {
+            return true;
+        }
+
+        public long balance(UUID p) {
+            return m.getOrDefault(p, 0L);
+        }
+
+        public boolean deposit(UUID p, long a) {
+            m.merge(p, a, Long::sum);
+            return true;
+        }
+
+        public boolean withdraw(UUID p, long a) {
+            long cur = balance(p);
+            if (cur < a) return false;
+            m.put(p, cur - a);
+            return true;
+        }
+    }
+
+    /** {@code Balances.checkParties} 的真值表。 */
+    static void partiesInvariant() {
+        UUID a = UUID.randomUUID();
+        UUID b = UUID.randomUUID();
+        eq(Balances.checkParties(a, b), TxnResult.OK, "两个不同的人，可以");
+        eq(Balances.checkParties(a, a), TxnResult.INVALID, "同一个人 → INVALID");
+        eq(Balances.checkParties(a, UUID.fromString(a.toString())), TxnResult.INVALID,
+                "比的是值不是引用");
+        eq(Balances.checkParties(null, b), TxnResult.INVALID, "from 为 null");
+        eq(Balances.checkParties(a, null), TxnResult.INVALID, "to 为 null");
+        eq(Balances.checkParties(null, null), TxnResult.INVALID, "两个都 null");
+    }
+
+    /** {@code Balances.checkEscrowCurrency} 的真值表。 */
+    static void escrowCurrencyInvariant() {
+        eq(Balances.checkEscrowCurrency("a:coin", "a:coin"), TxnResult.OK, "同一种货币");
+        eq(Balances.checkEscrowCurrency("a:coin", "b:coin"), TxnResult.UNKNOWN_ESCROW,
+                "namespace 不同就是两种货币");
+        eq(Balances.checkEscrowCurrency("a:coin", "a:gold"), TxnResult.UNKNOWN_ESCROW, "path 不同");
+        eq(Balances.checkEscrowCurrency("a:coin", "A:COIN"), TxnResult.UNKNOWN_ESCROW,
+                "大小写敏感 —— id 本来就不许大写，宁可拒");
+        eq(Balances.checkEscrowCurrency(null, "a:coin"), TxnResult.UNKNOWN_ESCROW, "托管方为 null");
+        eq(Balances.checkEscrowCurrency("a:coin", null), TxnResult.UNKNOWN_ESCROW, "提供者为 null");
+    }
+
+    /**
+     * <b>四种 provider 对同一个非法调用给同一个码。</b>
+     *
+     * <p>这一条才是「不许各写一遍」可验的部分：判据摆在 {@code Balances} 里不等于大家都调了它。
+     */
+    static void allProvidersRejectSelfTransfer() {
+        final TxnReason RSN = new TxnReason("test:probe", "r1");
+        UUID a = UUID.randomUUID();
+        AtomicLong t = new AtomicLong(0);
+
+        MemBalances bal = new MemBalances();
+        bal.set(a, "myserver:coin", 1000);
+        var builtin = new BuiltinProvider(coin(), bal, new EscrowLedger(t::get), null, t::get, false, 10000);
+
+        MemWallet w = new MemWallet();
+        w.deposit(a, 1000);
+        var adapter = new AdapterProvider(coin(), w, new EscrowLedger(t::get), 10000);
+
+        var legacy = new LegacyWalletProvider(coin());
+        var scoreboard = new ScoreboardProvider(coin(), () -> null,
+                new EscrowLedger(t::get), null, t::get, false, 0);
+
+        eq(builtin.transfer(a, a, 100, RSN), TxnResult.INVALID, "builtin 自己转自己");
+        eq(adapter.transfer(a, a, 100, RSN), TxnResult.INVALID, "adapter 自己转自己");
+        eq(legacy.transfer(a, a, 100, RSN), TxnResult.INVALID, "emc_legacy 自己转自己");
+        eq(scoreboard.transfer(a, a, 100, RSN), TxnResult.INVALID, "scoreboard 自己转自己");
+
+        // 【早退：两端余额不变】—— 走进读-判-写再拦就晚了
+        eq(bal.get(a, "myserver:coin"), 1000L, "builtin 被拒之后余额一分没动");
+        eq(w.balance(a), 1000L, "adapter 被拒之后余额一分没动");
+
+        // 而正常的两人转账照走
+        UUID b = UUID.randomUUID();
+        eq(builtin.transfer(a, b, 100, RSN), TxnResult.OK, "两个人之间照转");
+        eq(bal.get(a, "myserver:coin") + bal.get(b, "myserver:coin"), 1000L, "总额不变");
+    }
+
+    /** 托管号要认货币 —— 三种有托管的 provider 都要拒，而且那笔托管原封不动。 */
+    static void allProvidersRejectForeignEscrow() {
+        final TxnReason RSN = new TxnReason("test:probe", "r1");
+        UUID a = UUID.randomUUID();
+        UUID b = UUID.randomUUID();
+        AtomicLong t = new AtomicLong(0);
+
+        // 一本托管账管两种货币：这正是 EscrowLedger 的 Entry 带 currencyId 的用意
+        EscrowLedger led = new EscrowLedger(t::get);
+        var foreign = led.create(a, b, "other:gold", 500);
+
+        MemBalances bal = new MemBalances();
+        var builtin = new BuiltinProvider(coin(), bal, led, null, t::get, false, 10000);
+        var adapter = new AdapterProvider(coin(), new MemWallet(), led, 10000);
+        var scoreboard = new ScoreboardProvider(coin(), () -> null, led, null, t::get, false, 0);
+
+        eq(builtin.release(foreign, RSN), TxnResult.UNKNOWN_ESCROW, "builtin 拒别的货币的托管号");
+        eq(adapter.release(foreign, RSN), TxnResult.UNKNOWN_ESCROW, "adapter 拒");
+        eq(scoreboard.release(foreign, RSN), TxnResult.UNKNOWN_ESCROW, "scoreboard 拒");
+        eq(builtin.refund(foreign, RSN), TxnResult.UNKNOWN_ESCROW, "退款同理");
+        eq(adapter.refund(foreign, RSN), TxnResult.UNKNOWN_ESCROW, "退款同理");
+        eq(scoreboard.refund(foreign, RSN), TxnResult.UNKNOWN_ESCROW, "退款同理");
+
+        eq(led.get(foreign).settled(), false, "被拒之后那笔托管原封不动");
+        eq(bal.get(b, "myserver:coin"), 0L, "更没有给受益人记上钱");
+        eq(led.held("other:gold"), 500L, "那种货币托管中的钱还是 500");
+
+        // 自己那种货币的托管号照常放款
+        bal.set(a, "myserver:coin", 1000);
+        var mine = builtin.hold(a, b, 300, RSN);
+        eq(mine.result(), TxnResult.OK, "自己这种货币的托管建得出来");
+        eq(builtin.release(mine.id(), RSN), TxnResult.OK, "也放得出去");
+        eq(bal.get(b, "myserver:coin"), 300L, "受益人收到了");
+    }
+
     public static void main(String[] args) throws Exception {
         nonPositiveRejected();
         ceilingAndOverflow();
@@ -816,6 +954,10 @@ public class CurrencyTest {
         scoreboardAmounts();
         scoreboardObjectiveNamespace();
         scoreboardSpec();
+        partiesInvariant();
+        escrowCurrencyInvariant();
+        allProvidersRejectSelfTransfer();
+        allProvidersRejectForeignEscrow();
         scoreboardRejectsBeforeAvailability();
         scoreboardUnavailable();
 
