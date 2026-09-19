@@ -73,8 +73,27 @@ sourceSets.main.resources {
 }
 
 loom {
-    // mixins 声明在 fabric.mod.json 里，Loom 只需要知道配置文件在哪儿
-    // 的问题不存在；这里不额外配 accessWidener / runs，缺什么补什么。
+    // 【为什么现在必须配上 accessWidener —— 原来那个"不额外配"的说法过期了】
+    //
+    // 「遥控器」（feature/hotkey/client）要直接读写 net.minecraft.client.KeyMapping 的私有
+    // 字段 clickCount —— consumeClick() 减的那个「按下边沿队列」。原版把它声明成 private，
+    // 而唯一能同时让【编译期与运行期】都看见它的入口就是这一句：Loom 在编译期把
+    // mcphone.accesswidener 应用到 Minecraft jar 上（javac 才会认 mapping.clickCount），
+    // 运行期由 fabric-loader 应用同一份规则。
+    //
+    // 少了这一句，那个文件只是躺在 resources 里没人读：编译期当场报
+    // "clickCount has private access in KeyMapping"。所以它不是可选装饰，是这一处功能的
+    // 依赖本身。fabric.mod.json 的 "accessWidener" 字段是【另一处】登记 ——
+    // 打包出去之后由加载器读，两处缺一不可，别只改一处。
+    //
+    // 【为什么不是本平台已有的 mixin accessor】本目标已经有一个 KeyMappingAccessor
+    // （给私有字段 key 开读口），但 mixin 只在真实游戏里生效，而 docs/ 下的断言测试要在
+    // 纯 JVM 里真读写 clickCount。理由与取舍写在 mcphone.accesswidener 与 HotkeyBackend
+    // 的类注释里，不在这儿复述。
+    accessWidenerPath = file("src/main/resources/mcphone.accesswidener")
+
+    // runs 依然不配：让开发环境直接起游戏不是这个目标的构建要解决的问题，缺什么补什么。
+    // mixins 的配置文件名在 fabric.mod.json 里，Loom 自己找得到，也不需要在这儿声明。
 }
 
 dependencies {

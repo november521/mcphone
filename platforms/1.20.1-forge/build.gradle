@@ -73,6 +73,15 @@ minecraft {
     // 而这个工程眼下最需要的是"能稳定编过"。要加见 docs/PORTING.md。
     mappings channel: 'official', version: minecraft_version
 
+    // AT 登记。【ForgeGradle 6 不会自己发现 AT 文件】—— 少了这一句，那份
+    // src/main/resources/META-INF/accesstransformer.cfg 就只是一份躺在 resources 里、
+    // 谁都不读的文本：开发环境里 clickCount 还是私有的，HotkeyBackend 编译当场报
+    // "clickCount has private access"，而验的人只会去怀疑那个字段名写错了。
+    // （neoforge 那一支不用这一句：ModDevGradle 是自动发现的，两边不要互相抄。）
+    //
+    // 路径相对本工程，不是仓库根：这份 build.gradle 就是 1.20.1-forge 的。
+    accessTransformer = file('src/main/resources/META-INF/accesstransformer.cfg')
+
     runs {
         client {
             workingDirectory project.file('run')

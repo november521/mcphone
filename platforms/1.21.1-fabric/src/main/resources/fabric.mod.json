@@ -14,6 +14,7 @@
   },
   "license": "MIT",
   "environment": "*",
+  "accessWidener": "mcphone.accesswidener",
   "entrypoints": {
     "main": [
       "com.november.mcphone.MCphone"

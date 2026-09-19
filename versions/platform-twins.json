@@ -66,6 +66,7 @@
     "com/november/mcphone/feature/chat/net/SyncOnlinePlayersPacket.java": 66,
     "com/november/mcphone/feature/chat/net/TeleportToFriendPacket.java": 52,
     "com/november/mcphone/feature/enderchest/net/OpenEnderChestPacket.java": 30,
+    "com/november/mcphone/feature/hotkey/client/HotkeyBackend.java": 27,
     "com/november/mcphone/feature/music/DiscService.java": 101,
     "com/november/mcphone/feature/music/NetSong.java": 42,
     "com/november/mcphone/feature/music/net/DiscActionPacket.java": 60,

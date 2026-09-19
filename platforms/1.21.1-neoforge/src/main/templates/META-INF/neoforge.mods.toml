@@ -60,8 +60,14 @@ player, and an open SPI-based app system that add-on mods can plug into.
 
 # The [[accessTransformers]] block allows you to declare where your AT file is.
 # If this block is omitted, a fallback attempt will be made to load an AT from META-INF/accesstransformer.cfg
-#[[accessTransformers]]
-#file="META-INF/accesstransformer.cfg"
+#
+# 【这一块是打开的】。AT 文件把 KeyMapping.clickCount 放成 public，理由写在那个文件里
+# （「快捷键触发」要按对象而不是按键给某一个键位注入一次点击）。
+# 那句 "if omitted, a fallback attempt will be made" 说的是运行期 FML 会去猜默认路径；
+# 开发环境（ModDevGradle 的 runClient）不认那个猜测，所以这里显式声明一条，
+# 让开发环境与发出去的 jar 走同一条路。
+[[accessTransformers]]
+file="META-INF/accesstransformer.cfg"
 
 # The coremods config file path is not configurable and is always loaded from META-INF/coremods.json
 

@@ -1,5 +1,6 @@
 package com.november.mcphone.core.client;
 
+import com.november.mcphone.feature.hotkey.client.KeyTrigger;
 import com.november.mcphone.feature.store.client.AppSourceRegistry;
 
 /**
@@ -44,5 +45,8 @@ public final class ClientTicks {
 
         // 商店那边有没有哪个来源列到一半不吭声了（§14.1 的超时）
         AppSourceRegistry.tick();
+
+        // 「快捷键触发」注入之后要隔一拍读回计数器才知道模组理没理那一下，见 KeyTrigger
+        KeyTrigger.tick();
     }
 }

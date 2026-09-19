@@ -223,7 +223,7 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 
 <!-- 下面这段由 ./gradlew updateSeamsDoc 生成，别手改：1.21.1-neoforge -->
 
-#### 共用代码引用了的（34）
+#### 共用代码引用了的（35）
 
 **新平台必须提供同名类型**，否则 shared/ 与共享层编不过。全限定名是硬约束；方法体是抄现成的一份还是自己写，看那个文件。
 
@@ -243,6 +243,7 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 - `core.net.MCphoneNetwork`　—— 1.20.5+ 原版、加载器导入
 - `core.net.NetworkHandler`　—— 加载器导入
 - `feature.camera.client.CameraFlash`
+- `feature.hotkey.client.HotkeyBackend`　—— 加载器导入
 - `feature.music.DiscService`　—— 1.20.5+ 原版、加载器导入
 - `feature.music.net.MusicNetworking`　—— 加载器导入
 - `feature.terminal.TerminalCharger`　—— 加载器导入、注入的方法
@@ -292,7 +293,7 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 
 <!-- 下面这段由 ./gradlew updateSeamsDoc 生成，别手改：1.20.1-forge -->
 
-#### 共用代码引用了的（74）
+#### 共用代码引用了的（75）
 
 **新平台必须提供同名类型**，否则 shared/ 与共享层编不过。全限定名是硬约束；方法体是抄现成的一份还是自己写，看那个文件。
 
@@ -334,6 +335,7 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 - `feature.chat.net.SendChatMessagePacket`
 - `feature.chat.net.TeleportToFriendPacket`
 - `feature.enderchest.net.OpenEnderChestPacket`
+- `feature.hotkey.client.HotkeyBackend`　—— 加载器导入
 - `feature.music.DiscService`　—— 加载器导入
 - `feature.music.NetSong`
 - `feature.music.net.DiscActionPacket`
@@ -413,7 +415,7 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 
 <!-- 下面这段由 ./gradlew updateSeamsDoc 生成，别手改：1.21.1-fabric -->
 
-#### 共用代码引用了的（36）
+#### 共用代码引用了的（37）
 
 **新平台必须提供同名类型**，否则 shared/ 与共享层编不过。全限定名是硬约束；方法体是抄现成的一份还是自己写，看那个文件。
 
@@ -434,6 +436,7 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 - `core.net.NetworkHandler`
 - `feature.camera.client.CameraFlash`
 - `feature.chat.ChatImageStore`
+- `feature.hotkey.client.HotkeyBackend`
 - `feature.music.DiscService`　—— 1.20.5+ 原版
 - `feature.music.net.MusicNetworking`
 - `feature.terminal.TerminalCharger`　—— 加载器导入

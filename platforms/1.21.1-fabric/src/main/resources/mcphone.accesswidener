@@ -1,0 +1,50 @@
+accessWidener	v2	named
+
+# ============================================================
+#  MCphone 在 1.21.1-fabric 上的 access widener
+# ============================================================
+#
+# 【每一格都必须用制表符分隔，不是空格】。空格会被当成名字的一部分，加载器/ Loom
+# 解析时要么报"找不到这个名字"，要么在运行期才炸。上下两条都不要手抖改成空格。
+#
+# 语法（本文件只用到两种行）：
+#   accessWidener <格式版本> <命名空间>          文件头，整个文件只有这一行
+#   accessible field <类> <字段名> <描述符>      把某个字段放成 public
+# 描述符 I = int；类名用斜杠分隔的 mojmap 名。
+
+# 【为什么要开这个字段】
+#
+# 「遥控器」要代替玩家按一次第三方模组的快捷键，做法是往那个 KeyMapping 自己的
+# 「按下边沿队列」里放一次：模组那段 while (key.consumeClick()) 就会照常跑，
+# 我们不需要碰它的类。而 consumeClick() 的全部实现就是「队列里有货就减一」。
+# 那个队列就是下面这个字段，原版把它声明成 private int —— 缺的只是读写入口。
+accessible	field	net/minecraft/client/KeyMapping	clickCount	I
+
+# 【为什么是 access widener，不是本平台已有的 mixin accessor】
+#
+# 本目标已经有现成的手法：src/main/java/.../mixin/client/KeyMappingAccessor.java 就是给
+# KeyMapping 的私有字段 key 开的一个 @Accessor 读口，照抄一个 clickCount 的 accessor
+# 看起来更"就地"。判据不是省事，是【字段在编译期与运行期都必须真的可写】：
+#
+#   access widener（本文件）  build.gradle 的 loom.accessWidenerPath 登记它，
+#                            Loom 在【编译期】就把它应用到 Minecraft jar 上 —— javac 看见的
+#                            KeyMapping 里 clickCount 已经是 public，所以 HotkeyBackend 里
+#                            直接写 mapping.clickCount++ 编得过；运行期 fabric-loader 应用
+#                            同一份规则，字段真的可写。一处声明，两个阶段。
+#
+#   mixin accessor           只在【真实游戏里】成立：访问器方法是 mixin 在类加载时织进去的，
+#                            纯 JVM（没有 mixin bootstrap）里它根本不存在 —— 先在编译期
+#                            拒绝调用方（若不经 mixin 接口），侥幸编过也会在运行期炸。
+#
+# 而这里偏偏要的就是纯 JVM：docs/ 下那些带 main() 的断言测试由【每个目标】编译并运行
+# （挂在 check 上，CI 逐目标跑 ./gradlew build），其中一条回路要 new 一个 KeyMapping、
+# 注入一次、再把计数器读回来 —— 那是一个没有游戏、没有 mixin 的 JVM。只有
+# "编译期与运行期同时生效"的声明才过得了它。
+#
+# 【另一处登记】fabric.mod.json 里的 "accessWidener": "mcphone.accesswidener" 是打包出去
+# 之后由加载器读的那一份，与 build.gradle 里那句 accessWidenerPath 缺一不可：
+# 少前者，开发环境编得过、发出去的 jar 一进游戏就报字段不可访问。
+#
+# 【字段名为什么是 clickCount】本目标用 loom.officialMojangMappings()，整个工程（含本文件
+# 的 named 命名空间）都是 Mojang 官方名；Loom 会把它映射成 intermediary 打进产物。
+# 1.21.1 的 KeyMapping 里那个字段就叫 clickCount、类型 int，已用 mojmap jar 的 javap 核实。
