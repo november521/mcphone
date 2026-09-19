@@ -100,7 +100,7 @@ public final class RhinoEvaluator implements ActionEvaluator {
             return Outcome.fail(ScriptErrorCode.INTERNAL);
 
         } catch (OutcomeUnknown unknown) {
-            // 钱可能动了一半：回 INTERNAL 玩家会再点一次、可能多付，所以回 UNKNOWN（客户端绝不自动重试）。不是脚本的错，不记过失；来龙去脉 moneyCall 已打过 ERROR
+            // 钱可能动了一半：回 INTERNAL 玩家会再点一次、可能多付，所以回 UNKNOWN（客户端绝不自动重试）。不是脚本的错，不记过失
             MCphone.LOGGER.warn("[MCphone] 货币调用结果不明 app={} action={}，已回 UNKNOWN", request.appId(), request.actionId());
             return Outcome.fail(ScriptErrorCode.UNKNOWN);
 

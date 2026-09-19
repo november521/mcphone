@@ -796,6 +796,7 @@ public class ScriptEngineTest {
                     if (m.getName().equals("transfer")) {
                         moved.incrementAndGet();
                         if (mode.get().equals("pay")) throw new IllegalStateException("钱包写了一半");
+                        if (mode.get().equals("null")) return null;
                     }
                     if (m.getName().equals("balance") && mode.get().equals("bal")) throw new NoSuchMethodError("换了版本");
                     return m.invoke(real, args);
@@ -826,6 +827,7 @@ public class ScriptEngineTest {
                         + " buy: function (ctx) { " + pay + "; ctx.ok({}) },"
                         + " buyfin: function (ctx) { try { " + pay + " } finally { ctx.ok({}); return } },"
                         + " buycatch: function (ctx) { try { " + pay + " } catch (e) { } ctx.ok({}) },"
+                        + " okfirst: function (ctx) { ctx.ok({}); " + pay + " },"
                         + " bal: function (ctx) { try { ctx.currency.balance('myserver:coin') } finally { ctx.ok({}); return } } }",
                         "app", 1, null);
             } finally {
@@ -845,16 +847,17 @@ public class ScriptEngineTest {
             };
 
             eq(call.apply("buy"), com.november.mcphone.core.script.net.ScriptErrorCode.OK, "对照：provider 正常时 OK");
-            mode.set("pay");
-            for (int i = 0; i < 2; i++) {
-                for (String action : new String[]{"buy", "buyfin", "buycatch"}) {
+            // 抛了、没给结果（返回 null）都是结果不明；脚本先调过 ctx.ok 也不算数
+            for (String m : new String[]{"pay", "null"}) {
+                mode.set(m);
+                for (String action : new String[]{"buy", "buyfin", "buycatch", "okfirst"}) {
                     moved.set(0);
                     eq(call.apply(action), com.november.mcphone.core.script.net.ScriptErrorCode.UNKNOWN,
-                            action + "：provider 动钱时抛了 → UNKNOWN（catch / finally { return } 改不了）");
-                    eq(moved.get(), 1, action + "：provider 只被调了一次");
+                            m + " " + action + "：provider 动钱时抛了或没给结果 → UNKNOWN（catch / finally { return } / 先 ctx.ok 都改不了）");
+                    eq(moved.get(), 1, m + " " + action + "：provider 只被调了一次");
                 }
             }
-            check(strikes.allowed("t:app", player().uuid()), "结果不明六次也不记过失：不是脚本的错");
+            check(strikes.allowed("t:app", player().uuid()), "结果不明八次也不记过失：不是脚本的错");
             mode.set("bal");
             eq(call.apply("bal"), com.november.mcphone.core.script.net.ScriptErrorCode.INTERNAL,
                     "对照：查余额抛了不动钱，照旧 INTERNAL，不是 UNKNOWN");
