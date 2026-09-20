@@ -1465,6 +1465,8 @@ public final class PhoneScreen extends PhoneScreenBase {
         if (mode == Mode.APP_MANAGER && appManagerPage.mouseScrolled(scrollY)) return true;
         if (mode == Mode.APP_MANAGER_DETAIL && appManagerDetail.mouseScrolled(scrollY, font)) return true;
         if (mode == Mode.ABOUT && aboutPage.mouseScrolled(scrollY, font)) return true;
+        if (mode == Mode.VAULT && vaultPage.mouseScrolled(scrollY, font)) return true;
+        if (mode == Mode.AUTHOR_KEY && authorKeyPage.mouseScrolled(scrollY, font)) return true;
         if (mode == Mode.ADDON_PAGE
                 && callPage(p -> p.mouseScrolled(mx, my, scrollY))) return true;
         return false;
@@ -1588,6 +1590,9 @@ public final class PhoneScreen extends PhoneScreenBase {
         ChatImageCache.clear();
         if (mode == Mode.NOTE_EDIT) noteEditor.close();
         if (mode == Mode.TXT_BOOK) txtReader.close();
+
+        // 口令输入也在"关机必抹"之列：HUD 那副面孔不经过 navigateTo，不在这里关就还留在内存里
+        vaultPage.close();
 
         // 关手机、被顶掉、退出世界都不经过 navigateTo，IPhonePage.onClose() "一定会被调用"靠这一行兑现
         closeAddonPage();

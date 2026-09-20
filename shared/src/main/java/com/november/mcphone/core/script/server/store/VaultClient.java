@@ -50,11 +50,25 @@ public final class VaultClient {
         }
     }
 
+    /** 口令太短。<b>与"还锁着"分开</b>：一个是输入不合格，一个是还没开箱。 */
+    public static final String KEY_TOO_SHORT = "mcphone.vault.too_short";
+
     private final String serverId;
     private final String playerUuid;
 
-    /** key → 见过的最大 recordVersion。真正的持久化在 local 档，这里是会话内的镜像。 */
+    /**
+     * 版本表的槽位 → 见过的最大 recordVersion。
+     *
+     * <p><b>槽位是 {@code appId + '\0' + key}</b>，不是光 key：只按 key 记的话，两个 App
+     * 都用 {@code k1} 时版本号会互相推进，A 的第二版会把 B 的合法第一版判成回滚。
+     * 真正的持久化在 local 档，这里是会话内的镜像。
+     */
     private final Map<String, Long> known = new HashMap<>();
+
+    /** 一个 App 的一个 key 在版本表里的槽位。{@code \0} 分隔，避免与 key 里合法的字符撞车。 */
+    private static String slot(String appId, String key) {
+        return appId + "\0" + key;
+    }
 
     /** 派生出来的密钥。<b>只在内存里，关手机就该 {@link #lock()}</b>。 */
     private SecretKey sessionKey;
@@ -74,13 +88,13 @@ public final class VaultClient {
         return serverVersion >= localKnown;
     }
 
-    /** 从 local 档把版本表读回来。 */
+    /** 从 local 档把版本表读回来。键是 {@link #slot} 的形状。 */
     public void restoreVersions(Map<String, Long> fromLocal) {
         known.clear();
         known.putAll(fromLocal);
     }
 
-    /** 交给 local 档存起来。 */
+    /** 交给 local 档存起来。键是 {@link #slot} 的形状（{@code appId\0key}）。 */
     public Map<String, Long> versionsForLocal() {
         return Map.copyOf(known);
     }
@@ -88,7 +102,7 @@ public final class VaultClient {
     /** 用口令开箱。口令用完当场抹掉。 */
     public void unlock(char[] passphrase, byte[] salt) {
         if (!VaultCrypto.passphraseLongEnough(passphrase)) {
-            throw new VaultException(KEY_LOCKED, "口令至少 " + VaultCrypto.MIN_PASSPHRASE + " 个字符");
+            throw new VaultException(KEY_TOO_SHORT, "口令至少 " + VaultCrypto.MIN_PASSPHRASE + " 个字符");
         }
         try {
             sessionKey = VaultCrypto.derive(passphrase, salt);
@@ -109,10 +123,11 @@ public final class VaultClient {
     /** 把一个值封成记录，准备交给服务端搬运。 */
     public SealedRecord put(String appId, String key, String plaintext, byte[] salt) {
         requireUnlocked();
-        long next = known.getOrDefault(key, 0L) + 1;
+        String slot = slot(appId, key);
+        long next = known.getOrDefault(slot, 0L) + 1;
         byte[] aad = VaultCrypto.aad(serverId, playerUuid, appId, key, SealedRecord.SCHEMA, next);
         VaultCrypto.Sealed sealed = VaultCrypto.seal(sessionKey, aad, plaintext.getBytes(StandardCharsets.UTF_8));
-        known.put(key, next);
+        known.put(slot, next);
         return new SealedRecord(salt, sealed.nonce(), sealed.cipher(), SealedRecord.SCHEMA, next);
     }
 
@@ -124,7 +139,8 @@ public final class VaultClient {
      */
     public String get(String appId, String key, SealedRecord record) {
         requireUnlocked();
-        long localKnown = known.getOrDefault(key, 0L);
+        String slot = slot(appId, key);
+        long localKnown = known.getOrDefault(slot, 0L);
         if (!accept(record.recordVersion(), localKnown)) {
             throw new VaultException(KEY_ROLLBACK,
                     "服务端给的是第 " + record.recordVersion() + " 版，本地见过第 " + localKnown + " 版");
@@ -134,7 +150,7 @@ public final class VaultClient {
         try {
             byte[] plain = VaultCrypto.unseal(sessionKey,
                     aad, new VaultCrypto.Sealed(record.nonce(), record.cipher()));
-            known.put(key, record.recordVersion());
+            known.put(slot, record.recordVersion());
             return new String(plain, StandardCharsets.UTF_8);
         } catch (AEADBadTagException e) {
             // 口令不对、AAD 六个字段里任何一个不对、密文被改过，都落在这里

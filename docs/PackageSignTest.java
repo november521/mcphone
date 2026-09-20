@@ -422,10 +422,42 @@ public class PackageSignTest {
         eq(m.fingerprint(), k.fingerprint(), "指纹对得上");
         eq(m.author(), "yumeka", "author 写进去了");
 
-        // 备份
-        Path backup = game.resolve("backup").resolve("author.key.bak");
+        // 备份：两个文件都要有（只备私钥的"备份"换台机器恢复不了）
+        Path backup = game.resolve("backup");
         AuthorKeys.exportBackup(game, backup);
-        eq(Files.readAllBytes(backup).length, 48, "备份是那 48 字节");
+        eq(Files.readAllBytes(backup.resolve(AuthorKeys.PRIVATE_FILE)).length, 48, "备份里有私钥 48 字节");
+        eq(Files.readAllBytes(backup.resolve(AuthorKeys.PUBLIC_FILE)).length, 44, "备份里有公钥 44 字节");
+
+        // 恢复演练：一个全新目录，只靠备份里的两个文件就能读回同一把
+        Path restored = Files.createTempDirectory("mcphone-keys-restore");
+        Files.createDirectories(restored.resolve(AuthorKeys.DIR));
+        Files.copy(backup.resolve(AuthorKeys.PRIVATE_FILE),
+                restored.resolve(AuthorKeys.DIR).resolve(AuthorKeys.PRIVATE_FILE));
+        Files.copy(backup.resolve(AuthorKeys.PUBLIC_FILE),
+                restored.resolve(AuthorKeys.DIR).resolve(AuthorKeys.PUBLIC_FILE));
+        eq(AuthorKeys.load(restored).fingerprint(), k.fingerprint(), "用备份恢复出同一把密钥");
+
+        // 半成品：缺公钥 / 公钥被换成另一把 → 读失败且报的是"密钥坏"，不冒充"没有密钥"
+        Path mixed = Files.createTempDirectory("mcphone-keys-mixed");
+        Files.createDirectories(mixed.resolve(AuthorKeys.DIR));
+        Files.copy(backup.resolve(AuthorKeys.PRIVATE_FILE),
+                mixed.resolve(AuthorKeys.DIR).resolve(AuthorKeys.PRIVATE_FILE));
+        check(codeOf(() -> AuthorKeys.load(mixed)) == PackageError.Code.E_SIG_BAD_KEY,
+                "缺公钥：读失败（不是「没有密钥」）");
+
+        Path other = Files.createTempDirectory("mcphone-keys-other");
+        AuthorKeys otherKeys = AuthorKeys.generate(other);
+        Files.copy(other.resolve(AuthorKeys.DIR).resolve(AuthorKeys.PUBLIC_FILE),
+                mixed.resolve(AuthorKeys.DIR).resolve(AuthorKeys.PUBLIC_FILE));
+        check(codeOf(() -> AuthorKeys.load(mixed)) == PackageError.Code.E_SIG_BAD_KEY,
+                "author.key 与 author.pub 不是一对：读失败");
+        check(!otherKeys.fingerprint().equals(k.fingerprint()), "两把不同密钥的指纹不同");
+
+        // 生成是原子的：改名发布，不留 .tmp 半成品
+        try (var walk = Files.walk(game.resolve(AuthorKeys.DIR))) {
+            check(walk.noneMatch(p -> p.getFileName().toString().endsWith(".tmp")),
+                    "生成之后没有 .tmp 残留");
+        }
     }
 
     /** §12.7：服务端的作者名单。 */

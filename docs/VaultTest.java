@@ -238,16 +238,60 @@ public class VaultTest {
             eq(e.messageKey(), VaultClient.KEY_LOCKED, "锁着时报 locked");
         }
 
-        // 口令太短要拒（§17.4.4 最少 8 字符）
+        // 口令太短要拒（§17.4.4 最少 8 字符）—— 报的是"太短"，不是"还锁着"
         checks++;
         try {
             new VaultClient("srv", "p1").unlock("1234567".toCharArray(), salt);
             failures.add("7 个字符的口令竟然收了");
         } catch (VaultClient.VaultException e) {
-            eq(e.messageKey(), VaultClient.KEY_LOCKED, "口令太短要拒");
+            eq(e.messageKey(), VaultClient.KEY_TOO_SHORT, "口令太短报 too_short（与「还锁着」分开）");
         }
         check(VaultCrypto.passphraseLongEnough("12345678".toCharArray()), "8 个字符够");
         check(!VaultCrypto.passphraseLongEnough("1234567".toCharArray()), "7 个不够");
+    }
+
+    /** 口令策略是纯判定（界面照着画），数值与边界在这里钉死。 */
+    static void passphrasePolicy() {
+        eq(VaultPassphrase.strength("1234567".toCharArray()), VaultPassphrase.Strength.TOO_SHORT,
+                "7 个字符：太短");
+        eq(VaultPassphrase.strength("abcdefgh".toCharArray()), VaultPassphrase.Strength.WEAK,
+                "8 个小写：弱");
+        eq(VaultPassphrase.strength("abcdefghijkl".toCharArray()), VaultPassphrase.Strength.FAIR,
+                "12 个、两类：一般");
+        eq(VaultPassphrase.strength("abcdefgh1234".toCharArray()), VaultPassphrase.Strength.FAIR,
+                "12 个、两类：一般");
+        eq(VaultPassphrase.strength("abcdefgh123!".toCharArray()), VaultPassphrase.Strength.STRONG,
+                "12 个、三类：强");
+        eq(VaultPassphrase.strength("abcdefghijklmnop".toCharArray()), VaultPassphrase.Strength.STRONG,
+                "16 个：强");
+        eq(VaultPassphrase.strength(null), VaultPassphrase.Strength.TOO_SHORT, "null 当太短");
+
+        check(VaultPassphrase.matches("同一个口令".toCharArray(), "同一个口令".toCharArray()), "相同算一样");
+        check(!VaultPassphrase.matches("一个口令".toCharArray(), "另一个口令".toCharArray()), "不同算不一样");
+        check(!VaultPassphrase.matches("短".toCharArray(), "长一点点".toCharArray()), "长度不同算不一样");
+        check(!VaultPassphrase.matches(null, "x".toCharArray()), "null 算不一样");
+
+        check(VaultPassphrase.acceptable("足够长的口令123".toCharArray(), "足够长的口令123".toCharArray()),
+                "够长且一致：可提交");
+        check(!VaultPassphrase.acceptable("1234567".toCharArray(), "1234567".toCharArray()),
+                "太短：不可提交");
+        check(!VaultPassphrase.acceptable("足够长的口令123".toCharArray(), "另一个足够长的口令".toCharArray()),
+                "不一致：不可提交");
+    }
+
+    /** 版本表的槽位按 App 分开：两个 App 都用 k1 时，各自的版本号不许互相推进。 */
+    static void versionSlotsArePerApp() {
+        VaultClient v = new VaultClient("srv", "p1");
+        byte[] salt = VaultCrypto.newSalt();
+        v.unlock("一个足够长的口令".toCharArray(), salt);
+
+        v.put("appA", "k1", TOKEN, salt);                 // A 的第 1 版
+        SealedRecord a2 = v.put("appA", "k1", "A 的第二版", salt);
+        SealedRecord b1 = v.put("appB", "k1", "B 的合法第一版", salt);
+        eq(b1.recordVersion(), 1L, "B 的 k1 是它自己的第 1 版");
+
+        eq(v.get("appB", "k1", b1), "B 的合法第一版", "A 推进到第 2 版不影响 B 的合法记录");
+        eq(v.get("appA", "k1", a2), "A 的第二版", "A 自己的记录照常");
     }
 
     /** 版本表能存进 local 档再读回来（§17.4.2：sealed 依赖 local 的唯一一处）。 */
@@ -258,12 +302,12 @@ public class VaultTest {
         SealedRecord r = v.put("app", "k1", TOKEN, salt);
 
         var saved = v.versionsForLocal();
-        eq(saved.get("k1"), 1L, "版本表里记着第 1 版");
+        eq(saved.get("app\0k1"), 1L, "版本表里按「App + key」的槽位记着第 1 版");
 
         // 换一台设备：从 local 档把版本表读回来，回滚照样挡得住
         VaultClient other = new VaultClient("srv", "p1");
         other.unlock("一个足够长的口令".toCharArray(), salt);
-        other.restoreVersions(java.util.Map.of("k1", 5L));
+        other.restoreVersions(java.util.Map.of("app\0k1", 5L));
         checks++;
         try {
             other.get("app", "k1", r);
@@ -380,6 +424,8 @@ public class VaultTest {
         cipherHasNoPlaintext();
         sameInputDifferentCipher();
         clientFlow();
+        passphrasePolicy();
+        versionSlotsArePerApp();
         versionTableRoundTrip();
 
         System.out.println("断言 " + checks + " 条");
