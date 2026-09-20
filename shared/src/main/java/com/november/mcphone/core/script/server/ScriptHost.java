@@ -74,16 +74,21 @@ public final class ScriptHost {
         // 没有后端的项整项不挂（E12）：item / cycle / store / sealed / currencies（本步）全是 null
         CtxBuilder.Backends backends = new CtxBuilder.Backends(new SharedState(), null, null, null, null, null);
         RhinoEvaluator evaluator = new RhinoEvaluator(apps, strikes, backends, server::execute);
-        // 服务器身份用【存档级】的 ServerIdentity（§13.5）：复制世界 = 复制身份，客户端按握手拿到的 serverId 分桶
+        // S17：三张世界级表随服务器装配（身份 / 部署 / 授权）；扫一趟 incoming 进候选队列。
+        // 【扫描不给任何特权】：候选要 OP 用命令逐条批准后才成为 Deployment（§14.4）。
+        DeploymentData deployments = DeploymentData.get(server);
+        AuthorityData authority = AuthorityData.get(server);
+        int queued = ServerPackageScanner.scan(server, deployments);
         ScriptPipeline pipeline = new ScriptPipeline(ServerIdentity.idOf(server),
                 new IdempotencyLedger(System::currentTimeMillis),
                 new ScriptRateLimiter(System::currentTimeMillis),
-                new DenyAllDeployments(), new DenyAllAuthority(), evaluator);
+                new ServerDeployments(deployments), new ServerAuthority(deployments, authority), evaluator);
         // 登记之后 ScriptRpcHandler.handle 才会把请求交给这条管线（此前一律 NOT_DEPLOYED）
         ScriptRpcHandler.install(pipeline);
         current = new ScriptHost(apps, strikes, evaluator, pipeline);
-        MCphone.LOGGER.info("[MCphone] 脚本宿主已装配：apps={}，管线已登记（部署表/授权表为空，请求一律 NOT_DEPLOYED，等 S17）",
-                apps.size());
+        MCphone.LOGGER.info("[MCphone] 脚本宿主已装配：apps={}，已批准部署 {}，候选 {}{}，管线已登记",
+                apps.size(), deployments.deployments().size(), deployments.candidates().size(),
+                queued == 0 ? "" : "（本次进队 " + queued + "）");
     }
 
     /** 开服时在主线程上调，没有 App scope 的简写。 */

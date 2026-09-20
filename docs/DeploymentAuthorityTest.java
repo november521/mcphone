@@ -6,6 +6,7 @@ import net.minecraft.nbt.StringTag;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -207,12 +208,48 @@ public class DeploymentAuthorityTest {
         check(!ad2.isLicensed(APP, P2), "没授过的不被放行");
     }
 
+    /** 扫描器与命令面的纯函数：前端摘要的谓词、manifest 扩展字段解析、动作列表拆分。 */
+    static void scannerAndCommandHelpers() {
+        Map<String, byte[]> entries = new java.util.LinkedHashMap<>();
+        entries.put("app.vue", "UI".getBytes());
+        entries.put("lang/zh_cn.json", "{}".getBytes());
+        entries.put("server.js", "backend".getBytes());
+        entries.put("server/util.js", "util".getBytes());
+        Map<String, byte[]> front = new java.util.LinkedHashMap<>();
+        front.put("app.vue", "UI".getBytes());
+        front.put("lang/zh_cn.json", "{}".getBytes());
+        eq(ServerPackageScanner.frontendDigest(entries), com.november.mcphone.core.script.pkg.PackageDigest.of(front),
+                "前端摘要排除 server.js 与 server/**");
+        check(!ServerPackageScanner.frontendDigest(entries)
+                        .equals(com.november.mcphone.core.script.pkg.PackageDigest.of(entries)),
+                "前端摘要与整包摘要不同（谓词不同）");
+
+        var root = com.google.gson.JsonParser.parseString(
+                "{\"actions\":[\"buy\",\"sell\"],\"capabilities\":[]}").getAsJsonObject();
+        eq(ServerPackageScanner.stringList(root, "actions"), List.of("buy", "sell"), "manifest.actions 解析");
+        eq(ServerPackageScanner.stringList(root, "capabilities"), List.of(), "空数组");
+        eq(ServerPackageScanner.stringList(root, "missing"), List.of(), "缺字段 = 空");
+        boolean threw = false;
+        try {
+            ServerPackageScanner.stringList(
+                    com.google.gson.JsonParser.parseString("{\"actions\":[1]}").getAsJsonObject(), "actions");
+        } catch (IllegalArgumentException e) {
+            threw = true;
+        }
+        check(threw, "非字符串元素被拒");
+
+        eq(ScriptAdminCommand.split(" buy , sell ,, buy "), List.of("buy", "sell"), "动作列表按逗号拆、去空去重");
+        eq(ScriptAdminCommand.split(""), List.of(), "空串 = 空列表（一个都不批，与 approve 的语义一致）");
+        eq(ScriptAdminCommand.shortDigest("abcdef123456"), "abcdef12", "短摘要取 8 位");
+    }
+
     public static void main(String[] args) {
         deploymentAndAuthority();
         approvalDefaultsAreFailClosed();
         limitsAndEviction();
         malformedDataIsRejectedNotThrown();
         persistenceRoundTrip();
+        scannerAndCommandHelpers();
 
         System.out.println("断言 " + checks + " 条");
         if (!failures.isEmpty()) {

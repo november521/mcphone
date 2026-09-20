@@ -82,7 +82,11 @@ public class MCphone implements ModInitializer {
         });
 
         net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback.EVENT.register(
-                (dispatcher, registryAccess, environment) -> com.november.mcphone.core.script.server.economy.EconomyCommand.register(dispatcher));
+                (dispatcher, registryAccess, environment) -> {
+                    com.november.mcphone.core.script.server.economy.EconomyCommand.register(dispatcher);
+                    // 脚本后端的 OP 管理命令（S17，§14.4）：部署/授权的 Stage 1 审批入口
+                    com.november.mcphone.core.script.server.ScriptAdminCommand.register(dispatcher);
+                });
 
         // 手机替卡槽里的终端供电。漏了它的症状是"终端在手机里会没电"，见 TerminalCharger。
         // Fabric 没有 NeoForge 的按玩家 tick 事件，用服务端 tick 自己发

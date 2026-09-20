@@ -154,6 +154,10 @@ public final class MCphone {
         });
         MinecraftForge.EVENT_BUS.addListener(
                 (net.minecraftforge.event.RegisterCommandsEvent e) -> com.november.mcphone.core.script.server.economy.EconomyCommand.register(e.getDispatcher()));
+        // 脚本后端的 OP 管理命令（S17，§14.4）：部署/授权的 Stage 1 审批入口
+        MinecraftForge.EVENT_BUS.addListener(
+                (net.minecraftforge.event.RegisterCommandsEvent e) ->
+                        com.november.mcphone.core.script.server.ScriptAdminCommand.register(e.getDispatcher()));
 
         // 放在自家注册之后：兼容模块可能要看我们已经注册了什么
         com.november.mcphone.compat.CompatModules.init(modBus);
