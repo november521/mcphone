@@ -2219,6 +2219,47 @@ public class EconomyDataTest {
         }
     }
 
+    /**
+     * S15g 补上一轮的 P1：生产里<b>唯一会动钱</b>的组合 ——
+     * {@code install → sweepNow → registry::get → GatedCurrencyProvider → 网关主线程快路径 → BuiltinProvider.refund}
+     * —— 真的把钱退回原主、写进流水，且重复扫描不重复退。
+     */
+    static void installRefundsExpiredEscrow() throws Exception {
+        AtomicLong t = new AtomicLong(1_700_000_000_000L);
+        Path dir = tmp("s15g-refund");
+        EconomyData d = EconomyData.empty(t::get);
+        TxnLog log = new TxnLog(dir, ZoneOffset.UTC, d);
+        BuiltinProvider coin = builtin(COIN, d, log, t);
+        UUID a = UUID.randomUUID(), b = UUID.randomUUID();
+        eq(coin.mint(a, 100, RSN), TxnResult.OK, "先造出账目");
+        HoldResult expired = coin.hold(a, b, 30, RSN);
+        eq(d.get(a, COIN), 70L, "托管先扣了 30");
+        t.addAndGet(EscrowLedger.DEFAULT_TIMEOUT_MS + 1);       // 这笔托管已经过期
+
+        CurrencyGateway gw = new CurrencyGateway(Runnable::run, () -> true);
+        EconomyRuntime r = EconomyRuntime.install(d, log, gw, 0);
+        try {
+            eq(d.get(a, COIN), 100L, "开服扫描经注册表把超时托管退回原主");
+            check(d.escrow().get(expired.id()).settled(), "那笔托管结清了");
+            // 流水文件名按【墙上时钟】的日期（注册表里的 provider 用 System::currentTimeMillis，与生产一致），
+            // 而这份测试的假时钟停在过去：所以扫整个 ledger 目录，不按合成时间戳找文件
+            StringBuilder all = new StringBuilder();
+            Path ledgerDir = dir.resolve("ledger");
+            if (Files.isDirectory(ledgerDir)) {
+                try (var files = Files.list(ledgerDir)) {
+                    for (Path f : files.toList()) all.append(Files.readString(f)).append('\n');
+                }
+            }
+            check(all.indexOf("|refund|") >= 0 && all.indexOf("|" + EconomyRuntime.TIMEOUT_REFUND_KIND + "|") >= 0,
+                    "退款进了流水，kind 写明是超时：" + all);
+            long before = d.get(a, COIN);
+            r.sweepNow();
+            eq(d.get(a, COIN), before, "再扫一趟不重复退");
+        } finally {
+            EconomyRuntime.stop();
+        }
+    }
+
     // ================================================================ 工具
 
     static CompoundTag escrowTag(UUID id, String currency, long amount, long createdAt) {
@@ -2308,6 +2349,7 @@ public class EconomyDataTest {
         commandPermissionNode();
         conservationThroughGateway();
         registryLifecycle();
+        installRefundsExpiredEscrow();
 
         System.out.println("断言 " + checks + " 条");
         if (!failures.isEmpty()) {
