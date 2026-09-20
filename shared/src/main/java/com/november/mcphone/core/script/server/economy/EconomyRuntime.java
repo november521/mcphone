@@ -95,8 +95,11 @@ public final class EconomyRuntime {
         this.nextSweepAt = now + SWEEP_INTERVAL_MS;
     }
 
-    /** 开服时在主线程上调。重复调会先把上一份关掉（在 {@link #install} 里）。 */
+    /** 开服时在主线程上调。重复调会先把上一份关掉（在 {@link #install} 里；这里再兜一句，幂等）。 */
     public static synchronized void start(MinecraftServer server) {
+        // 先停掉上一份再建新日志/网关：否则在最外面这个窗口里，旧的 gateway 还开着、
+        // 旧 runtime 还是 current，而新日志已经开跑了一次 sweep（P3）。多调一次 stop() 零代价。
+        stop();
         EconomyData data = EconomyData.get(server);
         // 整份锁住的存档不接进流水：它永远不写存档点，接上了流水就会替它自动补存档点、说它"存过了"
         TxnLog log = new TxnLog(server.getWorldPath(LevelResource.ROOT).resolve("mcphone").resolve("economy"),
@@ -234,6 +237,11 @@ public final class EconomyRuntime {
     /**
      * 唯一一份货币注册表 —— {@code ctx.currency.*}（S15g 接线）与超时托管查找用的是<b>同一个实例</b>。
      * 直接注入 provider 查找函数的测试运行时为 {@code null}。
+     *
+     * <p><b>线程约定（S15g 接线前必须定死）</b>：注册表是普通 {@code LinkedHashMap}，现在只有主线程上的
+     * {@code sweepNow} 读它，{@code registry()} 也还没有生产调用点。S15g 把 {@code ctx.currency} 接上之后，
+     * worker 上的 {@code get()} 会与主线程上的 {@code register()}/{@code clear()} 并发 —— 要么把表换成并发结构，
+     * 要么明文规定"注册表只在主线程读"。在那之前不许接。
      */
     public CurrencyRegistry registry() {
         return registry;
