@@ -74,3 +74,41 @@ Rhino 1.9.1，**没有** `class` / `for...of` / `export` / `import` / `async` / 
 （`ctx.num.*` 已经砍掉了）。
 
 前后端唯一的通道是 `phone.call(actionId, params, callback)`，回调风格不是 Promise。
+
+## 客户端：现在能写的那一截（S17 Stage 2）
+
+`phone.call` 的完整形态要等 P1 的 `<script>`（函数、参数、回调都还写不了）。当前能用的只有：
+
+```html
+<button @click="call('claim_daily')">领取</button>
+```
+
+- 参数是空的，结果由宿主在屏幕底部弹一条提示（成功 / 错误码的本地化文案）。
+- 同一个 App 同时最多 4 个未完成调用，超出立刻提示"正在处理"，不排队。
+- `epoch` / `deployRev` / 前端摘要由宿主回填，**作者改不了** —— 伪造这些字段是客户端的对抗测试，
+  不是 App 的能力。
+
+### 宿主注入的只读上下文 `backend`（§13.8）
+
+模板里可以直接读，**不能赋值、不能写进 state**：
+
+```html
+<column v-if="!backend.available">
+  <text>这个 App 需要「{{ backend.serverName }}」才能使用</text>
+</column>
+<column v-else>
+  <button v-if="backend.actions.length > 0" @click="call('claim_daily')">领取</button>
+</column>
+```
+
+| 名字 | 类型 | 含义 |
+|---|---|---|
+| `backend.available` | bool | 本服有没有这个 App 的已批准部署 |
+| `backend.serverName` | string | 部署它的服务器显示名 |
+| `backend.actions` | string[] | 本服已批准、且**你被授权**的动作 id |
+
+⚠ `backend.actions` 是 **UX，不是边界**：你可以无视它照样发请求，服务端每次都会重新判。
+拿它灰按钮用，别拿它当权限结论。
+
+不写 `backend.available` 分支时，宿主会在商店详情页顶部插一条横幅兜底 —— 但那只覆盖详情页，
+App 里最好还是自己把降级画出来。
