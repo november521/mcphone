@@ -230,12 +230,98 @@ public class ScriptHostTest {
         });
     }
 
+    /** S17：AppScope 的入口求值 + 宿主实现的 {@code require}（模块化 server.js）。 */
+    static void appScopeEntryAndRequire() {
+        Map<String, String> modules = new java.util.LinkedHashMap<>();
+        modules.put("lib.js", "42");
+        modules.put("pkg/tool.js", "require('../lib.js') + 1");
+        modules.put(AppScope.ENTRY,
+                "var a = require('./lib.js');"
+                        + "var b = require('./pkg/tool.js');"
+                        + "var esc = 0; try { require('../evil.js') } catch (e) { esc = 1 }"
+                        + "var actions = { act: function (ctx) { ctx.ok({}) } };");
+        AppScope app = new AppScope("example:app", ScriptBudget.server(), modules);
+        Context cx = app.budget().enterContext();
+        try {
+            var scope = app.scope(cx);
+            eq(number(scope, "a"), 42.0, "入口 require 到模块导出");
+            eq(number(scope, "b"), 43.0, "模块里再 require（相对当前模块解析）");
+            eq(number(scope, "esc"), 1.0, "require('../…') 弹出包根被拒，且脚本接得住（HostError）");
+            check(app.actions(cx) != null, "入口求值定义了 actions 表");
+            app.discard();
+        } finally {
+            Context.exit();
+        }
+    }
+
+    /** S17：落地前重查被拒 —— 没动钱回 NOT_AUTHORIZED，动过钱回 UNKNOWN（E35③）。 */
+    static void landingDeniedAfterMoneyMovedIsUnknown() {
+        AtomicLong t = new AtomicLong(1_000);
+        List<ScriptRpcResult> moved = new ArrayList<>();
+        ScriptPipeline p = new ScriptPipeline(SERVER, new IdempotencyLedger(t::get), new ScriptRateLimiter(t::get),
+                allDeployed("rev1"), (player, appId, actionId) -> false,
+                (req, onDone) -> {
+                    onDone.accept(ActionEvaluator.Outcome.ok(new byte[0], 1, List.of()).withMoneyMoved());
+                    return true;
+                });
+        p.accept(rpc(9, p.newEpoch(P1), "act"), snap(P1), moved::add);
+        eq(moved.get(0).code(), ScriptErrorCode.UNKNOWN, "钱已动 + 落地前被拒 → UNKNOWN，不是 NOT_AUTHORIZED");
+
+        List<ScriptRpcResult> untouched = new ArrayList<>();
+        ScriptPipeline p2 = new ScriptPipeline(SERVER, new IdempotencyLedger(t::get), new ScriptRateLimiter(t::get),
+                allDeployed("rev1"), (player, appId, actionId) -> false,
+                (req, onDone) -> {
+                    onDone.accept(ActionEvaluator.Outcome.ok(new byte[0], 1, List.of()));
+                    return true;
+                });
+        p2.accept(rpc(10, p2.newEpoch(P1), "act"), snap(P1), untouched::add);
+        eq(untouched.get(0).code(), ScriptErrorCode.NOT_AUTHORIZED, "没动钱 + 落地前被拒 → NOT_AUTHORIZED（对照）");
+    }
+
+    /** S17 约束 3：主线程执行器在停服时拒绝投递 —— onDone 不许丢、账本那条 RESERVED 必须结清。 */
+    static void dispatchFailureStillCompletes() throws Exception {
+        ScriptWorkers.start();
+        try {
+            StrikeTracker strikes = new StrikeTracker(System::currentTimeMillis);   // 本线程就是 owner
+            AppScope app = appWith("var actions = { act: function (ctx) { ctx.ok({}) } }");
+            RhinoEvaluator ev = new RhinoEvaluator(Map.of("example:app", app), strikes,
+                    new CtxBuilder.Backends(new SharedState(), null, null, null, null, null),
+                    r -> {
+                        throw new java.util.concurrent.RejectedExecutionException("服务器正在停");
+                    });
+            AtomicLong t = new AtomicLong(1_000);
+            IdempotencyLedger ledger = new IdempotencyLedger(t::get);
+            ScriptPipeline p = new ScriptPipeline(SERVER, ledger, new ScriptRateLimiter(t::get), allDeployed("rev1"),
+                    (player, appId, actionId) -> true, ev);
+            CompletableFuture<ScriptRpcResult> done = new CompletableFuture<>();
+            p.accept(rpc(77, p.newEpoch(P1), "act"), snap(P1), done::complete);
+            ScriptRpcResult r = done.get(20, TimeUnit.SECONDS);
+            eq(r.code(), ScriptErrorCode.INTERNAL, "投递失败时在 worker 上降级结清，onDone 不许丢");
+
+            byte[] key = IdempotencyKey.of(SERVER, P1, "example:app", "rev1", "act", 77);
+            check(ledger.check(P1, key, IdempotencyKey.digestOf(new byte[0]))
+                    instanceof IdempotencyLedger.Verdict.Replay, "那条 RESERVED 已结清，不本局永久挂着");
+            check(ScriptWorkers.running(), "worker 没被打死");
+            app.discard();
+        } finally {
+            ScriptWorkers.stop();
+        }
+    }
+
+    static double number(org.mozilla.javascript.ScriptableObject scope, String name) {
+        Object v = org.mozilla.javascript.ScriptableObject.getProperty(scope, name);
+        return v instanceof Number n ? n.doubleValue() : Double.NaN;
+    }
+
     public static void main(String[] args) throws Exception {
         denyAllViews();
         endToEndReachesEvaluator();
         manyInFlightExactlyOnce();
         messageKeysAreLocalizationKeys();
         serverIdentityRoundTrip();
+        appScopeEntryAndRequire();
+        landingDeniedAfterMoneyMovedIsUnknown();
+        dispatchFailureStillCompletes();
 
         System.out.println("断言 " + checks + " 条");
         if (!failures.isEmpty()) {

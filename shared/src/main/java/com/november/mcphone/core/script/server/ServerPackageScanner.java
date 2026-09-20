@@ -59,14 +59,14 @@ public final class ServerPackageScanner {
     private ServerPackageScanner() {
     }
 
-    /** 扫一趟 incoming。返回新增/更新了几条候选。 */
-    public static int scan(MinecraftServer server, DeploymentData deployments) {
+    /** 扫一趟 incoming。返回新增候选数 + 这一趟读到的包（供装配复用，别再解一遍）。 */
+    public static Scan scan(MinecraftServer server, DeploymentData deployments) {
         Path dir = server.getWorldPath(LevelResource.ROOT).resolve(DIR);
         try {
             Files.createDirectories(dir);
         } catch (IOException e) {
             MCphone.LOGGER.warn("[MCphone] 建不了待审目录 {}：{}", dir, e.toString());
-            return 0;
+            return new Scan(0, Map.of());
         }
         TrustStore trust = TrustStore.load(configPath(server));
         List<Path> files = new ArrayList<>();
@@ -83,14 +83,16 @@ public final class ServerPackageScanner {
             }
         } catch (IOException e) {
             MCphone.LOGGER.warn("[MCphone] 读不了待审目录 {}：{}", dir, e.toString());
-            return 0;
+            return new Scan(0, Map.of());
         }
+        Map<String, AppPackage> packages = new LinkedHashMap<>();
         int changed = 0;
-        for (Path f : files) if (scanOne(f, deployments, trust)) changed++;
-        return changed;
+        for (Path f : files) if (scanOne(f, deployments, trust, packages)) changed++;
+        return new Scan(changed, packages);
     }
 
-    private static boolean scanOne(Path file, DeploymentData deployments, TrustStore trust) {
+    private static boolean scanOne(Path file, DeploymentData deployments, TrustStore trust,
+                                   Map<String, AppPackage> packages) {
         AppPackage pkg;
         try {
             pkg = PackageReader.readFile(file);
@@ -132,6 +134,12 @@ public final class ServerPackageScanner {
         if ("frontend".equalsIgnoreCase(deploy)) {
             MCphone.LOGGER.warn("[MCphone] 待审包 {} 声明 deploy=frontend 却带 server.js，自相矛盾，拒", appId);
             return false;
+        }
+
+        // 这一趟读到的包留给装配复用（别再解一遍）；已批准的包不再进候选，否则每次开服又重新排队
+        packages.put(pkg.digest(), pkg);
+        for (Deployment d : deployments.deployments()) {
+            if (d.packageDigest().equals(pkg.digest())) return false;
         }
 
         try {
@@ -184,5 +192,12 @@ public final class ServerPackageScanner {
         // getFile 两版都在，但返回类型不同（1.20.1 是 File、1.21.1 是 Path）：用 toString 收敛，
         // 避免在共用层里出现版本专有的转换。getServerDirectory 在 1.20.1 上不存在，不能用。
         return Path.of(server.getFile("config/mcphone/authors.json").toString());
+    }
+
+    /** 一趟扫描的结果：新进队几条 + 这一趟读到的包（按摘要，供装配复用）。 */
+    public record Scan(int changed, Map<String, AppPackage> packages) {
+        public Scan {
+            packages = Map.copyOf(packages);
+        }
     }
 }

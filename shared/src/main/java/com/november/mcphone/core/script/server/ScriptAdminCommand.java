@@ -46,7 +46,7 @@ public final class ScriptAdminCommand {
                         }))
                         .then(Commands.literal("reload").executes(ctx -> {
                             MinecraftServer server = ctx.getSource().getServer();
-                            int n = ServerPackageScanner.scan(server, DeploymentData.get(server));
+                            int n = ServerPackageScanner.scan(server, DeploymentData.get(server)).changed();
                             ok(ctx.getSource(), "[脚本] 重扫待审目录完毕，本次进队 " + n + " 条");
                             return n;
                         }))

@@ -67,20 +67,39 @@ public final class ScriptHost {
     /**
      * 开服时在主线程上调。<b>重复调会先把上一份停掉</b>（单人游戏换世界）。
      *
-     * @param apps appId → 那个 App 的 scope。本步为空（装配属 S17）；有值时必须一个 App 一个 scope、跨调用复用
+     * <p><b>装配失败不许把服务器弄崩</b>（S17 约束 5）：任何非虚拟机级异常都在这里被接住 ——
+     * 不装管线、脚本后端降级为"一律 {@code NOT_DEPLOYED}"，并留下一条可观测 ERROR。
+     * 平台差异随之无关紧要：Fabric 的事件回调不 catch 也不会因此开服失败。
      */
-    public static synchronized void start(MinecraftServer server, Map<String, AppScope> apps) {
+    public static synchronized void start(MinecraftServer server) {
         stop();
+        try {
+            startBackend(server);
+        } catch (VirtualMachineError fatal) {
+            throw fatal;
+        } catch (Throwable t) {
+            ScriptRpcHandler.clear();
+            current = null;
+            MCphone.LOGGER.error("[MCphone] ⚠ 脚本后端装配失败，已降级为「未启用」：所有脚本请求会回 NOT_DEPLOYED。"
+                    + "修好之后重开服务器（本步不做热重载）", t);
+        }
+    }
+
+    /** 真正装配；异常向上抛给 {@link #start} 统一降级。 */
+    private static void startBackend(MinecraftServer server) {
+        // S17：三张世界级表随服务器装配（身份 / 部署 / 授权）；扫一趟 incoming。
+        // 【扫描不给任何特权】：候选要 OP 用命令逐条批准后才成为 Deployment（§14.4）。
+        DeploymentData deployments = DeploymentData.get(server);
+        AuthorityData authority = AuthorityData.get(server);
+        ServerPackageScanner.Scan scan = ServerPackageScanner.scan(server, deployments);
+        // 生产装配：每个已部署 App 一个 AppScope（server.js + 模块），跨调用复用、停服 discard
+        Map<String, AppScope> apps = ServerAppAssembler.assemble(deployments, scan.packages());
+
         // 必须在主线程建：StrikeTracker 的 owner 就是构造它的这条线程
         StrikeTracker strikes = new StrikeTracker(System::currentTimeMillis);
         // 没有后端的项整项不挂（E12）：item / cycle / store / sealed / currencies（本步）全是 null
         CtxBuilder.Backends backends = new CtxBuilder.Backends(new SharedState(), null, null, null, null, null);
         RhinoEvaluator evaluator = new RhinoEvaluator(apps, strikes, backends, server::execute);
-        // S17：三张世界级表随服务器装配（身份 / 部署 / 授权）；扫一趟 incoming 进候选队列。
-        // 【扫描不给任何特权】：候选要 OP 用命令逐条批准后才成为 Deployment（§14.4）。
-        DeploymentData deployments = DeploymentData.get(server);
-        AuthorityData authority = AuthorityData.get(server);
-        int queued = ServerPackageScanner.scan(server, deployments);
         ScriptPipeline pipeline = new ScriptPipeline(ServerIdentity.idOf(server),
                 new IdempotencyLedger(System::currentTimeMillis),
                 new ScriptRateLimiter(System::currentTimeMillis),
@@ -90,12 +109,7 @@ public final class ScriptHost {
         current = new ScriptHost(apps, strikes, evaluator, pipeline);
         MCphone.LOGGER.info("[MCphone] 脚本宿主已装配：apps={}，已批准部署 {}，候选 {}{}，管线已登记",
                 apps.size(), deployments.deployments().size(), deployments.candidates().size(),
-                queued == 0 ? "" : "（本次进队 " + queued + "）");
-    }
-
-    /** 开服时在主线程上调，没有 App scope 的简写。 */
-    public static synchronized void start(MinecraftServer server) {
-        start(server, Map.of());
+                scan.changed() == 0 ? "" : "（本次进队 " + scan.changed() + "）");
     }
 
     /**

@@ -175,9 +175,15 @@ public final class ScriptPipeline {
     public ScriptRpcResult land(ScriptRpc rpc, UUID player, byte[] key, ActionEvaluator.Outcome outcome) {
         try {
             if (!authority.allows(player, rpc.appId(), rpc.actionId())) {
-                // 重查没过：意图一条都不落地
-                ledger.settle(player, key, ScriptErrorCode.NOT_AUTHORIZED, new byte[0], 0, 0);
-                return ScriptRpcResult.fail(rpc.requestId(), ScriptErrorCode.NOT_AUTHORIZED);
+                // 重查没过：意图一条都不落地。但【钱已经动过】时不能回 NOT_AUTHORIZED ——
+                // 那会让玩家以为"没动、重试一下"，而钱可能已经付了（E35③）。回 UNKNOWN，客户端绝不自动重试。
+                ScriptErrorCode code = outcome.moneyMoved() ? ScriptErrorCode.UNKNOWN : ScriptErrorCode.NOT_AUTHORIZED;
+                ledger.settle(player, key, code, new byte[0], 0, 0);
+                if (code == ScriptErrorCode.UNKNOWN) {
+                    MCphone.LOGGER.warn("[MCphone] 落地前重查授权没过，但本次求值里钱已动过 app={} action={}，回 UNKNOWN 不回 NOT_AUTHORIZED",
+                            rpc.appId(), rpc.actionId());
+                }
+                return ScriptRpcResult.fail(rpc.requestId(), code);
             }
             ledger.settle(player, key, outcome.code(), outcome.data(), outcome.retryAfterMs(), outcome.stateRevision());
             return new ScriptRpcResult(rpc.requestId(), outcome.code(), outcome.data(),
