@@ -21,6 +21,7 @@ final class EvalContext {
     static final int MAX_WARNINGS = 32;
 
     private final Map<String, Object> state;
+    private final Map<String, Object> host;
     private final String file;
     private final List<String> names = new ArrayList<>();
     private final List<Object> values = new ArrayList<>();
@@ -33,7 +34,12 @@ final class EvalContext {
     int line;
 
     EvalContext(Map<String, Object> state, String file) {
+        this(state, Map.of(), file);
+    }
+
+    EvalContext(Map<String, Object> state, Map<String, Object> host, String file) {
         this.state = state;
+        this.host = ExprParser.Host.withDefaults(host);
         this.file = file;
     }
 
@@ -57,11 +63,15 @@ final class EvalContext {
         return java.util.Collections.unmodifiableList(new ArrayList<>(values));
     }
 
-    /** 循环变量先于 state：编译期已经拒了遮蔽，这里的顺序只对嵌套 v-for 的同名变量有意义。 */
+    /**
+     * 循环变量先于宿主上下文、宿主上下文先于 state：编译期已经拒了遮蔽（v-for 变量与 state 键都
+     * 不许叫 {@code backend}），这里的顺序只是把"宿主给的只读对象不许被 state 顶掉"钉死。
+     */
     Object lookup(String name) {
         for (int i = names.size() - 1; i >= 0; i--) {
             if (names.get(i).equals(name)) return values.get(i);
         }
+        if (host.containsKey(name)) return host.get(name);
         return state.get(name);
     }
 

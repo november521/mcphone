@@ -7,10 +7,13 @@ import com.november.mcphone.core.script.engine.RhinoEvaluator;
 import com.november.mcphone.core.script.engine.SharedState;
 import com.november.mcphone.core.script.engine.StrikeTracker;
 import com.november.mcphone.core.script.net.ScriptRpcHandler;
+import com.november.mcphone.core.script.pkg.AppPackage;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 
+import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.UUID;
 import java.util.UUID;
 
 /**
@@ -55,13 +58,21 @@ public final class ScriptHost {
     private final StrikeTracker strikes;
     private final RhinoEvaluator evaluator;
     private final ScriptPipeline pipeline;
+    private final UUID serverId;
+    private final DeploymentData deployments;
+    /** 生产授权视图。握手要用它把"这个玩家被授权的动作"筛出来（只给 UX）。 */
+    private final ServerAuthority authority;
 
     private ScriptHost(Map<String, AppScope> apps, StrikeTracker strikes,
-                       RhinoEvaluator evaluator, ScriptPipeline pipeline) {
+                       RhinoEvaluator evaluator, ScriptPipeline pipeline,
+                       UUID serverId, DeploymentData deployments, ServerAuthority authority) {
         this.apps = apps;
         this.strikes = strikes;
         this.evaluator = evaluator;
         this.pipeline = pipeline;
+        this.serverId = serverId;
+        this.deployments = deployments;
+        this.authority = authority;
     }
 
     /**
@@ -92,21 +103,24 @@ public final class ScriptHost {
         DeploymentData deployments = DeploymentData.get(server);
         AuthorityData authority = AuthorityData.get(server);
         ServerPackageScanner.Scan scan = ServerPackageScanner.scan(server, deployments);
-        // 生产装配：每个已部署 App 一个 AppScope（server.js + 模块），跨调用复用、停服 discard
-        Map<String, AppScope> apps = ServerAppAssembler.assemble(deployments, scan.packages());
+        // 生产装配：每个已部署 App 一个 AppScope（server.js + 模块），跨调用复用、停服 discard。
+        // 【可变表】：重装配要按 appId 换项，而 RhinoEvaluator 持有的是这个引用（读的时候看得到新 scope）
+        Map<String, AppScope> apps = new LinkedHashMap<>(ServerAppAssembler.assemble(deployments, scan.packages()));
 
         // 必须在主线程建：StrikeTracker 的 owner 就是构造它的这条线程
         StrikeTracker strikes = new StrikeTracker(System::currentTimeMillis);
         // 没有后端的项整项不挂（E12）：item / cycle / store / sealed / currencies（本步）全是 null
         CtxBuilder.Backends backends = new CtxBuilder.Backends(new SharedState(), null, null, null, null, null);
         RhinoEvaluator evaluator = new RhinoEvaluator(apps, strikes, backends, server::execute);
-        ScriptPipeline pipeline = new ScriptPipeline(ServerIdentity.idOf(server),
+        UUID serverId = ServerIdentity.idOf(server);
+        ServerAuthority authorityView = new ServerAuthority(deployments, authority);
+        ScriptPipeline pipeline = new ScriptPipeline(serverId,
                 new IdempotencyLedger(System::currentTimeMillis),
                 new ScriptRateLimiter(System::currentTimeMillis),
-                new ServerDeployments(deployments), new ServerAuthority(deployments, authority), evaluator);
+                new ServerDeployments(deployments), authorityView, evaluator);
         // 登记之后 ScriptRpcHandler.handle 才会把请求交给这条管线（此前一律 NOT_DEPLOYED）
         ScriptRpcHandler.install(pipeline);
-        current = new ScriptHost(apps, strikes, evaluator, pipeline);
+        current = new ScriptHost(apps, strikes, evaluator, pipeline, serverId, deployments, authorityView);
         MCphone.LOGGER.info("[MCphone] 脚本宿主已装配：apps={}，已批准部署 {}，候选 {}{}，管线已登记",
                 apps.size(), deployments.deployments().size(), deployments.candidates().size(),
                 scan.changed() == 0 ? "" : "（本次进队 " + scan.changed() + "）");
@@ -146,24 +160,84 @@ public final class ScriptHost {
 
     /**
      * 这个 App 现在有没有装配好的后端（也就是它此刻跑的是<b>哪一份包</b>）。
-     *
-     * <p>命令面用它拒绝"换包不重启"：`approve` 换同一个 appId 的新包时，判定读的是实时部署表
-     * （deployed/hasAction/deployRev 全来自新包），而执行用的 {@code apps} 还是开服时装配的旧包 ——
-     * 客户端按新包发、服务端跑旧包，两端都不会说话（定向对抗第 5 条）。本步不做热重载，所以只能拒绝并要重启。
      */
     public boolean hasApp(String appId) {
         return apps.containsKey(appId);
     }
 
     /**
-     * 玩家登录：给这一次连接一个新 epoch（§15.9）。管线没装（装配失败降级）时安全无操作。
+     * 批准/撤部署之后在<b>主线程</b>上重装配受影响的 App（S17 Stage 2 约束 1）。
+     *
+     * <p>做法：按当前部署表拿到新摘要 → 扫 incoming 找那个包 → {@link ServerAppAssembler#assembleOne}
+     * 建出<b>完整的新 scope</b>（含预检）→ 成功才替换 apps 表项并 {@code discard()} 旧 scope。
+     * <b>在飞的求值持有旧引用、不打断</b>；新请求走新 scope。全程主线程，不需要额外锁。
+     *
+     * <p>失败：<b>不替换</b>，并把该 App 从 apps 里摘掉 —— 请求回 {@code NOT_DEPLOYED}，
+     * 绝不出现"判定说已批准、执行却是空/旧包"的中间态；返回 false 让命令面报错。
+     *
+     * @return 成功（撤部署也算成功：表里没有就摘掉 scope）
+     */
+    public static synchronized boolean reassemble(MinecraftServer server, String appId) {
+        ScriptHost h = current();
+        if (h == null) return false;      // 脚本后端降级/未装：命令面照旧写表，重开服生效
+        Deployment d = h.deployments.deployment(appId);
+        if (d == null) {
+            h.removeApp(appId);           // 撤部署：旧 scope 消失
+            return true;
+        }
+        ServerPackageScanner.Scan scan = ServerPackageScanner.scan(server, h.deployments);
+        AppPackage pkg = scan.packages().get(d.packageDigest());
+        if (pkg == null) {
+            MCphone.LOGGER.error("[MCphone] {} 已批准，但包（{}…）不在 incoming，重装配失败：该 App 现在不可执行（NOT_DEPLOYED）。"
+                    + "把包装回待审目录后重试，或重启", appId, short8(d.packageDigest()));
+            h.removeApp(appId);
+            return false;
+        }
+        AppScope fresh = ServerAppAssembler.assembleOne(d, pkg);
+        if (fresh == null) {
+            MCphone.LOGGER.error("[MCphone] {} 的重装配失败：该 App 现在不可执行（NOT_DEPLOYED），修好后重新 approve 或重启", appId);
+            h.removeApp(appId);
+            return false;
+        }
+        AppScope old = h.apps.put(appId, fresh);
+        if (old != null) old.discard();   // 在飞的求值持有旧引用，discard 只是把 AppScope 的缓存置空
+        MCphone.LOGGER.info("[MCphone] {} 已重装配（批准轴 {}，包 {}…）", appId, d.approvalRevision(), short8(d.packageDigest()));
+        return true;
+    }
+
+    private void removeApp(String appId) {
+        AppScope old = apps.remove(appId);
+        if (old != null) old.discard();
+    }
+
+    private static String short8(String digest) {
+        return digest.substring(0, Math.min(8, digest.length()));
+    }
+
+    /** 这一局的服务器身份（§13.5），握手把它下发给客户端。 */
+    public UUID serverId() {
+        return serverId;
+    }
+
+    /** 已批准部署表。读的人必须守它的线程纪律（主线程装配/命令期写、运行期只读）。 */
+    public DeploymentData deployments() {
+        return deployments;
+    }
+
+    /** 握手筛"这个玩家被授权的动作"用（只给 UX）；判定链本身在管线里各自再查。 */
+    public boolean allows(UUID player, String appId, String actionId) {
+        return authority.allows(player, appId, actionId);
+    }
+
+    /**
+     * 玩家登录：给这一次连接一个新 epoch（§15.9）。管线没装（装配失败降级）时返回 0、安全无操作。
      *
      * <p>与 {@link #forget(UUID)} <b>必须成对</b>：只建不忘 ⇒ epochs 表按玩家无界增长；
      * 只忘不建 ⇒ 所有请求判成过期连接。两个调用点要写在同一个登录/登出接线处。
      */
-    public static void newEpoch(ServerPlayer player) {
+    public static long newEpoch(ServerPlayer player) {
         ScriptHost h = current();
-        if (h != null) h.pipeline.newEpoch(player.getUUID());
+        return h == null ? 0L : h.pipeline.newEpoch(player.getUUID());
     }
 
     /** 玩家登出：只忘 epoch，不清账本（账本保留 24 小时，跨重连命中正是它存在的理由）。 */

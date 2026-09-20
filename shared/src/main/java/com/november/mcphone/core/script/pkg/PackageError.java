@@ -29,6 +29,7 @@ public final class PackageError extends RuntimeException {
         E_PKG_MISSING_FIELD("manifest.json 缺少必填字段 '%s'"),
         E_PKG_BAD_TYPE("manifest.json 的字段 '%s' 要 %s，给的是 %s"),
         E_PKG_BAD_ID("manifest.json 的 id 要写成 namespace:path，两段都匹配 [a-z0-9_.-]{1,64}，收到 '%s'"),
+        E_PKG_ID_TOO_LONG("manifest.json 的 id 是整条 namespace:path，最长 %d 个字符，收到 %d 个（'%s'）—— 线格式与部署表都按整条算"),
         E_PKG_RESERVED_NAMESPACE("manifest.json 的 id 不许用 mcphone 命名空间：那是内建 App 的，占了会把内建 App 挡在注册表外"),
         E_PKG_BAD_VERSION("manifest.json 的 version 要写成 x.y.z 三段数字，收到 '%s'"),
         E_PKG_TEXT_TOO_LONG("manifest.json 的字段 '%s' 超长：上限 %d，收到 %d"),
@@ -122,12 +123,17 @@ public final class PackageError extends RuntimeException {
         public static final int MAX_DEPTH = 4;
 
         /**
-         * 允许的扩展名（P1 加 .js）。
+         * 允许的扩展名。
          *
          * <p>{@code vue} 是作者真正写的那个格式（§11.1）：zip 形态里入口是 {@code app.vue}、
          * 别的页在 {@code pages/} 下（§11.2）。不收它的话，§11.2 的 zip 形态一个都装不进来。
+         *
+         * <p>{@code js} 是后端模块（{@code server.js} 与 {@code server/*.js}，§11.2）
+         * 与将来客户端脚本的扩展名。少了它 {@code signApp} 与收包两侧都会拒
+         * {@code server.js}（PR #44 实跑抓到；旧断言还把"拒 .js"写成了预期，见
+         * {@code docs/ScriptPackageTest.java} 的 {@code serverJsPasses}）。
          */
-        public static final Set<String> ALLOWED_EXT = Set.of("json", "mss", "png", "txt", "vue");
+        public static final Set<String> ALLOWED_EXT = Set.of("json", "mss", "png", "txt", "vue", "js");
 
         /**
          * 禁止的扩展名。它是「不在允许清单里」的真子集，留着只为报得准：收到 evil.class 时

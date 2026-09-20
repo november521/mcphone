@@ -6,7 +6,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.november.mcphone.MCphone;
 import com.november.mcphone.core.script.pkg.AppPackage;
-import com.november.mcphone.core.script.pkg.PackageDigest;
+import com.november.mcphone.core.script.pkg.FrontendDigest;
 import com.november.mcphone.core.script.pkg.PackageError;
 import com.november.mcphone.core.script.pkg.PackageReader;
 import com.november.mcphone.core.script.pkg.TrustState;
@@ -52,8 +52,8 @@ public final class ServerPackageScanner {
     /** 一次扫描最多看几个文件，别让一堆垃圾包把开服拖住。 */
     public static final int MAX_FILES = 64;
 
-    static final String SERVER_ENTRY = "server.js";
-    static final String SERVER_DIR = "server/";
+    static final String SERVER_ENTRY = FrontendDigest.SERVER_ENTRY;
+    static final String SERVER_DIR = FrontendDigest.SERVER_DIR;
     private static final String MANIFEST = "manifest.json";
 
     private ServerPackageScanner() {
@@ -160,15 +160,11 @@ public final class ServerPackageScanner {
     /**
      * 前端摘要：内容条目里**除 {@code server.js} 与 {@code server/**} 之外**的全部。
      * 与线格式无关，纯粹是"玩家看到的那一半"的规范化摘要（Q8）。
+     *
+     * <p>谓词只有一份，在 {@link FrontendDigest} —— 客户端回显与"界面被改过"的对比也走它。
      */
     public static String frontendDigest(Map<String, byte[]> entries) {
-        Map<String, byte[]> front = new LinkedHashMap<>();
-        for (Map.Entry<String, byte[]> e : entries.entrySet()) {
-            String path = e.getKey();
-            if (path.equals(SERVER_ENTRY) || path.startsWith(SERVER_DIR)) continue;
-            front.put(path, e.getValue());
-        }
-        return PackageDigest.of(front);
+        return FrontendDigest.of(entries);
     }
 
     /** manifest 里的字符串数组；有非字符串元素就抛（调用方按拒处理）。 */

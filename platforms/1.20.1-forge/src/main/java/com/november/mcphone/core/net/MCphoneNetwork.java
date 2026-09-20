@@ -63,7 +63,10 @@ public final class MCphoneNetwork {
     // "4"：手机屏幕亮不亮那个 C2S 包（PhoneScreenOnPacket）。它插在设备名之后而不是
     // 追加在末尾，后面所有包的序号跟着平移了，两端版本对不上必须拒绝连接。
     // "5"：PhoneScreenOnPacket 改为两只手的位掩码，旧客户端不能按旧格式解码。
-    private static final String PROTOCOL_VERSION = "5";
+    // "6"：S17 Stage 2 的握手下发（script_push 三个包）里，部署项加了 approvalRevision /
+    // approvedAt 两个 varlong。字段格式变了一样要抬：旧客户端会把批准轴当动作表长度解码，
+    // 结果是"解不开 → 握手批次永远收不齐 → 本服看起来没部署"。宁可拒绝连接给人话。
+    private static final String PROTOCOL_VERSION = "6";
 
     private static final SimpleChannel CHANNEL = NetworkRegistry.newSimpleChannel(
             ResourceLocation.fromNamespaceAndPath(MCphone.MODID, "main"),

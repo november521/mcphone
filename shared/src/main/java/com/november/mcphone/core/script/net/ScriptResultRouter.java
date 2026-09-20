@@ -31,6 +31,23 @@ public final class ScriptResultRouter {
         onPush = push;
     }
 
+    /**
+     * 只装推送接收方（S17 Stage 2 的握手用）。与 {@link #install} 分开是因为调用时机不同：
+     * 握手在客户端初始化时就要收，而结果回调表要等脚本运行时（S13）到货。
+     */
+    public static void installPush(Consumer<ScriptPush> push) {
+        onPush = push;
+    }
+
+    /**
+     * 只装结果接收方（S17 Stage 2 的客户端调用用）。与 {@link #installPush} 分开：
+     * 一次进服里两方都要装，谁后装不许把谁挤掉（{@link #install} 是"两个一起换"的老口子，
+     * 留给将来真正的脚本运行时）。
+     */
+    public static void installResult(Consumer<ScriptRpcResult> result) {
+        onResult = result;
+    }
+
     /** 由各平台的登记点指过来。 */
     public static void result(ScriptRpcResult r) {
         Consumer<ScriptRpcResult> c = onResult;

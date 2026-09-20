@@ -404,6 +404,7 @@ public final class TemplateCompiler {
             String index = m.group(2);
             for (String n : index == null ? List.of(item) : List.of(item, index)) {
                 if (KEYWORDS.contains(n)) throw syntax(vFor.line, vFor.col, "'" + n + "' 不能当 v-for 的变量名");
+                if (ExprParser.Host.is(n)) throw syntax(vFor.line, vFor.col, "'" + n + "' 是宿主注入的只读名字，不能当 v-for 的变量名");
                 if (scope.isState(n)) throw SfcError.at(Code.E_TPL_SHADOW, vFor.line, vFor.col, n);
                 if (scope.isLoopVar(n)) throw syntax(vFor.line, vFor.col, "v-for 的变量 '" + n + "' 和外层 v-for 的同名，换个名字");
             }

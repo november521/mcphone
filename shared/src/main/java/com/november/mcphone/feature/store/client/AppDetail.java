@@ -2,11 +2,16 @@ package com.november.mcphone.feature.store.client;
 
 import com.november.mcphone.api.client.store.AppInfo;
 import com.november.mcphone.api.client.store.IAppSource;
+import com.november.mcphone.api.client.app.IPhoneApp;
 import com.november.mcphone.api.cost.ICost;
 import com.november.mcphone.core.client.FontPalette;
 import com.november.mcphone.core.client.PhoneScreenRegistry;
 import com.november.mcphone.core.client.PhoneSkin;
 import com.november.mcphone.core.client.PhoneTheme;
+import com.november.mcphone.core.script.client.ClientHandshake;
+import com.november.mcphone.core.script.client.LocalScriptSource;
+import com.november.mcphone.core.script.client.ScriptApp;
+import com.november.mcphone.core.script.client.ScriptAppAdapter;
 import com.november.mcphone.core.script.pkg.SigCopy;
 import com.november.mcphone.feature.store.AppPriceRegistry;
 import com.november.mcphone.feature.store.client.AppSourceRegistry;
@@ -16,6 +21,10 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
+
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 
 /**
  * 应用详情页：一个 App 的介绍、价格与唯一的按钮（购买/买不起/下载/已安装 四态）。
@@ -37,6 +46,18 @@ public final class AppDetail {
 
     /** 二次确认框的位置；没画出来时 {@code confirmBoxY} 是 -1。 */
     private int confirmBoxX, confirmBoxY = -1;
+
+    /**
+     * 「申请」按钮的位置与状态（§14.5）。没画出来时 {@code applyW} 是 0。
+     *
+     * <p>按钮本身只做一件事：把"申请通道还没接通"如实告诉玩家。真正发通知给 OP 的链路
+     * 属于审批界面那一批（Stage 3 之后），现在不该画一个点了像发出去、其实什么都没发的按钮。
+     */
+    private int applyX, applyY, applyW, applyH;
+    private boolean applyHovered;
+
+    /** 打开时查一次的本机脚本 App（装没装都查得到）；不是脚本 App 就是 null。 */
+    private ScriptApp script;
 
     private Component message = null;
 
@@ -66,6 +87,21 @@ public final class AppDetail {
         this.installedRequest = false;
         this.typedPhrase = "";
         this.confirmTicked = false;
+        this.applyW = 0;
+        this.script = target == null ? null : scriptOf(target);
+    }
+
+    /**
+     * 这个 App 是不是脚本 App，是就把它的包拿在手里（详情页三行与横幅要读包里的 server.js）。
+     *
+     * <p>已装过的走目录（{@code PhoneScreenRegistry}），没装的问本地脚本来源（会扫一次
+     * {@code mcphone/apps/}）—— 两处都只在这页打开时问一次，不每帧问。
+     */
+    private static ScriptApp scriptOf(AppInfo info) {
+        IPhoneApp installed = PhoneScreenRegistry.getApp(info.id());
+        if (installed instanceof ScriptAppAdapter adapter) return adapter.script();
+        if (!LocalScriptSource.ID.equals(info.sourceId())) return null;
+        return LocalScriptSource.scriptOf(info.id());
     }
 
     public boolean consumeBackRequest() {
@@ -132,6 +168,10 @@ public final class AppDetail {
         if (lastState != null && s != lastState) message = null;
         lastState = s;
 
+        // 空壳横幅（§13.7 的宿主兜底）：作者没写 v-if="!backend.available" 那一支时，
+        // 宿主在最上面插一条，别让玩家对着点不动的界面发呆。它是 UX，不参与任何判定
+        y = renderBackendBanner(g, font, x, y, w);
+
         if (info.iconTexture() != null) {
             GuiUtil.drawTexture(g, info.iconTexture(), x, y, BIG_ICON, BIG_ICON, BIG_ICON, BIG_ICON);
         } else {
@@ -164,6 +204,10 @@ public final class AppDetail {
             g.drawString(font, line, x, y, FontPalette.body(), false);
             y += font.lineHeight + 1;
         }
+
+        // §14.5 的三行（部署 / 授权 / 来源）+「申请」按钮：排在签名之前，
+        // 因为"为什么我装了却用不了"比签名更常被问
+        y = renderDeployment(g, font, x, y, w, bodyBottom, mouseX, mouseY);
 
         y = renderSignature(g, font, x, y, w, bodyBottom);
 
@@ -207,6 +251,142 @@ public final class AppDetail {
                 btnY + (BUTTON_H - font.lineHeight) / 2 + 1,
                 btnEnabled ? PhoneTheme.FONT_COLOR_BUTTON : PhoneTheme.FONT_COLOR_BUTTON_DISABLED,
                 false);
+    }
+
+    /**
+     * 空壳横幅（§13.7 的宿主兜底）。画的条件很窄：<b>这个 App 的包里有 {@code server.js}</b>
+     * （也就是它需要服务端那一半），而握手说本服没有它的部署。画在详情页最上面，返回新的 y。
+     *
+     * <p>作者自己写了 {@code v-if="!backend.available"} 分支时这条横幅是多余的 —— 但宿主
+     * 静态看不出作者写没写，宁可多一条也不要白屏。它只是提示，不参与任何授权判断。
+     */
+    private int renderBackendBanner(GuiGraphics g, Font font, int x, int y, int w) {
+        if (!needsBackend()) return y;
+        if (ClientHandshake.deployment(info.id().toString()) != null) return y;
+
+        var lines = font.split(Component.translatable("mcphone.store.backend_missing"), w - 8);
+        int h = lines.size() * font.lineHeight + 6;
+        g.fill(x, y, x + w, y + h, PhoneTheme.COLOR_BUTTON_DISABLED);
+        int ly = y + 3;
+        for (var line : lines) {
+            g.drawString(font, line, x + 4, ly, FontPalette.notice(), false);
+            ly += font.lineHeight;
+        }
+        return y + h + 4;
+    }
+
+    /** 这个包带不带服务端那一半。{@code server.js} 永远不下发给客户端，本地这一份就是判据。 */
+    private boolean needsBackend() {
+        return script != null && script.pkg() != null && script.pkg().entry("server.js") != null;
+    }
+
+    /**
+     * 玩家侧三行 +「申请」按钮（§14.5）。
+     *
+     * <pre>
+     * 部署   本服已部署 · 版本 3   ｜ 本服未部署
+     * 授权   你可以使用：a、b      ｜ 你还没有被授权  [申请]
+     * 来源   服务器商店 · 服主 2026-09-07 批准
+     * </pre>
+     *
+     * <p>数据来自握手（{@link ClientHandshake}）与本地包，<b>全部是展示</b>：
+     * 授权那一行就算画出"你可以使用"，服务端每次请求照样重查（§13.8）。
+     * 界面里再判一遍就会有两份判据 —— 所以这里只渲染事实。
+     */
+    private int renderDeployment(GuiGraphics g, Font font, int x, int y, int w, int bodyBottom,
+                                 int mouseX, int mouseY) {
+        applyW = 0;
+        applyHovered = false;
+        if (script == null || info == null) return y;
+
+        String appId = info.id().toString();
+        ClientHandshake.Entry entry = ClientHandshake.deployment(appId);
+        boolean deployed = entry != null;
+        if (!needsBackend() && !deployed) return y;   // 纯前端脚本 App：这三行对它没有意义
+
+        y += 3;
+
+        // 部署
+        y = factLine(g, font, x, y, w, bodyBottom, "mcphone.store.detail.deploy",
+                deployed
+                        ? Component.translatable("mcphone.store.deploy.deployed",
+                                String.valueOf(entry.approvalRevision())).getString()
+                        : Component.translatable("mcphone.store.deploy.not_deployed").getString());
+
+        // 授权 + 「申请」
+        String license = deployed && !entry.actions().isEmpty()
+                ? Component.translatable("mcphone.store.license.granted",
+                        String.join("、", entry.actions())).getString()
+                : Component.translatable("mcphone.store.license.none").getString();
+        boolean apply = !deployed || entry.actions().isEmpty();
+        String applyLabel = apply ? Component.translatable("mcphone.store.license.apply").getString() : "";
+        int btnW = apply ? font.width(applyLabel) + 8 : 0;
+        if (y + font.lineHeight <= bodyBottom) {
+            y = factLine(g, font, x, y, w - (btnW == 0 ? 0 : btnW + 4), bodyBottom,
+                    "mcphone.store.detail.license", license);
+            if (apply) {
+                applyX = x + w - btnW;
+                applyY = y - font.lineHeight - 1;
+                applyW = btnW;
+                applyH = font.lineHeight + 2;
+                applyHovered = mouseX >= applyX && mouseX <= applyX + applyW
+                        && mouseY >= applyY && mouseY <= applyY + applyH;
+                g.fill(applyX, applyY, applyX + applyW, applyY + applyH,
+                        applyHovered ? PhoneTheme.COLOR_BUTTON_HOVER : PhoneTheme.COLOR_BUTTON);
+                g.drawString(font, applyLabel, applyX + 4, applyY + 1,
+                        PhoneTheme.FONT_COLOR_BUTTON, false);
+            }
+        }
+
+        // 来源
+        String source;
+        if (deployed) {
+            source = Component.translatable("mcphone.store.source.server",
+                    date(entry.approvedAt())).getString();
+        } else {
+            IAppSource src = AppSourceRegistry.getSource(info.sourceId());
+            source = src == null
+                    ? info.sourceId().toString()
+                    : src.getDisplayName().getString();
+        }
+        y = factLine(g, font, x, y, w, bodyBottom, "mcphone.store.detail.source", source);
+
+        // 前端摘要只回显「界面被本地改过」——这不是安全边界（§13.3）：
+        // 恶意客户端伪造它什么也换不来，服务端的判定一次都不会看它。
+        // 摘要在 ScriptApp 装载时算过一次（ADV-S2b-7），这里读缓存，不在渲染路径上重算
+        if (deployed && script.frontendDigest() != null) {
+            String local = script.frontendDigest();
+            if (entry.frontendDigest() != null && !entry.frontendDigest().isEmpty()
+                    && !entry.frontendDigest().equals(local)
+                    && y + font.lineHeight <= bodyBottom) {
+                g.drawString(font, GuiUtil.truncate(font,
+                                Component.translatable("mcphone.store.frontend_modified").getString(), w),
+                        x, y, FontPalette.subtle(), false);
+                y += font.lineHeight;
+            }
+        }
+        return y + 2;
+    }
+
+    /** 一行「标签 + 内容」，标签灰、内容正常色；内容一行放不下就截断。返回新的 y。 */
+    private int factLine(GuiGraphics g, Font font, int x, int y, int w, int bodyBottom,
+                         String labelKey, String value) {
+        if (y + font.lineHeight > bodyBottom) return y;
+        String label = Component.translatable(labelKey).getString();
+        int labelW = font.width(label) + 4;
+        g.drawString(font, label, x, y, FontPalette.subtle(), false);
+        g.drawString(font, GuiUtil.truncate(font, value, Math.max(0, w - labelW)),
+                x + labelW, y, FontPalette.body(), false);
+        return y + font.lineHeight + 1;
+    }
+
+    /** 批准日期（epoch 毫秒 → 本机时区的 yyyy-MM-dd）；没有记录时给一句可读的话。 */
+    private static String date(long epochMillis) {
+        if (epochMillis <= 0L) {
+            return Component.translatable("mcphone.store.source.unknown_date").getString();
+        }
+        return DateTimeFormatter.ISO_LOCAL_DATE
+                .format(Instant.ofEpochMilli(epochMillis).atZone(ZoneId.systemDefault()));
     }
 
     /**
@@ -332,6 +512,14 @@ public final class AppDetail {
 
     public boolean mouseClicked(double mx, double my, int button) {
         if (info == null) return false;
+
+        // 「申请」（§14.5）：现在只如实说"通道还没接通"，不假装发出去了一条通知。
+        // 真链路（通知 OP / 审批界面）到货时把这里换成发送，界面其余部分不用动
+        if (applyW > 0 && mx >= applyX && mx <= applyX + applyW
+                && my >= applyY && my <= applyY + applyH) {
+            message = Component.translatable("mcphone.store.license.apply_hint");
+            return true;
+        }
 
         AppInfo.Signature sig = info.signature();
         if (sig != null && sig.needsConfirm() && confirmBoxY >= 0

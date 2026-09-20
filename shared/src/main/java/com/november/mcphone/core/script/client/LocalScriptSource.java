@@ -196,6 +196,14 @@ public final class LocalScriptSource implements IAppSource {
         return null;
     }
 
+    /**
+     * 给商店详情页用（§14.5）：按 id 找本机的脚本 App，<b>装没装都找得到</b>；不是脚本 App
+     * 时返回 null。详情页在 {@code open()} 时问一次并记住，不要每帧问 —— 它会扫目录。
+     */
+    public static ScriptApp scriptOf(ResourceLocation appId) {
+        return appId == null ? null : find(appId);
+    }
+
     /** 给界面用：判这个包属于哪一档（§12.4）。<b>UI 只渲染，不再判一遍。</b> */
     public static TrustState.Verdict trustOf(ScriptApp app) {
         if (app.pkg() == null) {

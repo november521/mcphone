@@ -118,7 +118,7 @@ public final class SfcCompiler {
         List<Object> args = e.args();
         String field = switch (e.code()) {
             case E_PKG_BAD_FORMAT -> "format";
-            case E_PKG_BAD_ID, E_PKG_RESERVED_NAMESPACE -> "id";
+            case E_PKG_BAD_ID, E_PKG_ID_TOO_LONG, E_PKG_RESERVED_NAMESPACE -> "id";
             case E_PKG_BAD_VERSION -> "version";
             case E_PKG_BAD_ICON -> "icon";
             case E_PKG_BAD_TYPE, E_PKG_TEXT_TOO_LONG, E_PKG_TEXT_CONTROL_CHAR, E_PKG_MANIFEST_DUP_KEY ->

@@ -324,7 +324,7 @@ public class SfcCompilerTest {
 
     static Ran run(String src, UiState s) {
         Statements st = Statements.parse(src, ExprParser.Scope.of(s.values()), 1, 1);
-        return new Ran(s, st.run(s, "test.vue", List.of(), List.of()));
+        return new Ran(s, st.run(s, "test.vue", List.of(), List.of(), Map.of()));
     }
 
     // ============================================================
@@ -756,7 +756,7 @@ public class SfcCompilerTest {
         check(!mixed.outcome().applied() && mixed.state().get("items").equals(List.of(1, 2)), "@click 写入不同构的数组整组不执行");
         Ran longer = run("title = title + title + title", state("title", "x".repeat(30)));
         eq(longer.state().getString("title").length(), 30, "@click 写入超过 64 字的字符串整组不执行");
-        check(!Statements.parse("count = 1", EXPR_SCOPE, 1, 1).run(UiState.empty(), "t.vue", List.of(), List.of()).applied(),
+        check(!Statements.parse("count = 1", EXPR_SCOPE, 1, 1).run(UiState.empty(), "t.vue", List.of(), List.of(), Map.of()).applied(),
                 "state 里没有这个 key 时不抛，整组不执行");
         check(state("title", "x").writeProblem("title", "y".repeat(65)) != null, "作者写入（@click）挡超长字符串");
         check(caught(() -> state("title", "x").set("title", "y".repeat(65))) == null, "宿主写入不套 64 字：服务端数据可以更长");
@@ -1205,7 +1205,7 @@ public class SfcCompilerTest {
             }));
             tally(kinds, passed, others, statement, "statement", caught(() -> {
                 UiState s = UiState.of(st.values());
-                Statements.parse(statement, scope, 1, 1).run(s, "fuzz.vue", List.of(), List.of());
+                Statements.parse(statement, scope, 1, 1).run(s, "fuzz.vue", List.of(), List.of(), Map.of());
             }));
             tally(kinds, passed, others, script, "script", caught(() -> ScriptParser.parse(script)));
         }

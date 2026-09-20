@@ -14,8 +14,8 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * {@code @click} 的值（施工方案 §9.6）：赋值、自增减、内建 close() / back() / nav(...)，用 ; 连接最多 4 条。
- * 它不是表达式语言的一部分，所以 {@code {{ count++ }}} 报的是不能赋值。
+ * {@code @click} 的值（施工方案 §9.6）：赋值、自增减、内建 close() / back() / nav(...) / call('动作')，
+ * 用 ; 连接最多 4 条。它不是表达式语言的一部分，所以 {@code {{ count++ }}} 报的是不能赋值。
  *
  * <p>按书写顺序在一份副本上执行，全部成功才写回 state：半执行的状态比不执行更难排查。
  */
@@ -23,9 +23,13 @@ public final class Statements {
 
     public static final int MAX_STATEMENTS = 4;
 
-    private static final String SHAPES = "@click 只能写 x = 表达式、x++、x--、close()、back()、nav('页面')";
+    /** {@code call(...)} 里动作 id 的长度上限，与 {@code ScriptProtocol.ID_MAX} 一致（那份是线格式，这里是编译期）。 */
+    public static final int MAX_ACTION_LEN = 64;
 
-    sealed interface Stmt permits Assign, Step, Close, Back, Nav {
+    private static final String SHAPES =
+            "@click 只能写 x = 表达式、x++、x--、close()、back()、nav('页面')、call('动作')";
+
+    sealed interface Stmt permits Assign, Step, Close, Back, Nav, Call {
     }
 
     record Assign(String key, Expr.Compiled value) implements Stmt {
@@ -43,17 +47,24 @@ public final class Statements {
     record Nav(Expr.Compiled page) implements Stmt {
     }
 
+    /** 宿主转发的一条 RPC（§15.1）。参数与回调还写不了（P1 的 <script>），这里只点一下发空参数。 */
+    record Call(String actionId) implements Stmt {
+    }
+
     /**
-     * 一次点击的结果。applied 为 false 时 state 一个都没改，close / back / nav 也都不算数。
+     * 一次点击的结果。applied 为 false 时 state 一个都没改，close / back / nav / call 也都不算数。
      * close、back、nav 同时出现时由页面决定先后，这里只如实报出写了哪些。
+     * {@code calls} 是要宿主发出去的动作 id，按书写顺序。
      */
-    public record Outcome(boolean applied, boolean close, boolean back, String nav, List<String> warnings) {
+    public record Outcome(boolean applied, boolean close, boolean back, String nav,
+                          List<String> calls, List<String> warnings) {
     }
 
     /** 实例化时绑好 v-for 变量的一条 @click，点击时执行。 */
-    public record Bound(Statements statements, List<String> names, List<Object> values) {
+    public record Bound(Statements statements, List<String> names, List<Object> values,
+                        java.util.Map<String, Object> host) {
         public Outcome run(UiState state, String file) {
-            return statements.run(state, file, names, values);
+            return statements.run(state, file, names, values, host);
         }
     }
 
@@ -108,11 +119,28 @@ public final class Statements {
                     p.expect(")");
                     return new Nav(compiled(page, t, src));
                 }
+                case "call" -> {
+                    p.next();
+                    Tok arg = p.next();
+                    if (arg.kind() != 's') throw ExprParser.syntax(arg, "call(...) 要一个动作名字符串，比如 call('claim_daily')");
+                    String action = (String) arg.value();
+                    if (action.isEmpty() || action.length() > MAX_ACTION_LEN) {
+                        throw ExprParser.syntax(arg, "动作名要 1–" + MAX_ACTION_LEN + " 个字符");
+                    }
+                    for (int i = 0; i < action.length(); i++) {
+                        if (Character.isISOControl(action.charAt(i))) {
+                            throw ExprParser.syntax(arg, "动作名里不能有控制字符");
+                        }
+                    }
+                    p.expect(")");
+                    return new Call(action);
+                }
                 default -> throw SfcError.at(Code.E_EXPR_NO_CALLS, t.line(), t.col());
             }
         }
 
         if (ExprParser.is(after, "=") || ExprParser.is(after, "++") || ExprParser.is(after, "--")) {
+            if (ExprParser.Host.is(name)) throw ExprParser.syntax(t, name + " 是宿主注入的只读对象，不能赋值");
             if (scope.isLoopVar(name)) throw ExprParser.syntax(t, "v-for 的变量 '" + name + "' 不能赋值，只能赋给 state 里的 key");
             if (!scope.isState(name)) throw ExprParser.unknownIdent(t, scope.names());
             p.next();
@@ -179,13 +207,15 @@ public final class Statements {
         return new Expr.Compiled(t.expr(), at.line(), src);
     }
 
-    Outcome run(UiState state, String file, List<String> names, List<Object> values) {
+    Outcome run(UiState state, String file, List<String> names, List<Object> values,
+                Map<String, Object> host) {
         Map<String, Object> scratch = new LinkedHashMap<>(state.values());
-        EvalContext c = new EvalContext(scratch, file);
+        EvalContext c = new EvalContext(scratch, host, file);
         for (int i = 0; i < names.size(); i++) c.push(names.get(i), values.get(i));
         boolean close = false;
         boolean back = false;
         String nav = null;
+        List<String> calls = new ArrayList<>();
         Set<String> changed = new LinkedHashSet<>();
         for (Stmt s : list) {
             c.line = line;
@@ -206,6 +236,8 @@ public final class Statements {
                 Object v = nv.page().run(c);
                 if (!(v instanceof String page)) return failed(c, "nav(...) 要页面名字符串，得到的是 " + Values.kind(v));
                 nav = page;
+            } else if (s instanceof Call call) {
+                calls.add(call.actionId());
             } else if (s instanceof Close) {
                 close = true;
             } else {
@@ -213,11 +245,11 @@ public final class Statements {
             }
         }
         for (String k : changed) state.set(k, scratch.get(k));
-        return new Outcome(true, close, back, nav, c.warnings());
+        return new Outcome(true, close, back, nav, List.copyOf(calls), c.warnings());
     }
 
     private static Outcome failed(EvalContext c, String reason) {
         c.warn(reason + "，这组 @click 一条都不执行");
-        return new Outcome(false, false, false, null, c.warnings());
+        return new Outcome(false, false, false, null, List.of(), c.warnings());
     }
 }

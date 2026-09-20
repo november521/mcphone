@@ -1,6 +1,7 @@
 package com.november.mcphone.core.script.client;
 
 import com.november.mcphone.core.script.pkg.AppPackage;
+import com.november.mcphone.core.script.pkg.FrontendDigest;
 import com.november.mcphone.core.script.pkg.Manifest;
 import com.november.mcphone.core.script.sfc.SfcCompiler;
 import net.minecraft.resources.ResourceLocation;
@@ -19,6 +20,9 @@ import java.util.Map;
  *   <li>zip：清单是 {@code manifest.json}，入口是 {@code app.vue}，{@code pages/*.vue} 是别的页，
  *       素材在 {@code assets/} 下，图标是包里那张 png。</li>
  * </ul>
+ *
+ * <p>{@link #frontendDigest()} 在装载时算一次存下（ADV-S2b-7）：详情页的每帧渲染与每次点击都要读它，
+ * 而算一次摘要是 SHA-256 过一遍整个包（合法上限 1 MiB）。单文件形态没有包，为 null。
  */
 public record ScriptApp(
         ResourceLocation id,
@@ -32,7 +36,16 @@ public record ScriptApp(
         /** 图标的原始 PNG 字节，没有就是 null。 */
         byte[] icon,
         /** 从哪个文件读来的，只用于日志与重装。 */
-        String file) {
+        String file,
+        /** 前端摘要（服务端谓词的那一份，见 {@link FrontendDigest}）；单文件形态为 null。 */
+        String frontendDigest) {
+
+    /** 装载时把摘要算好，别让渲染路径自己去算。 */
+    public static ScriptApp of(ResourceLocation id, Manifest manifest, AppPackage pkg,
+                               SfcCompiler.Page entry, Map<String, SfcCompiler.Page> pages,
+                               byte[] icon, String file) {
+        return new ScriptApp(id, manifest, pkg, entry, pages, icon, file, FrontendDigest.of(pkg));
+    }
 
     /** {@code nav(name)} 要的那一页；空串是入口页，找不到返回 null。 */
     public SfcCompiler.Page page(String name) {

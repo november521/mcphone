@@ -36,10 +36,12 @@ public final class Handshake {
      *
      * @param serverId   §13.5 的服务器身份，存在存档里
      * @param serverName 显示名
-     * @param scriptApi  服务端支持的脚本 API 版本。App 声明的版本高于它 → 商店标「需要服务端更新」
+     * @param scriptApi  {@link ScriptProtocol#SCRIPT_API}，<b>握手线格式版本</b>。客户端对不上就
+     *                   整批不应用（Fabric 没有加载器级闸，这是唯一能识别混版本的地方）
      * @param epoch      这一次连接的标签。客户端之后每个 {@link ScriptRpc} 都要原样回填
-     * @param count      接下来会推几条 deployment；大于 {@link ScriptProtocol#HANDSHAKE_MAX_DEPLOYMENTS}
-     *                   时一条都不推，客户端按需去拉
+     * @param count      接下来会推几条 deployment。<b>只数真正会推出去的</b>：编码后超过
+     *                   {@link ScriptProtocol#DATA_MAX} 的条目在服务端就整条跳过、不计入，
+     *                   没有"条数封顶"这回事（每条能不能装下由它自己的字节数决定）
      * @param features   服主开了哪些口子
      */
     public record Begin(UUID serverId, String serverName, int scriptApi, long epoch,
@@ -56,9 +58,12 @@ public final class Handshake {
      * @param actions <b>只含当前玩家被授权的动作</b>（§13.8）。它是 UX 用的 ——
      *                客户端据此把没授权的按钮画灰，<b>不是安全边界</b>，
      *                真正的判定在服务端落地前那一次重查
+     * @param approvalRevision 批准轴（同一 App 每次批准 +1），详情页"版本 N"显示的就是它。
+     *                         <b>不参与</b> deployRev 对齐（那是包轴，见 {@link Deployment#revision()}）
+     * @param approvedAt 批准时刻（epoch 毫秒），详情页来源行用；0 表示没记
      */
     public record Deployment(String appId, String deployRev, String frontendDigest,
-                             int visibility, List<String> actions) {
+                             int visibility, long approvalRevision, long approvedAt, List<String> actions) {
     }
 
     /** 最后一条。带着同一个 epoch，客户端据此确认这一批是完整的。 */
@@ -93,6 +98,8 @@ public final class Handshake {
         buf.writeUtf(d.deployRev(), ScriptProtocol.ID_MAX);
         buf.writeUtf(d.frontendDigest(), ScriptProtocol.DIGEST_MAX);
         buf.writeVarInt(d.visibility());
+        buf.writeVarLong(d.approvalRevision());
+        buf.writeVarLong(d.approvedAt());
         Wire.writeList(buf, d.actions(), ScriptProtocol.MAX_ACTIONS_PER_DEPLOYMENT,
                 (s, b) -> b.writeUtf(s, ScriptProtocol.ID_MAX));
         return bytes(buf);
@@ -105,6 +112,8 @@ public final class Handshake {
                 buf.readUtf(ScriptProtocol.ID_MAX),
                 buf.readUtf(ScriptProtocol.DIGEST_MAX),
                 buf.readVarInt(),
+                buf.readVarLong(),
+                buf.readVarLong(),
                 Wire.readList(buf, ScriptProtocol.MAX_ACTIONS_PER_DEPLOYMENT,
                         b -> b.readUtf(ScriptProtocol.ID_MAX)));
     }
@@ -122,6 +131,19 @@ public final class Handshake {
     /** 包成一条推送。{@code revision} 由调用方按顺序给，客户端据此判乱序。 */
     public static ScriptPush push(String topic, byte[] data, long revision) {
         return new ScriptPush(ScriptProtocol.HOST_APP_ID, topic, data, revision);
+    }
+
+    /**
+     * 这条部署在握手线上要多少字节（取<b>已批准动作全集</b>，是实际上限：推给某个玩家时只会更少）。
+     * <b>批准期就要用它</b>：超过 {@link ScriptProtocol#DATA_MAX} 的部署客户端永远收不到，
+     * 批了也白批（表现是"本服没部署"）。运行时的整条跳过只是老存档的兜底。
+     *
+     * <p>参数类型写全限定名：本类里有一个同名的嵌套 {@link Deployment}（线上的那条），
+     * 简单名会被它遮住。
+     */
+    public static int wireSize(com.november.mcphone.core.script.server.Deployment d) {
+        return encodeDeployment(new Deployment(d.appId(), d.revision(), d.frontendDigest(), 0,
+                d.approvalRevision(), d.approvedAt(), d.approvedActions())).length;
     }
 
     private static FriendlyByteBuf buffer() {

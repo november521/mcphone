@@ -51,7 +51,56 @@ final class ExprParser {
     record Typed(Expr expr, T type, T elem, int nodes) {
     }
 
-    /** 编译期的名字表：state 的 key 与外层 v-for 的变量。不可变，进一层 v-for 包一层。 */
+    /**
+     * 宿主注入的只读名字（§13.8）。编译期就要知道它们是"声明过的"（否则模板里写
+     * {@code backend.available} 会被当成拼错的 state 键拒掉），但<b>不能</b>写进 state、
+     * 也不许赋值 —— 它们是宿主给的，不是 App 的数据。
+     *
+     * <p>目前只有一个 {@code backend}，形状是 {@code {available, serverName, actions}}；
+     * 它不是安全边界，只是让作者能把"本服没部署"的分支画出来。
+     */
+    static final class Host {
+
+        static final String BACKEND = "backend";
+
+        private Host() {
+        }
+
+        static boolean is(String name) {
+            return BACKEND.equals(name);
+        }
+
+        /** 编译期的静态类型；不是宿主名字返回 null。 */
+        static T typeOf(String name) {
+            return is(name) ? T.OBJ : null;
+        }
+
+        static java.util.Collection<String> names() {
+            return java.util.List.of(BACKEND);
+        }
+
+        /**
+         * 没有宿主喂值时的缺省形状：{@code available=false}、空名字、空动作表。
+         * 形状齐全比缺键好 —— 表达式里的 {@code backend.actions.length} 在缺键时是 null，
+         * 在缺省形状下是 0，后者才是"没有可用的动作"的正确表现。
+         */
+        static Map<String, Object> defaults() {
+            return Map.of(BACKEND, Map.of(
+                    "available", false,
+                    "serverName", "",
+                    "actions", java.util.List.of()));
+        }
+
+        /** 把宿主表补成"至少有一个形状齐全的 backend"。 */
+        static Map<String, Object> withDefaults(Map<String, Object> host) {
+            if (host != null && host.containsKey(BACKEND)) return host;
+            Map<String, Object> out = new java.util.LinkedHashMap<>(defaults());
+            if (host != null) out.putAll(host);
+            return out;
+        }
+    }
+
+    /** 编译期的名字表：state 的 key、宿主注入的只读名字与外层 v-for 的变量。不可变，进一层 v-for 包一层。 */
     static final class Scope {
         private final Map<String, Object> state;
         private final Scope parent;
@@ -91,7 +140,8 @@ final class ExprParser {
             for (Scope s = this; s.parent != null; s = s.parent) {
                 if (s.name.equals(n)) return s.type;
             }
-            return state.containsKey(n) ? T.of(state.get(n)) : null;
+            if (state.containsKey(n)) return T.of(state.get(n));
+            return Host.typeOf(n);
         }
 
         /** state 数组的元素按初值推：写入必须与初值同形（UiState.writeProblem / set），推断才成立。初值是空数组时不知道。 */
@@ -111,6 +161,7 @@ final class ExprParser {
         Collection<String> names() {
             Set<String> out = new TreeSet<>(state.keySet());
             for (Scope s = this; s.parent != null; s = s.parent) out.add(s.name);
+            out.addAll(Host.names());
             return out;
         }
     }

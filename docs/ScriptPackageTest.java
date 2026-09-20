@@ -87,6 +87,7 @@ public class ScriptPackageTest {
         pathRuleDetails();
         manifestRules();
         happyPath();
+        serverJsPasses();
         maliciousZips();
         forgedZips();
 
@@ -192,7 +193,11 @@ public class ScriptPackageTest {
         // .vue 是作者真正写的那个格式（§11.1）：不收它的话 §11.2 的 zip 形态一个都装不进来
         eq(codeOf(() -> PathRules.require("app.vue")), null, "收 .vue");
         eq(codeOf(() -> PathRules.require("pages/detail.vue")), null, "pages/ 下的 .vue 也收");
-        eq(codeOf(() -> PathRules.require("evil.js")), Code.E_PKG_BAD_EXT, "P0 还不收 .js");
+        // PR #44 实跑抓到的洞：原先这里断言"P0 还不收 .js"，而设计侧全程用 server.js ——
+        // 白名单少一个 js，signApp 与收包两侧都会拒掉后端模块。预期不许再写反
+        eq(codeOf(() -> PathRules.require("server.js")), null, "收 .js（后端入口 server.js）");
+        eq(codeOf(() -> PathRules.require("server/util.js")), null, "server/ 下的 .js 模块也收");
+        eq(codeOf(() -> PathRules.require("evil.yaml")), Code.E_PKG_BAD_EXT, "白名单外的扩展名照拒");
         eq(codeOf(() -> PathRules.require("../x.json")), Code.E_PKG_BAD_PATH, "形状不对报 BAD_PATH");
         eq(codeOf(() -> PathRules.requireAll(List.of("Icon.png", "icon.PNG"))), Code.E_PKG_DUP_PATH,
            "撞车报 DUP_PATH");
@@ -262,6 +267,18 @@ public class ScriptPackageTest {
         eq(codeOf(() -> Manifest.parse(with("id", "\"example:\""))), Code.E_PKG_BAD_ID, "id 的 path 不许空");
         eq(codeOf(() -> Manifest.parse(with("id", "\"mcphone:notice\""))), Code.E_PKG_RESERVED_NAMESPACE,
            "mcphone 命名空间是内建 App 的");
+
+        // ADV-S2b-3：ID_SEGMENT 的 64 是【每段】上限，整条 id 另有 64 的上限
+        // （与 ScriptProtocol.ID_MAX / Deployment.MAX_ID_LEN 同一个数）。不限整条的话，
+        // 两段各 64 能拼出 129 字符的 id：客户端装得下、ScriptRpc 编码不出来、服务端永远批不了
+        String seg64 = "x".repeat(64);
+        String total64 = "a:" + "b".repeat(62);
+        eq(Manifest.parse(with("id", "\"" + total64 + "\"")).id(), total64, "整条 id 恰好 64 字符：通过");
+        eq(codeOf(() -> Manifest.parse(with("id", "\"a:" + seg64 + "\""))), Code.E_PKG_ID_TOO_LONG,
+           "整条 66 字符：拒绝（每段都合法也不行）");
+        eq(codeOf(() -> Manifest.parse(with("id", "\"" + seg64 + ":" + seg64 + "\""))),
+           Code.E_PKG_ID_TOO_LONG, "两段各 64 拼出 129 字符：拒绝");
+        eq(Manifest.MAX_ID, 64, "整条 id 上限与线格式的 64 是同一个数（改一处必须三处一起改）");
 
         eq(codeOf(() -> Manifest.parse(with("version", "\"1.0\""))), Code.E_PKG_BAD_VERSION, "version 要三段");
         eq(codeOf(() -> Manifest.parse(with("version", "\"1.0.0-beta\""))), Code.E_PKG_BAD_VERSION,
@@ -403,6 +420,47 @@ public class ScriptPackageTest {
         byte[] metaExtraZip = zip(metaExtra);
         eq(codeOf(() -> PackageReader.read(metaExtraZip)), Code.E_PKG_META_EXTRA,
            "META/ 下多一个文件就拒整包");
+    }
+
+    // ============================================================
+    //  server.js 必须过得去（PR #44 实跑抓到）
+    // ============================================================
+
+    /**
+     * 白名单漏了 {@code js}：设计侧全程按 {@code server.js} / {@code server/*.js} 取后端
+     * （{@code FrontendDigest.SERVER_ENTRY}、{@code PackageReader}、{@code ServerPackageScanner}），
+     * 而 {@link PathRules#ALLOWED_EXT} 里没有它 —— {@code signApp} 第一步就拒真包。
+     *
+     * <p>这条用例**真走读包路径**（{@link PackageReader#read(byte[])}）与**签名路径**
+     * （{@link AppSigner#readDir(Path)}），不像旧用例那样把条目直接塞进 Map 绕开白名单。
+     */
+    static void serverJsPasses() throws Exception {
+        Map<String, byte[]> entries = goodEntries();
+        entries.put("server.js", b("actions.ping = function (ctx) { return ctx.ok({}); };\n"));
+        entries.put("server/util.js", b("var util = {};\n"));
+
+        AppPackage pkg = PackageReader.read(zip(entries));
+        check(pkg.entry("server.js") != null, "带 server.js 的包能过读包白名单");
+        check(pkg.entry("server/util.js") != null, "server/ 下的 .js 模块也能过");
+
+        // 签名侧：AppSigner.readDir 先跑 PathRules.require，对同一批文件要给出同一份条目表
+        Path dir = Files.createTempDirectory("mcphone-sign-readdir");
+        try {
+            for (Map.Entry<String, byte[]> e : entries.entrySet()) {
+                Path f = dir.resolve(e.getKey());
+                Files.createDirectories(f.getParent());
+                Files.write(f, e.getValue());
+            }
+            Map<String, byte[]> read = AppSigner.readDir(dir);
+            check(read.containsKey("server.js"), "signApp 的读目录能收 server.js");
+            check(read.containsKey("server/util.js"), "signApp 的读目录能收 server/util.js");
+        } finally {
+            try (var walk = Files.walk(dir)) {
+                for (Path p : walk.sorted(java.util.Comparator.reverseOrder()).toList()) {
+                    Files.deleteIfExists(p);
+                }
+            }
+        }
     }
 
     // ============================================================

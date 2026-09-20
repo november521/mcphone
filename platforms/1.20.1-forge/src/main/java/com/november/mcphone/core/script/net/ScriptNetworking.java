@@ -32,5 +32,9 @@ public final class ScriptNetworking {
                 ScriptResultRouter::push);
 
         ScriptRpcHandler.installSender(MCphoneNetwork::sendToPlayer);
+        // S17 Stage 2：服务端主动推送（握手）
+        ScriptPushHandler.installSender(MCphoneNetwork::sendToPlayer);
+        // S17 Stage 2：客户端发出的脚本调用。这一支 sendToServer 收 Object，record 直接用
+        com.november.mcphone.core.script.client.ScriptCall.installSender(MCphoneNetwork::sendToServer);
     }
 }

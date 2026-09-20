@@ -142,7 +142,7 @@ public final class ScriptAppFolder {
     private static ScriptApp single(String name, String src) {
         SfcCompiler.App compiled = SfcCompiler.compile(name, src);
         Manifest manifest = compiled.manifest();
-        return new ScriptApp(idOf(manifest), manifest, null,
+        return ScriptApp.of(idOf(manifest), manifest, null,
                 new SfcCompiler.Page(compiled.stylesheet(), compiled.template()), Map.of(),
                 inlineIcon(manifest), name);
     }
@@ -166,7 +166,7 @@ public final class ScriptAppFolder {
             pages.put(page, SfcCompiler.compilePage(path, text(pkg, path)));
         }
         SfcCompiler.Page entry = SfcCompiler.compilePage(entryPath, text(pkg, entryPath));
-        return new ScriptApp(idOf(manifest), manifest, pkg, entry, Map.copyOf(pages),
+        return ScriptApp.of(idOf(manifest), manifest, pkg, entry, Map.copyOf(pages),
                 pkg.entry(manifest.icon()), name);
     }
 

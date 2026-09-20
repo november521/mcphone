@@ -84,6 +84,19 @@ public final class MCphoneClient {
         IEventBus modBus = context.getModEventBus();
 
         modBus.addListener(ClientConfig::onLoad);
+
+        // S17 Stage 2：接住服务端握手（serverId / epoch / 部署表）。必须在进服之前装好 ——
+        // 握手是登录时推的，晚了就丢了（丢了的表现是 connectionEpoch 恒 0，请求判过期连接）
+        com.november.mcphone.core.script.client.ClientHandshake.install();
+        // S17 Stage 2：接住脚本调用结果（@click 的 call(...) 与调试命令）
+        com.november.mcphone.core.script.client.ScriptCall.install();
+
+        // S17 Stage 2：客户端脚本诊断命令（看握手 / 伪造字段发原始 RPC，验收剧本 3/4/5 用）。
+        // 只在客户端本地执行，不发给服务端；与 OP 的 /mcphone script 不共根名
+        MinecraftForge.EVENT_BUS.addListener(
+                (net.minecraftforge.client.event.RegisterClientCommandsEvent event) ->
+                        com.november.mcphone.core.script.client.ScriptClientCommand.register(
+                                event.getDispatcher(), (src, msg) -> src.sendSuccess(() -> msg, false)));
         modBus.addListener(ClientConfig::onReload);
         context.registerConfig(ModConfig.Type.CLIENT, ClientConfig.SPEC);
 
@@ -137,6 +150,10 @@ public final class MCphoneClient {
                     // 排在最前：它要在下面那些缓存被清掉之前把会话存下来。
                     // 这条路上不能碰 setScreen，理由见 PhoneHud.onWorldLeave
                     PhoneHud.onWorldLeave();
+                    // S17 Stage 2：断线清掉握手状态（serverId/epoch/部署表），下次进服重新握
+                    com.november.mcphone.core.script.client.ClientHandshake.clear();
+                    // S17 Stage 2：在飞的脚本调用一并丢掉（旧连接的迟到结果回来时已无主）
+                    com.november.mcphone.core.script.client.ScriptCall.clear();
 
                     // 去重用的记忆跟着世界走：不清的话，进新世界开手机会因为"和上次一样"
                     // 被判成没变，那部手机在别人眼里就不亮

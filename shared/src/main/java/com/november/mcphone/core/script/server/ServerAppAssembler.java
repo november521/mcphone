@@ -45,27 +45,37 @@ public final class ServerAppAssembler {
                         d.appId(), short8(d.packageDigest()));
                 continue;
             }
-            Map<String, String> sources = new LinkedHashMap<>();
-            for (String path : pkg.paths()) {
-                if (!isBackendModule(path)) continue;
-                sources.put(path, new String(pkg.entry(path), StandardCharsets.UTF_8));
-            }
-            if (!sources.containsKey(AppScope.ENTRY)) {
-                MCphone.LOGGER.warn("[MCphone] {} 的包里没有 {}，本次不装配后端", d.appId(), AppScope.ENTRY);
-                continue;
-            }
-            try {
-                // 模块条数与规范名的校验在 AppScope/ScriptModules 构造器里；超限就跳过这个 App
-                AppScope app = new AppScope(d.appId(), ScriptBudget.server(), sources);
-                if (preflight(app)) apps.put(d.appId(), app);
-            } catch (Throwable t) {
-                MCphone.LOGGER.warn("[MCphone] {} 的模块表装不起来（{}），跳过这个 App", d.appId(), t.toString());
-            }
+            AppScope app = assembleOne(d, pkg);
+            if (app != null) apps.put(d.appId(), app);
         }
         if (!apps.isEmpty()) {
             MCphone.LOGGER.info("[MCphone] 已装配 {} 个 App 后端：{}", apps.size(), String.join("、", apps.keySet()));
         }
         return apps;
+    }
+
+    /**
+     * 装配<b>单个</b> App 的后端（含装配期预检）。失败返回 {@code null}（已记日志），调用方据此
+     * 决定"跳过"还是"回滚 + 标记不可执行"。重装配路径复用它，保证两条路装出来的是同一个东西。
+     */
+    static AppScope assembleOne(Deployment d, AppPackage pkg) {
+        Map<String, String> sources = new LinkedHashMap<>();
+        for (String path : pkg.paths()) {
+            if (!isBackendModule(path)) continue;
+            sources.put(path, new String(pkg.entry(path), StandardCharsets.UTF_8));
+        }
+        if (!sources.containsKey(AppScope.ENTRY)) {
+            MCphone.LOGGER.warn("[MCphone] {} 的包里没有 {}，本次不装配后端", d.appId(), AppScope.ENTRY);
+            return null;
+        }
+        try {
+            // 模块条数与规范名的校验在 AppScope/ScriptModules 构造器里；超限就跳过这个 App
+            AppScope app = new AppScope(d.appId(), ScriptBudget.server(), sources);
+            return preflight(app) ? app : null;
+        } catch (Throwable t) {
+            MCphone.LOGGER.warn("[MCphone] {} 的模块表装不起来（{}），跳过这个 App", d.appId(), t.toString());
+            return null;
+        }
     }
 
     /** 后端模块的谓词：{@code server.js} 与 {@code server/**} 里的 {@code .js}（前端 js 不进服务端模块表）。 */
