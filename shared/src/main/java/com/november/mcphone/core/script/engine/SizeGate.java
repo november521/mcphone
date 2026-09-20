@@ -3,6 +3,7 @@ package com.november.mcphone.core.script.engine;
 import org.mozilla.javascript.NativeArray;
 import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
+import org.mozilla.javascript.SymbolKey;
 
 import java.util.Collections;
 import java.util.IdentityHashMap;
@@ -76,6 +77,16 @@ public final class SizeGate {
 
     /** Validate one wrapped Rhino native call before the native implementation gets control. */
     public static void checkNativeCall(String holder, String method, Object thisObj, Object[] args) {
+        if ("Array".equals(holder)) {
+            checkAll(args, holder + "." + method + " 的参数");
+            if ("from".equals(method)) {
+                checkArrayFrom(args);
+            } else if ("of".equals(method) && args != null && args.length > MAX_ARRAY) {
+                tooLarge("Array.of", args.length, MAX_ARRAY);
+            }
+            return;
+        }
+
         if ("JSON".equals(holder)) {
             checkAll(args, holder + "." + method + " 的参数");
             if ("stringify".equals(method) && args != null && args.length > 0) {
@@ -99,6 +110,96 @@ public final class SizeGate {
             long receiverLength = stringReceiverLength(thisObj, holder + "." + method);
             checkAll(args, holder + "." + method + " 的参数");
             checkStringAmplification(method, receiverLength, args);
+        }
+    }
+
+    /**
+     * Validate both branches of Rhino's Array.from before it allocates its result.
+     *
+     * <p>Custom iterables are deliberately rejected. Counting one requires consuming it, which can
+     * run arbitrary script twice, never terminate, or leave a generator in Rhino's broken abort
+     * state. Native arrays and strings keep their built-in, statically bounded iterators; plain
+     * objects use only a data-valued own length and therefore take the array-like branch.
+     */
+    private static void checkArrayFrom(Object[] args) {
+        if (args == null || args.length == 0 || args[0] == null
+                || args[0] == org.mozilla.javascript.Undefined.instance) {
+            return; // Let Rhino preserve its normal TypeError for null/undefined.
+        }
+        if (args.length > 1 && args[1] != org.mozilla.javascript.Undefined.instance) {
+            // The callback can grow an iterable source while it is being consumed, and its output
+            // shape cannot be estimated without executing script during preflight.
+            throw HostError.invalid("Array.from: 受限沙箱不允许映射回调");
+        }
+
+        Object source = args[0];
+        if (source instanceof CharSequence chars) {
+            if (chars.length() > MAX_ARRAY) tooLarge("Array.from", chars.length(), MAX_ARRAY);
+            return;
+        }
+        if (source instanceof NativeArray array) {
+            if (array.getPrototype() != ScriptableObject.getArrayPrototype(array)
+                    || array.has(SymbolKey.ITERATOR, array)) {
+                throw HostError.invalid("Array.from: 不允许改写数组迭代器或原型");
+            }
+            check(array, "Array.from 输入");
+            rejectIndexedAccessors(array, array.getLength(), "Array.from");
+            return;
+        }
+        if (!(source instanceof ScriptableObject object)) {
+            // Number/boolean have no length and produce an empty array. Other host values are never
+            // intentionally exposed to scripts, so fail closed rather than coercing them.
+            if (source instanceof Number || source instanceof Boolean
+                    || source instanceof java.math.BigInteger) return;
+            throw HostError.invalid("Array.from: 只接受有界数组、字符串或普通类数组对象");
+        }
+        if ("String".equals(object.getClassName())) {
+            if (object.getPrototype() != ScriptableObject.getClassPrototype(object, "String")
+                    || object.has(SymbolKey.ITERATOR, object)) {
+                throw HostError.invalid("Array.from: 不允许改写字符串迭代器或原型");
+            }
+            long length = stringReceiverLength(object, "Array.from 输入");
+            if (length > MAX_ARRAY) tooLarge("Array.from", length, MAX_ARRAY);
+            return;
+        }
+
+        // hasProperty only inspects property presence; it does not execute a Symbol.iterator getter.
+        if (ScriptableObject.hasProperty(object, SymbolKey.ITERATOR)) {
+            throw HostError.invalid("Array.from: 受限沙箱不接受 iterable/生成器输入");
+        }
+        if (!"Object".equals(object.getClassName())
+                || (object.getPrototype() != null
+                && object.getPrototype() != ScriptableObject.getObjectPrototype(object))) {
+            throw HostError.invalid("Array.from: 类数组输入必须是普通对象");
+        }
+        if (!object.has("length", object)) return;
+        Object getter = object.getGetterOrSetter("length", 0, false);
+        if (getter instanceof org.mozilla.javascript.Callable) {
+            throw HostError.invalid("Array.from: length 访问器不可用于放大型原生操作");
+        }
+        long length = safeArrayLikeLength(object.get("length", object));
+        if (length > MAX_ARRAY) tooLarge("Array.from", length, MAX_ARRAY);
+        rejectIndexedAccessors(object, length, "Array.from");
+    }
+
+    private static long safeArrayLikeLength(Object value) {
+        if (value == null || value == Scriptable.NOT_FOUND
+                || value == org.mozilla.javascript.Undefined.instance) return 0;
+        if (!(value instanceof Number number)) {
+            throw HostError.invalid("Array.from: length 必须是数字数据属性");
+        }
+        double raw = number.doubleValue();
+        if (Double.isNaN(raw) || raw <= 0) return 0;
+        if (!Double.isFinite(raw) || raw >= Long.MAX_VALUE) return Long.MAX_VALUE;
+        return (long) Math.floor(raw);
+    }
+
+    private static void rejectIndexedAccessors(ScriptableObject object, long length, String where) {
+        for (int i = 0; i < length; i++) {
+            Object getter = object.getGetterOrSetter(null, i, false);
+            if (getter instanceof org.mozilla.javascript.Callable) {
+                throw HostError.invalid(where + ": 元素访问器不可用于放大型原生操作");
+            }
         }
     }
 

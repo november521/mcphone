@@ -65,6 +65,10 @@ if (ctx.sealed.get('token') === '...') { }   // ❌ 服务端拿到的是密文
 32 层嵌套，会在分配前拒绝。`array.flatMap(...)` 的输出取决于脚本回调，无法可靠预检，
 当前在受限沙箱中禁用；请改写成有明确上限的循环并逐项 `push`。
 
+`Array.from(...)` 只接受最多 4096 项的原生数组、字符串，或带数值型普通 `length`
+数据属性的普通 array-like 对象。自定义 iterable、生成器、`length`/元素 getter、映射回调，
+以及改写过迭代器或原型的数组/字符串会在执行前拒绝；同样请改写成有明确上限的循环。
+
 Rhino 1.9.1，**没有** `class` / `for...of` / `export` / `import` / `async` / `await`。
 用 `var` 与 `function`，箭头函数可以用。`BigInt` 可以用，而且是大数的正路
 （`ctx.num.*` 已经砍掉了）。

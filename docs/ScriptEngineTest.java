@@ -170,6 +170,33 @@ public class ScriptEngineTest {
         eq(run("var n=0,a=[];Object.defineProperty(a,'0',{get:function(){n++;return [1]}});"
                         + "try{a.flat()}catch(e){};n"), "0",
                 "flat 预检不得执行数组 getter");
+        eq(run("Array.from({0:'a',1:'b',length:2}).join(',')"), "a,b",
+                "Array.from 保留有界 array-like 路径");
+        eq(run("Array.from('ab').join(',')"), "a,b", "Array.from 保留有界字符串路径");
+        eq(run("Array.from([1,2]).join(',')"), "1,2", "Array.from 保留原生数组路径");
+        check(rejectedBySizeGate("Array.from({length:4097})"),
+                "Array.from array-like 超限必须在分配前拒绝");
+        check(rejectedBySizeGate("Array.from('a'.repeat(4097))"),
+                "Array.from 字符串超限必须在分配前拒绝");
+        check(rejectedBySizeGate("Array.from(new Array(1000000))"),
+                "Array.from 稀疏原生数组超限必须在迭代前拒绝");
+        eq(run("var n=0,o={};Object.defineProperty(o,'length',{get:function(){n++;return 1}});"
+                        + "try{Array.from(o)}catch(e){};n"), "0",
+                "Array.from 预检不得执行 length getter");
+        eq(run("var n=0,o={length:1};Object.defineProperty(o,'0',{get:function(){n++;return 1}});"
+                        + "try{Array.from(o)}catch(e){};n"), "0",
+                "Array.from 预检不得执行元素 getter");
+        eq(run("var n=0,o={};Object.defineProperty(o,Symbol.iterator,{get:function(){n++;return function(){}}});"
+                        + "try{Array.from(o)}catch(e){};n"), "0",
+                "Array.from 预检不得执行 Symbol.iterator getter");
+        eq(run("var n=0;function* g(){n++;while(true)yield 1}try{Array.from(g())}catch(e){};n"), "0",
+                "Array.from 生成器必须在启动前拒绝");
+        eq(run("var n=0;try{Array.from([1],function(x){n++;return x})}catch(e){};n"), "0",
+                "Array.from 映射回调必须在执行前拒绝");
+        check(rejectedBySizeGate("var a=[1];a[Symbol.iterator]=function*(){while(true)yield 1};Array.from(a)"),
+                "Array.from 不接受数组自定义迭代器");
+        eq(run("var n=0;function C(){n++;return []}try{Array.from.call(C,[1])}catch(e){};n"), "0",
+                "Array.from 不得执行脚本结果构造器");
         eq(run("var n=0,o={get x(){n++;return 'x'}};try{JSON.stringify(o)}catch(e){};n"), "0",
                 "JSON 预检不执行脚本 getter");
         eq(SizeGate.MAX_STRING, 64 * 1024, "§16.4 ① 的字符串上限");

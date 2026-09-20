@@ -86,7 +86,7 @@ public final class ScriptSandbox {
             "decodeURI", "decodeURIComponent", "encodeURI", "encodeURIComponent");
 
     /** 这几个的 this 小、参数大也能炸，单独包。 */
-    private static final List<String> EXTRA_WRAPPED_HOLDERS = List.of("JSON");
+    private static final List<String> EXTRA_WRAPPED_HOLDERS = List.of("Array", "JSON");
 
     /**
      * 建一个加固过的顶层 scope。<b>三步顺序不能变。</b>
@@ -158,6 +158,12 @@ public final class ScriptSandbox {
                 String boundary = where + "." + name;
                 HostFn.enter(boundary);
                 try {
+                    // Array.from uses its receiver as an optional result constructor. Letting scripts
+                    // substitute one creates a preflight/call TOCTOU window: that constructor can grow
+                    // the source after it was measured but before Rhino starts consuming its iterator.
+                    if ("Array".equals(where) && "from".equals(name) && thisObj != target) {
+                        throw HostError.invalid(boundary + ": 必须直接通过内置 Array 调用");
+                    }
                     SizeGate.checkNativeCall(where, name, thisObj, args);
                     Object out = inner.call(cx, sc, thisObj, args);
                     SizeGate.check(out, boundary + " 的返回值");
