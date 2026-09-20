@@ -64,6 +64,8 @@ public class MCphone implements ModInitializer {
             com.november.mcphone.core.ServerConfig.load(server);
             com.november.mcphone.core.script.server.economy.EconomyRuntime.start(server);
             com.november.mcphone.core.script.server.ScriptWorkers.start();
+            // 脚本宿主（S15g）：建 StrikeTracker（必须主线程）、管线、登记进 ScriptRpcHandler
+            com.november.mcphone.core.script.server.ScriptHost.start(server);
         });
 
         // 脚本 worker 的生死跟着服务器走（§15.5）。【停必须有】：单人游戏里服务器会在同一个
@@ -74,8 +76,9 @@ public class MCphone implements ModInitializer {
         // 反过来主线程就要白等到 worker 超时（见 CurrencyGateway.close）
         ServerLifecycleEvents.SERVER_STOPPING.register(server -> {
             com.november.mcphone.core.script.server.economy.EconomyRuntime.stop();
+            // 先摘管线（在飞的求值还有机会落地），再停 worker
+            com.november.mcphone.core.script.server.ScriptHost.stop();
             com.november.mcphone.core.script.server.ScriptWorkers.stop();
-            com.november.mcphone.core.script.net.ScriptRpcHandler.clear();
         });
 
         net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback.EVENT.register(

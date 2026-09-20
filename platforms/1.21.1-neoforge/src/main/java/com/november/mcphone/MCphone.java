@@ -55,14 +55,17 @@ public class MCphone {
                 (net.neoforged.neoforge.event.server.ServerStartedEvent e) -> {
                     com.november.mcphone.core.script.server.economy.EconomyRuntime.start(e.getServer());
                     com.november.mcphone.core.script.server.ScriptWorkers.start();
+                    // 脚本宿主（S15g）：建 StrikeTracker（必须主线程）、管线、登记进 ScriptRpcHandler
+                    com.november.mcphone.core.script.server.ScriptHost.start(e.getServer());
                 });
         // 货币网关先关、再停 worker：worker 可能正等着主线程替它执行一笔货币调用，
         // 反过来主线程就要白等到 worker 超时（见 CurrencyGateway.close）
         net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener(
                 (net.neoforged.neoforge.event.server.ServerStoppingEvent e) -> {
                     com.november.mcphone.core.script.server.economy.EconomyRuntime.stop();
+                    // 先摘管线（在飞的求值还有机会落地），再停 worker
+                    com.november.mcphone.core.script.server.ScriptHost.stop();
                     com.november.mcphone.core.script.server.ScriptWorkers.stop();
-                    com.november.mcphone.core.script.net.ScriptRpcHandler.clear();
                 });
         // 超时托管每 5 分钟扫一次（见 EconomyRuntime.tick）
         net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener(
