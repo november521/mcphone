@@ -1,5 +1,6 @@
 package com.november.mcphone.feature.settings.client;
 
+import com.november.mcphone.core.client.GuiUtil;
 import com.november.mcphone.core.client.PhoneTheme;
 import com.november.mcphone.core.script.pkg.AuthorKeys;
 import com.november.mcphone.core.script.pkg.PackageError;
@@ -7,6 +8,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
+import net.minecraft.util.Mth;
 
 import java.nio.file.Path;
 
@@ -47,8 +49,18 @@ public final class AuthorKeyPage {
 
     private int genY, backupY, btnX, btnW;
 
+    /** 可滚区域（渲染时更新）：滚出可见区的按钮不该还能点到。 */
+    private int clipTop, clipBottom;
+
+    /** 正文往上滚了多少像素。错误提示与"未受保护"同时出现时，中文/英文都可能超一屏。 */
+    private int scrollPx;
+
+    /** 上一帧量出来的滚动上限（内容总高只有画完才知道，与 AboutPage 同一套路）。 */
+    private int maxScroll;
+
     public void open() {
         notice = null;
+        scrollPx = 0;
         refresh();
     }
 
@@ -93,9 +105,18 @@ public final class AuthorKeyPage {
         btnX = x;
         btnW = w;
 
+        // 标题固定，正文可滚：错误提示 + 未受保护警告 + 备份按钮在两种语言下都可能超过一屏
         g.drawString(font, Component.translatable("mcphone.settings.author_key").getString(),
                 x, y, PhoneTheme.FONT_COLOR_STATUS, false);
         y += ROW + 2;
+
+        clipTop = y;
+        clipBottom = phoneTop + screenH - navH;
+        scrollPx = Mth.clamp(scrollPx, 0, maxScroll);
+        y -= scrollPx;
+
+        // 裁掉滚出去的部分，否则正文会画到导航栏上
+        GuiUtil.enableScissor(g, x, clipTop, x + w, clipBottom);
 
         if (broken) {
             // 文件在、读不出来：说清怎么办，且不给「生成密钥」（点下去只会撞"已经有一对"）
@@ -158,17 +179,32 @@ public final class AuthorKeyPage {
                 y += font.lineHeight;
             }
         }
+
+        GuiUtil.disableScissor(g);
+
+        // 这一帧画到哪儿，就是内容有多高；下一帧的滚动上限按它来
+        maxScroll = Math.max(0, (y + scrollPx) - clipBottom);
     }
 
     private void button(GuiGraphics g, Font font, int x, int y, int w, String label, int mx, int my) {
-        boolean hover = mx >= x && mx <= x + w && my >= y && my <= y + ROW;
+        boolean hover = my >= clipTop && my <= clipBottom
+                && mx >= x && mx <= x + w && my >= y && my <= y + ROW;
         g.fill(x, y, x + w, y + ROW, hover ? PhoneTheme.COLOR_BUTTON_HOVER : PhoneTheme.COLOR_BUTTON);
         g.drawString(font, label, x + (w - font.width(label)) / 2, y + 2,
                 PhoneTheme.FONT_COLOR_BUTTON, false);
     }
 
+    /** 滚轮。一次三行，跟原版列表手感一致 */
+    public boolean mouseScrolled(double scrollY, Font font) {
+        int step = font.lineHeight * 3;
+        int before = scrollPx;
+        scrollPx = Mth.clamp(scrollPx - (int) (scrollY * step), 0, maxScroll);
+        return scrollPx != before;
+    }
+
     public boolean mouseClicked(double mx, double my, int button) {
         if (mx < btnX || mx > btnX + btnW) return false;
+        if (my < clipTop || my > clipBottom) return false;
         try {
             if (genY > 0 && my >= genY && my <= genY + ROW) {
                 AuthorKeys k = AuthorKeys.generate(gameDir());

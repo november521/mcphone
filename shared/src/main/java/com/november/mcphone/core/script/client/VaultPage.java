@@ -1,10 +1,12 @@
 package com.november.mcphone.core.script.client;
 
+import com.november.mcphone.core.client.GuiUtil;
 import com.november.mcphone.core.client.PhoneTheme;
 import com.november.mcphone.core.script.server.store.VaultPassphrase;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
+import net.minecraft.util.Mth;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -43,13 +45,23 @@ public final class VaultPage {
 
     private boolean backRequested;
 
-    /** 两个输入框的命中区（渲染时更新）：点框选框，点别处不该抢焦点。 */
+    /** 两个输入框的命中区（渲染时更新，已算进滚动偏移）：点框选框，点别处不该抢焦点。 */
     private int boxX, boxW, firstBoxY, secondBoxY;
+
+    /** 可滚区域（渲染时更新）：输入框滚出可见区之后不该还能点到。 */
+    private int clipTop, clipBottom;
+
+    /** 正文往上滚了多少像素。0 ＝ 贴着标题。中文三条警告折行后就装不下一屏，得滚。 */
+    private int scrollPx;
+
+    /** 上一帧量出来的滚动上限（内容总高只有画完才知道，与 AboutPage 同一套路）。 */
+    private int maxScroll;
 
     public void open() {
         clear();
         onSecond = false;
         backRequested = false;
+        scrollPx = 0;
     }
 
     /** 关页就抹掉。<b>这是口令在内存里存在的全部时间。</b> */
@@ -107,9 +119,19 @@ public final class VaultPage {
         boxX = x;
         boxW = w;
 
+        // 标题固定，正文可滚：三条必须显示的警告在中文下就装不下一屏（英文更长），
+        // 原先画到导航栏底下就被盖住、永远看不到（与 AboutPage 同一个修法）
         g.drawString(font, Component.translatable("mcphone.vault.title").getString(),
                 x, y, PhoneTheme.FONT_COLOR_STATUS, false);
         y += ROW + 2;
+
+        clipTop = y;
+        clipBottom = phoneTop + screenH - navH;
+        scrollPx = Mth.clamp(scrollPx, 0, maxScroll);
+        y -= scrollPx;
+
+        // 裁掉滚出去的部分，否则正文会画到状态栏和导航栏上
+        GuiUtil.enableScissor(g, x, clipTop, x + w, clipBottom);
 
         firstBoxY = y + ROW;
         y = field(g, font, x, y, w, Component.translatable("mcphone.vault.enter").getString(), first, !onSecond);
@@ -142,6 +164,11 @@ public final class VaultPage {
             }
             y += 2;
         }
+
+        GuiUtil.disableScissor(g);
+
+        // 这一帧画到哪儿，就是内容有多高；下一帧的滚动上限按它来
+        maxScroll = Math.max(0, (y + scrollPx) - clipBottom);
     }
 
     /** 一个输入框。<b>只画星号</b>，不画明文 —— 旁边站着人也看不到。 */
@@ -156,10 +183,11 @@ public final class VaultPage {
 
     /**
      * 点输入框选框。点在别处不该改焦点 —— 以前是"点哪都切换"，在手机里点导航栏也会把
-     * 光标切走，回来继续打字就打进了另一个框。
+     * 光标切走，回来继续打字就打进了另一个框。滚出可见区的框也点不到（命中区按裁剪区挡一道）。
      */
     public boolean mouseClicked(double mx, double my, int button) {
         if (mx < boxX || mx > boxX + boxW) return false;
+        if (my < clipTop || my > clipBottom) return false;
         if (my >= firstBoxY && my <= firstBoxY + ROW) {
             onSecond = false;
             return true;
@@ -169,6 +197,14 @@ public final class VaultPage {
             return true;
         }
         return false;
+    }
+
+    /** 滚轮。一次三行，跟原版列表手感一致 */
+    public boolean mouseScrolled(double scrollY, Font font) {
+        int step = font.lineHeight * 3;
+        int before = scrollPx;
+        scrollPx = Mth.clamp(scrollPx - (int) (scrollY * step), 0, maxScroll);
+        return scrollPx != before;
     }
 
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {

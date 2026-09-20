@@ -1465,6 +1465,8 @@ public final class PhoneScreen extends PhoneScreenBase {
         if (mode == Mode.APP_MANAGER && appManagerPage.mouseScrolled(scrollY)) return true;
         if (mode == Mode.APP_MANAGER_DETAIL && appManagerDetail.mouseScrolled(scrollY, font)) return true;
         if (mode == Mode.ABOUT && aboutPage.mouseScrolled(scrollY, font)) return true;
+        if (mode == Mode.VAULT && vaultPage.mouseScrolled(scrollY, font)) return true;
+        if (mode == Mode.AUTHOR_KEY && authorKeyPage.mouseScrolled(scrollY, font)) return true;
         if (mode == Mode.ADDON_PAGE
                 && callPage(p -> p.mouseScrolled(mx, my, scrollY))) return true;
         return false;
