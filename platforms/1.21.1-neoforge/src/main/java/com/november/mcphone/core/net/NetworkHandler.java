@@ -127,8 +127,12 @@ public final class NetworkHandler {
 
     /** 两只手必须逐一更新，否则同时打开 HUD 和全屏设备时会误灭其中一台。 */
     private static void handlePhoneScreenOn(PhoneScreenOnPacket packet, ServerPlayer player) {
-        if (!PhoneItem.isCarriedBy(player)
-                || !RequestThrottle.allow(player, RequestThrottle.Kind.SCREEN_STATE)) return;
+        // 这里【不】限流：SCREEN_STATE 是绝对状态而不是增量，而客户端只在状态变化时发一次、
+        // 失败不重发（PhoneScreenOnSync.send 先把 lastSent 改成新值）。按 250 ms 丢一次，服务端
+        // 亮屏位就永久停在旧值（重登/换世界才自愈），而半秒内翻两次手机是正常操作。
+        // 代价：改过的客户端可以按任意频率发，每次是一次 getInventory().contains(...) 全背包
+        // 谓词扫描（约 41 格、微秒量级）—— 不值得拿"状态永久错误"去换。
+        if (!PhoneItem.isCarriedBy(player)) return;
         for (InteractionHand hand : InteractionHand.values()) {
             ItemStack held = player.getItemInHand(hand);
             if (packet.isLit(hand) && PhoneItem.isDevice(held)) {

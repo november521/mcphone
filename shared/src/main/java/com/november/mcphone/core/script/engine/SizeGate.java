@@ -96,6 +96,14 @@ public final class SizeGate {
             return;
         }
 
+        if ("Function.prototype".equals(holder)) {
+            // 只装 apply 一个。call/bind 的参数表来自解释器自己的实参数组（脚本要撑大它得先
+            // 真的写出那么多实参，指令预算拦得住），唯一能把 array-like 塞进原生代码的是
+            // apply 的第二个参数。
+            if ("apply".equals(method)) checkApplyArgArray(args);
+            return;
+        }
+
         if ("Array.prototype".equals(holder)) {
             if (!(thisObj instanceof NativeArray array)) {
                 throw HostError.invalid(holder + "." + method + ": 只接受原生数组接收者");
@@ -177,16 +185,69 @@ public final class SizeGate {
         if (getter instanceof org.mozilla.javascript.Callable) {
             throw HostError.invalid("Array.from: length 访问器不可用于放大型原生操作");
         }
-        long length = safeArrayLikeLength(object.get("length", object));
+        long length = safeArrayLikeLength(object.get("length", object), "Array.from");
         if (length > MAX_ARRAY) tooLarge("Array.from", length, MAX_ARRAY);
         rejectIndexedAccessors(object, length, "Array.from");
     }
 
-    private static long safeArrayLikeLength(Object value) {
+    /**
+     * Gate {@code Function.prototype.apply}'s argument list before Rhino materialises it.
+     *
+     * <p>This is the one place that covers every function at once. The unwrapped host functions
+     * ({@code String.fromCharCode}, {@code parseInt}, {@code Object.keys}, {@code Number.isFinite},
+     * …) all inherit {@code Function.prototype}, and {@code apply(null, {length: 1e8})} would build
+     * an {@code Object[]} of that size inside native code: no instruction callback fires
+     * (measured {@code instr=0}) and the wall clock is only sampled from those callbacks, so the
+     * only way to stop it is here.
+     *
+     * <p>Same TOCTOU rule as {@link #checkArrayFrom}: a data-valued length may be read, an accessor
+     * length may not. A getter could report 1 here and 10^9 inside the native call.
+     */
+    private static void checkApplyArgArray(Object[] args) {
+        if (args == null || args.length < 2) return; // apply(thisArg) 就是零个参数
+        Object list = args[1];
+        if (list == null || list == org.mozilla.javascript.Undefined.instance) return;
+
+        if (list instanceof NativeArray array) {
+            check(array, "Function.prototype.apply 的参数表");
+            rejectIndexedAccessors(array, array.getLength(), "Function.prototype.apply");
+            return;
+        }
+        if (list instanceof CharSequence chars) {
+            if (chars.length() > MAX_ARRAY) tooLarge("Function.prototype.apply", chars.length(), MAX_ARRAY);
+            return;
+        }
+        if (!(list instanceof ScriptableObject object)) {
+            // 数字与布尔没有 length，apply 会当成零长度；其余宿主值一律不放行。
+            if (list instanceof Number || list instanceof Boolean
+                    || list instanceof java.math.BigInteger) return;
+            throw HostError.invalid("Function.prototype.apply: 参数表只能是数组、字符串或普通类数组对象");
+        }
+        if ("String".equals(object.getClassName())) {
+            long length = stringReceiverLength(object, "Function.prototype.apply 的参数表");
+            if (length > MAX_ARRAY) tooLarge("Function.prototype.apply", length, MAX_ARRAY);
+            return;
+        }
+        if (!"Object".equals(object.getClassName())
+                || (object.getPrototype() != null
+                && object.getPrototype() != ScriptableObject.getObjectPrototype(object))) {
+            throw HostError.invalid("Function.prototype.apply: 类数组参数表必须是普通对象");
+        }
+        if (!object.has("length", object)) return; // 没有 length -> apply 当作零参数，不必拦
+        Object getter = object.getGetterOrSetter("length", 0, false);
+        if (getter instanceof org.mozilla.javascript.Callable) {
+            throw HostError.invalid("Function.prototype.apply: length 访问器不可用于放大型原生操作");
+        }
+        long length = safeArrayLikeLength(object.get("length", object), "Function.prototype.apply");
+        if (length > MAX_ARRAY) tooLarge("Function.prototype.apply", length, MAX_ARRAY);
+        rejectIndexedAccessors(object, length, "Function.prototype.apply");
+    }
+
+    private static long safeArrayLikeLength(Object value, String where) {
         if (value == null || value == Scriptable.NOT_FOUND
                 || value == org.mozilla.javascript.Undefined.instance) return 0;
         if (!(value instanceof Number number)) {
-            throw HostError.invalid("Array.from: length 必须是数字数据属性");
+            throw HostError.invalid(where + ": length 必须是数字数据属性");
         }
         double raw = number.doubleValue();
         if (Double.isNaN(raw) || raw <= 0) return 0;

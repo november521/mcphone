@@ -96,12 +96,32 @@ public final class ScriptSandbox {
     public static ScriptableObject harden(Context cx) {
         ScriptableObject s = (ScriptableObject) cx.initSafeStandardObjects(null, false);
 
-        // ① 切断 .constructor 链 —— 光删全局不够，这一步是关键。
-        //    少了它，[].constructor.constructor('return 42')() 照样能编译执行
+        // ① 切断 .constructor 链 + 给 Function.prototype.apply 装尺寸闸 + 密封它。
+        //    三件事都必须赶在【第②步删掉 Function 这个全局之前】：那之后这个对象从 scope 上
+        //    再也取不到（脚本那边只能靠 Object.getPrototypeOf(某个原生函数) 摸它，实测成立）。
+        //
+        //    apply 为什么装在这里：未包装的宿主函数（String.fromCharCode / parseInt /
+        //    Object.keys / Number.isFinite …）的原型链全都经过【同一个】Function.prototype，
+        //    所以这一处闸一次覆盖所有函数的 .apply，比逐个 holder 补更根治。
+        //    不装的话 apply(null, {length:1e8}) 会在原生代码里把 array-like 物化成 Object[]：
+        //    指令预算（instr=0）与墙钟都够不着，直接 OOM（ADV-27，实测 7 个函数 1.2~2.1 秒）。
         Object fn = ScriptableObject.getProperty(s, "Function");
         if (fn instanceof Scriptable fnObj) {
             Object proto = ScriptableObject.getProperty(fnObj, "prototype");
-            if (proto instanceof Scriptable p) ScriptableObject.deleteProperty(p, "constructor");
+            if (proto instanceof ScriptableObject p) {
+                //    少了这一步，[].constructor.constructor('return 42')() 照样能编译执行
+                ScriptableObject.deleteProperty(p, "constructor");
+
+                Object apply = ScriptableObject.getProperty(p, "apply");
+                if (apply instanceof Callable applyFn) {
+                    wrapOne(p, s, "Function.prototype", "apply", applyFn);
+                }
+
+                // 密封是闸的一部分，不是顺手做的：第③步按【全局表】逐个密封，而 Function
+                // 已在第②步被删，这个对象于是被整个跳过 —— 实测未密封时脚本
+                // p.apply = 1 与 delete p.apply 都成功，闸当场作废。
+                p.sealObject();
+            }
         }
 
         // ② 白名单：不在名单里的全局一律删。
@@ -154,27 +174,33 @@ public final class ScriptSandbox {
             if (!(id instanceof String name)) continue;
             Object v = ScriptableObject.getProperty(target, name);
             if (!(v instanceof Callable inner)) continue;
-            LambdaFunction wrapped = new LambdaFunction(scope, name, 0, (cx, sc, thisObj, args) -> {
-                String boundary = where + "." + name;
-                HostFn.enter(boundary);
-                try {
-                    // Array.from uses its receiver as an optional result constructor. Letting scripts
-                    // substitute one creates a preflight/call TOCTOU window: that constructor can grow
-                    // the source after it was measured but before Rhino starts consuming its iterator.
-                    if ("Array".equals(where) && "from".equals(name) && thisObj != target) {
-                        throw HostError.invalid(boundary + ": 必须直接通过内置 Array 调用");
-                    }
-                    SizeGate.checkNativeCall(where, name, thisObj, args);
-                    Object out = inner.call(cx, sc, thisObj, args);
-                    SizeGate.check(out, boundary + " 的返回值");
-                    return out;
-                } finally {
-                    HostFn.exit();
-                }
-            });
-            // LambdaFunction 自带一个未密封的 .prototype，那是跨调用的驻留点
-            wrapped.sealObject();
-            ScriptableObject.putProperty(target, name, wrapped);
+            wrapOne(target, scope, where, name, inner);
         }
+    }
+
+    /** 包装单个宿主函数：先过闸，再调原件，最后量返回值。 */
+    private static void wrapOne(ScriptableObject target, Scriptable scope, String where,
+                                String name, Callable inner) {
+        LambdaFunction wrapped = new LambdaFunction(scope, name, 0, (cx, sc, thisObj, args) -> {
+            String boundary = where + "." + name;
+            HostFn.enter(boundary);
+            try {
+                // Array.from uses its receiver as an optional result constructor. Letting scripts
+                // substitute one creates a preflight/call TOCTOU window: that constructor can grow
+                // the source after it was measured but before Rhino starts consuming its iterator.
+                if ("Array".equals(where) && "from".equals(name) && thisObj != target) {
+                    throw HostError.invalid(boundary + ": 必须直接通过内置 Array 调用");
+                }
+                SizeGate.checkNativeCall(where, name, thisObj, args);
+                Object out = inner.call(cx, sc, thisObj, args);
+                SizeGate.check(out, boundary + " 的返回值");
+                return out;
+            } finally {
+                HostFn.exit();
+            }
+        });
+        // LambdaFunction 自带一个未密封的 .prototype，那是跨调用的驻留点
+        wrapped.sealObject();
+        ScriptableObject.putProperty(target, name, wrapped);
     }
 }
