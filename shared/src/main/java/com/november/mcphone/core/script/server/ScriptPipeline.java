@@ -72,6 +72,9 @@ public final class ScriptPipeline {
     /** 玩家登录时给一个新 epoch，随握手下发。 */
     public long newEpoch(UUID player) {
         long e = System.nanoTime() ^ (player.getMostSignificantBits() * 31);
+        // 0 只用来表示"没有 epoch"（握手没收到/不完整）：真发出去的 epoch 保证非 0，
+        // 否则 (epoch==0 且 epochs 表里也是 0) 会让 epoch 闸对这名玩家失效（S2-4）
+        if (e == 0) e = 1;
         epochs.put(player, e);
         return e;
     }

@@ -23,7 +23,12 @@ public final class ScriptPushHandler {
         sender = s;
     }
 
-    /** 发一条推送。发送器没装（客户端侧的专用服务器不会走到这里）时记一条并返回 false。 */
+    /**
+     * 发一条推送。发送器没装时记一条并返回 false。
+     *
+     * <p>注意：这个发送器在客户端也会被装上（{@code ScriptNetworking.register} 两端都跑），
+     * 只是客户端永不调用发送 —— 不是"客户端侧不会装"。
+     */
     public static boolean push(ServerPlayer player, ScriptPush push) {
         BiConsumer<ServerPlayer, ScriptPush> s = sender;
         if (s == null) {
