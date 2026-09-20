@@ -263,6 +263,18 @@ public class ScriptPackageTest {
         eq(codeOf(() -> Manifest.parse(with("id", "\"mcphone:notice\""))), Code.E_PKG_RESERVED_NAMESPACE,
            "mcphone 命名空间是内建 App 的");
 
+        // ADV-S2b-3：ID_SEGMENT 的 64 是【每段】上限，整条 id 另有 64 的上限
+        // （与 ScriptProtocol.ID_MAX / Deployment.MAX_ID_LEN 同一个数）。不限整条的话，
+        // 两段各 64 能拼出 129 字符的 id：客户端装得下、ScriptRpc 编码不出来、服务端永远批不了
+        String seg64 = "x".repeat(64);
+        String total64 = "a:" + "b".repeat(62);
+        eq(Manifest.parse(with("id", "\"" + total64 + "\"")).id(), total64, "整条 id 恰好 64 字符：通过");
+        eq(codeOf(() -> Manifest.parse(with("id", "\"a:" + seg64 + "\""))), Code.E_PKG_ID_TOO_LONG,
+           "整条 66 字符：拒绝（每段都合法也不行）");
+        eq(codeOf(() -> Manifest.parse(with("id", "\"" + seg64 + ":" + seg64 + "\""))),
+           Code.E_PKG_ID_TOO_LONG, "两段各 64 拼出 129 字符：拒绝");
+        eq(Manifest.MAX_ID, 64, "整条 id 上限与线格式的 64 是同一个数（改一处必须三处一起改）");
+
         eq(codeOf(() -> Manifest.parse(with("version", "\"1.0\""))), Code.E_PKG_BAD_VERSION, "version 要三段");
         eq(codeOf(() -> Manifest.parse(with("version", "\"1.0.0-beta\""))), Code.E_PKG_BAD_VERSION,
            "version 不收后缀");

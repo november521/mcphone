@@ -33,8 +33,12 @@ public class ClientHandshakeTest {
     static final long EPOCH = 123456789L;
 
     static ScriptPush begin(long revision, long epoch, int count) {
+        return beginWithApi(revision, ScriptProtocol.SCRIPT_API, epoch, count);
+    }
+
+    static ScriptPush beginWithApi(long revision, int scriptApi, long epoch, int count) {
         return Handshake.push(ScriptProtocol.TOPIC_HANDSHAKE_BEGIN,
-                Handshake.encodeBegin(new Handshake.Begin(SERVER, "测试服", ScriptProtocol.PROTOCOL, epoch, count,
+                Handshake.encodeBegin(new Handshake.Begin(SERVER, "测试服", scriptApi, epoch, count,
                         new Handshake.Features(false, false, true))), revision);
     }
 
@@ -92,7 +96,47 @@ public class ClientHandshakeTest {
     static void rejectsForgedAndMismatched() {
         ClientHandshake.clear();
 
+        // ADV-S2b-1：握手线版本对不上（Fabric 没有加载器闸，这是唯一识别点）→ 整批不应用
+        ClientHandshake.onPush(beginWithApi(1, ScriptProtocol.SCRIPT_API + 1, EPOCH, 1));
+        eq(ClientHandshake.serverId(), null, "版本不匹配：serverId 不落地");
+        eq(ClientHandshake.complete(), false, "版本不匹配：批次不算数");
+        eq(ClientHandshake.scriptApiMismatch(), true, "留一个可查的不匹配标记（诊断命令用）");
+        ClientHandshake.onPush(deployment(2, "example:shop", "rev1", "front1", List.of("buy")));
+        eq(ClientHandshake.deployment("example:shop"), null, "版本不匹配之后，随后的明细也不收（批次没打开）");
+        ClientHandshake.onPush(end(3, EPOCH));
+        eq(ClientHandshake.complete(), false, "版本不匹配的批次 END 也救不回来");
+
+        // 恢复正常版本：新批次的 revision 更大，照常应用，标记清掉
+        ClientHandshake.onPush(begin(4, EPOCH, 1));
+        eq(ClientHandshake.scriptApiMismatch(), false, "正常版本把不匹配标记清掉");
+        ClientHandshake.onPush(deployment(5, "example:shop", "rev1", "front1", List.of("buy")));
+        ClientHandshake.onPush(end(6, EPOCH));
+        eq(ClientHandshake.complete(), true, "版本恢复后正常收齐");
+        ClientHandshake.clear();
+
+        // ADV-S2b-8.3：没有 BEGIN 打开的批次，明细一条都不收
+        ClientHandshake.onPush(deployment(10, "example:orphan", "rev", "front", List.of()));
+        eq(ClientHandshake.deployment("example:orphan"), null, "批次外的明细不收");
+
+        // 批内同 App 的批准轴只增不减：重放旧条目不覆盖新条目（另一条不同 App 的照常收，凑齐条数）
+        ClientHandshake.onPush(begin(20, EPOCH, 2));
+        ClientHandshake.onPush(Handshake.push(ScriptProtocol.TOPIC_HANDSHAKE_DEPLOYMENT,
+                Handshake.encodeDeployment(new Handshake.Deployment("example:shop", "rev2", "front2", 0, 9L,
+                        1_700_000_000_000L, List.of("buy", "sell"))), 21));
+        ClientHandshake.onPush(Handshake.push(ScriptProtocol.TOPIC_HANDSHAKE_DEPLOYMENT,
+                Handshake.encodeDeployment(new Handshake.Deployment("example:shop", "rev1", "front1", 0, 5L,
+                        1_600_000_000_000L, List.of("buy"))), 22));
+        ClientHandshake.onPush(Handshake.push(ScriptProtocol.TOPIC_HANDSHAKE_DEPLOYMENT,
+                Handshake.encodeDeployment(new Handshake.Deployment("example:other", "rev1", "front1", 0, 1L,
+                        1_600_000_000_000L, List.of())), 23));
+        ClientHandshake.onPush(end(24, EPOCH));
+        ClientHandshake.Entry kept = ClientHandshake.deployment("example:shop");
+        check(kept != null, "批次收齐后条目在");
+        eq(kept.deployRev(), "rev2", "批准轴 9 的条目没被批准轴 5 的旧条目盖回去");
+        eq(kept.approvalRevision(), 9L, "批准轴取新的");
+
         // 脚本能选 topic：不是宿主发的（appId 不对）一律忽略
+        ClientHandshake.clear();
         ClientHandshake.onPush(new ScriptPush("example:evil", ScriptProtocol.TOPIC_HANDSHAKE_BEGIN, new byte[0], 1));
         eq(ClientHandshake.serverId(), null, "非宿主 appId 的推送忽略");
 

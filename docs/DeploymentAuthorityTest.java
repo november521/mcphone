@@ -283,6 +283,51 @@ public class DeploymentAuthorityTest {
         }
     }
 
+    /**
+     * ADV-S2b-5：装不下握手的部署在<b>批准期</b>就拒，并报出字节数。
+     *
+     * <p>32 条动作本身合法（≤ MAX_ACTIONS），但每条 64 个中文数字混排的名字会让编码超
+     * {@code DATA_MAX} —— 这种部署推不到客户端，批准它只会制造"本服没部署"的假象。
+     */
+    static void oversizedApprovalIsRejected() {
+        List<String> many = new ArrayList<>();
+        for (int i = 0; i < Deployment.MAX_ACTIONS; i++) {
+            many.add("动".repeat(60) + String.format("%04d", i));   // 64 字符，编码约 184 字节
+        }
+        String bigDigest = "e".repeat(64);
+        DeploymentData.Candidate big = new DeploymentData.Candidate("example:big", bigDigest, FRONT, 1L,
+                many, List.of());
+        DeploymentData dd = new DeploymentData();
+        check(dd.putCandidate(big), "超长动作集合的候选进队（单条合法，只是装不下握手）");
+
+        boolean threw = false;
+        String message = "";
+        try {
+            dd.approve(big, null, List.of(), P1, 1L);
+        } catch (IllegalArgumentException e) {
+            threw = true;
+            message = String.valueOf(e.getMessage());
+        }
+        check(threw, "批准被拒：这条部署超出单条握手上限");
+        check(message.contains(String.valueOf(com.november.mcphone.core.script.net.ScriptProtocol.DATA_MAX)),
+                "错误里带字节数上限（实际文案：" + message + "）");
+        check(dd.deployment("example:big") == null, "被拒之后没有写进部署表（无假象）");
+        check(dd.candidate(bigDigest) != null, "候选仍在待审队列里，缩短动作名后可以再批");
+
+        // 同一份表里的正常部署照常能批，并且编码得下
+        DeploymentData ok = new DeploymentData();
+        ok.putCandidate(candidate());
+        Deployment small = ok.approve(ok.candidate(PKG), List.of("buy"), List.of(), P1, 1L).deployment();
+        check(com.november.mcphone.core.script.net.Handshake.wireSize(small) <=
+                        com.november.mcphone.core.script.net.ScriptProtocol.DATA_MAX,
+                "普通部署的握手表示在 4096 以内");
+
+        // 三处 id 上限必须是同一个数（ADV-S2b-3 的教训：两个 64 的含义不同，改一处要三处一起改）
+        check(com.november.mcphone.core.script.pkg.Manifest.MAX_ID == Deployment.MAX_ID_LEN
+                        && Deployment.MAX_ID_LEN == com.november.mcphone.core.script.net.ScriptProtocol.ID_MAX,
+                "Manifest.MAX_ID / Deployment.MAX_ID_LEN / ScriptProtocol.ID_MAX 三处一致");
+    }
+
     public static void main(String[] args) {
         deploymentAndAuthority();
         approvalDefaultsAreFailClosed();
@@ -291,6 +336,7 @@ public class DeploymentAuthorityTest {
         persistenceRoundTrip();
         scannerAndCommandHelpers();
         commandParsesRealIds();
+        oversizedApprovalIsRejected();
 
         System.out.println("断言 " + checks + " 条");
         if (!failures.isEmpty()) {

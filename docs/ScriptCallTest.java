@@ -42,7 +42,7 @@ public class ScriptCallTest {
 
     static void begin(long revision, int count) {
         ClientHandshake.onPush(Handshake.push(ScriptProtocol.TOPIC_HANDSHAKE_BEGIN,
-                Handshake.encodeBegin(new Handshake.Begin(SERVER, "测试服", ScriptProtocol.PROTOCOL, EPOCH, count,
+                Handshake.encodeBegin(new Handshake.Begin(SERVER, "测试服", ScriptProtocol.SCRIPT_API, EPOCH, count,
                         new Handshake.Features(false, false, true))), revision));
     }
 
@@ -183,6 +183,48 @@ public class ScriptCallTest {
         check(first != second, "两次调用的 requestId 不重复");
     }
 
+    /** 发送器抛异常（本地编码失败等）：不外抛、回调收 UNAVAILABLE、名额回滚（ADV-S2b-2）。 */
+    static void sendFailureRollsBack() {
+        reset();
+        ScriptCall.installSender(rpc -> {
+            throw new IllegalArgumentException("模拟 writeUtf 超限");
+        });
+        begin(70, 1);
+        deployment(71, APP, "rev-7", "front", List.of());
+        end(72);
+
+        for (int i = 0; i < ScriptCall.MAX_IN_FLIGHT; i++) {
+            ScriptCall.call(APP, "claim", new byte[0], "f", callbacks::add);
+        }
+        eq(callbacks.size(), ScriptCall.MAX_IN_FLIGHT, "四次发送失败各自回一条本地结果");
+        for (ScriptRpcResult r : callbacks) {
+            eq(r.code(), ScriptErrorCode.UNAVAILABLE, "本地合成 UNAVAILABLE（不是崩、也不是 IN_PROGRESS）");
+        }
+
+        // 名额没有泄漏：换一个能发的发送器，第 5 次必须真的发出去
+        sent.clear();
+        ScriptCall.installSender(sent::add);
+        ScriptCall.call(APP, "claim", new byte[0], "f", callbacks::add);
+        eq(sent.size(), 1, "失败四次之后名额仍是 0，下一次照常发");
+    }
+
+    /** 服务端回 UNKNOWN：客户端只交给回调、绝不自动重试（ADV-S2b-4 的约束）。 */
+    static void unknownDoesNotRetry() {
+        reset();
+        ScriptCall.installSender(sent::add);
+        begin(80, 1);
+        deployment(81, APP, "rev-8", "front", List.of());
+        end(82);
+
+        ScriptCall.call(APP, "claim", new byte[0], "f", callbacks::add);
+        eq(sent.size(), 1, "先发一条");
+        ScriptCall.onResult(new ScriptRpcResult(sent.get(0).requestId(), ScriptErrorCode.UNKNOWN,
+                new byte[0], ScriptErrorCode.UNKNOWN.defaultMessageKey(), List.of(), 0, 0));
+        eq(callbacks.size(), 1, "UNKNOWN 原样交给回调");
+        eq(callbacks.get(0).code(), ScriptErrorCode.UNKNOWN, "码不变");
+        eq(sent.size(), 1, "客户端不自动重试（重试要新 requestId，等于新的幂等键）");
+    }
+
     public static void main(String[] args) {
         noHandshakeIsLocalUnavailable();
         fillsFieldsFromHandshake();
@@ -191,6 +233,8 @@ public class ScriptCallTest {
         ignoresStrayResultsAndClears();
         rawSendUsesOverrides();
         requestIdsAreMonotonic();
+        sendFailureRollsBack();
+        unknownDoesNotRetry();
 
         System.out.println("断言 " + checks + " 条");
         if (!failures.isEmpty()) {
