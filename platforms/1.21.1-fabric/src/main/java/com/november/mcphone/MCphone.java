@@ -52,6 +52,7 @@ public class MCphone implements ModInitializer {
         // 游戏生命周期 —— 对应原 NeoForge 的 NeoForge.EVENT_BUS 几条
         ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> {
             var id = handler.getPlayer().getUUID();
+            com.november.mcphone.core.script.server.ScriptHost.forget(id);   // S17：epoch 成对（登录建、登出忘）
             com.november.mcphone.core.net.RequestThrottle.onPlayerLoggedOut(id);
             com.november.mcphone.feature.music.DiscService.onPlayerLoggedOut(id);
             com.november.mcphone.feature.chat.ChatImageUploads.onPlayerLoggedOut(id);
@@ -103,6 +104,8 @@ public class MCphone implements ModInitializer {
         // 玩家进入世界时把服主那份服务端配置推给他（Fabric 没有 NeoForge 的自动同步，
         // shared/ 有三处客户端直读 ServerConfig，没有这个包按钮显隐会静默出错）
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> {
+            // S17：连接 epoch 成对（登出见 DISCONNECT）。客户端拿到的 epoch 经握手下发，那一半在 Stage 2
+            com.november.mcphone.core.script.server.ScriptHost.newEpoch(handler.getPlayer());
             var cfg = com.november.mcphone.core.ServerConfig.allowFriendTeleport();
             var img = com.november.mcphone.core.ServerConfig.allowChatImages();
             var kb = com.november.mcphone.core.ServerConfig.chatImageMaxBytes() / 1024;

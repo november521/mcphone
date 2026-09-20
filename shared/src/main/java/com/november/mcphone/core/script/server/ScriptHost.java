@@ -8,8 +8,10 @@ import com.november.mcphone.core.script.engine.SharedState;
 import com.november.mcphone.core.script.engine.StrikeTracker;
 import com.november.mcphone.core.script.net.ScriptRpcHandler;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerPlayer;
 
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * 脚本宿主的唯一装配点（S15g，施工方案 §15.5）。把"各自做完、但从没接在一起"的四段接成一条路：
@@ -126,5 +128,22 @@ public final class ScriptHost {
 
     public StrikeTracker strikes() {
         return strikes;
+    }
+
+    /**
+     * 玩家登录：给这一次连接一个新 epoch（§15.9）。管线没装（装配失败降级）时安全无操作。
+     *
+     * <p>与 {@link #forget(UUID)} <b>必须成对</b>：只建不忘 ⇒ epochs 表按玩家无界增长；
+     * 只忘不建 ⇒ 所有请求判成过期连接。两个调用点要写在同一个登录/登出接线处。
+     */
+    public static void newEpoch(ServerPlayer player) {
+        ScriptHost h = current();
+        if (h != null) h.pipeline.newEpoch(player.getUUID());
+    }
+
+    /** 玩家登出：只忘 epoch，不清账本（账本保留 24 小时，跨重连命中正是它存在的理由）。 */
+    public static void forget(UUID player) {
+        ScriptHost h = current();
+        if (h != null) h.pipeline.forget(player);
     }
 }

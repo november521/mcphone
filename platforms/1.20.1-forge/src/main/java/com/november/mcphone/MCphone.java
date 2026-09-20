@@ -119,6 +119,21 @@ public final class MCphone {
         MinecraftForge.EVENT_BUS.addListener(
                 com.november.mcphone.feature.chat.ChatImageUploads::onPlayerLoggedOut);
 
+        // S17：连接 epoch 成对（登录建、登出忘）。两者必须写在同一处，漏一个的后果见 ScriptHost.newEpoch。
+        // 客户端拿到的 epoch 经握手（Handshake.Begin）下发 —— 那一半在 Stage 2。
+        MinecraftForge.EVENT_BUS.addListener(
+                (net.minecraftforge.event.entity.player.PlayerEvent.PlayerLoggedInEvent e) -> {
+                    if (e.getEntity() instanceof net.minecraft.server.level.ServerPlayer p) {
+                        com.november.mcphone.core.script.server.ScriptHost.newEpoch(p);
+                    }
+                });
+        MinecraftForge.EVENT_BUS.addListener(
+                (net.minecraftforge.event.entity.player.PlayerEvent.PlayerLoggedOutEvent e) -> {
+                    if (e.getEntity() instanceof net.minecraft.server.level.ServerPlayer p) {
+                        com.november.mcphone.core.script.server.ScriptHost.forget(p.getUUID());
+                    }
+                });
+
         // 开服时清掉没有消息认领的图片文件，理由见 ChatImageStore.sweepOrphans
         MinecraftForge.EVENT_BUS.addListener(
                 com.november.mcphone.feature.chat.ChatImageStore::onServerStarted);
