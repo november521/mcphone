@@ -108,6 +108,15 @@ public class ScriptHostTest {
         eq(out.get(0).code(), ScriptErrorCode.NOT_DEPLOYED, "空部署表：请求一律 NOT_DEPLOYED");
         eq(ran.get(), 0, "空部署表：求值器一次都没跑（两轴都不在就不建桶）");
 
+        // 【对抗组 P1】生产里 newEpoch / forget 还没有调用点，epochs 表恒空 ⇒ 真实请求在 epoch
+        // 这一档就被拒，根本走不到部署判定。这里故意【不喂 epoch】，钉住生产当前的真实返回码 ——
+        // 别让"测试自己补上生产缺失的那一环"再无声发生。
+        out.clear();
+        p.accept(rpc(3, 12345L, "act"), snap(P1), out::add);
+        eq(out.get(0).code(), ScriptErrorCode.INVALID_ARGUMENT, "没喂过 epoch：真实生产在 epoch 一档被拒");
+        eq(out.get(0).messageKey(), ScriptPipeline.KEY_STALE_CONNECTION, "原因键是「过期连接」");
+        eq(ran.get(), 0, "更走不到求值器");
+
         // 部署表放行、授权表空 → 求值跑了，但落地前重查没过，效果没发生
         out.clear();
         ScriptPipeline p2 = new ScriptPipeline(SERVER, new IdempotencyLedger(System::currentTimeMillis),

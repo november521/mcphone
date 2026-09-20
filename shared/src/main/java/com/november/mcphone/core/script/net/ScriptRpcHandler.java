@@ -9,13 +9,18 @@ import net.minecraft.server.level.ServerPlayer;
  * 三个平台的登记点都指到这里（施工方案 §15.5）。<b>调到这里时已经在服务器主线程上</b> ——
  * 三个门面各自用 {@code consumerMainThread} / {@code ctx.enqueueWork} / {@code server.execute} 保证。
  *
- * <h2>本步还没有真正的管线</h2>
+ * <h2>管线由 ScriptHost 在开服时装上（S15g）</h2>
  *
- * {@link ScriptPipeline} 要一张已批准的部署表与一张授权表，那两张是 S17 的交付物（§14.4）。
- * 所以 {@link #pipeline} 在本步<b>始终是 null</b>，任何请求一律回 {@link ScriptErrorCode#NOT_DEPLOYED} ——
- * 那正是"本服没有这个 App 的已批准部署"的字面意思，不是兜底。
+ * 服务器运行期间 {@link #pipeline} 恒非 null（{@code ScriptHost.start} 装配、{@code ScriptHost.stop} 摘掉）。
+ * 但"装上了"不等于"能跑"：部署表与授权表是 {@code DenyAll*} 占位，那两张是 S17 的交付物（§14.4）。
  *
- * <p>登记本身现在就要做：三个包的序号由注册顺序发放（§10.3 顺序即身份），
+ * <p><b>当前真实返回码要说准</b>：{@code ScriptPipeline} 的准入顺序里"连接 epoch"排在"部署判定"<b>之前</b>，
+ * 而 {@code newEpoch} / {@code forget} 目前<b>还没有生产调用点</b>（成对接线属 S17）—— 于是 epochs 表恒空，
+ * 真实请求在 epoch 那一档就被拒（{@code INVALID_ARGUMENT} + {@code mcphone.script.stale_connection}），
+ * <b>根本走不到部署判定</b>。所以"部署表为空 ⇒ NOT_DEPLOYED"是 S17 接上握手之后的第一道，
+ * 不是今天请求被拒的原因；别把这两档说混（对抗组 P1）。
+ *
+ * <p>登记（{@link #install}）本身 S15g 已经做了：三个包的序号由注册顺序发放（§10.3 顺序即身份），
  * 等 S17 到货再登记的话，那时追加的序号与现在追加的不是同一个。
  */
 public final class ScriptRpcHandler {
@@ -23,7 +28,7 @@ public final class ScriptRpcHandler {
     private ScriptRpcHandler() {
     }
 
-    /** S17 装好部署表与授权表之后把它塞进来。 */
+    /** 由 {@code ScriptHost} 在开服时装上（S15g）；S17 只换部署表/授权表的实现，这个登记点不变。 */
     private static volatile ScriptPipeline pipeline;
 
     public static void install(ScriptPipeline p) {

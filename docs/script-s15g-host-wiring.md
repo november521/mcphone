@@ -17,7 +17,12 @@
 
 ## 本步的边界
 
-- **不做部署表 / 授权表 / 审批链 / 能力勾选**（S17）。两个视图只做"空表即拒"，没有任何"允许"分支；生产里请求因此仍一律 `NOT_DEPLOYED`。
+- **不做部署表 / 授权表 / 审批链 / 能力勾选**（S17）。两个视图只做"空表即拒"，没有任何"允许"分支。
+
+> **当前真实返回码要说准（对抗组 P1）**：管线确实装上了，但 `newEpoch` / `forget` 还没有生产调用点
+> ⇒ `epochs` 表恒空 ⇒ 真实请求在 **epoch 一档**就被拒，回 `INVALID_ARGUMENT` + `mcphone.script.stale_connection`，
+> **根本走不到部署判定**。所以"部署表为空 ⇒ `NOT_DEPLOYED`"是 S17 接上握手之后的第一道，不是今天的原因。
+> `docs/ScriptHostTest.java` 里有一条**故意不喂 epoch** 的断言钉住这个真实行为。
 - **不做 AppScope 的生产装配**：它的来源是"已部署的 server 包"，那正是 S17 的本体。本步 `apps` 表为空，端到端只由 `docs/ScriptHostTest.java`（真 `AppScope` + 真 `RhinoEvaluator` + 真 `ScriptPipeline` + 真 worker）跑通。
 - 没有后端的 `ctx.*` 整项不挂（E12）：本期 `item / cycle / store / sealed / currencies` 全是 `null`。
 
@@ -33,3 +38,11 @@
 脚本 / 客户端能拿到的"为什么不可用"一律是**本地化键**（`mcphone.*`），不是自由文本：
 `ScriptErrorCode.defaultMessageKey()` = `mcphone.script.code.<小写名>`；货币侧的 `CurrencyUnavailableException.reasonKey()` / `unavailableReasonKey()` 同样是 `mcphone.economy.*`。
 断言钉在 `docs/ScriptHostTest.java` 的 `messageKeysAreLocalizationKeys()`。
+
+## 交给 S17 的必做项（对抗组复核开出，本步不实施）
+
+1. **`newEpoch` / `forget` 必须成对接到生产**（登录/登出写在同一处）：只接 `newEpoch` ⇒ `epochs` 表按玩家无界增长；只接 `forget` ⇒ 所有请求判过期。接上之前，真实请求一直停在 epoch 一档。
+2. **`mainThread.accept` 的失败归宿**（P3）：`RhinoEvaluator.submit` 里 `mainThread.accept(...)` 不在任何 `catch` 内；生产是 `server::execute`，服务器停/已停时可能抛 `RejectedExecutionException` —— 那会让 worker 线程死、`onDone` 永不调、账本那条 `RESERVED` 本局永久挂着。必须给它一个确定的归宿（落定或下一拍重试），账本那条一定要结掉。
+3. **`ScriptHost.stop()` 的 discard 时机**（P4）：现在是"先 `discard` 各 scope、后停 worker"。今天 `apps` 恒空无事；S17 接上真 App 后要明确"求值中途 scope 被 discard"的语义（等 worker 停完再 discard，或让 `AppScope` 支持并发 discard）。
+4. **装配点失败的平台差异**（对抗组推算，需实测）：`ScriptHost.start` 若抛，NeoForge/Forge 的事件总线 per-listener catch，而 Fabric 的调用方直接调 handler ⇒ 可能等于**开服失败**。S17 之前让 `ScriptHost.start` 故意抛一次，在 Fabric 上确认后才决定要不要自己 `try/catch`。
+
