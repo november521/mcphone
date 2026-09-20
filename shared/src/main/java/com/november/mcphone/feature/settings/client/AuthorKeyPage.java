@@ -27,8 +27,9 @@ import java.nio.file.Path;
  *
  * <h2>签名是命令式的</h2>
  *
- * 这一页有「打包并签名」，但<b>没有"改了就自动签"</b>（§12.6）——
- * 自动签名会让"我只是改个错别字"与"我发布了一个新版本"变成同一件事。
+ * 这一页<b>不提供"打包并签名"</b>：签名走离线工具（gradle 的 {@code signApp}）。
+ * 自动签名会让"我只是改个错别字"与"我发布了一个新版本"变成同一件事 ——
+ * 后者要作者自己点头，所以本页只管密钥本身。
  */
 public final class AuthorKeyPage {
 
@@ -38,6 +39,11 @@ public final class AuthorKeyPage {
     private String fingerprint;
     private Boolean protectedOnDisk;
     private Component notice;
+
+    /** 私钥文件在不在。与 {@link #fingerprint} 分开：文件在、但读不出来是第三种状态。 */
+    private boolean keyPresent;
+    /** 文件在但读不出来/不是一对：此时不能画「生成密钥」（点下去只会报"已经有一对"）。 */
+    private boolean broken;
 
     private int genY, backupY, btnX, btnW;
 
@@ -57,7 +63,10 @@ public final class AuthorKeyPage {
 
     private void refresh() {
         Path game = gameDir();
-        if (!AuthorKeys.exists(game)) {
+        notice = null;
+        keyPresent = AuthorKeys.exists(game);
+        broken = false;
+        if (!keyPresent) {
             fingerprint = null;
             protectedOnDisk = null;
             return;
@@ -67,8 +76,10 @@ public final class AuthorKeyPage {
             fingerprint = k.fingerprint();
             protectedOnDisk = k.protectedOnDisk();
         } catch (PackageError e) {
+            // 文件在、读不出来：把"没有密钥"和"密钥坏了"分开显示，后者不给生成按钮
             fingerprint = null;
             protectedOnDisk = null;
+            broken = true;
             notice = Component.literal(e.getMessage());
         }
     }
@@ -86,7 +97,16 @@ public final class AuthorKeyPage {
                 x, y, PhoneTheme.FONT_COLOR_STATUS, false);
         y += ROW + 2;
 
-        if (fingerprint == null) {
+        if (broken) {
+            // 文件在、读不出来：说清怎么办，且不给「生成密钥」（点下去只会撞"已经有一对"）
+            for (var l : font.split(Component.translatable("mcphone.sig.key_broken"), w)) {
+                g.drawString(font, l, x, y, PhoneTheme.FONT_COLOR_CHAT_SEND, false);
+                y += font.lineHeight;
+            }
+            y += 4;
+            genY = -1;
+            backupY = -1;
+        } else if (fingerprint == null) {
             for (var l : font.split(Component.translatable("mcphone.sig.key_none"), w)) {
                 g.drawString(font, l, x, y, PhoneTheme.FONT_COLOR_NAV, false);
                 y += font.lineHeight;
@@ -102,8 +122,12 @@ public final class AuthorKeyPage {
             g.drawString(font, Component.translatable("mcphone.sig.key_fingerprint").getString(),
                     x, y, PhoneTheme.FONT_COLOR_NAV, false);
             y += ROW;
-            g.drawString(font, fingerprint, x, y, PhoneTheme.FONT_COLOR_STATUS, false);
-            y += ROW + 4;
+            // 长指纹按宽度折行：手机内容区只有 108 px，直接画会顶出去
+            for (var l : font.split(Component.literal(fingerprint), w)) {
+                g.drawString(font, l, x, y, PhoneTheme.FONT_COLOR_STATUS, false);
+                y += font.lineHeight;
+            }
+            y += 4;
 
             // 权限：设不上就明说，不假装设上了
             if (Boolean.FALSE.equals(protectedOnDisk)) {
@@ -148,20 +172,26 @@ public final class AuthorKeyPage {
         try {
             if (genY > 0 && my >= genY && my <= genY + ROW) {
                 AuthorKeys k = AuthorKeys.generate(gameDir());
+                keyPresent = true;
+                broken = false;
                 fingerprint = k.fingerprint();
                 protectedOnDisk = k.protectedOnDisk();
                 notice = Component.translatable("mcphone.sig.key_generated");
                 return true;
             }
             if (backupY > 0 && my >= backupY && my <= backupY + ROW) {
-                Path out = gameDir().resolve("mcphone-author-key-backup.key");
+                // 备份是一个目录、两个文件（只备私钥恢复不了）
+                Path out = gameDir().resolve("mcphone-author-key-backup");
                 AuthorKeys.exportBackup(gameDir(), out);
-                // 只说路径，【不说内容】
-                notice = Component.translatable("mcphone.sig.key_exported", out.getFileName().toString());
+                notice = Component.translatable("mcphone.sig.key_exported", out.toString());
                 return true;
             }
-        } catch (PackageError e) {
-            notice = Component.literal(e.getMessage());
+        } catch (VirtualMachineError fatal) {
+            throw fatal;
+        } catch (Throwable t) {
+            // SecurityException、坏路径、实现里的意外都变成一行提示，不许冒泡进 PhoneScreen
+            notice = Component.literal(t instanceof PackageError ? String.valueOf(t.getMessage())
+                    : t.getClass().getSimpleName() + ": " + t.getMessage());
             return true;
         }
         return false;

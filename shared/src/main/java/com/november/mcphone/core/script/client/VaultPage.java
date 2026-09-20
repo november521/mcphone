@@ -43,6 +43,9 @@ public final class VaultPage {
 
     private boolean backRequested;
 
+    /** 两个输入框的命中区（渲染时更新）：点框选框，点别处不该抢焦点。 */
+    private int boxX, boxW, firstBoxY, secondBoxY;
+
     public void open() {
         clear();
         onSecond = false;
@@ -82,18 +85,35 @@ public final class VaultPage {
         }
     }
 
+    /** 两次输入一不一样（空框不算"不一致"）。 */
+    private boolean entriesMatch() {
+        if (first.isEmpty() || second.isEmpty()) return true;
+        char[] a = toChars(first);
+        char[] b = toChars(second);
+        try {
+            return VaultPassphrase.matches(a, b);
+        } finally {
+            Arrays.fill(a, '\0');
+            Arrays.fill(b, '\0');
+        }
+    }
+
     public void render(GuiGraphics g, int phoneLeft, int phoneTop,
                        int screenW, int screenH, int statusH, int navH,
                        int mouseX, int mouseY, Font font) {
         int x = phoneLeft + PAD;
         int y = phoneTop + statusH + PAD;
         int w = screenW - PAD * 2;
+        boxX = x;
+        boxW = w;
 
         g.drawString(font, Component.translatable("mcphone.vault.title").getString(),
                 x, y, PhoneTheme.FONT_COLOR_STATUS, false);
         y += ROW + 2;
 
+        firstBoxY = y + ROW;
         y = field(g, font, x, y, w, Component.translatable("mcphone.vault.enter").getString(), first, !onSecond);
+        secondBoxY = y + ROW;
         y = field(g, font, x, y, w, Component.translatable("mcphone.vault.confirm").getString(), second, onSecond);
 
         // 强度提示：只提示，不拦；拦的只有长度与两次一致
@@ -106,7 +126,8 @@ public final class VaultPage {
         }
         y += ROW;
 
-        if (!second.isEmpty() && !acceptable() && first.size() == second.size()) {
+        // 两次不一致就要说出来，与长度差没关系（长度不同也是不一致）
+        if (!entriesMatch()) {
             g.drawString(font, Component.translatable("mcphone.vault.mismatch").getString(),
                     x, y, PhoneTheme.FONT_COLOR_CHAT_SEND, false);
         }
@@ -133,9 +154,20 @@ public final class VaultPage {
         return y + ROW + 4;
     }
 
-    /** 点一下换输入框。 */
+    /**
+     * 点输入框选框。点在别处不该改焦点 —— 以前是"点哪都切换"，在手机里点导航栏也会把
+     * 光标切走，回来继续打字就打进了另一个框。
+     */
     public boolean mouseClicked(double mx, double my, int button) {
-        onSecond = !onSecond;
+        if (mx < boxX || mx > boxX + boxW) return false;
+        if (my >= firstBoxY && my <= firstBoxY + ROW) {
+            onSecond = false;
+            return true;
+        }
+        if (my >= secondBoxY && my <= secondBoxY + ROW) {
+            onSecond = true;
+            return true;
+        }
         return false;
     }
 

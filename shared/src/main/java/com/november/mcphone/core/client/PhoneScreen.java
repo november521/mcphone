@@ -1589,6 +1589,9 @@ public final class PhoneScreen extends PhoneScreenBase {
         if (mode == Mode.NOTE_EDIT) noteEditor.close();
         if (mode == Mode.TXT_BOOK) txtReader.close();
 
+        // 口令输入也在"关机必抹"之列：HUD 那副面孔不经过 navigateTo，不在这里关就还留在内存里
+        vaultPage.close();
+
         // 关手机、被顶掉、退出世界都不经过 navigateTo，IPhonePage.onClose() "一定会被调用"靠这一行兑现
         closeAddonPage();
     }
