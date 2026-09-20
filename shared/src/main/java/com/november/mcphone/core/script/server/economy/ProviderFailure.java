@@ -28,7 +28,11 @@ public final class ProviderFailure extends RuntimeException {
     /** 造一个替身；已经是替身就原样返回。不抛：原来那个的 getMessage / getStackTrace 炸了就不带那一样。 */
     public static ProviderFailure of(Throwable original) {
         if (original instanceof ProviderFailure pf) return pf;
-        ProviderFailure s = new ProviderFailure(LogText.filter(original.getClass().getName() + safeMessage(original)));
+        // 【类名与 message 各自过 filter，不要先拼再过滤】：LogText.filter 自己也有上限，
+        // 先拼再过滤的话长 message 会被截两次 —— 第二次追加的 "...(truncated, original length N)"
+        // 会把 safeMessage 结尾那个「…」冲掉，而那条「…」正是"这条 message 被截过"的唯一记号。
+        ProviderFailure s = new ProviderFailure(
+                LogText.filter(original.getClass().getName()) + safeMessage(original));
         try {
             StackTraceElement[] frames = original.getStackTrace();
             if (frames == null) frames = new StackTraceElement[0];
@@ -47,7 +51,10 @@ public final class ProviderFailure extends RuntimeException {
         try {
             String m = t.getMessage();
             if (m == null) return "";
-            return ": " + (m.length() > MAX_MESSAGE ? m.substring(0, MAX_MESSAGE) + "…" : m);
+            // 【先过滤、再截短】：filter 会把控制字符换成转义并按 LogText.MAX 收口，
+            // 必须放在 MAX_MESSAGE 截短【之前】—— 反过来 filter 的截断记号会把结尾的「…」顶掉。
+            String f = LogText.filter(m);
+            return ": " + (f.length() > MAX_MESSAGE ? f.substring(0, MAX_MESSAGE) + "…" : f);
         } catch (Throwable e) {
             return "（getMessage 抛了 " + e.getClass().getName() + "）";
         }
