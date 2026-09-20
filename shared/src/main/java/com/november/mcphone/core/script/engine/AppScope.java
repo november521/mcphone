@@ -29,6 +29,9 @@ public final class AppScope {
     /** 一个 App 的 scope 顶层最多留多少字符。超了就重建。 */
     public static final long MAX_RETAINED_CHARS = 1 << 20;
 
+    /** 入口模块的规范名（施工方案 §15.2）：它定义 {@code actions} 表。 */
+    public static final String ENTRY = "server.js";
+
     /** 扫驻留量时最多看几个属性，防着一个有几万个键的 scope 把扫描本身变成负担。 */
     public static final int MAX_SCANNED = 4096;
 
@@ -56,10 +59,38 @@ public final class AppScope {
         return modules;
     }
 
-    /** 这个 App 的顶层 scope。第一次用时建。<b>只在持有 Context 的线程上调。</b> */
+    /**
+     * 这个 App 的顶层 scope。第一次用时建：加固 → 装 {@code require} → 在同一个 scope 里求值入口
+     * {@link #ENTRY} 定义出 {@code actions} 表。<b>只在持有 Context 的线程上调。</b>
+     *
+     * <p>求值发生在调用方的预算之内（{@code RhinoEvaluator} 先 {@code budget.begin()} 再进来），
+     * 所以一份写坏/写恶意的 {@code server.js} 烧不掉服务器。失败时<b>不发布</b>半成品 scope ——
+     * 下次调用重建重试，并把错误照常报上来。
+     */
     public synchronized ScriptableObject scope(Context cx) {
-        if (scope == null) scope = ScriptSandbox.harden(cx);
+        if (scope == null) {
+            ScriptableObject s = ScriptSandbox.harden(cx, target -> installRequire(cx, target));
+            String entry = modules.source(ENTRY);
+            if (entry != null) {
+                cx.evaluateString(s, entry, ENTRY, 1, null);
+            }
+            scope = s;
+        }
         return scope;
+    }
+
+    /** 把 {@code require(spec)} 装到加固后的顶层 scope 上；解析与缓存都在 {@link ScriptModules} 里。 */
+    private void installRequire(Context cx, ScriptableObject target) {
+        HostFn.put(target, target, "require", 1, (c, s, a) -> modules.require(
+                HostFn.str(a, 0, "require"), modules.currentModule(),
+                (name, source) -> c.evaluateString(s, source, name, 1, null)));
+        // 顶层 scope 刻意不密封（否则脚本连 var 都声明不了），于是 require 这个绑定本身是可写的：
+        // 脚本能把自己这个 App 的模块加载弄坏（不是提权 —— 它换不成宿主函数）。定成只读，与其它宿主全局同待遇。
+        Object fn = ScriptableObject.getProperty(target, "require");
+        if (fn != null) {
+            ScriptableObject.defineProperty(target, "require", fn,
+                    ScriptableObject.READONLY | ScriptableObject.PERMANENT | ScriptableObject.DONTENUM);
+        }
     }
 
     /**

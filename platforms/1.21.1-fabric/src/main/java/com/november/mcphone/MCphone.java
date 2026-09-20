@@ -52,6 +52,7 @@ public class MCphone implements ModInitializer {
         // 游戏生命周期 —— 对应原 NeoForge 的 NeoForge.EVENT_BUS 几条
         ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> {
             var id = handler.getPlayer().getUUID();
+            com.november.mcphone.core.script.server.ScriptHost.forget(id);   // S17：epoch 成对（登录建、登出忘）
             com.november.mcphone.core.net.RequestThrottle.onPlayerLoggedOut(id);
             com.november.mcphone.feature.music.DiscService.onPlayerLoggedOut(id);
             com.november.mcphone.feature.chat.ChatImageUploads.onPlayerLoggedOut(id);
@@ -82,7 +83,11 @@ public class MCphone implements ModInitializer {
         });
 
         net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback.EVENT.register(
-                (dispatcher, registryAccess, environment) -> com.november.mcphone.core.script.server.economy.EconomyCommand.register(dispatcher));
+                (dispatcher, registryAccess, environment) -> {
+                    com.november.mcphone.core.script.server.economy.EconomyCommand.register(dispatcher);
+                    // 脚本后端的 OP 管理命令（S17，§14.4）：部署/授权的 Stage 1 审批入口
+                    com.november.mcphone.core.script.server.ScriptAdminCommand.register(dispatcher);
+                });
 
         // 手机替卡槽里的终端供电。漏了它的症状是"终端在手机里会没电"，见 TerminalCharger。
         // Fabric 没有 NeoForge 的按玩家 tick 事件，用服务端 tick 自己发
@@ -99,6 +104,8 @@ public class MCphone implements ModInitializer {
         // 玩家进入世界时把服主那份服务端配置推给他（Fabric 没有 NeoForge 的自动同步，
         // shared/ 有三处客户端直读 ServerConfig，没有这个包按钮显隐会静默出错）
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> {
+            // S17：连接 epoch 成对（登出见 DISCONNECT）。客户端拿到的 epoch 经握手下发，那一半在 Stage 2
+            com.november.mcphone.core.script.server.ScriptHost.newEpoch(handler.getPlayer());
             var cfg = com.november.mcphone.core.ServerConfig.allowFriendTeleport();
             var img = com.november.mcphone.core.ServerConfig.allowChatImages();
             var kb = com.november.mcphone.core.ServerConfig.chatImageMaxBytes() / 1024;

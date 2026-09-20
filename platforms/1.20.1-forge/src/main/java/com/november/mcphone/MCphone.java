@@ -119,6 +119,21 @@ public final class MCphone {
         MinecraftForge.EVENT_BUS.addListener(
                 com.november.mcphone.feature.chat.ChatImageUploads::onPlayerLoggedOut);
 
+        // S17：连接 epoch 成对（登录建、登出忘）。两者必须写在同一处，漏一个的后果见 ScriptHost.newEpoch。
+        // 客户端拿到的 epoch 经握手（Handshake.Begin）下发 —— 那一半在 Stage 2。
+        MinecraftForge.EVENT_BUS.addListener(
+                (net.minecraftforge.event.entity.player.PlayerEvent.PlayerLoggedInEvent e) -> {
+                    if (e.getEntity() instanceof net.minecraft.server.level.ServerPlayer p) {
+                        com.november.mcphone.core.script.server.ScriptHost.newEpoch(p);
+                    }
+                });
+        MinecraftForge.EVENT_BUS.addListener(
+                (net.minecraftforge.event.entity.player.PlayerEvent.PlayerLoggedOutEvent e) -> {
+                    if (e.getEntity() instanceof net.minecraft.server.level.ServerPlayer p) {
+                        com.november.mcphone.core.script.server.ScriptHost.forget(p.getUUID());
+                    }
+                });
+
         // 开服时清掉没有消息认领的图片文件，理由见 ChatImageStore.sweepOrphans
         MinecraftForge.EVENT_BUS.addListener(
                 com.november.mcphone.feature.chat.ChatImageStore::onServerStarted);
@@ -154,6 +169,10 @@ public final class MCphone {
         });
         MinecraftForge.EVENT_BUS.addListener(
                 (net.minecraftforge.event.RegisterCommandsEvent e) -> com.november.mcphone.core.script.server.economy.EconomyCommand.register(e.getDispatcher()));
+        // 脚本后端的 OP 管理命令（S17，§14.4）：部署/授权的 Stage 1 审批入口
+        MinecraftForge.EVENT_BUS.addListener(
+                (net.minecraftforge.event.RegisterCommandsEvent e) ->
+                        com.november.mcphone.core.script.server.ScriptAdminCommand.register(e.getDispatcher()));
 
         // 放在自家注册之后：兼容模块可能要看我们已经注册了什么
         com.november.mcphone.compat.CompatModules.init(modBus);

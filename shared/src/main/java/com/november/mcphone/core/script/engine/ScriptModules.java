@@ -108,6 +108,19 @@ public final class ScriptModules {
         return sources.size();
     }
 
+    /**
+     * 正在求值的模块（给 JS 的 {@code require} 取 {@code from}）。
+     * 不在任何模块里时就是入口 {@link AppScope#ENTRY}。
+     */
+    public synchronized String currentModule() {
+        return loading.isEmpty() ? AppScope.ENTRY : loading.peek();
+    }
+
+    /** 某个规范名的源码；没有就是 null。入口求值用它。 */
+    public synchronized String source(String canonicalName) {
+        return sources.get(canonicalName);
+    }
+
     /** 有没有这个规范名。 */
     public boolean has(String canonicalName) {
         return sources.containsKey(canonicalName);

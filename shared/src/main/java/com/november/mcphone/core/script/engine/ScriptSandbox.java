@@ -94,6 +94,16 @@ public final class ScriptSandbox {
      * <p>{@code cx} 必须来自 {@link ScriptBudget}（那里已经设好 optimizationLevel、语言版本与 shutter）。
      */
     public static ScriptableObject harden(Context cx) {
+        return harden(cx, null);
+    }
+
+    /**
+     * 同上，外加一个<b>密封之前</b>的钩子：{@link AppScope} 用它把 {@code require} 装上顶层 scope。
+     *
+     * <p>顺序是判据的一部分：钩子在白名单删除（②）与内置包装（②.5）之后、逐个密封（③）之前 ——
+     * 密封之后就换不动了。钩子装上来的属性会与其它全局一起被第③步密封。
+     */
+    public static ScriptableObject harden(Context cx, java.util.function.Consumer<ScriptableObject> beforeSeal) {
         ScriptableObject s = (ScriptableObject) cx.initSafeStandardObjects(null, false);
 
         // ① 切断 .constructor 链 + 给 Function.prototype.apply 装尺寸闸 + 密封它。
@@ -137,6 +147,9 @@ public final class ScriptSandbox {
         wrapPrototype(s, "String");
         wrapPrototype(s, "Array");
         for (String holder : EXTRA_WRAPPED_HOLDERS) wrapOwn(s, holder);
+
+        // ②.7 宿主钩子（比如 require）：同样必须在密封之前
+        if (beforeSeal != null) beforeSeal.accept(s);
 
         // ③ 逐个密封留下来的全局与它的 prototype。
         //    【不要】密封顶层 scope —— 实测那样脚本连 var 都声明不了

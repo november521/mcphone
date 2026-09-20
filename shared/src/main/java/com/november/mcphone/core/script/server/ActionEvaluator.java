@@ -54,7 +54,7 @@ public interface ActionEvaluator {
      * §20.6 的 revision）。不放在这里，S13 到货时就要改这个已经合并的签名。
      */
     record Outcome(ScriptErrorCode code, byte[] data, String messageKey, List<String> messageArgs,
-                   long retryAfterMs, long stateRevision, List<ActionIntent> intents) {
+                   long retryAfterMs, long stateRevision, List<ActionIntent> intents, boolean moneyMoved) {
 
         public Outcome {
             if (code == null) code = ScriptErrorCode.INTERNAL;
@@ -64,12 +64,22 @@ public interface ActionEvaluator {
             intents = intents == null ? List.of() : List.copyOf(intents);
         }
 
+        /**
+         * 这一次求值里<b>钱已经动过</b>（provider 返回过结果）。落地前重查被拒时要据此回
+         * {@code UNKNOWN} 而不是 {@code NOT_AUTHORIZED} —— 回后者玩家会以为"没动、重试一下"，
+         * 而钱可能已经付了（E35③、§15.9）。
+         */
+        public Outcome withMoneyMoved() {
+            return moneyMoved ? this
+                    : new Outcome(code, data, messageKey, messageArgs, retryAfterMs, stateRevision, intents, true);
+        }
+
         public static Outcome ok(byte[] data, long stateRevision, List<ActionIntent> intents) {
-            return new Outcome(ScriptErrorCode.OK, data, "", List.of(), 0, stateRevision, intents);
+            return new Outcome(ScriptErrorCode.OK, data, "", List.of(), 0, stateRevision, intents, false);
         }
 
         public static Outcome fail(ScriptErrorCode code) {
-            return new Outcome(code, new byte[0], code.defaultMessageKey(), List.of(), 0, 0, List.of());
+            return new Outcome(code, new byte[0], code.defaultMessageKey(), List.of(), 0, 0, List.of(), false);
         }
     }
 }

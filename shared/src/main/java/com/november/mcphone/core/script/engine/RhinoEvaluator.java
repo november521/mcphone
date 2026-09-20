@@ -75,7 +75,27 @@ public final class RhinoEvaluator implements ActionEvaluator {
         // 队列满时返回 false，onDone 不会被调 —— 背压要传回准入那一层（ActionEvaluator 的契约）
         return ScriptWorkers.submit(() -> {
             Completion completion = evaluateSafely(app, request);
-            mainThread.accept(() -> land(request, completion, onDone));
+            try {
+                mainThread.accept(() -> land(request, completion, onDone));
+            } catch (VirtualMachineError fatal) {
+                throw fatal;
+            } catch (Throwable dispatch) {
+                // 服务器正在停：主线程执行器（server::execute）拒绝投递。onDone 的契约是"主线程上恰好一次"，
+                // 此时只能降级，但【绝不静默丢，也不许丢真实结论】—— 直接把这次求值的 Completion 走 land()：
+                // land 的 finally 一定会调 onDone，于是账本那条 RESERVED 结清、钱已动⇒UNKNOWN 也照常生效（M1）。
+                // 代价：这一次 onDone 不在主线程，且 apply(处分) 会因归属断言在 worker 上失败（被 catch 住）；
+                // 停服窗口内可接受，日志留痕。C1：这条口子把"两张表只在主线程读写"的纪律在停服窗口里开了缝 ——
+                // 所以【停服窗口里不许再有人改 DeploymentData/AuthorityData/账本】（热重载、stopping 时保存都不行）。
+                MCphone.LOGGER.error("[MCphone] ⚠ 完成回调投递失败（服务器正在停？），改在 worker 上直接落地 app={} action={}",
+                        request.appId(), request.actionId(), dispatch);
+                try {
+                    land(request, completion, onDone);
+                } catch (Throwable t) {
+                    // 归属断言（StrikeTracker 只许主线程）会在这里抛；onDone 已在 land 的 finally 里用真实结论调过
+                    MCphone.LOGGER.error("[MCphone] 降级落地收尾（处分跳过，结论已回）app={} action={}",
+                            request.appId(), request.actionId(), t);
+                }
+            }
         });
     }
 
@@ -164,7 +184,12 @@ public final class RhinoEvaluator implements ActionEvaluator {
                 }
             }
         }
-        return completion == null ? none(ScriptErrorCode.INTERNAL) : completion;
+        // 钱动过的记号要带进 Outcome：落地前重查被拒时靠它决定 UNKNOWN 还是 NOT_AUTHORIZED（S17 约束 6）。
+        // 各条路径自己不带这个记号（runAction 只在 code!=OK 时折成 UNKNOWN），在这里统一补上。
+        Completion done = completion == null ? none(ScriptErrorCode.INTERNAL) : completion;
+        return ledger.moved() && !done.outcome().moneyMoved()
+                ? new Completion(done.outcome().withMoneyMoved(), done.disposition())
+                : done;
     }
 
     private Completion runAction(Context cx, AppScope app, Request request, CtxBuilder.Result result,
@@ -184,7 +209,7 @@ public final class RhinoEvaluator implements ActionEvaluator {
         if (ledger.moved() && code != ScriptErrorCode.OK) return none(ScriptErrorCode.UNKNOWN);
         Outcome outcome = new Outcome(code, result.dataJson.getBytes(StandardCharsets.UTF_8),
                 LogText.filter(result.messageKey), result.messageArgs.stream().map(LogText::filter).toList(),
-                0, 0, List.of());
+                0, 0, List.of(), ledger.moved());
         return new Completion(outcome, Disposition.RESET);
     }
 

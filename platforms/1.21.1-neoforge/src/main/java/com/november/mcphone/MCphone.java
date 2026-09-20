@@ -39,6 +39,21 @@ public class MCphone {
         net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener(
                 com.november.mcphone.feature.chat.ChatImageUploads::onPlayerLoggedOut);
 
+        // S17：连接 epoch 成对（登录建、登出忘）。两者必须写在同一处，漏一个的后果见 ScriptHost.newEpoch。
+        // 客户端拿到的 epoch 经握手（Handshake.Begin）下发 —— 那一半在 Stage 2。
+        net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener(
+                (net.neoforged.neoforge.event.entity.player.PlayerEvent.PlayerLoggedInEvent e) -> {
+                    if (e.getEntity() instanceof net.minecraft.server.level.ServerPlayer p) {
+                        com.november.mcphone.core.script.server.ScriptHost.newEpoch(p);
+                    }
+                });
+        net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener(
+                (net.neoforged.neoforge.event.entity.player.PlayerEvent.PlayerLoggedOutEvent e) -> {
+                    if (e.getEntity() instanceof net.minecraft.server.level.ServerPlayer p) {
+                        com.november.mcphone.core.script.server.ScriptHost.forget(p.getUUID());
+                    }
+                });
+
         // 手机替卡槽里的终端供电。漏了它的症状是"终端在手机里会没电"，见 TerminalCharger
         net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener(
                 com.november.mcphone.feature.terminal.TerminalCharger::onPlayerTick);
@@ -75,6 +90,10 @@ public class MCphone {
                         tickDiscLoop(e.getServer().getPlayerList().getPlayers()));
         net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener(
                 (net.neoforged.neoforge.event.RegisterCommandsEvent e) -> com.november.mcphone.core.script.server.economy.EconomyCommand.register(e.getDispatcher()));
+        // 脚本后端的 OP 管理命令（S17，§14.4）：部署/授权的 Stage 1 审批入口
+        net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener(
+                (net.neoforged.neoforge.event.RegisterCommandsEvent e) ->
+                        com.november.mcphone.core.script.server.ScriptAdminCommand.register(e.getDispatcher()));
 
         // SERVER 而非 COMMON：必须由服主一份说了算，且 NeoForge 会同步给客户端供界面藏按钮
         modContainer.registerConfig(net.neoforged.fml.config.ModConfig.Type.SERVER,

@@ -44,6 +44,9 @@ public final class ScriptPipeline {
     /** 服务器忙的文案键。<b>与"你太快了"分开</b>：一个该退避，一个该稍后再试。 */
     public static final String KEY_SERVER_BUSY = "mcphone.script.server_busy";
 
+    /** App 已部署、但请求的动作没在包里声明。码仍是 {@code NOT_DEPLOYED}（两轴都不在），文案分开。 */
+    public static final String KEY_NO_SUCH_ACTION = "mcphone.script.no_such_action";
+
     private final IdempotencyLedger ledger;
     private final ScriptRateLimiter limiter;
     private final DeploymentView deployments;
@@ -100,8 +103,15 @@ public final class ScriptPipeline {
             return;
         }
 
-        if (!deployments.deployed(rpc.appId()) || !deployments.hasAction(rpc.appId(), rpc.actionId())) {
+        if (!deployments.deployed(rpc.appId())) {
             send.accept(ScriptRpcResult.fail(rpc.requestId(), ScriptErrorCode.NOT_DEPLOYED));
+            return;
+        }
+        if (!deployments.hasAction(rpc.appId(), rpc.actionId())) {
+            // 部署在、但这个动作没在包里声明：还是 NOT_DEPLOYED（两轴都不在），但给一条自己的文案键，
+            // 别让玩家看到"本服没有这个 App"（它明明在）——对抗组 Q1 的粒度修正
+            send.accept(new ScriptRpcResult(rpc.requestId(), ScriptErrorCode.NOT_DEPLOYED,
+                    new byte[0], KEY_NO_SUCH_ACTION, java.util.List.of(), 0, 0));
             return;
         }
 
@@ -165,9 +175,15 @@ public final class ScriptPipeline {
     public ScriptRpcResult land(ScriptRpc rpc, UUID player, byte[] key, ActionEvaluator.Outcome outcome) {
         try {
             if (!authority.allows(player, rpc.appId(), rpc.actionId())) {
-                // 重查没过：意图一条都不落地
-                ledger.settle(player, key, ScriptErrorCode.NOT_AUTHORIZED, new byte[0], 0, 0);
-                return ScriptRpcResult.fail(rpc.requestId(), ScriptErrorCode.NOT_AUTHORIZED);
+                // 重查没过：意图一条都不落地。但【钱已经动过】时不能回 NOT_AUTHORIZED ——
+                // 那会让玩家以为"没动、重试一下"，而钱可能已经付了（E35③）。回 UNKNOWN，客户端绝不自动重试。
+                ScriptErrorCode code = outcome.moneyMoved() ? ScriptErrorCode.UNKNOWN : ScriptErrorCode.NOT_AUTHORIZED;
+                ledger.settle(player, key, code, new byte[0], 0, 0);
+                if (code == ScriptErrorCode.UNKNOWN) {
+                    MCphone.LOGGER.warn("[MCphone] 落地前重查授权没过，但本次求值里钱已动过 app={} action={}，回 UNKNOWN 不回 NOT_AUTHORIZED",
+                            rpc.appId(), rpc.actionId());
+                }
+                return ScriptRpcResult.fail(rpc.requestId(), code);
             }
             ledger.settle(player, key, outcome.code(), outcome.data(), outcome.retryAfterMs(), outcome.stateRevision());
             return new ScriptRpcResult(rpc.requestId(), outcome.code(), outcome.data(),
