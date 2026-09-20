@@ -51,8 +51,9 @@ public final class EconomyCommand {
                 unbalanced++;
                 continue;
             }
-            // 一律按 builtin 档对：余额取自世界存档。计分板档的余额不在这份存档里，对出来必然不平 ——
-            // 注册表接进来（S15f）之后要按档区分，在那之前生产环境里还没有计分板档的货币
+            // 一律按 builtin 档对：余额取自世界存档。S15f 只为"存档里已出现过的货币"注册 builtin 档
+            // （面额表属 S15d′），所以现在账上不可能出现别的档。等 S15d′ 按配置注册计分板/外部钱包档之后，
+            // 这里要按 provider 的档区分 —— 计分板档的余额不在这份存档里，照这样对出来必然不平
             EconomyAudit.Result r = EconomyAudit.run(id, data);
             if (!r.balanced()) unbalanced++;
             Component line = Component.literal(r.describe())

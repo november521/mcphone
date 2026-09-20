@@ -22,6 +22,11 @@
 | 脚本自身未捕获异常 | `RhinoException` | 已未捕获 | `INTERNAL`；钱已动则 `UNKNOWN` | `STRIKE`；钱已动则 `NONE` | worker / 主线程 |
 | 驻留清扫 getter 抛任意 `Throwable` | 清扫局部捕获 | 不适用 | 保留已算出的业务结果；钱已动则 `UNKNOWN` | `STRIKE`；钱已动则 `NONE` | worker（Context 内）/ 主线程 |
 | 求值器意外宿主失败 / VM 级错误 | 最外层 `Throwable` | 否 | `INTERNAL`；钱已动则 `UNKNOWN` | `NONE` | worker / 主线程 |
+| 注册表：同一 `currencyId` 第二个实例（S15f） | `CurrencyRegistry.register` 记一条 ERROR 并返回 `false`，不替换 | 不适用（发生在接线/开服，不在脚本求值内） | 原实例保留、新实例不生效；不抛，不改任何结论 | `NONE`（不是脚本行为） | 主线程（开服接线）；测试直调时调用线程 |
+| 注册表为空（新世界、尚无配置，S15f） | `get(id)` 返回 `null`；`ctx.currency` 不挂空壳 | 不适用 | `ctx.currency.default()` 为 `null`、`list()` 为空；App 该 `ctx.fail('UNAVAILABLE', …)`，不崩 | `NONE` | 主线程（开服） |
+| 默认货币未配置（S15f） | `defaultCurrency()` 返回 `null` | 不适用 | 同左；不抛、不猜 | `NONE` | 主线程 |
+
+注册表级三行与本表其余行不同：它们不经过脚本求值，因此没有"脚本可 catch"与"处分"可言 —— 一律 `NONE`，不记任何玩家过失。第二行是**正常状态**（新世界一种货币都没有），不是错误。
 
 ## 线程与顺序
 

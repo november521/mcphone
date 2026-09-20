@@ -1,10 +1,13 @@
 package com.november.mcphone.core.script.server.economy;
 
 import com.november.mcphone.MCphone;
+import com.november.mcphone.api.economy.Currency;
 import com.november.mcphone.api.economy.EscrowId;
 import com.november.mcphone.api.economy.ICurrencyProvider;
 import com.november.mcphone.api.economy.TxnReason;
 import com.november.mcphone.api.economy.TxnResult;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.level.storage.LevelResource;
 
@@ -24,8 +27,25 @@ import java.util.function.Function;
  * <p>超时托管除了开服扫一次，运行中每 {@link #SWEEP_INTERVAL_MS} 再扫一次（{@link #tick()}）：只在开服扫，
  * 服务器跑得越久越不守 7 天的规则。
  *
- * <p>注册表（有哪几种货币、各用哪一档）还没接进来，那是 S15f 的事；所以扫描时超时托管找不到 provider 退款，
- * 只计数不动账 —— 钱留在托管里，比退错地方强。
+ * <h2>注册表：谁提供哪种钱（S15f 接线）</h2>
+ *
+ * 唯一一份 {@link CurrencyRegistry} 由本类持有（{@link #registry()}），与服务器/世界生命周期同轴：
+ * 开服建、停服 {@link CurrencyRegistry#clear()}；provider 查找就是它的 {@code get}，不再是写死的 {@code null}。
+ * {@code ctx.currency.*}（S15g 接线）与这里的超时托管查找拿到的是<b>同一个实例</b> ——
+ * 两份实例会让"同一种货币只有一个实例"这条守恒前提失效（见 {@link CurrencyRegistry#register}）。
+ *
+ * <p><b>本步只接线、不造货币</b>：面额表（id / 符号 / 小数位 / 用哪一档）属 {@code S15d′}。在此之前，
+ * 对世界存档里<b>已经出现过</b>的每种货币（{@link EconomyData#currencyIds()}）按 {@code builtin} 档注册一份 ——
+ * 与 {@link EconomyCommand} 对账时"一律按 builtin 档"的现状口径一致。新世界一种都没有，注册表为空，
+ * {@code ctx.currency.default()} 回 null（App 该 {@code ctx.fail} 而不是崩，§22.8）。
+ *
+ * <p><b>还没到货的档不注册、也不挂空壳</b>（{@code ctx} 上不出现"有属性但永远不可用"的货币，E12/E20/E33）：
+ * <ul>
+ *   <li>{@code scoreboard} —— 要货币配置（哪一种走计分板）与 {@code platform/Scores} 接缝；</li>
+ *   <li>{@code adapter} —— 要一个已到货的 {@link AdapterProvider.ExternalWallet} 实例（具体目标模组未定）；</li>
+ *   <li>{@code emc_legacy} —— 要旧 {@code api/cost} 钱包（{@code IEmcWallet}）在场。</li>
+ * </ul>
+ * 三者都由 {@code S15d′} 按配置决定并注册。
  */
 public final class EconomyRuntime {
 
@@ -40,25 +60,45 @@ public final class EconomyRuntime {
     private final EconomyData data;
     private final TxnLog log;
     private final CurrencyGateway gateway;
-    /** 货币 id → 它的 provider。注册表接进来（S15f）之前一律找不到。 */
+    /** 货币 id → 它的 provider。生产里就是 {@link #registry} 的 get（同一个实例）。 */
     private final Function<String, ICurrencyProvider> providers;
+    /**
+     * 唯一一份货币注册表，与服务器/世界生命周期同轴（开服建、停服 {@link CurrencyRegistry#clear()}）。
+     * {@code null} 只出现在断言测试直接注入 provider 查找函数的那个构造器里。
+     */
+    private final CurrencyRegistry registry;
     private long nextSweepAt;
     private int lastOrphaned;
     private int lastFailed;
     /** 退款时 provider 抛过异常的托管：钱退没退出去不知道，这次运行里不再自动退（见 {@link #sweepEscrow}） */
     private final Set<EscrowId> suspect = new HashSet<>();
 
+    /** 断言测试用：直接喂一个 provider 查找函数（{@link #registry()} 为 null）。 */
     EconomyRuntime(EconomyData data, TxnLog log, CurrencyGateway gateway,
                    Function<String, ICurrencyProvider> providers, long now) {
+        this(data, log, gateway, null, providers, now);
+    }
+
+    private EconomyRuntime(EconomyData data, TxnLog log, CurrencyGateway gateway,
+                           CurrencyRegistry registry, long now) {
+        this(data, log, gateway, registry, registry::get, now);
+    }
+
+    private EconomyRuntime(EconomyData data, TxnLog log, CurrencyGateway gateway,
+                           CurrencyRegistry registry,
+                           Function<String, ICurrencyProvider> providers, long now) {
         this.data = data;
         this.log = log;
         this.gateway = gateway;
+        this.registry = registry;
         this.providers = providers;
         this.nextSweepAt = now + SWEEP_INTERVAL_MS;
     }
 
-    /** 开服时在主线程上调。重复调会先把上一份关掉。 */
+    /** 开服时在主线程上调。重复调会先把上一份关掉（在 {@link #install} 里；这里再兜一句，幂等）。 */
     public static synchronized void start(MinecraftServer server) {
+        // 先停掉上一份再建新日志/网关：否则在最外面这个窗口里，旧的 gateway 还开着、
+        // 旧 runtime 还是 current，而新日志已经开跑了一次 sweep（P3）。多调一次 stop() 零代价。
         stop();
         EconomyData data = EconomyData.get(server);
         // 整份锁住的存档不接进流水：它永远不写存档点，接上了流水就会替它自动补存档点、说它"存过了"
@@ -71,10 +111,66 @@ public final class EconomyRuntime {
         log.sweep(now);
         CurrencyGateway gateway = new CurrencyGateway(server::execute,
                 () -> Thread.currentThread() == server.getRunningThread());
-        EconomyRuntime r = new EconomyRuntime(data, log, gateway, currencyId -> null, System.nanoTime() / 1_000_000);
+        // 顺序：建注册表 → 注册已到货的档 → 扫超时托管（用注册表找 provider）→ 最后才开网关。
+        // 扫描发生在主线程上，而网关的 call 在主线程直接执行、不受"还没 open"影响（见 CurrencyGateway.call）
+        install(data, log, gateway, System.nanoTime() / 1_000_000);
+    }
+
+    /**
+     * 建注册表、注册已到货的档、扫一趟超时托管、开网关、挂上 {@link #current}。
+     * <b>会先 {@link #stop()} 把上一份关掉</b>，所以重复调用是幂等的（单人游戏连续开关世界不会残留上一个世界）。
+     *
+     * <p>与 {@code start(MinecraftServer)} 分开是为了能在 {@code docs/} 的断言测试里跑完整生命周期 ——
+     * 那边起不了服务器，但能喂一本 {@link EconomyData} 与一个假网关。
+     */
+    static synchronized EconomyRuntime install(EconomyData data, TxnLog log,
+                                               CurrencyGateway gateway, long now) {
+        stop();
+        EconomyRuntime r = wire(data, log, gateway, now);
         r.sweepNow();
         gateway.open();
         current = r;
+        return r;
+    }
+
+    /**
+     * 建出唯一一份注册表并注册已到货的档，得到 runtime。开服与断言测试都走这里，
+     * 保证 {@code ctx.currency} 与超时托管查找不会各建一份。
+     */
+    static EconomyRuntime wire(EconomyData data, TxnLog log, CurrencyGateway gateway, long now) {
+        CurrencyRegistry registry = new CurrencyRegistry(gateway);
+        registerAvailable(registry, data, log);
+        return new EconomyRuntime(data, log, gateway, registry, now);
+    }
+
+    /**
+     * 注册<b>当前已到货</b>的档。本步只有 {@code builtin}，且只为世界存档里已经出现过的货币注册 ——
+     * 面额表（id / 符号 / 小数位 / 哪一档）属 {@code S15d′}，本步不猜、不硬编码默认货币。
+     *
+     * <p>元数据只从 id 推：显示名取 path、符号空、小数位 0。它只影响显示（E19），
+     * 对账与超时退款都不看这些；{@code S15d′} 到货后按配置覆盖。
+     *
+     * <p>未到货的档见类注释那张清单：不注册、也不挂空壳。
+     */
+    private static void registerAvailable(CurrencyRegistry registry, EconomyData data, TxnLog log) {
+        java.util.List<String> ids = new java.util.ArrayList<>();
+        for (String id : data.currencyIds()) {
+            ResourceLocation rl = ResourceLocation.tryParse(id);
+            if (rl == null) {
+                // 存档里的 id 不是合法 ResourceLocation：本来也花不出去，跳过并说出来，别让它把开服打断
+                MCphone.LOGGER.warn("[MCphone] 货币注册表：存档里的 id {} 不是合法的 ResourceLocation，跳过", id);
+                continue;
+            }
+            Currency currency = new Currency(rl, Component.literal(rl.getPath()), "", 0, null);
+            BuiltinProvider p = new BuiltinProvider(currency, data, data.escrow(), log,
+                    System::currentTimeMillis, false, Long.MAX_VALUE);
+            // isDefault=false：默认货币是配置决定的事（S15d′），本步不做主
+            if (registry.register(p, false)) ids.add(id);
+        }
+        if (!ids.isEmpty()) {
+            MCphone.LOGGER.info("[MCphone] 货币注册表：按 builtin 档注册了 {} 种（{}）",
+                    ids.size(), String.join("、", ids));
+        }
     }
 
     /**
@@ -121,16 +217,34 @@ public final class EconomyRuntime {
         lastFailed = s.failed();
     }
 
-    /** 停服时在主线程上调，<b>在 {@code ScriptWorkers.stop()} 之前</b>。 */
+    /** 停服时在主线程上调，<b>在 {@code ScriptWorkers.stop()} 之前</b>。重复调安全（已经是 null 就是空操作）。 */
     public static synchronized void stop() {
         EconomyRuntime r = current;
         current = null;
-        if (r != null) r.gateway.close();
+        if (r != null) {
+            // 先关网关（还在排队的调用一律取消）、再清注册表：清掉之后谁都拿不到 provider，
+            // 上一个世界的实例不会跟着静态表进下一个世界（单人游戏连续开关世界）
+            r.gateway.close();
+            if (r.registry != null) r.registry.clear();
+        }
     }
 
     /** 没开服、或者已经停了就是 null。 */
     public static EconomyRuntime current() {
         return current;
+    }
+
+    /**
+     * 唯一一份货币注册表 —— {@code ctx.currency.*}（S15g 接线）与超时托管查找用的是<b>同一个实例</b>。
+     * 直接注入 provider 查找函数的测试运行时为 {@code null}。
+     *
+     * <p><b>线程约定（S15g 接线前必须定死）</b>：注册表是普通 {@code LinkedHashMap}，现在只有主线程上的
+     * {@code sweepNow} 读它，{@code registry()} 也还没有生产调用点。S15g 把 {@code ctx.currency} 接上之后，
+     * worker 上的 {@code get()} 会与主线程上的 {@code register()}/{@code clear()} 并发 —— 要么把表换成并发结构，
+     * 要么明文规定"注册表只在主线程读"。在那之前不许接。
+     */
+    public CurrencyRegistry registry() {
+        return registry;
     }
 
     public EconomyData data() {
