@@ -241,6 +241,9 @@ public class DeploymentAuthorityTest {
         eq(ScriptAdminCommand.split(" buy , sell ,, buy "), List.of("buy", "sell"), "动作列表按逗号拆、去空去重");
         eq(ScriptAdminCommand.split(""), List.of(), "空串 = 空列表（一个都不批，与 approve 的语义一致）");
         eq(ScriptAdminCommand.shortDigest("abcdef123456"), "abcdef12", "短摘要取 8 位");
+        eq(ScriptAdminCommand.parseList(null), null, "approve 不传参数 = 按声明全批");
+        eq(ScriptAdminCommand.parseList("-"), List.of(), "approve 传 - = 一个都不批（显式 fail-closed）");
+        eq(ScriptAdminCommand.parseList("buy,sell"), List.of("buy", "sell"), "逗号拆的逐条勾选");
     }
 
     public static void main(String[] args) {

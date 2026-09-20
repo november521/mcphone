@@ -81,14 +81,18 @@ public final class RhinoEvaluator implements ActionEvaluator {
                 throw fatal;
             } catch (Throwable dispatch) {
                 // 服务器正在停：主线程执行器（server::execute）拒绝投递。onDone 的契约是"主线程上恰好一次"，
-                // 此时只能降级，但【绝不静默丢】—— 在 worker 上直接走完成链，让账本那条 RESERVED 结清
-                // （S17 约束 3）。代价是这一次 onDone 不在主线程；停服窗口内可接受，日志留痕。
-                MCphone.LOGGER.error("[MCphone] ⚠ 完成回调投递失败（服务器正在停？），改在 worker 上直接结清 app={} action={}",
+                // 此时只能降级，但【绝不静默丢，也不许丢真实结论】—— 直接把这次求值的 Completion 走 land()：
+                // land 的 finally 一定会调 onDone，于是账本那条 RESERVED 结清、钱已动⇒UNKNOWN 也照常生效（M1）。
+                // 代价：这一次 onDone 不在主线程，且 apply(处分) 会因归属断言在 worker 上失败（被 catch 住）；
+                // 停服窗口内可接受，日志留痕。C1：这条口子把"两张表只在主线程读写"的纪律在停服窗口里开了缝 ——
+                // 所以【停服窗口里不许再有人改 DeploymentData/AuthorityData/账本】（热重载、stopping 时保存都不行）。
+                MCphone.LOGGER.error("[MCphone] ⚠ 完成回调投递失败（服务器正在停？），改在 worker 上直接落地 app={} action={}",
                         request.appId(), request.actionId(), dispatch);
                 try {
-                    onDone.accept(Outcome.fail(ScriptErrorCode.INTERNAL));
+                    land(request, completion, onDone);
                 } catch (Throwable t) {
-                    MCphone.LOGGER.error("[MCphone] 降级结清也失败 app={} action={}",
+                    // 归属断言（StrikeTracker 只许主线程）会在这里抛；onDone 已在 land 的 finally 里用真实结论调过
+                    MCphone.LOGGER.error("[MCphone] 降级落地收尾（处分跳过，结论已回）app={} action={}",
                             request.appId(), request.actionId(), t);
                 }
             }

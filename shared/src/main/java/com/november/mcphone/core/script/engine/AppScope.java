@@ -84,6 +84,13 @@ public final class AppScope {
         HostFn.put(target, target, "require", 1, (c, s, a) -> modules.require(
                 HostFn.str(a, 0, "require"), modules.currentModule(),
                 (name, source) -> c.evaluateString(s, source, name, 1, null)));
+        // 顶层 scope 刻意不密封（否则脚本连 var 都声明不了），于是 require 这个绑定本身是可写的：
+        // 脚本能把自己这个 App 的模块加载弄坏（不是提权 —— 它换不成宿主函数）。定成只读，与其它宿主全局同待遇。
+        Object fn = ScriptableObject.getProperty(target, "require");
+        if (fn != null) {
+            ScriptableObject.defineProperty(target, "require", fn,
+                    ScriptableObject.READONLY | ScriptableObject.PERMANENT | ScriptableObject.DONTENUM);
+        }
     }
 
     /**

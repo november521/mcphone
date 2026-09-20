@@ -111,8 +111,16 @@ public record Deployment(
                 MCphone.LOGGER.warn("[MCphone] 部署 {} 的批准人 UUID 读不出来（{}），按无批准人处理", appId, raw);
             }
         }
-        return new Deployment(appId, t.getString(DEPLOYMENT_ID), t.getString(REVISION),
-                t.getLong(APPROVAL_REVISION), t.getString(PACKAGE_DIGEST), t.getString(FRONTEND_DIGEST),
+        String packageDigest = t.getString(PACKAGE_DIGEST);
+        String storedRevision = t.getString(REVISION);
+        // M5：revision 与 packageDigest 是同一个值。读档一律以 packageDigest 为准，两边不一致就告警并归一 ——
+        // 否则将来某一步只改一个字段，客户端的 deployRev 比对与"装配的是哪份代码"会静默分叉。
+        if (!storedRevision.isEmpty() && !storedRevision.equals(packageDigest)) {
+            MCphone.LOGGER.warn("[MCphone] 部署 {} 的 revision（{}）与包摘要不一致，按包摘要归一",
+                    appId, storedRevision);
+        }
+        return new Deployment(appId, t.getString(DEPLOYMENT_ID), packageDigest,
+                t.getLong(APPROVAL_REVISION), packageDigest, t.getString(FRONTEND_DIGEST),
                 cleanList(t, DECLARED_ACTIONS), cleanList(t, APPROVED_ACTIONS),
                 cleanList(t, DECLARED_CAPS), cleanList(t, APPROVED_CAPS), approver, t.getLong(APPROVED_AT));
     }

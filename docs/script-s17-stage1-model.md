@@ -8,7 +8,7 @@
 | # | 闸 | 输入 | 失败码 | 入账本 | 计限流 | 备注 |
 |---|---|---|---|---|---|---|
 | 1 | 协议号 | `rpc.protocol` | `VERSION_MISMATCH` | 否 | 否 | 不断线 |
-| 2 | 连接 epoch | `epochs[player]` vs `rpc.connectionEpoch` | `INVALID_ARGUMENT` + `KEY_STALE_CONNECTION` | 否 | 否 | **成对接线属后续切片**；接上之前真实请求停在这一档 |
+| 2 | 连接 epoch | `epochs[player]` vs `rpc.connectionEpoch` | `INVALID_ARGUMENT` + `KEY_STALE_CONNECTION` | 否 | 否 | **成对已接**（三平台登录建/登出忘）；客户端拿到 epoch 的握手下发属 Stage 2 |
 | 3 | 部署：App 轴 | `deployments.deployed(appId)` | `NOT_DEPLOYED` | 否 | 否 | 两轴都不在就不建桶 |
 | 4 | 部署：动作轴 | `hasAction`（查 **declaredActions**） | `NOT_DEPLOYED` + `KEY_NO_SUCH_ACTION` | 否 | 否 | 文案与"整个 App 没部署"分开 |
 | 5 | 部署版本 | `deployRev`（= `packageDigest`） | `VERSION_MISMATCH` | 否 | 否 | 包轴 |
@@ -72,3 +72,23 @@
 - `approve`：打印 `dropped` 与 `replaced`（旧 → 新批准集合差异）；空选择集按"什么都不批"报出来。
 - `revoke <app> <player>`：若该 App 是"所有人"档，**拒掉并提示**"要收紧先取消所有人档"，不许回成功。
 - `clearApp`：打印清掉了几人。
+
+## 交给后续切片/热重载的约束（终审对抗 C1/C2）
+
+- **C1 停服窗口的线程纪律**：`RhinoEvaluator` 的"投递失败降级落地"会把 `DeploymentData`/`AuthorityData`/
+  账本在 **worker** 上读一遍。今天安全 —— 停服窗口里没有并发写者。**但从这一刻起**：任何在停服窗口里
+  改这三样东西的代码（热重载、stopping 时保存、把 OP 命令挂到 stopping）都会把它变成真竞态。
+  要么那条降级改成"投递到自有兜底队列、由主线程最后一次 drain"，要么把两张表换成并发结构。
+- **C2 重装配必须重发 epoch**：`newEpoch` 只挂在登录事件上。任何**重建 pipeline** 的动作（未来的热重载/
+  重装配）都会清空 `epochs` ⇒ 在线玩家的请求立刻变成 `INVALID_ARGUMENT`（过期连接），直到重登。
+  当前的 `/mcphone script reload` 只重扫、不重装配 ✓，别在重装配时忘了这一条。
+
+## 装配与命令面的既定口径（终审对抗 M2/M3/M4/C6/C7）
+
+- **后端模块谓词 = `server.js` + `server/**`**，前端 `.js` 不进服务端模块表（否则吃掉 16 个模块额度、
+  且能被 `server.js` require 进来在服务端求值）。
+- **装配期预检**：每个 App 的入口在开服时（预算内）跑一遍，失败整个跳过并告警 —— 请求路径不重试坏入口。
+- **能力轴与动作轴都逐条勾选**：`approve <digest> [动作列表] [能力列表]`，省略 = 全批、`-` = 一个都不批。
+- **`clearApp` 有命令入口**，并报出清掉几人。
+- **命令面的 appId 一律过 `Deployment.validId`**（非空、≤64、无控制字符）。
+- **生效时机**：批准/撤部署对**授权**立即生效；**后端代码**在下次开服时装配/卸载 —— 命令回显会写明。

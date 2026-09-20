@@ -296,7 +296,7 @@ public class ScriptHostTest {
             CompletableFuture<ScriptRpcResult> done = new CompletableFuture<>();
             p.accept(rpc(77, p.newEpoch(P1), "act"), snap(P1), done::complete);
             ScriptRpcResult r = done.get(20, TimeUnit.SECONDS);
-            eq(r.code(), ScriptErrorCode.INTERNAL, "投递失败时在 worker 上降级结清，onDone 不许丢");
+            eq(r.code(), ScriptErrorCode.OK, "投递失败时用真实结论降级落地，onDone 不许丢（不是 INTERNAL）");
 
             byte[] key = IdempotencyKey.of(SERVER, P1, "example:app", "rev1", "act", 77);
             check(ledger.check(P1, key, IdempotencyKey.digestOf(new byte[0]))
@@ -305,6 +305,36 @@ public class ScriptHostTest {
             app.discard();
         } finally {
             ScriptWorkers.stop();
+        }
+    }
+
+    /** M2/C7：后端模块谓词 —— 前端 js 不进服务端模块表。 */
+    static void backendModulePredicate() {
+        check(ServerAppAssembler.isBackendModule("server.js"), "server.js 是后端");
+        check(ServerAppAssembler.isBackendModule("server/util.js"), "server/** 是后端");
+        check(!ServerAppAssembler.isBackendModule("ui/app.js"), "前端 js 不是后端（M2）");
+        check(!ServerAppAssembler.isBackendModule("app.js"), "顶层前端 js 不是后端");
+        check(!ServerAppAssembler.isBackendModule(null), "null 不是");
+    }
+
+    /** require 绑定只读：脚本给自己赋值改不动它（否则一个 App 能把自己弄坏）。 */
+    static void requireIsReadOnly() {
+        Map<String, String> modules = new java.util.LinkedHashMap<>();
+        modules.put("lib.js", "7");
+        modules.put(AppScope.ENTRY,
+                "var before = require('./lib.js');"
+                        + "require = 1;"
+                        + "var after = require('./lib.js');"
+                        + "var actions = { act: function (ctx) { ctx.ok({}) } };");
+        AppScope app = new AppScope("example:app", ScriptBudget.server(), modules);
+        Context cx = app.budget().enterContext();
+        try {
+            var scope = app.scope(cx);
+            eq(number(scope, "before"), 7.0, "改之前 require 能用");
+            eq(number(scope, "after"), 7.0, "给 require 赋值改不动绑定（只读）");
+            app.discard();
+        } finally {
+            Context.exit();
         }
     }
 
@@ -322,6 +352,8 @@ public class ScriptHostTest {
         appScopeEntryAndRequire();
         landingDeniedAfterMoneyMovedIsUnknown();
         dispatchFailureStillCompletes();
+        backendModulePredicate();
+        requireIsReadOnly();
 
         System.out.println("断言 " + checks + " 条");
         if (!failures.isEmpty()) {
