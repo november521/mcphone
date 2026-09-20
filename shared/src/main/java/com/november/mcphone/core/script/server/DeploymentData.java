@@ -266,6 +266,17 @@ public final class DeploymentData extends PhoneSavedData {
             if (!Deployment.validList(declaredCapabilities)) {
                 throw new IllegalArgumentException("声明能力超限：" + declaredCapabilities);
             }
+            // S18：能力名必须对得上能力目录（§18.8）。对不上 = 服务端既不知道档位、也没法审批，
+            // 一律在入队时拒（fail-closed）。App 自称什么档都不作数，名字本身必须是我们认得的。
+            java.util.Set<String> seen = new java.util.LinkedHashSet<>();
+            for (String cap : declaredCapabilities) {
+                if (!CapabilityCatalog.knownDeclared(cap)) {
+                    throw new IllegalArgumentException("不认识的能力名（不在能力目录里）：" + cap);
+                }
+                if (!seen.add(cap)) {
+                    throw new IllegalArgumentException("同一条能力声明了两次：" + cap);
+                }
+            }
             declaredActions = List.copyOf(declaredActions);
             declaredCapabilities = List.copyOf(declaredCapabilities);
         }

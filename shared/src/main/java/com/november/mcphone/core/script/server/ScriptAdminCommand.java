@@ -52,6 +52,9 @@ public final class ScriptAdminCommand {
                             return n;
                         }))
                         .then(Commands.literal("list").executes(ctx -> list(ctx.getSource())))
+                        .then(Commands.literal("capabilities")
+                                .executes(ctx -> capabilities(ctx.getSource()))
+                                .then(Commands.literal("reload").executes(ctx -> reloadCapabilities(ctx.getSource()))))
                         .then(Commands.literal("approve")
                                 .then(Commands.argument("digest", StringArgumentType.word())
                                         .executes(ctx -> approve(ctx.getSource(),
@@ -104,6 +107,41 @@ public final class ScriptAdminCommand {
             ok(src, "  已批准 " + d.appId() + " 版本 " + d.approvalRevision() + " [" + shortDigest(d.packageDigest())
                     + "] 动作 " + d.approvedActions() + " / 声明 " + d.declaredActions()
                     + "，范围 " + ad.scopeOf(d.appId()));
+        }
+        return 1;
+    }
+
+    /** 能力目录 + 当前生效的开关（S18）。服主据此知道哪些 id 能批、哪些被全服关了。 */
+    private static int capabilities(CommandSourceStack src) {
+        ScriptHost host = ScriptHost.current();
+        CapabilityConfig cfg = host == null ? null : host.capabilities();
+        ok(src, "[脚本] 能力目录（" + CapabilityCatalog.all().size() + " 条，其中首版开放 "
+                + CapabilityCatalog.open().size() + " 条）：");
+        for (CapabilityCatalog.Entry e : CapabilityCatalog.all()) {
+            boolean off = cfg != null && cfg.isDisabled(e.id());
+            ok(src, "  " + (e.open() ? "开放" : "不开放") + "  " + e.tier() + "  " + e.id()
+                    + (off ? "  【本服已关闭】" : ""));
+        }
+        if (cfg == null) {
+            ok(src, "[脚本] 脚本后端未启用，能力配置读不到");
+            return 1;
+        }
+        ok(src, "[脚本] 预设 " + cfg.preset() + "，全服关闭 " + cfg.disabled().size() + " 项"
+                + (cfg.disabled().isEmpty() ? "" : "：" + String.join("、", cfg.disabled())));
+        return 1;
+    }
+
+    /** 重读能力配置文件。只换配置快照：不动部署、不动 epoch、不重建 scope。 */
+    private static int reloadCapabilities(CommandSourceStack src) {
+        if (!ScriptHost.reloadCapabilities(src.getServer())) {
+            fail(src, "[脚本] 脚本后端未启用，能力配置要等开服后才会读");
+            return 0;
+        }
+        ScriptHost host = ScriptHost.current();
+        CapabilityConfig cfg = host == null ? null : host.capabilities();
+        if (cfg != null) {
+            for (String w : cfg.warnings()) ok(src, "[脚本] 能力配置警告：" + w);
+            ok(src, "[脚本] 能力配置已重载：预设 " + cfg.preset() + "，全服关闭 " + cfg.disabled().size() + " 项");
         }
         return 1;
     }

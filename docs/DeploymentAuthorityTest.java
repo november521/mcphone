@@ -40,7 +40,7 @@ public class DeploymentAuthorityTest {
 
     static DeploymentData.Candidate candidate() {
         return new DeploymentData.Candidate(APP, PKG, FRONT, 1L,
-                List.of("buy", "sell", "grant"), List.of("economy.pay"));
+                List.of("buy", "sell", "grant"), List.of("currency.mint"));
     }
 
     /** 候选 → 批准 → 视图：声明 vs 批准 vs 许可三层各判各的。 */
@@ -114,7 +114,7 @@ public class DeploymentAuthorityTest {
         all.putCandidate(candidate());
         Deployment dAll = all.approve(all.candidate(PKG), null, null, P1, 1L).deployment();
         eq(dAll.approvedActions(), List.of("buy", "sell", "grant"), "null = 显式按声明全批");
-        eq(dAll.approvedCapabilities(), List.of("economy.pay"), "能力同理 null = 全批");
+        eq(dAll.approvedCapabilities(), List.of("currency.mint"), "能力同理 null = 全批");
 
         // 换包重新批准：批准轴单调 +1，且回显"这是覆盖"
         DeploymentData.Approval second = all.approve(
@@ -253,6 +253,31 @@ public class DeploymentAuthorityTest {
         eq(ScriptAdminCommand.parseList("buy,sell"), List.of("buy", "sell"), "逗号拆的逐条勾选");
     }
 
+    /** S18：能力名必须对得上能力目录 —— 目录外/重复在入队就拒（fail-closed）。 */
+    static void capabilityNamesAreValidated() {
+        boolean threw = false;
+        try {
+            new DeploymentData.Candidate(APP, PKG, FRONT, 1L, List.of("buy"), List.of("economy.pay"));
+        } catch (IllegalArgumentException e) {
+            threw = true;
+        }
+        check(threw, "目录外的能力名在候选构造期就被拒");
+
+        threw = false;
+        try {
+            new DeploymentData.Candidate(APP, PKG, FRONT, 1L, List.of("buy"), List.of("item.give", "item.give"));
+        } catch (IllegalArgumentException e) {
+            threw = true;
+        }
+        check(threw, "重复声明同一能力被拒");
+
+        // 参数化的模板名是认得的（command.template:<id>）
+        new DeploymentData.Candidate(APP, PKG, FRONT, 1L, List.of("buy"),
+                List.of("item.give", "command.template:daily"));
+        checks++;
+        check(CapabilityCatalog.knownDeclared("command.template:daily"), "参数化模板名在目录里");
+    }
+
     /** C8/#4：命令解析要吃得下真实的 appId（`example:shop`）与含点的动作/能力名。 */
     static void commandParsesRealIds() {
         var dispatcher = new com.mojang.brigadier.CommandDispatcher<net.minecraft.commands.CommandSourceStack>();
@@ -264,7 +289,7 @@ public class DeploymentAuthorityTest {
         for (String cmd : new String[]{
                 "mcphone script identity",
                 "mcphone script remove example:shop",
-                "mcphone script approve " + PKG + " buy,sell economy.pay",
+                "mcphone script approve " + PKG + " buy,sell currency.mint",
                 "mcphone script approve " + PKG + " - -",
                 "mcphone script authorize example:shop all",
                 "mcphone script revoke example:shop 00000000-0000-0000-0000-000000000001",
@@ -335,6 +360,7 @@ public class DeploymentAuthorityTest {
         malformedDataIsRejectedNotThrown();
         persistenceRoundTrip();
         scannerAndCommandHelpers();
+        capabilityNamesAreValidated();
         commandParsesRealIds();
         oversizedApprovalIsRejected();
 

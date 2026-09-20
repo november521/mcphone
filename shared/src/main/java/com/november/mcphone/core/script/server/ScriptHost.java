@@ -62,10 +62,16 @@ public final class ScriptHost {
     private final DeploymentData deployments;
     /** 生产授权视图。握手要用它把"这个玩家被授权的动作"筛出来（只给 UX）。 */
     private final ServerAuthority authority;
+    /**
+     * 能力与边界配置（S18）。<b>volatile</b>：{@code capabilities reload} 会在主线程换新的一份，
+     * 之后 worker 上的能力判定读到的必须是新值（"切换后已装 App 的行为随之改变"）。
+     */
+    private volatile CapabilityConfig capabilities;
 
     private ScriptHost(Map<String, AppScope> apps, StrikeTracker strikes,
                        RhinoEvaluator evaluator, ScriptPipeline pipeline,
-                       UUID serverId, DeploymentData deployments, ServerAuthority authority) {
+                       UUID serverId, DeploymentData deployments, ServerAuthority authority,
+                       CapabilityConfig capabilities) {
         this.apps = apps;
         this.strikes = strikes;
         this.evaluator = evaluator;
@@ -73,6 +79,7 @@ public final class ScriptHost {
         this.serverId = serverId;
         this.deployments = deployments;
         this.authority = authority;
+        this.capabilities = capabilities;
     }
 
     /**
@@ -109,6 +116,8 @@ public final class ScriptHost {
 
         // 必须在主线程建：StrikeTracker 的 owner 就是构造它的这条线程
         StrikeTracker strikes = new StrikeTracker(System::currentTimeMillis);
+        // 能力与边界配置：独立文件、坏配置不崩服（S18）。它只在这里读一次 + 命令 reload。
+        CapabilityConfig capabilities = CapabilityConfig.load(server);
         // 没有后端的项整项不挂（E12）：item / cycle / store / sealed / currencies（本步）全是 null
         CtxBuilder.Backends backends = new CtxBuilder.Backends(new SharedState(), null, null, null, null, null);
         RhinoEvaluator evaluator = new RhinoEvaluator(apps, strikes, backends, server::execute);
@@ -120,10 +129,13 @@ public final class ScriptHost {
                 new ServerDeployments(deployments), authorityView, evaluator);
         // 登记之后 ScriptRpcHandler.handle 才会把请求交给这条管线（此前一律 NOT_DEPLOYED）
         ScriptRpcHandler.install(pipeline);
-        current = new ScriptHost(apps, strikes, evaluator, pipeline, serverId, deployments, authorityView);
+        current = new ScriptHost(apps, strikes, evaluator, pipeline, serverId, deployments, authorityView, capabilities);
         MCphone.LOGGER.info("[MCphone] 脚本宿主已装配：apps={}，已批准部署 {}，候选 {}{}，管线已登记",
                 apps.size(), deployments.deployments().size(), deployments.candidates().size(),
                 scan.changed() == 0 ? "" : "（本次进队 " + scan.changed() + "）");
+        MCphone.LOGGER.info("[MCphone] 能力配置：预设 {}，全服关闭 {} 项{}",
+                capabilities.preset(), capabilities.disabled().size(),
+                capabilities.disabled().isEmpty() ? "" : "（" + String.join("、", capabilities.disabled()) + "）");
     }
 
     /**
@@ -163,6 +175,32 @@ public final class ScriptHost {
      */
     public boolean hasApp(String appId) {
         return apps.containsKey(appId);
+    }
+
+    /**
+     * 能力与边界配置（S18）。<b>运行期只读</b>；{@code capabilities reload} 或重开服时整份替换。
+     */
+    public CapabilityConfig capabilities() {
+        return capabilities;
+    }
+
+    /**
+     * 重新读一遍能力配置（{@code /mcphone script capabilities reload}）。
+     *
+     * <p>只换配置快照，<b>不重建 App scope、不动 epoch、不动部署表</b>：服务端脚本与部署是两回事。
+     * 换完之后 worker 上的能力判定读到的就是新值（"切换预设后已装 App 的行为随之改变"，§31.4）。
+     *
+     * @return 没开服（脚本后端降级/未装）时 false
+     */
+    public static synchronized boolean reloadCapabilities(MinecraftServer server) {
+        ScriptHost h = current;
+        if (h == null) return false;
+        CapabilityConfig fresh = CapabilityConfig.load(server);
+        h.capabilities = fresh;
+        MCphone.LOGGER.info("[MCphone] 能力配置已重载：预设 {}，全服关闭 {} 项{}",
+                fresh.preset(), fresh.disabled().size(),
+                fresh.disabled().isEmpty() ? "" : "（" + String.join("、", fresh.disabled()) + "）");
+        return true;
     }
 
     /**

@@ -126,6 +126,11 @@ public final class ScriptModules {
         return sources.containsKey(canonicalName);
     }
 
+    /** 全部源码的副本。给装配期静态预检（{@link ScriptStaticCheck}）与断言用；改不动内部表。 */
+    public Map<String, String> allSources() {
+        return Map.copyOf(sources);
+    }
+
     /** 当前 require 栈多深。只给测试用。 */
     public synchronized int depth() {
         return loading.size();

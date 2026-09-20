@@ -112,3 +112,32 @@ Rhino 1.9.1，**没有** `class` / `for...of` / `export` / `import` / `async` / 
 
 不写 `backend.available` 分支时，宿主会在商店详情页顶部插一条横幅兜底 —— 但那只覆盖详情页，
 App 里最好还是自己把降级画出来。
+
+## 能力声明（S18 起）
+
+manifest 里的 `capabilities` 是一个字符串数组，元素必须是**服务端能力目录里的 id**：
+
+```json
+"capabilities": ["loot.roll", "item.give"]
+```
+
+> 带参数的形态（`{ "id": "loot.roll", "tables": ["myserver:daily_gift"] }`）是后续卡片的落点；
+> **S18 只认字符串数组**，多写的对象会被拒。
+
+- **档位由服务端查表**：`plain` 免审批、`granted` 要 OP 逐条批准、`restricted` 首版全部不开放。
+  **App 在 manifest 里自称什么档都不作数**，写 `plain` 不会让一个 `item.give` 免审批。
+- **目录外的名字入队即拒**：`economy.pay` 这种自造 id 会让整个包进不了审批队列。
+  当前目录用 `/mcphone script capabilities` 列出来（首版开放 22 个）。
+- 服主可以**全服关掉任意一项**（包括 `plain`）：关掉的调用会返回 `UNAVAILABLE`，
+  与"你没有被授权"是两回事。App 要按 §13.7 的风格优雅降级。
+
+## 装配期静态预检（S18 起）
+
+装配后端时服务端**只编译、只解析模块，不执行任何一行代码**（零副作用）：
+
+- `require(...)` 的参数**必须是字符串字面量**、以 `./` 或 `../` 开头：
+  `require('./server/util.js')` 可以，`require('./server/' + n + '.js')` 会让预检不过。
+- 模块缺失、语法错、依赖成环 → 整个 App 不装配（所有请求 `NOT_DEPLOYED`），修好重开服。
+- **顶层代码不再在装配期运行**：它在第一次请求时执行一次（定义 `actions` 表）。
+  顶层可以写 `var`/`function`，但别把"必须尽早发生"的事放在顶层 —— 没有请求就不会发生。
+- 顶层直接抛错的包装配期能过，第一次请求时才报 `INTERNAL`。
