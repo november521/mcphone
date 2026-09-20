@@ -2,6 +2,7 @@ package com.november.mcphone.api.sdk.cycle;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
@@ -47,7 +48,11 @@ public final class CycleLabels {
     public static LocalDate cycleDay(Instant at, ZoneId zone, LocalTime dailyAt) {
         ZonedDateTime z = at.atZone(zone);
         LocalDate d = z.toLocalDate();
-        return z.toLocalTime().isBefore(dailyAt) ? d.minusDays(1) : d;
+        // Compare instants, not local clock text. During a fall-back overlap the local clock runs
+        // 01:59 -> 01:00; a LocalTime comparison would make the label move backwards. atZone()
+        // deliberately selects the earlier offset, so the boundary happens once and stays passed.
+        Instant boundary = boundary(d, dailyAt, zone).toInstant();
+        return at.isBefore(boundary) ? d.minusDays(1) : d;
     }
 
     /** 标签。格式是契约的一部分，改了等于把所有 App 的限量计数清零一次。 */
@@ -86,7 +91,11 @@ public final class CycleLabels {
             case MONTHLY -> day.withDayOfMonth(1).plusMonths(1);
         };
         // 分界点也在 dailyAt 这一刻：周期日是按它切的，边界与切法必须是同一个时刻
-        return next.atTime(dailyAt).atZone(zone).toInstant().toEpochMilli();
+        return boundary(next, dailyAt, zone).toInstant().toEpochMilli();
+    }
+
+    private static ZonedDateTime boundary(LocalDate day, LocalTime dailyAt, ZoneId zone) {
+        return LocalDateTime.of(day, dailyAt).atZone(zone);
     }
 
     private static LocalDate nextWeekStart(LocalDate day) {

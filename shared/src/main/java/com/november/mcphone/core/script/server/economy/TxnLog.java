@@ -82,6 +82,15 @@ public final class TxnLog {
     /** 记一行。成功的 mint / burn 同时记进 {@link Journal} 的累计 —— 与余额的改动在同一个主线程操作里。 */
     public void append(Instant at, String currencyId, Kind kind, UUID from, UUID to,
                        long amount, String appId, TxnReason reason, TxnResult result) {
+        if (at == null || kind == null || result == null) {
+            throw new IllegalArgumentException("流水必填字段为空");
+        }
+        requireField(currencyId, "currencyId");
+        if (appId != null) requireField(appId, "appId");
+        if (reason != null) {
+            requireField(reason.kind(), "reason.kind");
+            requireField(reason.ref(), "reason.ref");
+        }
         if (journal != null) journal.recorded(currencyId, kind, amount, result);
         String line = String.join(String.valueOf(SEP),
                 at.toString(),
@@ -95,6 +104,19 @@ public final class TxnLog {
                 reason == null ? "-" : reason.ref(),
                 result.name());
         write(at, line);
+    }
+
+    /** 防御新调用点绕过 TxnReason 等上游校验，破坏竖线分隔的审计格式。 */
+    private static void requireField(String value, String name) {
+        if (value == null || value.indexOf(SEP) >= 0) {
+            throw new IllegalArgumentException(name + " 不是合法流水字段");
+        }
+        for (int i = 0; i < value.length(); i++) {
+            char c = value.charAt(i);
+            if (c < 0x20 || c == 0x7f || c == '\u2028' || c == '\u2029') {
+                throw new IllegalArgumentException(name + " 不是合法流水字段");
+            }
+        }
     }
 
     /**

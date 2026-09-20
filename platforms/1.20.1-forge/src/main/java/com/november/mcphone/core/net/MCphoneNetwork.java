@@ -103,9 +103,20 @@ public final class MCphoneNetwork {
                     ServerPlayer sender = ctxSupplier.get().getSender();
                     // 连接在包排队期间断掉就会是 null。方向已由 NetworkDirection
                     // 限死，所以这里只可能是"人走了"，静默丢弃即可
-                    if (sender != null) handler.accept(msg, sender);
+                    if (sender != null) handleSafely(msg, sender, () -> handler.accept(msg, sender));
                 })
                 .add();
+    }
+
+    private static void handleSafely(Object packet, ServerPlayer player, Runnable action) {
+        try {
+            action.run();
+        } catch (VirtualMachineError fatal) {
+            throw fatal;
+        } catch (Throwable failure) {
+            MCphone.LOGGER.error("[MCphone] contained C2S handler failure packet={} player={}",
+                    packet == null ? "null" : packet.getClass().getName(), player.getUUID(), failure);
+        }
     }
 
     /**

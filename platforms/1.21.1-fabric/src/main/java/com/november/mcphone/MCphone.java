@@ -88,6 +88,9 @@ public class MCphone implements ModInitializer {
             com.november.mcphone.core.script.server.economy.EconomyRuntime.tick();
             for (ServerPlayer player : server.getPlayerList().getPlayers()) {
                 com.november.mcphone.feature.terminal.TerminalCharger.onPlayerTick(player);
+                if (com.november.mcphone.feature.music.DiscService.tickLoop(player)) {
+                    com.november.mcphone.feature.music.DiscService.syncState(player);
+                }
             }
         });
 

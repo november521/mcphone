@@ -76,6 +76,7 @@ public final class StoreNetworking {
      * 购买也可能已经扣掉了东西。
      */
     private static void handlePurchase(PurchaseAppPacket packet, ServerPlayer player) {
+        if (!RequestThrottle.allow(player, RequestThrottle.Kind.PURCHASE)) return;
         // 与末影箱、传送石一致：身上得真有手机。没有这道检查，改个客户端
         // 就能不掏手机买东西，手机这个前提条件形同虚设
         if (!PhoneItem.isCarriedBy(player)) {

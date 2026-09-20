@@ -71,7 +71,7 @@ nonce 12 字节随机、salt 16 字节、AAD 六个字段、明文补齐到 64 �
 | `docs/VaultTest.java` 全绿（三目标） | ✅ |
 | 存档 / 日志里 grep 不到明文 | ◐ 密文侧已判；真存档与真日志要跑服务器 |
 | 手动换记录 / 改版本号的复现 | ◐ 逻辑已判；手动复现要跑服务器 |
-| `ctx` 上没有能读 sealed 明文的方法 | ✅ `ctx.sealed` 只有 put / get |
+| `ctx` 上没有能读 sealed 明文的方法 | ✅ 当前 `ctx.sealed` 只挂真实可用的 get；无消费方的 put 已移除 |
 | local 档不进网络包 | ✅ `grep LocalStore` 在 net 包下为空 |
 | 配额超限显式拒绝 | ✅ |
 | **死亡保留：死后 scriptGuards 仍在** | ❌ **要跑服务器**。代码侧：`copyDeathPersistentFrom` 带了它，1.21.1 两支的 attachment 都 `copyOnDeath()` |

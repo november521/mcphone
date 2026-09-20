@@ -1,5 +1,10 @@
 package com.november.mcphone.core.script.server.economy;
 
+import com.november.mcphone.core.script.engine.LogText;
+
+import java.util.Arrays;
+import java.util.Objects;
+
 /**
  * provider（第三方代码）抛来的异常的替身：带原来的类名、截短的 message、堆栈，不带 cause。
  *
@@ -17,26 +22,24 @@ public final class ProviderFailure extends RuntimeException {
     /** message 最多留多少字符。 */
     private static final int MAX_MESSAGE = 500;
 
+    /** Enough context to diagnose a provider while bounding every later log rendering. */
+    public static final int MAX_STACK_FRAMES = 256;
+
     /** 造一个替身；已经是替身就原样返回。不抛：原来那个的 getMessage / getStackTrace 炸了就不带那一样。 */
     public static ProviderFailure of(Throwable original) {
         if (original instanceof ProviderFailure pf) return pf;
-        ProviderFailure s = new ProviderFailure(printable(original.getClass().getName() + safeMessage(original)));
+        ProviderFailure s = new ProviderFailure(LogText.filter(original.getClass().getName() + safeMessage(original)));
         try {
-            s.setStackTrace(original.getStackTrace());
+            StackTraceElement[] frames = original.getStackTrace();
+            if (frames == null) frames = new StackTraceElement[0];
+            s.setStackTrace(Arrays.stream(frames)
+                    .filter(Objects::nonNull)
+                    .limit(MAX_STACK_FRAMES)
+                    .toArray(StackTraceElement[]::new));
         } catch (Throwable ignored) {
             s.setStackTrace(new StackTraceElement[0]);
         }
         return s;
-    }
-
-    /** 控制字符（换行、回车、终端转义…）换成空格：这段文字进日志的首行，带换行就能伪造出一行日志。 */
-    private static String printable(String s) {
-        StringBuilder b = new StringBuilder(s.length());
-        for (int i = 0; i < s.length(); i++) {
-            char c = s.charAt(i);
-            b.append(Character.isISOControl(c) ? ' ' : c);
-        }
-        return b.toString();
     }
 
     // 缺失的方法签名、NPE 的说明、provider 自己的原因键都在 message 里：值得留，但只在这里取一次

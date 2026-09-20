@@ -140,6 +140,29 @@ public class TimeCycleTest {
         // 那一天照样算得出标签，没有"这一天不存在"
         Instant on = ZonedDateTime.of(2027, 3, 14, 12, 0, 0, 0, ny).toInstant();
         eq(CycleLabels.label(CycleKind.DAILY, on, ny, half), "2027-03-14", "夏令时那天的日标签");
+
+        // 2026-11-01 01:30 occurs twice. The label may advance at either occurrence, but it must
+        // never move backwards during the repeated hour and nextBoundary must stay in the future.
+        LocalTime overlapBoundary = LocalTime.of(1, 30);
+        var offsets = ny.getRules().getValidOffsets(java.time.LocalDateTime.of(2026, 11, 1, 1, 15));
+        Instant first115 = java.time.LocalDateTime.of(2026, 11, 1, 1, 15)
+                .atOffset(offsets.get(0)).toInstant();
+        Instant first145 = java.time.LocalDateTime.of(2026, 11, 1, 1, 45)
+                .atOffset(offsets.get(0)).toInstant();
+        Instant second115 = java.time.LocalDateTime.of(2026, 11, 1, 1, 15)
+                .atOffset(offsets.get(1)).toInstant();
+        Instant second145 = java.time.LocalDateTime.of(2026, 11, 1, 1, 45)
+                .atOffset(offsets.get(1)).toInstant();
+        List<Instant> timeline = List.of(first115, first145, second115, second145);
+        List<String> labels = timeline.stream()
+                .map(i -> CycleLabels.label(CycleKind.DAILY, i, ny, overlapBoundary)).toList();
+        eq(labels, List.of("2026-10-31", "2026-11-01", "2026-11-01", "2026-11-01"),
+                "夏令时回拨小时标签只前进一次");
+        for (Instant instant : timeline) {
+            check(CycleLabels.nextBoundary(CycleKind.DAILY, instant, ny, overlapBoundary)
+                            > instant.toEpochMilli(),
+                    "重叠小时的 nextBoundary 必须在未来：" + instant);
+        }
     }
 
     /** 周恒按 ISO：没有 weekly_on 这个配置，所以不存在"标签相同但不是同一周"。 */

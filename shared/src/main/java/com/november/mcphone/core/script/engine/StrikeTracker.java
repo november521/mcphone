@@ -21,6 +21,8 @@ import java.util.function.LongSupplier;
  */
 public final class StrikeTracker {
 
+    private final Thread owner = Thread.currentThread();
+
     /** 单个玩家连续几次超预算就禁他。 */
     public static final int PLAYER_STRIKES = 3;
 
@@ -51,6 +53,7 @@ public final class StrikeTracker {
 
     /** 现在允不允许这个玩家调这个 App 的后端。 */
     public boolean allowed(String appId, UUID player) {
+        requireOwnerThread();
         long now = clock.getAsLong();
         Long appUntil = appBannedUntil.get(appId);
         if (appUntil != null && now < appUntil) return false;
@@ -60,6 +63,7 @@ public final class StrikeTracker {
 
     /** 记一次超预算。返回这一次是不是把人禁了。 */
     public boolean recordAbort(String appId, UUID player) {
+        requireOwnerThread();
         long now = clock.getAsLong();
         String k = key(appId, player);
         PlayerState s = players.getOrDefault(k, new PlayerState(0, 0));
@@ -76,6 +80,7 @@ public final class StrikeTracker {
 
     /** 记一次正常结束。<b>"连续"就是这里清零的。</b> */
     public void recordOk(String appId, UUID player) {
+        requireOwnerThread();
         String k = key(appId, player);
         PlayerState s = players.get(k);
         if (s != null && s.strikes() > 0) players.put(k, new PlayerState(0, s.bannedUntil()));
@@ -83,16 +88,19 @@ public final class StrikeTracker {
 
     /** 这个玩家被禁到什么时候，没被禁返回 0。管理界面读它。 */
     public long bannedUntil(String appId, UUID player) {
+        requireOwnerThread();
         PlayerState s = players.get(key(appId, player));
         return s == null ? 0 : s.bannedUntil();
     }
 
     /** 整个 App 被熔断到什么时候，没熔断返回 0。 */
     public long appBannedUntil(String appId) {
+        requireOwnerThread();
         return appBannedUntil.getOrDefault(appId, 0L);
     }
 
     private void noteAppOffender(String appId, UUID player, long now) {
+        requireOwnerThread();
         long start = appWindowStart.getOrDefault(appId, 0L);
         if (now - start >= APP_WINDOW_MS) {
             appWindowStart.put(appId, now);
@@ -108,5 +116,11 @@ public final class StrikeTracker {
 
     private static String key(String appId, UUID player) {
         return appId + SEP + player;
+    }
+
+    private void requireOwnerThread() {
+        if (Thread.currentThread() != owner) {
+            throw new IllegalStateException("StrikeTracker may only be accessed by its owner thread");
+        }
     }
 }

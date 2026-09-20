@@ -87,6 +87,12 @@ public final class CtxBuilder {
     /** 建一个 {@code ctx}。{@code result} 由调用方持有，求值结束后读它。 */
     public static ScriptableObject build(Context cx, Scriptable scope, String appId,
                                          PlayerSnapshot player, Backends backends, Result result) {
+        return build(cx, scope, appId, player, backends, result, new MoneyLedger());
+    }
+
+    public static ScriptableObject build(Context cx, Scriptable scope, String appId,
+                                         PlayerSnapshot player, Backends backends, Result result,
+                                         MoneyLedger ledger) {
         ScriptableObject ctx = HostFn.obj(cx, scope);
 
         // ---- ctx.player：四个字段（§32.7），都是 JS 字符串，不是 Java 对象
@@ -112,12 +118,12 @@ public final class CtxBuilder {
             ScriptableObject cycle = HostFn.obj(cx, scope);
             HostFn.put(cycle, scope, "label", 1, (c, s, a) -> {
                 CycleKind k = CycleKind.of(HostFn.str(a, 0, "cycle.label"));
-                if (k == null) throw new ScriptAbort(ScriptAbort.Reason.HOST, "cycle.label 只认 daily/weekly/monthly");
+                if (k == null) throw HostError.unknownValue("cycle.label 只认 daily/weekly/monthly");
                 return CycleLabels.label(k, Instant.now(), cfg.zone(), cfg.dailyAt());
             });
             HostFn.put(cycle, scope, "nextBoundary", 1, (c, s, a) -> {
                 CycleKind k = CycleKind.of(HostFn.str(a, 0, "cycle.nextBoundary"));
-                if (k == null) throw new ScriptAbort(ScriptAbort.Reason.HOST, "cycle.nextBoundary 只认 daily/weekly/monthly");
+                if (k == null) throw HostError.unknownValue("cycle.nextBoundary 只认 daily/weekly/monthly");
                 // 十进制字符串：毫秒时间戳超过 2^53，用数字会静默丢精度（§23.3）
                 return String.valueOf(CycleLabels.nextBoundary(k, Instant.now(), cfg.zone(), cfg.dailyAt()));
             });
@@ -170,7 +176,8 @@ public final class CtxBuilder {
                 return v != null ? v : (HostFn.present(a, 1) ? a[1] : null);
             });
             HostFn.put(store, scope, "setString", 2, (c, s, a) -> {
-                kv.setString(appId, HostFn.str(a, 0, "store.setString"), HostFn.str(a, 1, "store.setString"));
+                translated(() -> kv.setString(appId, HostFn.str(a, 0, "store.setString"),
+                        HostFn.str(a, 1, "store.setString")));
                 return Boolean.TRUE;
             });
             // 数值一律按十进制字符串过：毫秒时间戳与计数会超过 2^53（§23.3 同一条理由）
@@ -179,8 +186,9 @@ public final class CtxBuilder {
                 return v != null ? v : (HostFn.present(a, 1) ? a[1] : "0");
             });
             HostFn.put(store, scope, "setLong", 2, (c, s, a) -> {
-                kv.setString(appId, HostFn.str(a, 0, "store.setLong"),
-                        Long.toString(HostFn.num(a, 1, "store.setLong")));
+                String key = HostFn.str(a, 0, "store.setLong");
+                long value = HostFn.exactLong(a, 1, "store.setLong");
+                translated(() -> kv.setString(appId, key, Long.toString(value)));
                 return Boolean.TRUE;
             });
             HostFn.put(store, scope, "getBool", 2, (c, s, a) -> {
@@ -188,12 +196,13 @@ public final class CtxBuilder {
                 return v == null ? (HostFn.present(a, 1) && HostFn.bool(a, 1, "store.getBool")) : "true".equals(v);
             });
             HostFn.put(store, scope, "setBool", 2, (c, s, a) -> {
-                kv.setString(appId, HostFn.str(a, 0, "store.setBool"),
-                        Boolean.toString(HostFn.bool(a, 1, "store.setBool")));
+                String key = HostFn.str(a, 0, "store.setBool");
+                boolean value = HostFn.bool(a, 1, "store.setBool");
+                translated(() -> kv.setString(appId, key, Boolean.toString(value)));
                 return Boolean.TRUE;
             });
             HostFn.put(store, scope, "remove", 1, (c, s, a) -> {
-                kv.remove(appId, HostFn.str(a, 0, "store.remove"));
+                translated(() -> kv.remove(appId, HostFn.str(a, 0, "store.remove")));
                 return Boolean.TRUE;
             });
             HostFn.put(store, scope, "keys", 0, (c, s, a) ->
@@ -202,15 +211,10 @@ public final class CtxBuilder {
             ScriptableObject.putProperty(ctx, "store", store);
         }
 
-        // ---- ctx.sealed（§17.4.5）：只有 put 与 get，服务端只搬字节、解不开
+        // ---- ctx.sealed（§17.4.5）：只有真实可用的 get；未实现的 put 不暴露假能力
         if (backends.sealed() != null) {
             SealedBackend sb = backends.sealed();
             ScriptableObject sealed = HostFn.obj(cx, scope);
-            HostFn.put(sealed, scope, "put", 2, (c, s, a) -> {
-                // 脚本递过来的是客户端封好的密文（base64）。宿主不解、也解不开
-                throw new ScriptAbort(ScriptAbort.Reason.HOST,
-                        "sealed.put 要由客户端把封好的记录递进来，S14 只定了后端形状");
-            });
             HostFn.put(sealed, scope, "get", 1, (c, s, a) -> {
                 SealedRecord r = sb.get(appId, HostFn.str(a, 0, "sealed.get"));
                 return r == null ? null : java.util.Base64.getEncoder().encodeToString(r.cipher());
@@ -250,9 +254,10 @@ public final class CtxBuilder {
                     // 抛脚本接得住的 Error，App 在 catch 里 ctx.fail('UNAVAILABLE')。
                     // 不返回 0 或 null：比大小时 null 也当 0，App 会告诉玩家他没钱。
                     // 不抛 ScriptAbort：那个接不住、还记过失，连着几次就把整个 App 熔断
-                    throw org.mozilla.javascript.ScriptRuntime.constructError("Error", "UNAVAILABLE: " + e.reasonKey());
+                    throw HostError.unavailable(e.reasonKey());
                 } catch (ScriptAbort e) {
-                    throw e;
+                    logProviderAbort("balance", appId, e);
+                    throw new ProviderAbort("balance", false);
                 } catch (RuntimeException e) {
                     // provider 抛的别的：换成替身再往外抛，原来那个的 getMessage 可能自己会炸（见 ProviderFailure）
                     throw ProviderFailure.of(e);
@@ -267,24 +272,25 @@ public final class CtxBuilder {
                 ICurrencyProvider prov = requireOrError(reg, strOrNull(a, 0, "currency.format"));
                 // 金额缺了（常见是 parse 给的 null）或超出 long：和 pay 一样算"数不对"，抛接得住的 Error，不中断
                 Long v = amountOrNull(a, 1, "currency.format");
-                if (v == null) throw org.mozilla.javascript.ScriptRuntime.constructError("Error", "INVALID: " + INVALID_AMOUNT);
+                if (v == null) throw HostError.invalid(INVALID_AMOUNT);
                 return Balances.format(v, prov.currency().decimals()) + " " + prov.currency().symbol();
             });
 
-            // parse 收字符串，回 BigInt
+            // parse 收字符串，回 BigInt；失败必须是 catchable error，不能返回会继续流动的 null。
             HostFn.put(cur, scope, "parse", 2, (c, s, a) -> {
                 ICurrencyProvider prov = requireOrError(reg, strOrNull(a, 0, "currency.parse"));
                 try {
                     // 没给文本（null）Balances.parse 同样抛 NumberFormatException
-                    return Amounts.toScript(Balances.parse(strOrNull(a, 1, "currency.parse"), prov.currency().decimals()));
+                    if (!HostFn.present(a, 1)) throw HostError.invalid(INVALID_AMOUNT);
+                    return Amounts.toScript(Balances.parse(HostFn.str(a, 1, "currency.parse"), prov.currency().decimals()));
                 } catch (NumberFormatException e) {
-                    // 解析的多半是玩家输入：解析不了给 null，App 该 ctx.fail('INVALID')
-                    return null;
+                    throw HostError.invalid(INVALID_AMOUNT);
                 }
             });
 
             // pay 的 from 恒为调用者（§22.6：这样它才是 plain 档）
             HostFn.put(cur, scope, "pay", 4, (c, s, a) -> {
+                ledger.rejectFurther("currency.pay");
                 String cid = strOrNull(a, 0, "currency.pay");
                 ICurrencyProvider prov = reg.get(cid);
                 if (prov == null) return TxnResult.UNAVAILABLE.name();
@@ -292,11 +298,12 @@ public final class CtxBuilder {
                 Long amt = amountOrNull(a, 2, "currency.pay");
                 TxnReason why = reasonOrNull(a, 3, "pay");
                 if (to == null || amt == null || why == null) return TxnResult.INVALID.name();
-                return moneyCall("pay", appId, player.uuid(), cid, to, amt,
+                return moneyCall(ledger, "pay", appId, player.uuid(), cid, to, amt,
                         () -> prov.transfer(player.uuid(), to, amt, why)).name();
             });
 
             HostFn.put(cur, scope, "hold", 4, (c, s, a) -> {
+                ledger.rejectFurther("currency.hold");
                 String cid = strOrNull(a, 0, "currency.hold");
                 ICurrencyProvider prov = reg.get(cid);
                 if (prov == null) return TxnResult.UNAVAILABLE.name();
@@ -304,12 +311,13 @@ public final class CtxBuilder {
                 Long amt = amountOrNull(a, 2, "currency.hold");
                 TxnReason why = reasonOrNull(a, 3, "hold");
                 if (to == null || amt == null || why == null) return TxnResult.INVALID.name();
-                HoldResult h = moneyCall("hold", appId, player.uuid(), cid, to, amt,
+                HoldResult h = moneyCall(ledger, "hold", appId, player.uuid(), cid, to, amt,
                         () -> prov.hold(player.uuid(), to, amt, why));
                 return h.result() == TxnResult.OK ? h.id().value().toString() : h.result().name();
             });
 
             HostFn.put(cur, scope, "release", 3, (c, s, a) -> {
+                ledger.rejectFurther("currency.release");
                 String cid = strOrNull(a, 0, "currency.release");
                 ICurrencyProvider prov = reg.get(cid);
                 if (prov == null) return TxnResult.UNAVAILABLE.name();
@@ -317,11 +325,12 @@ public final class CtxBuilder {
                 if (id == null) return TxnResult.UNKNOWN_ESCROW.name();
                 TxnReason why = reasonOrNull(a, 2, "release");
                 if (why == null) return TxnResult.INVALID.name();
-                return moneyCall("release", appId, player.uuid(), cid, id, null,
+                return moneyCall(ledger, "release", appId, player.uuid(), cid, id, null,
                         () -> prov.release(new EscrowId(id), why)).name();
             });
 
             HostFn.put(cur, scope, "refund", 3, (c, s, a) -> {
+                ledger.rejectFurther("currency.refund");
                 String cid = strOrNull(a, 0, "currency.refund");
                 ICurrencyProvider prov = reg.get(cid);
                 if (prov == null) return TxnResult.UNAVAILABLE.name();
@@ -329,14 +338,17 @@ public final class CtxBuilder {
                 if (id == null) return TxnResult.UNKNOWN_ESCROW.name();
                 TxnReason why = reasonOrNull(a, 2, "refund");
                 if (why == null) return TxnResult.INVALID.name();
-                return moneyCall("refund", appId, player.uuid(), cid, id, null,
+                return moneyCall(ledger, "refund", appId, player.uuid(), cid, id, null,
                         () -> prov.refund(new EscrowId(id), why)).name();
             });
 
             // mint / burn 是 granted 档（§22.6）。本步没有能力表，一律 NOT_AUTHORIZED ——
             // 【不静默降级】：没批就明说没批，别让 App 以为成功了
             for (String granted : new String[]{"mint", "burn"}) {
-                HostFn.put(cur, scope, granted, 3, (c, s, a) -> TxnResult.NOT_AUTHORIZED.name());
+                HostFn.put(cur, scope, granted, 3, (c, s, a) -> {
+                    ledger.rejectFurther("currency." + granted);
+                    return TxnResult.NOT_AUTHORIZED.name();
+                });
             }
 
             cur.sealObject();
@@ -358,7 +370,7 @@ public final class CtxBuilder {
             return Boolean.TRUE;
         });
         HostFn.put(ctx, scope, "log", 1, (c, s, a) -> {
-            if (result.logs.size() < 32) result.logs.add(HostFn.str(a, 0, "ctx.log"));
+            if (result.logs.size() < 32) result.logs.add(LogText.filter(HostFn.str(a, 0, "ctx.log")));
             return Boolean.TRUE;
         });
 
@@ -370,7 +382,7 @@ public final class CtxBuilder {
     private static ICurrencyProvider requireOrError(CurrencyRegistry reg, String id) {
         ICurrencyProvider p = reg.get(id);
         if (p == null) {
-            throw org.mozilla.javascript.ScriptRuntime.constructError("Error", "UNAVAILABLE: " + NO_SUCH_CURRENCY);
+            throw HostError.unavailable(NO_SUCH_CURRENCY);
         }
         return p;
     }
@@ -383,32 +395,63 @@ public final class CtxBuilder {
      * 它可能是第三方的子类、getMessage 会炸，原样抛出去日志渲染时照样出事。
      * 不改写成返回码：UNAVAILABLE 会让 App 当"没动"去重试。
      */
-    private static <T> T moneyCall(String what, String appId, java.util.UUID player, String currencyId,
-                                   java.util.UUID other, Long amount, java.util.function.Supplier<T> op) {
+    private static <T> T moneyCall(MoneyLedger ledger, String what, String appId, java.util.UUID player,
+                                   String currencyId, java.util.UUID other, Long amount,
+                                   java.util.function.Supplier<T> op) {
         Throwable failure;
         try {
             T r = op.get();
-            if (r != null) return r;
+            if (r != null) {
+                ledger.movedMoney();
+                return r;
+            }
             failure = null;
         } catch (ScriptAbort e) {
-            throw e;
+            // The provider was entered. Even if budget observation replaces this Error while unwinding,
+            // RhinoEvaluator must still know that the final result is UNKNOWN.
+            ledger.movedMoney();
+            logProviderAbort(what, appId, e);
+            throw new ProviderAbort(what, true);
         } catch (Throwable e) {
             failure = e;
         }
+        // A thrown/null provider result is itself an uncertain money attempt. Set the bit before logging
+        // or constructing OutcomeUnknown so a later ScriptAbort cannot downgrade UNKNOWN to INTERNAL.
+        ledger.movedMoney();
         // provider 抛来的那个不可信（getMessage / getStackTrace 自己可能会炸）：日志与 cause 都只用替身
         Throwable standIn = null;
         String detail = "货币调用结果不明";
         try {
             standIn = failure == null ? null : ProviderFailure.of(failure);
-            detail = "货币调用结果不明：app=" + appId + " 玩家=" + player + " " + what + " " + currencyId
+            detail = "货币调用结果不明：app=" + LogText.filter(appId) + " 玩家=" + player + " " + what + " " + LogText.filter(currencyId)
                     + " 对方或托管号=" + other + " 金额=" + (amount == null ? "-" : amount + "（最小单位）")
-                    + " —— " + (failure == null ? "provider 没给结果（返回了 null）" : "provider 抛了 " + standIn.getMessage())
+                    + " —— " + (failure == null ? "provider 没给结果（返回了 null）" : "provider 抛了 " + LogText.filter(standIn.getMessage()))
                     + "，钱可能已经动了一半，请核对";
             com.november.mcphone.MCphone.LOGGER.error("[MCphone] ⚠ {}", detail, standIn);
         } catch (Throwable ignored) {
             // 栈溢出、内存不够时打不出来也别换掉原来那个错，更别变成脚本 finally 吞得掉的 RuntimeException
         }
         throw new OutcomeUnknown(detail, standIn);
+    }
+
+    private static void logProviderAbort(String operation, String appId, ScriptAbort abort) {
+        String detail;
+        try {
+            detail = LogText.filter(abort.getMessage());
+        } catch (Throwable ignored) {
+            detail = "(unreadable provider abort)";
+        }
+        com.november.mcphone.MCphone.LOGGER.error(
+                "[MCphone] provider aborted operation={} app={} detail={}",
+                operation, LogText.filter(appId), detail);
+    }
+
+    private static void translated(Runnable operation) {
+        try {
+            operation.run();
+        } catch (StoreQuota.QuotaExceeded quota) {
+            throw HostError.quota(quota.getMessage());
+        }
     }
 
     /**

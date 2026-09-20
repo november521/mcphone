@@ -36,7 +36,11 @@ public final class AppScope {
     private final ScriptBudget budget;
     private final ScriptModules modules;
 
-    private ScriptableObject scope;
+    private volatile ScriptableObject scope;
+
+    /** Parent and action table captured from the same initialized App scope. */
+    public record Invocation(Scriptable callScope, Scriptable actions) {
+    }
 
     public AppScope(String appId, ScriptBudget budget, Map<String, String> jsSources) {
         this.appId = appId;
@@ -53,9 +57,23 @@ public final class AppScope {
     }
 
     /** 这个 App 的顶层 scope。第一次用时建。<b>只在持有 Context 的线程上调。</b> */
-    public ScriptableObject scope(Context cx) {
+    public synchronized ScriptableObject scope(Context cx) {
         if (scope == null) scope = ScriptSandbox.harden(cx);
         return scope;
+    }
+
+    /**
+     * Atomically captures the parent and actions table used by one invocation. This prevents a
+     * concurrent first use or retained-scope reset from pairing a child of scope A with actions
+     * from scope B.
+     */
+    public synchronized Invocation beginInvocation(Context cx) {
+        ScriptableObject parent = scope(cx);
+        Scriptable call = cx.newObject(parent);
+        call.setPrototype(parent);
+        call.setParentScope(null);
+        Object value = ScriptableObject.getProperty(parent, "actions");
+        return new Invocation(call, value instanceof Scriptable actions ? actions : null);
     }
 
     /**
@@ -64,7 +82,7 @@ public final class AppScope {
      * <p>{@code setParentScope(null)}：顶层赋值会打到已经密封的 App scope 上并报错，
      * 而不是<b>悄悄</b>驻留一份。
      */
-    public Scriptable callScope(Context cx) {
+    public synchronized Scriptable callScope(Context cx) {
         ScriptableObject parent = scope(cx);
         Scriptable call = cx.newObject(parent);
         call.setPrototype(parent);
@@ -73,7 +91,7 @@ public final class AppScope {
     }
 
     /** {@code actions} 表。没有就返回 null。 */
-    public Scriptable actions(Context cx) {
+    public synchronized Scriptable actions(Context cx) {
         Object a = ScriptableObject.getProperty(scope(cx), "actions");
         return a instanceof Scriptable s ? s : null;
     }
@@ -83,14 +101,14 @@ public final class AppScope {
      *
      * @return 超没超。超了调用方要记一条审计
      */
-    public boolean sweepRetained() {
+    public synchronized boolean sweepRetained() {
         if (scope == null) return false;
         long chars = 0;
         int seen = 0;
         for (Object id : scope.getIds()) {          // 只看脚本自己声明的（可枚举的那些）
             if (++seen > MAX_SCANNED) break;
             if (!(id instanceof String name)) continue;
-            Object v = ScriptableObject.getProperty(scope, name);
+            Object v = readTopLevel(scope, name);
             if (v instanceof CharSequence cs) chars += cs.length();   // ConsString 上是 O(1)
         }
         if (chars <= MAX_RETAINED_CHARS) return false;
@@ -98,8 +116,16 @@ public final class AppScope {
         return true;
     }
 
+    private static Object readTopLevel(ScriptableObject scope, String name) {
+        Object accessor = scope.getGetterOrSetter(name, 0, false);
+        // A retention audit must be observational. Calling script getters here both mutates state
+        // and gives package code a second execution path. Accessor-backed values are skipped.
+        if (accessor instanceof org.mozilla.javascript.Callable) return org.mozilla.javascript.Undefined.instance;
+        return ScriptableObject.getProperty(scope, name);
+    }
+
     /** 服务器停止或 App 卸载时叫。 */
-    public void discard() {
+    public synchronized void discard() {
         scope = null;
     }
 

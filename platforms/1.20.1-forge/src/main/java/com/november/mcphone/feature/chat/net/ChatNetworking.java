@@ -182,24 +182,21 @@ public final class ChatNetworking {
     /**
      * 收一张图的一片。拼齐了才有事发生，见 {@link ChatImageUploads}。
      *
-     * 门禁与限流都只在第一片上做：中间几片被拦掉的话这次上传横竖也拼不齐，而每一片都
-     * 查一遍好友关系、每一片都占一次限流额度，等于把一次正常的发图判成"发得太快"。
+     * 配置、手机、好友关系与总大小每片都重查；只有频率额度在第一片消耗一次。
      */
     private static void handleSendImage(SendChatImagePacket packet, ServerPlayer sender) {
+        ImageOutcome gate = ChatService.maySendImage(sender, packet.target());
+        if (gate != ImageOutcome.OK) {
+            tell(sender, gate);
+            return;
+        }
+        if (packet.chunkCount() > ChatImage.maxChunks()) {
+            tell(sender, ImageOutcome.TOO_BIG);
+            return;
+        }
         if (packet.chunkIndex() == 0) {
-            ImageOutcome gate = ChatService.maySendImage(sender, packet.target());
-            if (gate != ImageOutcome.OK) {
-                tell(sender, gate);
-                return;
-            }
             if (!RequestThrottle.allow(sender, RequestThrottle.Kind.CHAT_IMAGE)) {
                 tell(sender, ImageOutcome.TOO_FAST);
-                return;
-            }
-            // 片数一眼就能看出这张图有多大。拦在这里而不是等它拼完：拼完再拒等于白收
-            // 几百 KB，而且 ChatImageUploads 那边只会静默丢掉，玩家看到的是点了没反应
-            if (packet.chunkCount() > ChatImage.maxChunks()) {
-                tell(sender, ImageOutcome.TOO_BIG);
                 return;
             }
         }
@@ -267,15 +264,19 @@ public final class ChatNetworking {
         if (!RequestThrottle.allow(player, RequestThrottle.Kind.CHAT_IMAGE_DATA)) return;
 
         List<UUID> allowed = new ArrayList<>();
+        java.util.Set<UUID> unique = new java.util.HashSet<>();
         for (UUID id : packet.images()) {
-            if (ChatService.mayReadImage(player, packet.peer(), id)) allowed.add(id);
+            if (unique.add(id) && ChatService.mayReadImage(player, packet.peer(), id)) allowed.add(id);
         }
         if (allowed.isEmpty()) return;
 
         MinecraftServer server = player.server;
         Util.backgroundExecutor().execute(() -> {
+            int responseBytes = 0;
             for (UUID id : allowed) {
                 byte[] data = ChatImageStore.read(server, id);
+                if (data != null && responseBytes + data.length > ChatImage.maxBytes()) break;
+                if (data != null) responseBytes += data.length;
                 ChatImageDataPacket reply = data == null
                         ? ChatImageDataPacket.gone(id)
                         : new ChatImageDataPacket(id, data);
@@ -295,11 +296,13 @@ public final class ChatNetworking {
 
     /** 成功与否都回发最新状态，失败时界面不会显示成功的假象 */
     private static void handleFriendRequest(FriendRequestPacket packet, ServerPlayer player) {
+        if (!RequestThrottle.allow(player, RequestThrottle.Kind.FRIEND_ACTION)) return;
         tell(player, ChatService.sendFriendRequest(player, packet.target()));
         replyState(player);
     }
 
     private static void handleRespondFriendRequest(RespondFriendRequestPacket packet, ServerPlayer player) {
+        if (!RequestThrottle.allow(player, RequestThrottle.Kind.FRIEND_ACTION)) return;
         tell(player, ChatService.respondFriendRequest(
                 player, packet.requester(), packet.accept()));
         replyState(player);
@@ -314,6 +317,7 @@ public final class ChatNetworking {
     }
 
     private static void handleRemoveFriend(RemoveFriendPacket packet, ServerPlayer player) {
+        if (!RequestThrottle.allow(player, RequestThrottle.Kind.FRIEND_ACTION)) return;
         ChatService.removeFriend(player, packet.target());
         replyState(player);
     }

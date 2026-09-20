@@ -1,6 +1,7 @@
 package com.november.mcphone.feature.terminal;
 
 import com.november.mcphone.MCphone;
+import com.november.mcphone.core.PhoneItem;
 import com.november.mcphone.feature.terminal.integration.TerminalIntegration;
 import com.november.mcphone.feature.terminal.integration.TerminalSource;
 import com.november.mcphone.feature.terminal.integration.Terminals;
@@ -50,6 +51,7 @@ public final class TerminalOpener {
 
     /** 开一台终端：按上面那两级挑。卡槽界面的「打开终端」按钮走这条，点 App 只在卡槽装了终端时走 */
     public static void open(ServerPlayer player) {
+        if (!PhoneItem.isCarriedBy(player)) return;
         // 开之前先给卡槽里那台补满电，"没电打不开"这件事因此根本不会发生。空着、不吃电、
         // 服主关了开关都会直接返回，见 TerminalCharger
         TerminalCharger.topUp(player);
@@ -85,6 +87,7 @@ public final class TerminalOpener {
 
     /** 打开终端卡槽界面 */
     public static void openSlotMenu(ServerPlayer player) {
+        if (!PhoneItem.isCarriedBy(player)) return;
         player.openMenu(new SimpleMenuProvider(
                 (containerId, playerInventory, ignored) -> new TerminalSlotMenu(containerId, playerInventory),
                 Component.translatable("mcphone.terminal.slot_title")));

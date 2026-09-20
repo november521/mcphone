@@ -26,10 +26,9 @@
 
 服主看不到值，但**看得到 key 的名字**。所以：
 
-```javascript
-ctx.sealed.put('k1', cipher)                 // ✅
-ctx.sealed.put('anthropic_api_key', cipher)  // ❌ 名字本身就把事情说完了
-```
+服务端脚本目前只暴露 `ctx.sealed.get(key)`；写入端尚无真实消费方，因此不会挂一个永远失败的
+`ctx.sealed.put` 空壳。将来写入链路接通后，key 仍必须使用不泄密的代号（例如 `k1`，不要用
+`anthropic_api_key`）。
 
 值的长度已经靠 64 字节对齐填充缓解了；key 名没有任何东西替你挡。
 
@@ -39,8 +38,7 @@ ctx.sealed.put('anthropic_api_key', cipher)  // ❌ 名字本身就把事情说�
 if (ctx.sealed.get('token') === '...') { }   // ❌ 服务端拿到的是密文
 ```
 
-`sealed` 只有两个操作：`ctx.sealed.put(key, cipher)` 与 `ctx.sealed.get(key)`。
-解密只发生在客户端。
+当前服务端脚本只提供 `ctx.sealed.get(key)`；解密只发生在客户端。
 
 ### 忘了保险箱口令 = 数据永久丢失
 

@@ -1,5 +1,6 @@
 package com.november.mcphone.core.script.server;
 
+import com.november.mcphone.MCphone;
 import com.november.mcphone.core.script.net.ScriptErrorCode;
 import com.november.mcphone.core.script.net.ScriptProtocol;
 import com.november.mcphone.core.script.net.ScriptRpc;
@@ -162,13 +163,22 @@ public final class ScriptPipeline {
      * 这个方法是 §15.9 那条"请求在队列里时撤销授权 → 落地前被拒，效果没发生"的落点。
      */
     public ScriptRpcResult land(ScriptRpc rpc, UUID player, byte[] key, ActionEvaluator.Outcome outcome) {
-        if (!authority.allows(player, rpc.appId(), rpc.actionId())) {
-            // 重查没过：意图一条都不落地
-            ledger.settle(player, key, ScriptErrorCode.NOT_AUTHORIZED, new byte[0], 0, 0);
-            return ScriptRpcResult.fail(rpc.requestId(), ScriptErrorCode.NOT_AUTHORIZED);
+        try {
+            if (!authority.allows(player, rpc.appId(), rpc.actionId())) {
+                // 重查没过：意图一条都不落地
+                ledger.settle(player, key, ScriptErrorCode.NOT_AUTHORIZED, new byte[0], 0, 0);
+                return ScriptRpcResult.fail(rpc.requestId(), ScriptErrorCode.NOT_AUTHORIZED);
+            }
+            ledger.settle(player, key, outcome.code(), outcome.data(), outcome.retryAfterMs(), outcome.stateRevision());
+            return new ScriptRpcResult(rpc.requestId(), outcome.code(), outcome.data(),
+                    outcome.messageKey(), outcome.messageArgs(), outcome.retryAfterMs(), outcome.stateRevision());
+        } catch (Throwable failure) {
+            // No intent has been applied by this S15 landing layer yet. Close RESERVED even when
+            // an authority implementation is broken; otherwise one callback can pin the key forever.
+            MCphone.LOGGER.error("[MCphone] script landing failed app={} action={} request={}",
+                    rpc.appId(), rpc.actionId(), rpc.requestId(), failure);
+            ledger.settle(player, key, ScriptErrorCode.INTERNAL, new byte[0], 0, 0);
+            return ScriptRpcResult.fail(rpc.requestId(), ScriptErrorCode.INTERNAL);
         }
-        ledger.settle(player, key, outcome.code(), outcome.data(), outcome.retryAfterMs(), outcome.stateRevision());
-        return new ScriptRpcResult(rpc.requestId(), outcome.code(), outcome.data(),
-                outcome.messageKey(), outcome.messageArgs(), outcome.retryAfterMs(), outcome.stateRevision());
     }
 }

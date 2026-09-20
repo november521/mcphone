@@ -61,12 +61,12 @@ public class ScriptEngineTest {
     // ================================================================ §16.3 逃逸
 
     static void escapes() {
-        check(run("eval('42')").contains("not defined"), "eval 没了");
-        check(run("new Function('return 42')()").contains("not defined"), "Function 没了");
+        check(!run("eval('42')").equals("42"), "eval 没了");
+        check(!run("new Function('return 42')()").equals("42"), "Function 没了");
         // §16.3 的配方照抄之后 Script 还在（实测 new Script('40+2')() → 42）。
         // 它拿不到 Java，但它是第三个运行时编译入口 —— 击穿了 §16.3 自己写的
         // 「运行的代码可以和 OP 审的源码不是一回事」那条理由
-        check(run("new Script('40+2')()").contains("not defined"), "Script 没了 —— 第三个运行时编译入口");
+        check(!run("new Script('40+2')()").equals("42"), "Script 没了 —— 第三个运行时编译入口");
         // 判据是「拿不到 42」，不是错误文案长什么样：同一条链在不同写法下报的话不一样
         // （实测有 "Cannot find function constructor" 也有 "return 42 is not a function"）
         for (String chain : new String[]{
@@ -107,12 +107,12 @@ public class ScriptEngineTest {
     }
 
     static void sealed() {
-        check(run("Object.prototype.p=1; ({}).p").contains("sealed"), "Object.prototype 封了");
-        check(run("Array.prototype.q=1; [].q").contains("sealed"), "Array.prototype 封了");
-        check(run("String.prototype.trim=function(){return 'X'}; ' a '.trim()").contains("sealed"), "改内置封了");
+        check(!run("Object.prototype.p=1; ({}).p").equals("1"), "Object.prototype 封了");
+        check(!run("Array.prototype.q=1; [].q").equals("1"), "Array.prototype 封了");
+        check(!run("String.prototype.trim=function(){return 'X'}; ' a '.trim()").equals("X"), "改内置封了");
         // §16.3 的 SEAL 只点了 10 个名字，Map 不在里面 —— 实测能污染
-        check(run("Map.prototype.zz=1; new Map().zz").contains("sealed"), "Map.prototype 也要封");
-        check(run("Set.prototype.zz=1; new Set().zz").contains("sealed"), "Set.prototype 也要封");
+        check(!run("Map.prototype.zz=1; new Map().zz").equals("1"), "Map.prototype 也要封");
+        check(!run("Set.prototype.zz=1; new Set().zz").equals("1"), "Set.prototype 也要封");
     }
 
     static void normalStillWorks() {
@@ -147,13 +147,25 @@ public class ScriptEngineTest {
 
     /** 预算只在分支点生效，大分配靠尺寸闸拦（§16.4 的三件事 ①②）。 */
     static void sizeGate() {
-        check(aborted("'x'.repeat(100000000).length", ScriptAbort.Reason.SIZE), "repeat 放大被拦");
-        check(aborted("new Array(100000000).join('')", ScriptAbort.Reason.SIZE), "join 放大被拦");
-        check(aborted("var s='x';for(var i=0;i<30;i++)s+=s; s.indexOf('y')", ScriptAbort.Reason.SIZE),
+        check(rejectedBySizeGate("'x'.repeat(100000000).length"), "repeat 放大被拦");
+        check(rejectedBySizeGate("new Array(100000000).join('')"), "join 放大被拦");
+        check(rejectedBySizeGate("var s='x';for(var i=0;i<30;i++)s+=s; s.indexOf('y')"),
                 "rope 物化被拦 —— 实测 9 毫秒能打爆 256 MB 堆");
-        check(aborted("var a=[];a.length=100000000; a.fill(1)", ScriptAbort.Reason.SIZE), "fill 放大被拦");
+        check(rejectedBySizeGate("var a=[];a.length=100000000; a.fill(1)"), "fill 放大被拦");
+        check(rejectedBySizeGate("var n=0;var o={get length(){n++;return n===1?1:10000000000},"
+                        + "indexOf:Array.prototype.indexOf};o.indexOf('z')"),
+                "类数组 length TOCTOU 在进入原生 indexOf 前拒绝");
+        check(rejectedBySizeGate("var o={get length(){return o.indexOf('x')},"
+                        + "indexOf:Array.prototype.indexOf};o.indexOf('x')"),
+                "包装层递归不能落到 StackOverflowError");
+        eq(run("var n=0,o={get x(){n++;return 'x'}};try{JSON.stringify(o)}catch(e){};n"), "0",
+                "JSON 预检不执行脚本 getter");
         eq(SizeGate.MAX_STRING, 64 * 1024, "§16.4 ① 的字符串上限");
         eq(SizeGate.MAX_ARRAY, 4096, "§16.4 ① 的数组上限");
+    }
+
+    static boolean rejectedBySizeGate(String source) {
+        return run(source).startsWith("HostError: INVALID:");
     }
 
     /** 跨调用驻留：每次调用都在预算内，26 次就打爆堆（实测）。 */
@@ -287,7 +299,7 @@ public class ScriptEngineTest {
         eq(withCtx("typeof ctx.getClass", FULL), "undefined", "ctx 摸不到 getClass");
         eq(withCtx("typeof ctx.equals", FULL), "undefined", "ctx 上没有 Java 的 equals");
         eq(withCtx("typeof ctx.wait", FULL), "undefined", "ctx 上没有 Java 的 wait");
-        check(withCtx("ctx.evil=1; typeof ctx.evil", FULL).contains("sealed"), "ctx 封了，加不了属性");
+        check(!withCtx("ctx.evil=1; typeof ctx.evil", FULL).equals("number"), "ctx 封了，加不了属性");
 
         // 表里没有的一律没有（§32.7：store/currency/mailbox/fetch 的后端还没到货）
         for (String absent : new String[]{"store", "currency", "mailbox", "fetch", "give", "loot", "command"}) {
@@ -347,9 +359,9 @@ public class ScriptEngineTest {
         eq(ScriptModules.normalize("", "./C:/x.js"), null, "带盘符拒");
         eq(ScriptModules.normalize("", "./a/./b.js"), "a/b.js", "单点跳过");
 
-        check(abortsWith(() -> m.require("server/gift.js", "server.js", (k, s) -> null), "只许包内相对路径"),
+        check(failsWith(() -> m.require("server/gift.js", "server.js", (k, s) -> null), "只许包内相对路径"),
                 "不带 ./ 的一律拒");
-        check(abortsWith(() -> m.require("./nope.js", "server.js", (k, s) -> null), "找不到"), "表里没有就拒");
+        check(failsWith(() -> m.require("./nope.js", "server.js", (k, s) -> null), "找不到"), "表里没有就拒");
 
         // 缓存命中不计深度、不计模块数
         Object[] loaded = {0};
@@ -369,24 +381,32 @@ public class ScriptEngineTest {
 
     static void requireCycle() {
         ScriptModules m = new ScriptModules(Map.of("a.js", "", "b.js", ""));
-        check(abortsWith(() -> m.require("./a.js", "server.js",
+        check(failsWith(() -> m.require("./a.js", "server.js",
                 (k, s) -> m.require("./b.js", k, (k2, s2) -> m.require("./a.js", k2, (k3, s3) -> null))),
                 "循环依赖"), "循环依赖要报出来");
+        check(failsWith(() -> m.require("./a.js", "server.js",
+                        (k, s) -> m.require("./b.js", k,
+                                (k2, s2) -> m.require("./a.js", k2, (k3, s3) -> null))),
+                "a.js -> b.js -> a.js"), "循环链按真实调用方向输出");
     }
 
     static void requireLimits() {
         java.util.Map<String, String> many = new java.util.HashMap<>();
         for (int i = 0; i <= ScriptModules.MAX_MODULES; i++) many.put("m" + i + ".js", "");
-        check(abortsWith(() -> new ScriptModules(many), "上限"), "模块数超限在建表时就拒");
-        check(abortsWith(() -> new ScriptModules(Map.of("a.vue", "")), "非 .js"), "非 .js 拒");
+        check(failsWith(() -> new ScriptModules(many), "上限"), "模块数超限在建表时就拒");
+        check(failsWith(() -> new ScriptModules(Map.of("a.vue", "")), "非 .js"), "非 .js 拒");
+        for (String bad : List.of("../../evil.js", "/abs.js", "a\\b.js", "C:x.js", "..js", ".js")) {
+            check(failsWith(() -> new ScriptModules(Map.of(bad, "")), "非规范名"),
+                    "非规范模块名拒绝：" + bad);
+        }
     }
 
-    static boolean abortsWith(Runnable body, String fragment) {
+    static boolean failsWith(Runnable body, String fragment) {
         try {
             body.run();
             return false;
-        } catch (ScriptAbort e) {
-            return e.getMessage().contains(fragment);
+        } catch (Throwable failure) {
+            return String.valueOf(failure.getMessage()).contains(fragment);
         }
     }
 
@@ -459,7 +479,8 @@ public class ScriptEngineTest {
         eq(withCtx("try { ctx.currency.balance('myserver:coin') < 5n } catch (e) { 'caught' }", backends),
                 "caught", "拿去比大小之前就抛了，不会被当成 0");
         String uncaught = withCtx("ctx.currency.balance('myserver:coin')", backends);
-        check(uncaught.startsWith("EcmaError"), "没接住时是脚本错误（不记过失），不是 ScriptAbort：" + uncaught);
+        check(uncaught.startsWith("HostError") || uncaught.startsWith("EcmaError"),
+                "没接住时是可捕获宿主错误（不记过失），不是 ScriptAbort：" + uncaught);
         eq(paid.get(), 1, "pay 只执行了一次");
     }
 
@@ -481,9 +502,16 @@ public class ScriptEngineTest {
                 new CtxBuilder.Cycle(ZoneId.of("Asia/Shanghai"), LocalTime.of(4, 0)), null, null, reg);
         String c = "'myserver:coin'", to = "'00000000-0000-0000-0000-000000000002'";
 
-        eq(withCtx("String(ctx.currency.parse(" + c + ", '1.234'))", b), "null", "小数位超了：parse 给 null，不中断");
-        eq(withCtx("String(ctx.currency.parse(" + c + ", '十块'))", b), "null", "不是数：parse 给 null");
+        eq(withCtx("try { ctx.currency.parse(" + c + ", '1.234') } catch (e) { e.message }", b),
+                "INVALID: mcphone.economy.invalid_amount", "小数位超了：parse 抛可捕获错误");
+        eq(withCtx("try { ctx.currency.parse(" + c + ", '十块') } catch (e) { e.message }", b),
+                "INVALID: mcphone.economy.invalid_amount", "不是数：parse 抛可捕获错误");
         eq(withCtx("String(ctx.currency.parse(" + c + ", '1.23'))", b), "123", "对照：合法的照常解析");
+        eq(withCtx("var out='before'; try { ctx.currency.parse(" + c + ", 'abc') } catch(e) { out='continued' } out", b),
+                "continued", "parse 错误可捕获，捕获后脚本可继续");
+        eq(withCtx("var used=false; try { used=(ctx.currency.parse(" + c + ", 'abc') + 1) > 0 }"
+                        + " catch(e) { } String(used)", b),
+                "false", "parse 错误值不能进入算术或比较");
         eq(withCtx("ctx.currency.pay(" + c + ", 'not-a-uuid', 5n)", b), "INVALID", "收款人不是 UUID：INVALID");
         eq(withCtx("ctx.currency.pay(" + c + ", " + to + ", 99999999999999999999999n)", b), "INVALID",
                 "金额超出 long：INVALID");
@@ -516,9 +544,10 @@ public class ScriptEngineTest {
                 "2^63-1 装得下，只是钱不够：交给 provider 判");
         eq(withCtx("ctx.currency.hold(" + c + ", " + to + ", 2n ** 63n)", b), "INVALID", "托管 2^63：INVALID");
 
-        // parse 给了 null，最常见的写法是不判就交给 pay / format：不许因此中断
-        eq(withCtx("ctx.currency.pay(" + c + ", " + to + ", ctx.currency.parse(" + c + ", 'abc'))", b), "INVALID",
-                "pay(parse(坏输入))：INVALID，不中断");
+        // parse 在产生任何哨兵值前就抛错，后续 pay 不会被调用。
+        eq(withCtx("try { ctx.currency.pay(" + c + ", " + to + ", ctx.currency.parse(" + c + ", 'abc')) }"
+                        + " catch (e) { e.message }", b), "INVALID: mcphone.economy.invalid_amount",
+                "pay(parse(坏输入))：parse 先抛，错误值不继续流动");
         eq(withCtx("ctx.currency.hold(" + c + ", " + to + ", undefined)", b), "INVALID", "金额 undefined：INVALID");
         eq(withCtx("try { ctx.currency.format(" + c + ", ctx.currency.parse(" + c + ", 'abc')) } catch (e) { e.message }", b),
                 "INVALID: mcphone.economy.invalid_amount", "format(parse(坏输入))：接得住的 Error，不中断");
@@ -533,8 +562,9 @@ public class ScriptEngineTest {
         }
         eq(withCtx("ctx.currency.pay(" + c + ", '00000000-0000-0000-0000-00000000000A', 5n)", b), "OK",
                 "规范写法的大写也收：是同一个 UUID");
-        check(withCtx("ctx.currency.pay(" + c + ", " + to + ", 5)", b).startsWith("ScriptAbort"),
-                "金额传了 Number 不是 BigInt：脚本自己写错了，照旧中断");
+        String badAmountType = withCtx("ctx.currency.pay(" + c + ", " + to + ", 5)", b);
+        check(badAmountType.startsWith("ScriptAbort") || badAmountType.startsWith("HostError"),
+                "金额传了 Number 不是 BigInt：宿主拒绝");
 
         // 字符串参数缺了（null / undefined）和金额缺了一样是返回码：多半是 default() 没有默认货币、或者玩家没填
         for (String call : new String[]{"pay(null, " + to + ", 5n)", "pay(undefined, " + to + ", 5n)",
@@ -553,9 +583,11 @@ public class ScriptEngineTest {
             eq(withCtx("try { ctx.currency." + call + " } catch (e) { e.message }", b),
                     "UNAVAILABLE: mcphone.economy.no_such_currency", call + "：没给货币 id 是接得住的 Error");
         }
-        eq(withCtx("String(ctx.currency.parse(" + c + ", null))", b), "null", "parse 没给文本：null，不中断");
-        check(withCtx("ctx.currency.pay(" + c + ", 5, 5n)", b).startsWith("ScriptAbort"),
-                "收款人传了 Number：类型写错了，照旧中断");
+        eq(withCtx("try { ctx.currency.parse(" + c + ", null) } catch (e) { e.message }", b),
+                "INVALID: mcphone.economy.invalid_amount", "parse 没给文本：抛可捕获错误");
+        String badRecipient = withCtx("ctx.currency.pay(" + c + ", 5, 5n)", b);
+        check(badRecipient.startsWith("HostError") || badRecipient.startsWith("ScriptAbort"),
+                "收款人传了 Number：宿主拒绝");
 
         // provider 在动钱时抛了（结果不明）：原样抛出、脚本接不住，不改写成 UNAVAILABLE 让 App 当"没动"去重试；也不是 ScriptAbort（不记过失）
         var open = new com.november.mcphone.core.script.server.economy.CurrencyGateway(Runnable::run, () -> true);
@@ -796,6 +828,9 @@ public class ScriptEngineTest {
                     if (m.getName().equals("transfer")) {
                         moved.incrementAndGet();
                         if (mode.get().equals("pay")) throw new IllegalStateException("钱包写了一半");
+                        if (mode.get().equals("abort")) throw new ScriptAbort(ScriptAbort.Reason.HOST,
+                                "provider\u2028abort\u202E§");
+                        if (mode.get().equals("error")) throw new AssertionError("provider\u2029error§");
                         if (mode.get().equals("null")) return null;
                     }
                     if (m.getName().equals("balance") && mode.get().equals("bal")) throw new NoSuchMethodError("换了版本");
@@ -825,6 +860,8 @@ public class ScriptEngineTest {
             try {
                 cx.evaluateString(app.scope(cx), "var actions = {"
                         + " buy: function (ctx) { " + pay + "; ctx.ok({}) },"
+                        + " buyabort: function (ctx) { " + pay + "; while (true) {} },"
+                        + " buytwice: function (ctx) { " + pay + "; " + pay + "; ctx.ok({}) },"
                         + " buyfin: function (ctx) { try { " + pay + " } finally { ctx.ok({}); return } },"
                         + " buycatch: function (ctx) { try { " + pay + " } catch (e) { } ctx.ok({}) },"
                         + " okfirst: function (ctx) { ctx.ok({}); " + pay + " },"
@@ -833,13 +870,13 @@ public class ScriptEngineTest {
             } finally {
                 Context.exit();
             }
-            StrikeTracker strikes = new StrikeTracker(System::currentTimeMillis);
-            RhinoEvaluator ev = new RhinoEvaluator(Map.of("t:app", app), strikes, b, Runnable::run);
+            StrikeTracker strikes = mainEx.submit(() -> new StrikeTracker(System::currentTimeMillis)).get();
+            RhinoEvaluator ev = new RhinoEvaluator(Map.of("t:app", app), strikes, b, mainEx::execute);
             java.util.function.Function<String, Object> call = action -> {
                 var f = new java.util.concurrent.CompletableFuture<com.november.mcphone.core.script.server.ActionEvaluator.Outcome>();
-                ev.submit(new com.november.mcphone.core.script.server.ActionEvaluator.Request(
-                        "t:app", action, new byte[0], player(), "r", 1), f::complete);
                 try {
+                    mainEx.submit(() -> ev.submit(new com.november.mcphone.core.script.server.ActionEvaluator.Request(
+                            "t:app", action, new byte[0], player(), "r", 1), f::complete)).get();
                     return f.get(10, java.util.concurrent.TimeUnit.SECONDS).code();
                 } catch (Exception e) {
                     return e.getClass().getSimpleName();
@@ -847,17 +884,22 @@ public class ScriptEngineTest {
             };
 
             eq(call.apply("buy"), com.november.mcphone.core.script.net.ScriptErrorCode.OK, "对照：provider 正常时 OK");
+            eq(call.apply("buyabort"), com.november.mcphone.core.script.net.ScriptErrorCode.UNKNOWN,
+                    "pay 已返回后再中断：UNKNOWN 优先且不记过");
+            eq(call.apply("buytwice"), com.november.mcphone.core.script.net.ScriptErrorCode.UNKNOWN,
+                    "钱已动过后第二次动钱被拒，最终仍为 UNKNOWN");
             // 抛了、没给结果（返回 null）都是结果不明；脚本先调过 ctx.ok 也不算数
-            for (String m : new String[]{"pay", "null"}) {
+            for (String m : new String[]{"pay", "null", "abort", "error"}) {
                 mode.set(m);
                 for (String action : new String[]{"buy", "buyfin", "buycatch", "okfirst"}) {
                     moved.set(0);
                     eq(call.apply(action), com.november.mcphone.core.script.net.ScriptErrorCode.UNKNOWN,
-                            m + " " + action + "：provider 动钱时抛了或没给结果 → UNKNOWN（catch / finally { return } / 先 ctx.ok 都改不了）");
+                            m + " " + action + "：provider 动钱时抛异常、ScriptAbort、Error 或没给结果 → UNKNOWN");
                     eq(moved.get(), 1, m + " " + action + "：provider 只被调了一次");
                 }
             }
-            check(strikes.allowed("t:app", player().uuid()), "结果不明八次也不记过失：不是脚本的错");
+            check(mainEx.submit(() -> strikes.allowed("t:app", player().uuid())).get(),
+                    "provider 异常与钱后中断都不记过失：不是脚本的错");
             mode.set("bal");
             eq(call.apply("bal"), com.november.mcphone.core.script.net.ScriptErrorCode.INTERNAL,
                     "对照：查余额抛了不动钱，照旧 INTERNAL，不是 UNKNOWN");

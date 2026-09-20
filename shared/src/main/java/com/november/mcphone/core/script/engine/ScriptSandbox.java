@@ -155,11 +155,16 @@ public final class ScriptSandbox {
             Object v = ScriptableObject.getProperty(target, name);
             if (!(v instanceof Callable inner)) continue;
             LambdaFunction wrapped = new LambdaFunction(scope, name, 0, (cx, sc, thisObj, args) -> {
-                SizeGate.check(thisObj, where + "." + name);
-                SizeGate.checkAll(args, where + "." + name + " 的参数");
-                Object out = inner.call(cx, sc, thisObj, args);
-                SizeGate.check(out, where + "." + name + " 的返回值");
-                return out;
+                String boundary = where + "." + name;
+                HostFn.enter(boundary);
+                try {
+                    SizeGate.checkNativeCall(where, name, thisObj, args);
+                    Object out = inner.call(cx, sc, thisObj, args);
+                    SizeGate.check(out, boundary + " 的返回值");
+                    return out;
+                } finally {
+                    HostFn.exit();
+                }
             });
             // LambdaFunction 自带一个未密封的 .prototype，那是跨调用的驻留点
             wrapped.sealObject();

@@ -1,5 +1,6 @@
 package com.november.mcphone.core.net;
 
+import com.november.mcphone.MCphone;
 import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.network.RegistryFriendlyByteBuf;
@@ -84,7 +85,19 @@ public final class MCphoneNetwork {
 
         PayloadTypeRegistry.playC2S().register(type, codec);
         ServerPlayNetworking.registerGlobalReceiver(type,
-                (packet, ctx) -> handler.accept(packet, ctx.player()));
+                (packet, ctx) -> handleSafely(packet, ctx.player(),
+                        () -> handler.accept(packet, ctx.player())));
+    }
+
+    private static void handleSafely(Object packet, ServerPlayer player, Runnable action) {
+        try {
+            action.run();
+        } catch (VirtualMachineError fatal) {
+            throw fatal;
+        } catch (Throwable failure) {
+            MCphone.LOGGER.error("[MCphone] contained C2S handler failure packet={} player={}",
+                    packet == null ? "null" : packet.getClass().getName(), player.getUUID(), failure);
+        }
     }
 
     /**

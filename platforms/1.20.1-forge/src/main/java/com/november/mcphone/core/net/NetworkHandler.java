@@ -207,13 +207,17 @@ public final class NetworkHandler {
      * 主线程与 player 非空由 MCphoneNetwork.registerToServer 保证，这里不必再判。
      */
     private static void handleSetWallpaper(SetWallpaperPacket packet, ServerPlayer player) {
-        ModCapabilities.of(player).setWallpaper(new WallpaperData(packet.wallpaperFileName()));
+        if (!PhoneItem.isCarriedBy(player)
+                || !RequestThrottle.allow(player, RequestThrottle.Kind.SETTINGS)) return;
+        String wallpaper = WallpaperData.sanitize(packet.wallpaperFileName());
+        if (!packet.wallpaperFileName().isEmpty() && wallpaper.isEmpty()) return;
+        ModCapabilities.of(player).setWallpaper(new WallpaperData(wallpaper));
 
         // 发回给该玩家确认
-        MCphoneNetwork.sendToPlayer(player, new SyncWallpaperPacket(packet.wallpaperFileName()));
+        MCphoneNetwork.sendToPlayer(player, new SyncWallpaperPacket(wallpaper));
 
         MCphone.LOGGER.debug("玩家 {} 设置壁纸: {}", player.getName().getString(),
-                packet.wallpaperFileName().isEmpty() ? "默认" : packet.wallpaperFileName());
+                wallpaper.isEmpty() ? "默认" : wallpaper);
     }
 
     /**
@@ -231,6 +235,7 @@ public final class NetworkHandler {
      * 与那一支只差存法：那边写的是数据组件，这边是 NBT（见 PhoneItemData）。
      */
     private static void handleSetDeviceName(SetDeviceNamePacket packet, ServerPlayer player) {
+        if (!RequestThrottle.allow(player, RequestThrottle.Kind.SETTINGS)) return;
         ItemStack stack = packet.location().resolve(player);
 
         // 那个位置上不是手机就什么都不做：位置由客户端给出，可能已经失效
@@ -270,6 +275,8 @@ public final class NetworkHandler {
      */
     /** 两只手必须逐一更新，否则同时打开 HUD 和全屏设备时会误灭其中一台。 */
     private static void handlePhoneScreenOn(PhoneScreenOnPacket packet, ServerPlayer player) {
+        if (!PhoneItem.isCarriedBy(player)
+                || !RequestThrottle.allow(player, RequestThrottle.Kind.SCREEN_STATE)) return;
         for (InteractionHand hand : InteractionHand.values()) {
             ItemStack held = player.getItemInHand(hand);
             if (packet.isLit(hand) && PhoneItem.isDevice(held)) {

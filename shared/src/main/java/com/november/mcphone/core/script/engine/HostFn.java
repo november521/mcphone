@@ -43,15 +43,11 @@ public final class HostFn {
     public static LambdaFunction of(Scriptable scope, String name, int arity, Body body) {
         LambdaFunction f = new LambdaFunction(scope, name, arity, (cx, sc, thisObj, args) -> {
             SizeGate.checkAll(args, name + " 的参数");
-            int[] d = DEPTH.get();
-            if (++d[0] > MAX_HOST_DEPTH) {
-                d[0]--;
-                throw new ScriptAbort(ScriptAbort.Reason.STACK, name + ": 宿主桥重入超过 " + MAX_HOST_DEPTH + " 层");
-            }
+            enter(name);
             try {
                 return body.call(cx, sc, args);
             } finally {
-                d[0]--;
+                exit();
             }
         });
         // LambdaFunction 自带一个未密封的 .prototype —— 跨调用复用 scope 时那是驻留点
@@ -70,6 +66,26 @@ public final class HostFn {
         DEPTH.get()[0] = 0;
     }
 
+    /**
+     * Enter any Java-backed script boundary, including sandbox wrappers around Rhino built-ins.
+     * Keeping the counter here prevents a getter/native-wrapper recursion from bypassing the
+     * protection that used to cover only {@link #of host functions}.
+     */
+    static void enter(String name) {
+        int[] d = DEPTH.get();
+        if (++d[0] > MAX_HOST_DEPTH) {
+            d[0]--;
+            throw new ScriptAbort(ScriptAbort.Reason.STACK,
+                    name + ": 宿主边界重入超过 " + MAX_HOST_DEPTH + " 层");
+        }
+    }
+
+    /** Balance one successful {@link #enter(String)}. */
+    static void exit() {
+        int[] d = DEPTH.get();
+        if (d[0] > 0) d[0]--;
+    }
+
     // ---------------------------------------------------------------- 读参数：只收原语
 
     public static String str(Object[] args, int i, String where) {
@@ -78,38 +94,42 @@ public final class HostFn {
             SizeGate.check(cs, where);
             return cs.toString();
         }
-        throw new ScriptAbort(ScriptAbort.Reason.HOST, where + " 第 " + i + " 个参数要字符串");
+        throw typeError(args, where, i, "字符串");
     }
 
-    public static long num(Object[] args, int i, String where) {
-        Object v = at(args, i);
-        if (v instanceof Number n) return n.longValue();
-        throw new ScriptAbort(ScriptAbort.Reason.HOST, where + " 第 " + i + " 个参数要数字");
+    public static long exactLong(Object[] args, int i, String where) {
+        return ExactLong.of(at(args, i), where);
     }
 
     public static boolean bool(Object[] args, int i, String where) {
         Object v = at(args, i);
         if (v instanceof Boolean b) return b;
-        throw new ScriptAbort(ScriptAbort.Reason.HOST, where + " 第 " + i + " 个参数要布尔");
+        throw typeError(args, where, i, "布尔");
     }
 
     /** 一串字符串。元素数受 {@link SizeGate#MAX_ARRAY} 限。 */
     public static List<String> strList(Object[] args, int i, String where) {
         Object v = at(args, i);
         if (!(v instanceof NativeArray arr)) {
-            throw new ScriptAbort(ScriptAbort.Reason.HOST, where + " 第 " + i + " 个参数要数组");
+            throw typeError(args, where, i, "数组");
         }
         SizeGate.check(arr, where);
         List<String> out = new ArrayList<>();
         for (int k = 0; k < arr.getLength(); k++) {
             Object e = arr.get(k, arr);
             if (!(e instanceof CharSequence cs)) {
-                throw new ScriptAbort(ScriptAbort.Reason.HOST, where + " 的第 " + k + " 个元素要字符串");
+                throw HostError.invalid(where + " 的第 " + k + " 个元素要字符串");
             }
             SizeGate.check(cs, where);
             out.add(cs.toString());
         }
         return out;
+    }
+
+    private static HostError typeError(Object[] args, String where, int i, String expected) {
+        Object value = at(args, i);
+        return HostError.invalid(where + " 第 " + i + " 个参数要" + expected + "，收到 "
+                + (value == null ? "null" : value.getClass().getSimpleName()));
     }
 
     public static boolean present(Object[] args, int i) {
