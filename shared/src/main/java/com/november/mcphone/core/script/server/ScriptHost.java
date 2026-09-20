@@ -8,11 +8,8 @@ import com.november.mcphone.core.script.engine.SharedState;
 import com.november.mcphone.core.script.engine.StrikeTracker;
 import com.november.mcphone.core.script.net.ScriptRpcHandler;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.world.level.storage.LevelResource;
 
-import java.nio.charset.StandardCharsets;
 import java.util.Map;
-import java.util.UUID;
 
 /**
  * 脚本宿主的唯一装配点（S15g，施工方案 §15.5）。把"各自做完、但从没接在一起"的四段接成一条路：
@@ -77,7 +74,8 @@ public final class ScriptHost {
         // 没有后端的项整项不挂（E12）：item / cycle / store / sealed / currencies（本步）全是 null
         CtxBuilder.Backends backends = new CtxBuilder.Backends(new SharedState(), null, null, null, null, null);
         RhinoEvaluator evaluator = new RhinoEvaluator(apps, strikes, backends, server::execute);
-        ScriptPipeline pipeline = new ScriptPipeline(serverIdOf(server),
+        // 服务器身份用【存档级】的 ServerIdentity（§13.5）：复制世界 = 复制身份，客户端按握手拿到的 serverId 分桶
+        ScriptPipeline pipeline = new ScriptPipeline(ServerIdentity.idOf(server),
                 new IdempotencyLedger(System::currentTimeMillis),
                 new ScriptRateLimiter(System::currentTimeMillis),
                 new DenyAllDeployments(), new DenyAllAuthority(), evaluator);
@@ -123,14 +121,5 @@ public final class ScriptHost {
 
     public StrikeTracker strikes() {
         return strikes;
-    }
-
-    /**
-     * 服务器身份：按世界根路径取一个确定性的 UUID。幂等键把 serverId 算进去，所以同一份世界
-     * 重开时键一致（账本本身是内存态，重启即清，见 {@link IdempotencyLedger}）。
-     */
-    static UUID serverIdOf(MinecraftServer server) {
-        String path = server.getWorldPath(LevelResource.ROOT).toString();
-        return UUID.nameUUIDFromBytes(path.getBytes(StandardCharsets.UTF_8));
     }
 }

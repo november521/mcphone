@@ -210,6 +210,18 @@ public class ScriptHostTest {
         }
     }
 
+    /** S17 Stage 1：服务器身份存【存档】、往返不变；旧存档缺这一段时生成新的并标脏。 */
+    static void serverIdentityRoundTrip() {
+        ServerIdentity a = new ServerIdentity();
+        net.minecraft.nbt.CompoundTag tag = a.write(new net.minecraft.nbt.CompoundTag());
+        eq(ServerIdentity.load(tag).id(), a.id(), "身份从存档往返不变");
+        check(ServerIdentity.FILE_NAME.contains("server_identity"), "文件名落在存档数据里：" + ServerIdentity.FILE_NAME);
+
+        ServerIdentity fresh = ServerIdentity.load(new net.minecraft.nbt.CompoundTag());
+        check(fresh.id() != null, "旧存档缺这一段时生成新身份");
+        check(fresh.isDirty(), "新身份标脏，下次世界保存时落盘");
+    }
+
     static ExecutorService newMain() {
         return Executors.newSingleThreadExecutor(r -> {
             Thread thread = new Thread(r, "fake-main");
@@ -223,6 +235,7 @@ public class ScriptHostTest {
         endToEndReachesEvaluator();
         manyInFlightExactlyOnce();
         messageKeysAreLocalizationKeys();
+        serverIdentityRoundTrip();
 
         System.out.println("断言 " + checks + " 条");
         if (!failures.isEmpty()) {
