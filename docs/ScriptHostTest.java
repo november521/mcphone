@@ -308,10 +308,11 @@ public class ScriptHostTest {
         }
     }
 
-    /** M2/C7：后端模块谓词 —— 前端 js 不进服务端模块表。 */
+    /** M2/C7/C12：后端模块谓词 —— 前端 js 与非 .js 都不进服务端模块表。 */
     static void backendModulePredicate() {
         check(ServerAppAssembler.isBackendModule("server.js"), "server.js 是后端");
-        check(ServerAppAssembler.isBackendModule("server/util.js"), "server/** 是后端");
+        check(ServerAppAssembler.isBackendModule("server/util.js"), "server/** 的 js 是后端");
+        check(!ServerAppAssembler.isBackendModule("server/readme.txt"), "server/** 下的非 .js 不是模块（C12）");
         check(!ServerAppAssembler.isBackendModule("ui/app.js"), "前端 js 不是后端（M2）");
         check(!ServerAppAssembler.isBackendModule("app.js"), "顶层前端 js 不是后端");
         check(!ServerAppAssembler.isBackendModule(null), "null 不是");

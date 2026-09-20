@@ -52,6 +52,8 @@ public record Deployment(
     public static final int DIGEST_LEN = 64;
 
     public Deployment {
+        // M5/C13：revision 与 packageDigest 是同一个值，构造时就归一 —— 只有一个源，永远不会分叉
+        if (packageDigest != null && !packageDigest.equals(revision)) revision = packageDigest;
         declaredActions = List.copyOf(declaredActions);
         approvedActions = List.copyOf(approvedActions);
         declaredCapabilities = List.copyOf(declaredCapabilities);

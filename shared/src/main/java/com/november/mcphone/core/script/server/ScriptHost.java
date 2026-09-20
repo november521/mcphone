@@ -145,6 +145,17 @@ public final class ScriptHost {
     }
 
     /**
+     * 这个 App 现在有没有装配好的后端（也就是它此刻跑的是<b>哪一份包</b>）。
+     *
+     * <p>命令面用它拒绝"换包不重启"：`approve` 换同一个 appId 的新包时，判定读的是实时部署表
+     * （deployed/hasAction/deployRev 全来自新包），而执行用的 {@code apps} 还是开服时装配的旧包 ——
+     * 客户端按新包发、服务端跑旧包，两端都不会说话（定向对抗第 5 条）。本步不做热重载，所以只能拒绝并要重启。
+     */
+    public boolean hasApp(String appId) {
+        return apps.containsKey(appId);
+    }
+
+    /**
      * 玩家登录：给这一次连接一个新 epoch（§15.9）。管线没装（装配失败降级）时安全无操作。
      *
      * <p>与 {@link #forget(UUID)} <b>必须成对</b>：只建不忘 ⇒ epochs 表按玩家无界增长；

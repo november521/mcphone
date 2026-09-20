@@ -246,6 +246,36 @@ public class DeploymentAuthorityTest {
         eq(ScriptAdminCommand.parseList("buy,sell"), List.of("buy", "sell"), "逗号拆的逐条勾选");
     }
 
+    /** C8/#4：命令解析要吃得下真实的 appId（`example:shop`）与含点的动作/能力名。 */
+    static void commandParsesRealIds() {
+        var dispatcher = new com.mojang.brigadier.CommandDispatcher<net.minecraft.commands.CommandSourceStack>();
+        ScriptAdminCommand.register(dispatcher);
+        net.minecraft.commands.CommandSourceStack src = new net.minecraft.commands.CommandSourceStack(
+                net.minecraft.commands.CommandSource.NULL, net.minecraft.world.phys.Vec3.ZERO,
+                net.minecraft.world.phys.Vec2.ZERO, null, 3, "t",
+                net.minecraft.network.chat.Component.literal("t"), null, null);
+        for (String cmd : new String[]{
+                "mcphone script identity",
+                "mcphone script remove example:shop",
+                "mcphone script approve " + PKG + " buy,sell economy.pay",
+                "mcphone script approve " + PKG + " - -",
+                "mcphone script authorize example:shop all",
+                "mcphone script revoke example:shop 00000000-0000-0000-0000-000000000001",
+                "mcphone script unlicenseAll example:shop",
+                "mcphone script clearApp example:shop"}) {
+            boolean parsed;
+            try {
+                dispatcher.parse(cmd, src);
+                parsed = true;
+            } catch (Exception e) {
+                failures.add("命令解析失败（" + e.getMessage() + "）：" + cmd);
+                checks++;
+                parsed = false;
+            }
+            check(parsed, "命令能解析：" + cmd);
+        }
+    }
+
     public static void main(String[] args) {
         deploymentAndAuthority();
         approvalDefaultsAreFailClosed();
@@ -253,6 +283,7 @@ public class DeploymentAuthorityTest {
         malformedDataIsRejectedNotThrown();
         persistenceRoundTrip();
         scannerAndCommandHelpers();
+        commandParsesRealIds();
 
         System.out.println("断言 " + checks + " 条");
         if (!failures.isEmpty()) {

@@ -56,36 +56,36 @@ public final class ScriptAdminCommand {
                                 .then(Commands.argument("digest", StringArgumentType.word())
                                         .executes(ctx -> approve(ctx.getSource(),
                                                 StringArgumentType.getString(ctx, "digest"), null, null))
-                                        .then(Commands.argument("actions", StringArgumentType.word())
+                                        .then(Commands.argument("actions", StringArgumentType.string())
                                                 .executes(ctx -> approve(ctx.getSource(),
                                                         StringArgumentType.getString(ctx, "digest"),
                                                         StringArgumentType.getString(ctx, "actions"), null))
-                                                .then(Commands.argument("caps", StringArgumentType.word())
+                                                .then(Commands.argument("caps", StringArgumentType.string())
                                                         .executes(ctx -> approve(ctx.getSource(),
                                                                 StringArgumentType.getString(ctx, "digest"),
                                                                 StringArgumentType.getString(ctx, "actions"),
                                                                 StringArgumentType.getString(ctx, "caps")))))))
                         .then(Commands.literal("remove")
-                                .then(Commands.argument("app", StringArgumentType.word())
+                                .then(Commands.argument("app", StringArgumentType.string())
                                         .executes(ctx -> remove(ctx.getSource(), StringArgumentType.getString(ctx, "app")))))
                         .then(Commands.literal("authorize")
-                                .then(Commands.argument("app", StringArgumentType.word())
-                                        .then(Commands.argument("target", StringArgumentType.word())
+                                .then(Commands.argument("app", StringArgumentType.string())
+                                        .then(Commands.argument("target", StringArgumentType.string())
                                                 .executes(ctx -> authorize(ctx.getSource(),
                                                         StringArgumentType.getString(ctx, "app"),
                                                         StringArgumentType.getString(ctx, "target"))))))
                         .then(Commands.literal("revoke")
-                                .then(Commands.argument("app", StringArgumentType.word())
-                                        .then(Commands.argument("target", StringArgumentType.word())
+                                .then(Commands.argument("app", StringArgumentType.string())
+                                        .then(Commands.argument("target", StringArgumentType.string())
                                                 .executes(ctx -> revoke(ctx.getSource(),
                                                         StringArgumentType.getString(ctx, "app"),
                                                         StringArgumentType.getString(ctx, "target"))))))
                         .then(Commands.literal("unlicenseAll")
-                                .then(Commands.argument("app", StringArgumentType.word())
+                                .then(Commands.argument("app", StringArgumentType.string())
                                         .executes(ctx -> unlicenseAll(ctx.getSource(),
                                                 StringArgumentType.getString(ctx, "app")))))
                         .then(Commands.literal("clearApp")
-                                .then(Commands.argument("app", StringArgumentType.word())
+                                .then(Commands.argument("app", StringArgumentType.string())
                                         .executes(ctx -> clearApp(ctx.getSource(),
                                                 StringArgumentType.getString(ctx, "app")))))));
     }
@@ -120,6 +120,13 @@ public final class ScriptAdminCommand {
             fail(src, "[脚本] 没有这个候选：" + digest + "（/mcphone script list 看有哪些）");
             return 0;
         }
+        // 换包必须重启：判定读实时部署表（新包），执行用的是开服时装配的 apps（旧包）—— 两端都会不一致
+        ScriptHost host = ScriptHost.current();
+        if (host != null && host.hasApp(candidate.appId())) {
+            fail(src, "[脚本] " + candidate.appId() + " 已有装配好的后端（旧包）。换包要重启服务器（本步不做热重载），"
+                    + "否则判定按新包、执行还是旧包。");
+            return 0;
+        }
         List<String> actions = parseList(actionsArg);
         List<String> caps = parseList(capsArg);
         UUID approver = src.getEntity() instanceof ServerPlayer p ? p.getUUID() : null;
@@ -138,6 +145,13 @@ public final class ScriptAdminCommand {
 
     private static int remove(CommandSourceStack src, String appId) {
         if (badApp(src, appId)) return 0;
+        // 撤部署时后端代码还挂在内存里：判定立刻变 NOT_DEPLOYED，但"装配的旧包"要重启才消失 —— 与 approve 同一口径
+        ScriptHost host = ScriptHost.current();
+        if (host != null && host.hasApp(appId)) {
+            fail(src, "[脚本] " + appId + " 已有装配好的后端。撤部署要重启服务器后才对执行生效"
+                    + "（判定立即生效，但旧后端代码还在内存里）。");
+            return 0;
+        }
         Deployment removed = DeploymentData.get(src.getServer()).remove(appId);
         if (removed == null) {
             fail(src, "[脚本] 没有这个部署：" + appId);

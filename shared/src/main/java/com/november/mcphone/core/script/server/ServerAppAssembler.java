@@ -68,14 +68,22 @@ public final class ServerAppAssembler {
         return apps;
     }
 
-    /** 后端模块的谓词：{@code server.js} 与 {@code server/**}（前端 .js 不进服务端模块表）。 */
+    /** 后端模块的谓词：{@code server.js} 与 {@code server/**} 里的 {@code .js}（前端 js 不进服务端模块表）。 */
     static boolean isBackendModule(String path) {
-        return path != null
+        return path != null && path.endsWith(".js")
                 && (path.equals(ServerPackageScanner.SERVER_ENTRY) || path.startsWith(ServerPackageScanner.SERVER_DIR));
     }
 
     /** 装配期把入口跑一遍（预算内）；失败返回 false，调用方整个跳过这个 App。 */
     private static boolean preflight(AppScope app) {
+        // C8.1：主线程上若已有别的 mod 留下的活动 Rhino Context，enterContext 可能进入"复用"分支 ——
+        // 那样指令/墙钟观察器就不是我们的 factory，两道闸失效，不受信入口会在主线程上无界运行。
+        // 宁可不预检（fail-safe）：该 App 改为首次请求时在 worker 上求值，预算照旧生效。
+        if (Context.getCurrentContext() != null) {
+            MCphone.LOGGER.warn("[MCphone] {} 跳过入口预检：当前线程已有活动的 Rhino Context，"
+                    + "预检的预算闸可能失效；改为首次请求时在 worker 上求值", app.appId());
+            return true;
+        }
         Context cx = app.budget().enterContext();
         boolean began = false;
         try {
