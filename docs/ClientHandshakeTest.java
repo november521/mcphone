@@ -40,7 +40,8 @@ public class ClientHandshakeTest {
 
     static ScriptPush deployment(long revision, String appId, String rev, String front, List<String> actions) {
         return Handshake.push(ScriptProtocol.TOPIC_HANDSHAKE_DEPLOYMENT,
-                Handshake.encodeDeployment(new Handshake.Deployment(appId, rev, front, 0, actions)), revision);
+                Handshake.encodeDeployment(new Handshake.Deployment(appId, rev, front, 0, 7L,
+                        1_700_000_000_000L, actions)), revision);
     }
 
     static ScriptPush end(long revision, long epoch) {
@@ -57,6 +58,7 @@ public class ClientHandshakeTest {
         eq(ClientHandshake.serverId(), SERVER, "serverId 来自服务端，不是自己推断的");
         eq(ClientHandshake.complete(), false, "只收到 begin：还不完整");
         eq(ClientHandshake.connectionEpoch(), 0L, "不完整时 connectionEpoch 是 0");
+        eq(ClientHandshake.serverName(), "", "不完整时 serverName 不交出去");
 
         ClientHandshake.onPush(deployment(11, "example:shop", "rev1", "front1", List.of("buy", "sell")));
         eq(ClientHandshake.deployment("example:shop"), null, "不完整批次里的部署对外不可见（S2-3）");
@@ -64,12 +66,27 @@ public class ClientHandshakeTest {
         ClientHandshake.onPush(end(12, EPOCH));
         eq(ClientHandshake.complete(), true, "begin…end 齐了且条数对得上");
         eq(ClientHandshake.connectionEpoch(), EPOCH, "完整之后才把 epoch 交出去回填");
+        eq(ClientHandshake.serverName(), "测试服", "完整之后 serverName 可用（§13.7 的空壳横幅）");
+        eq(ClientHandshake.revision(), 10L, "批次修订号交出来（begin 那一条，ScriptPage 据此重排）");
         ClientHandshake.Entry e = ClientHandshake.deployment("example:shop");
         check(e != null, "收齐之后部署可见");
         eq(e.deployRev(), "rev1", "部署版本记下来了");
         eq(e.frontendDigest(), "front1", "前端摘要记下来了（加载集=摘要集的落点）");
         eq(e.visibility(), 0, "visibility 记下来了");
+        eq(e.approvalRevision(), 7L, "批准轴（详情页的版本 N）记下来了");
+        eq(e.approvedAt(), 1_700_000_000_000L, "批准时间记下来了（详情页来源行）");
         eq(e.actions(), List.of("buy", "sell"), "授权动作记下来了");
+
+        // §13.8 的只读上下文：available / serverName / actions
+        java.util.Map<String, Object> backend = ClientHandshake.backendValues("example:shop");
+        eq(backend.get("available"), true, "backend.available");
+        eq(backend.get("serverName"), "测试服", "backend.serverName");
+        eq(backend.get("actions"), List.of("buy", "sell"), "backend.actions");
+        eq(ClientHandshake.backendValues("example:nope").get("available"), false, "没部署的 App 是 false");
+        eq(((java.util.Map<?, ?>) ClientHandshake.backendContext("example:shop").get("backend")).get("available"),
+                true, "backendContext 的键是 backend（模板注入用的那一个）");
+        eq(ClientHandshake.deployments().size(), 1, "部署表的只读快照");
+        eq(ClientHandshake.deployments().get("example:shop").actions(), List.of("buy", "sell"), "快照内容一致");
     }
 
     static void rejectsForgedAndMismatched() {

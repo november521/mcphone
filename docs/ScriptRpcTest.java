@@ -152,7 +152,7 @@ public class ScriptRpcTest {
                 "x".repeat(ScriptProtocol.ID_MAX),
                 "x".repeat(ScriptProtocol.ID_MAX),
                 "x".repeat(ScriptProtocol.DIGEST_MAX),
-                1, actions));
+                1, Long.MAX_VALUE, Long.MAX_VALUE, actions));
         check(one.length <= ScriptProtocol.DATA_MAX,
                 "最坏情况下的一个部署要 " + one.length + " 字节，上限 " + ScriptProtocol.DATA_MAX);
 
@@ -170,8 +170,11 @@ public class ScriptRpcTest {
         eq(Handshake.decodeEnd(Handshake.encodeEnd(new Handshake.End(9L))).epoch(), 9L, "end 往返");
 
         Handshake.Deployment d = Handshake.decodeDeployment(Handshake.encodeDeployment(
-                new Handshake.Deployment("example:market", "rev1", "digest", 0, List.of("buy", "sell"))));
+                new Handshake.Deployment("example:market", "rev1", "digest", 0, 7L, 1_700_000_000_000L,
+                        List.of("buy", "sell"))));
         eq(d.actions(), List.of("buy", "sell"), "actions 往返");
+        eq(d.approvalRevision(), 7L, "批准轴往返（详情页的版本 N）");
+        eq(d.approvedAt(), 1_700_000_000_000L, "批准时间往返（详情页来源行）");
     }
 
     // ================================================================ §15.6 幂等键

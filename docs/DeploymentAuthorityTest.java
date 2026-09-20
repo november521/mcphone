@@ -223,6 +223,13 @@ public class DeploymentAuthorityTest {
         check(!ServerPackageScanner.frontendDigest(entries)
                         .equals(com.november.mcphone.core.script.pkg.PackageDigest.of(entries)),
                 "前端摘要与整包摘要不同（谓词不同）");
+        // 客户端回显与"界面被改过"的对比走同一份谓词（FrontendDigest），两份实现迟早对不上
+        eq(com.november.mcphone.core.script.pkg.FrontendDigest.of(entries),
+                ServerPackageScanner.frontendDigest(entries), "FrontendDigest 与服务端谓词同一份实现");
+        check(com.november.mcphone.core.script.pkg.FrontendDigest.isServerSide("server.js")
+                        && com.november.mcphone.core.script.pkg.FrontendDigest.isServerSide("server/util.js")
+                        && !com.november.mcphone.core.script.pkg.FrontendDigest.isServerSide("app.vue"),
+                "后端谓词：server.js 与 server/** 是，app.vue 不是");
 
         var root = com.google.gson.JsonParser.parseString(
                 "{\"actions\":[\"buy\",\"sell\"],\"capabilities\":[]}").getAsJsonObject();
