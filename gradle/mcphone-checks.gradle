@@ -912,6 +912,17 @@ abstract class PlatformTwinsTask extends DefaultTask {
     /** 每条 {key, projectJavaDir}，来自 mcphoneAllTargets。 */
     @Input abstract ListProperty<Object> getTargets()
 
+    /**
+     * 目录【内容】也要当输入。
+     *
+     * 【不能只声明 targets】：那里面装的是 File，Gradle 只把<b>路径</b>当输入 —— 平台源码改一个字节，
+     * 输入哈希一个字都不变，{@code verifyPlatformTwins} 会被判 UP-TO-DATE 直接跳过：本地假绿、CI 才红。
+     * Stage 1 实际踩过（214→242 的漂移就是这么漏掉的）。与 SeamsDocTask.scannedDirs 同一个教训：
+     * <b>没被追踪的输入等于没有的闸</b>。
+     */
+    @InputFiles @PathSensitive(PathSensitivity.RELATIVE)
+    abstract ConfigurableFileCollection getScannedDirs()
+
     /** 基线文件的内容。用内容而不是 File：File 不是被追踪的配置输入，改了基线不重跑。 */
     @Input @Optional abstract Property<String> getBaselineJson()
 
@@ -1087,6 +1098,10 @@ tasks.register('verifyPlatformTwins', PlatformTwinsTask) {
     description = '校验 platforms/ 下同名文件的差异不超过基线，且没有逐字相同却没搬走的'
     group = 'verification'
     targets.set(mcphoneAllTargets)
+    // 内容输入（约束 3）：不声明的话，平台源码改了这道闸会被判 UP-TO-DATE 跳过（本地假绿、CI 才红）
+    scannedDirs.from(mcphoneAllTargets.collectMany { t ->
+        [t.projectJavaDir] + ((t.layerJavaDirs ?: []) as List)
+    }.findAll { (it as File).isDirectory() })
     baselineJson.set(providers.fileContents(
             layout.projectDirectory.file('../../versions/platform-twins.json')).asText)
     writeBaseline.set(false)
@@ -1097,6 +1112,9 @@ tasks.register('updateTwinBaseline', PlatformTwinsTask) {
     description = '重算 platforms/ 下同名文件的差异基线'
     group = 'verification'
     targets.set(mcphoneAllTargets)
+    scannedDirs.from(mcphoneAllTargets.collectMany { t ->
+        [t.projectJavaDir] + ((t.layerJavaDirs ?: []) as List)
+    }.findAll { (it as File).isDirectory() })
     baselineFile.set(twinBaselineFile)
     writeBaseline.set(true)
 }
