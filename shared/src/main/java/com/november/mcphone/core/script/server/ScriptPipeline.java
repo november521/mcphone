@@ -44,6 +44,9 @@ public final class ScriptPipeline {
     /** 服务器忙的文案键。<b>与"你太快了"分开</b>：一个该退避，一个该稍后再试。 */
     public static final String KEY_SERVER_BUSY = "mcphone.script.server_busy";
 
+    /** App 已部署、但请求的动作没在包里声明。码仍是 {@code NOT_DEPLOYED}（两轴都不在），文案分开。 */
+    public static final String KEY_NO_SUCH_ACTION = "mcphone.script.no_such_action";
+
     private final IdempotencyLedger ledger;
     private final ScriptRateLimiter limiter;
     private final DeploymentView deployments;
@@ -100,8 +103,15 @@ public final class ScriptPipeline {
             return;
         }
 
-        if (!deployments.deployed(rpc.appId()) || !deployments.hasAction(rpc.appId(), rpc.actionId())) {
+        if (!deployments.deployed(rpc.appId())) {
             send.accept(ScriptRpcResult.fail(rpc.requestId(), ScriptErrorCode.NOT_DEPLOYED));
+            return;
+        }
+        if (!deployments.hasAction(rpc.appId(), rpc.actionId())) {
+            // 部署在、但这个动作没在包里声明：还是 NOT_DEPLOYED（两轴都不在），但给一条自己的文案键，
+            // 别让玩家看到"本服没有这个 App"（它明明在）——对抗组 Q1 的粒度修正
+            send.accept(new ScriptRpcResult(rpc.requestId(), ScriptErrorCode.NOT_DEPLOYED,
+                    new byte[0], KEY_NO_SUCH_ACTION, java.util.List.of(), 0, 0));
             return;
         }
 
