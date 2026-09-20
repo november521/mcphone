@@ -42,6 +42,9 @@ public final class SizeGate {
     /** 数组上限，§16.4 ①。 */
     public static final int MAX_ARRAY = 4096;
 
+    /** 原生 flat 最多检查这么深；更深的嵌套直接拒绝，避免递归本身成为攻击面。 */
+    private static final int MAX_FLAT_DEPTH = 32;
+
     /** 一个值过不过得了闸。过不了就中断本次调用。 */
     public static void check(Object value, String where) {
         if (value instanceof CharSequence cs) {
@@ -165,7 +168,74 @@ public final class SizeGate {
                 || "toLocaleString".equals(method)) {
             long total = arrayStringCost(array, Collections.newSetFromMap(new IdentityHashMap<>()), 0);
             if (total > MAX_STRING) tooLarge("Array." + method, total, MAX_STRING);
+        } else if ("flat".equals(method)) {
+            int depth = flatDepth(args);
+            long total = flattenedLength(array, depth,
+                    Collections.newSetFromMap(new IdentityHashMap<>()), 0);
+            if (total > MAX_ARRAY) tooLarge("Array.flat", total, MAX_ARRAY);
+        } else if ("flatMap".equals(method)) {
+            // The callback decides what each element expands into. Invoking it during preflight would
+            // execute script twice and estimating without it is unsound (one callback can return a
+            // MAX_ARRAY-sized array for every input element). Keep this disabled until callbacks can
+            // be metered at the native boundary.
+            throw HostError.invalid("Array.flatMap: 受限沙箱无法在执行前估算回调输出");
         }
+    }
+
+    /** Count flat's output before Rhino allocates it, without invoking script getters. */
+    private static long flattenedLength(NativeArray array, int depth, Set<Object> path, int nesting) {
+        if (!path.add(array)) throw HostError.invalid("Array.flat: 不允许循环数组");
+        long length = array.getLength();
+        if (length > MAX_ARRAY) tooLarge("Array.flat 输入", length, MAX_ARRAY);
+
+        long total = 0;
+        for (int i = 0; i < length; i++) {
+            Object getter = array.getGetterOrSetter(null, i, false);
+            if (getter instanceof org.mozilla.javascript.Callable) {
+                throw HostError.invalid("Array.flat: 数组访问器不可用于放大型原生操作");
+            }
+            Object value = array.get(i, array);
+            if (value == Scriptable.NOT_FOUND) continue; // flat 会跳过空洞
+
+            if (depth > 0 && value instanceof NativeArray nested) {
+                if (nesting >= MAX_FLAT_DEPTH) {
+                    throw HostError.invalid("Array.flat: 嵌套超过 " + MAX_FLAT_DEPTH + " 层");
+                }
+                total += flattenedLength(nested, depth - 1, path, nesting + 1);
+            } else {
+                total++;
+            }
+            if (total > MAX_ARRAY) tooLarge("Array.flat", total, MAX_ARRAY);
+        }
+        path.remove(array);
+        return total;
+    }
+
+    /** Safe subset of ToIntegerOrInfinity for flat's depth argument. */
+    private static int flatDepth(Object[] args) {
+        if (args == null || args.length == 0 || args[0] == org.mozilla.javascript.Undefined.instance) return 1;
+        Object raw = args[0];
+        double value;
+        if (raw == null) {
+            value = 0;
+        } else if (raw instanceof Number number) {
+            value = number.doubleValue();
+        } else if (raw instanceof Boolean bool) {
+            value = bool ? 1 : 0;
+        } else if (raw instanceof CharSequence chars) {
+            String text = chars.toString().trim();
+            if (text.isEmpty()) return 0;
+            try {
+                value = Double.parseDouble(text);
+            } catch (NumberFormatException e) {
+                value = Double.NaN;
+            }
+        } else {
+            throw HostError.invalid("Array.flat: depth 只能是原语");
+        }
+        if (Double.isNaN(value) || value <= 0) return 0;
+        if (!Double.isFinite(value) || value > MAX_FLAT_DEPTH) return MAX_FLAT_DEPTH + 1;
+        return (int) Math.floor(value);
     }
 
     private static long arrayStringCost(NativeArray array, Set<Object> seen, int depth) {

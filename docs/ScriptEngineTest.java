@@ -158,6 +158,18 @@ public class ScriptEngineTest {
         check(rejectedBySizeGate("var o={get length(){return o.indexOf('x')},"
                         + "indexOf:Array.prototype.indexOf};o.indexOf('x')"),
                 "包装层递归不能落到 StackOverflowError");
+        check(rejectedBySizeGate("new Array(1024).fill(new Array(1024).fill("
+                        + "new Array(1024).fill(0))).flat(2).length"),
+                "flat 深层展开必须在原生分配前被拒绝");
+        eq(run("[[1,2],[3]].flat().join(',')"), "1,2,3", "小型 flat 保持可用");
+        eq(run("[[[1]],[[2]]].flat(2).join(',')"), "1,2", "带 depth 的小型 flat 保持可用");
+        check(rejectedBySizeGate("[1].flatMap(function(){return new Array(4096).fill(0)})"),
+                "flatMap 回调输出无法预检，必须在执行回调前拒绝");
+        check(rejectedBySizeGate("var a=[];a[0]=a;a.flat(Infinity)"),
+                "flat 循环数组必须在原生递归前拒绝");
+        eq(run("var n=0,a=[];Object.defineProperty(a,'0',{get:function(){n++;return [1]}});"
+                        + "try{a.flat()}catch(e){};n"), "0",
+                "flat 预检不得执行数组 getter");
         eq(run("var n=0,o={get x(){n++;return 'x'}};try{JSON.stringify(o)}catch(e){};n"), "0",
                 "JSON 预检不执行脚本 getter");
         eq(SizeGate.MAX_STRING, 64 * 1024, "§16.4 ① 的字符串上限");
