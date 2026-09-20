@@ -2169,6 +2169,56 @@ public class EconomyDataTest {
         }
     }
 
+    /**
+     * S15f：注册表与服务器/世界生命周期同轴 —— 开服建、停服 clear；重复 install/stop 幂等；
+     * 查找函数来自注册表，而不是写死的 null。起不了服务器，用假网关走 {@link EconomyRuntime#install}。
+     */
+    static void registryLifecycle() throws Exception {
+        AtomicLong t = new AtomicLong(1);
+        EconomyData d = EconomyData.empty(t::get);
+        TxnLog log = new TxnLog(tmp("s15f"), ZoneOffset.UTC, d);
+        UUID a = UUID.randomUUID();
+        // 先造一点账：注册表只给"存档里已经出现过"的货币注册（面额表属 S15d′，本步不造货币）
+        eq(builtin(COIN, d, log, t).mint(a, 1000, RSN), TxnResult.OK, "先造出账目，注册表才有货币可注册");
+
+        CurrencyGateway gw = new CurrencyGateway(Runnable::run, () -> true);
+        EconomyRuntime r = EconomyRuntime.install(d, log, gw, 0);
+        try {
+            check(EconomyRuntime.current() == r, "开服后 current 就是它");
+            CurrencyRegistry reg = r.registry();
+            check(reg != null, "注册表不是 null —— 查找函数来自它，不再是 currencyId -> null");
+            ICurrencyProvider p = reg.get(COIN);
+            check(p != null, "存档里已有的货币查得到 provider");
+            check(p instanceof GatedCurrencyProvider, "交出来的是包过网关的那一份");
+            eq(reg.defaultCurrency(), null, "没有配置默认货币时 default() 是 null，不抛");
+            eq(reg.get(GEM), null, "没出现过的货币查不到，也不挂空壳");
+
+            // 同一种货币的第二个实例直接拒、不替换（E25、E26①）
+            ICurrencyProvider before = reg.get(COIN);
+            check(!reg.register(builtin(COIN, d, log, t), false), "同一种货币第二个实例被拒");
+            check(reg.get(COIN) == before, "被拒的那次没有替换掉原来的");
+
+            // 重复开服：上一份被 stop（清注册表 + 关网关），换成新的一份
+            CurrencyGateway gw2 = new CurrencyGateway(Runnable::run, () -> true);
+            EconomyRuntime r2 = EconomyRuntime.install(d, log, gw2, 0);
+            check(EconomyRuntime.current() == r2 && r2 != r, "重复开服：current 换成新的一份");
+            check(!gw.isOpen(), "重复开服把上一份的网关关掉了");
+            eq(reg.get(COIN), null, "上一份注册表被 clear，不残留上一个世界的 provider");
+            check(r2.registry() != reg && r2.registry().get(COIN) != null, "新的一份是新的注册表且照样注册上了");
+
+            // 停服：current 归 null、注册表清空；重复停服安全
+            CurrencyRegistry reg2 = r2.registry();
+            EconomyRuntime.stop();
+            check(EconomyRuntime.current() == null, "停服后 current 是 null");
+            eq(reg2.get(COIN), null, "停服 clear 之后查不到");
+            check(!gw2.isOpen(), "停服关网关");
+            EconomyRuntime.stop();
+            check(EconomyRuntime.current() == null, "重复停服安全（幂等）");
+        } finally {
+            EconomyRuntime.stop();
+        }
+    }
+
     // ================================================================ 工具
 
     static CompoundTag escrowTag(UUID id, String currency, long amount, long createdAt) {
@@ -2257,6 +2307,7 @@ public class EconomyDataTest {
         registryHandsOutGated();
         commandPermissionNode();
         conservationThroughGateway();
+        registryLifecycle();
 
         System.out.println("断言 " + checks + " 条");
         if (!failures.isEmpty()) {
