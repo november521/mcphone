@@ -120,18 +120,17 @@ public final class ScriptAdminCommand {
             fail(src, "[脚本] 没有这个候选：" + digest + "（/mcphone script list 看有哪些）");
             return 0;
         }
-        // 换包必须重启：判定读实时部署表（新包），执行用的是开服时装配的 apps（旧包）—— 两端都会不一致
-        ScriptHost host = ScriptHost.current();
-        if (host != null && host.hasApp(candidate.appId())) {
-            fail(src, "[脚本] " + candidate.appId() + " 已有装配好的后端（旧包）。换包要重启服务器（本步不做热重载），"
-                    + "否则判定按新包、执行还是旧包。");
-            return 0;
-        }
         List<String> actions = parseList(actionsArg);
         List<String> caps = parseList(capsArg);
         UUID approver = src.getEntity() instanceof ServerPlayer p ? p.getUUID() : null;
         DeploymentData.Approval ap = dd.approve(candidate, actions, caps, approver, System.currentTimeMillis());
         Deployment d = ap.deployment();
+        // 批准之后立刻在主线程重装配（S17 Stage 2 约束 1）：成功即生效，不用重启
+        boolean degraded = ScriptHost.current() == null;
+        boolean live = ScriptHost.reassemble(server, d.appId());
+        String effect = degraded ? "（脚本后端未启用，重开服生效）"
+                : live ? "（已重装配，立即生效；在飞的请求仍用旧 scope）"
+                : "（⚠ 重装配失败，该 App 现在不可执行 NOT_DEPLOYED；修好后重新 approve 或重启）";
         ok(src, "[脚本] 已批准 " + d.appId() + "（版本 " + d.approvalRevision() + "）"
                 + "，批准动作 " + d.approvedActions() + " / 声明 " + d.declaredActions()
                 + "；批准能力 " + d.approvedCapabilities() + " / 声明 " + d.declaredCapabilities()
@@ -139,26 +138,24 @@ public final class ScriptAdminCommand {
                         : "，丢掉（不在声明里）：动作 " + ap.droppedActions() + "、能力 " + ap.droppedCapabilities())
                 + (ap.replaced() ? "；覆盖了旧部署" : "")
                 + (d.approvedActions().isEmpty() ? "【注意：批准动作是空的，这个 App 现在什么都不给】" : "")
-                + "（授权立即生效；后端代码在下次开服时装配）");
+                + effect);
         return 1;
     }
 
     private static int remove(CommandSourceStack src, String appId) {
         if (badApp(src, appId)) return 0;
-        // 撤部署时后端代码还挂在内存里：判定立刻变 NOT_DEPLOYED，但"装配的旧包"要重启才消失 —— 与 approve 同一口径
-        ScriptHost host = ScriptHost.current();
-        if (host != null && host.hasApp(appId)) {
-            fail(src, "[脚本] " + appId + " 已有装配好的后端。撤部署要重启服务器后才对执行生效"
-                    + "（判定立即生效，但旧后端代码还在内存里）。");
-            return 0;
-        }
         Deployment removed = DeploymentData.get(src.getServer()).remove(appId);
         if (removed == null) {
             fail(src, "[脚本] 没有这个部署：" + appId);
             return 0;
         }
-        ok(src, "[脚本] 已撤掉 " + appId + " 的部署（包摘要 " + shortDigest(removed.packageDigest())
-                + "）；授权立即生效，已装配的后端代码在下次开服时消失");
+        // 撤部署之后同样重装配：表里没有这个 App 了，reassemble 会把 scope 摘掉（在飞的求值继续用旧引用）
+        boolean degraded = ScriptHost.current() == null;
+        boolean live = ScriptHost.reassemble(src.getServer(), appId);
+        ok(src, "[脚本] 已撤掉 " + appId + " 的部署（包摘要 " + shortDigest(removed.packageDigest()) + "）"
+                + (degraded ? "（脚本后端未启用，重开服生效）"
+                        : live ? "（已重装配：新请求 NOT_DEPLOYED；在飞的请求仍用旧 scope）"
+                        : "（⚠ 重装配未完成，该 App 现在不可执行 NOT_DEPLOYED）"));
         return 1;
     }
 
