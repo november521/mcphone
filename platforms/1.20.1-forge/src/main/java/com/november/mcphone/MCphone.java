@@ -124,7 +124,9 @@ public final class MCphone {
         MinecraftForge.EVENT_BUS.addListener(
                 (net.minecraftforge.event.entity.player.PlayerEvent.PlayerLoggedInEvent e) -> {
                     if (e.getEntity() instanceof net.minecraft.server.level.ServerPlayer p) {
-                        com.november.mcphone.core.script.server.ScriptHost.newEpoch(p);
+                        long epoch = com.november.mcphone.core.script.server.ScriptHost.newEpoch(p);
+                        // S17 Stage 2：把 serverId / epoch / 部署表随握手下发（只含该玩家被授权的动作，UX）
+                        com.november.mcphone.core.script.server.HandshakeService.pushTo(p, epoch);
                     }
                 });
         MinecraftForge.EVENT_BUS.addListener(

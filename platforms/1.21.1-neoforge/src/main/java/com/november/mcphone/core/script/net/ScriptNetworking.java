@@ -33,5 +33,8 @@ public final class ScriptNetworking {
 
         ScriptRpcHandler.installSender((player, result) ->
                 MCphoneNetwork.sendToPlayer(player, new ScriptRpcResultPayload(result)));
+        // S17 Stage 2：服务端主动推送（握手）
+        ScriptPushHandler.installSender((player, push) ->
+                MCphoneNetwork.sendToPlayer(player, new ScriptPushPayload(push)));
     }
 }

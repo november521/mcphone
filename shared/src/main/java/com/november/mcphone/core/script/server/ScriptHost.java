@@ -12,6 +12,7 @@ import net.minecraft.server.level.ServerPlayer;
 
 import java.util.Map;
 import java.util.UUID;
+import java.util.UUID;
 
 /**
  * 脚本宿主的唯一装配点（S15g，施工方案 §15.5）。把"各自做完、但从没接在一起"的四段接成一条路：
@@ -55,13 +56,21 @@ public final class ScriptHost {
     private final StrikeTracker strikes;
     private final RhinoEvaluator evaluator;
     private final ScriptPipeline pipeline;
+    private final UUID serverId;
+    private final DeploymentData deployments;
+    /** 生产授权视图。握手要用它把"这个玩家被授权的动作"筛出来（只给 UX）。 */
+    private final ServerAuthority authority;
 
     private ScriptHost(Map<String, AppScope> apps, StrikeTracker strikes,
-                       RhinoEvaluator evaluator, ScriptPipeline pipeline) {
+                       RhinoEvaluator evaluator, ScriptPipeline pipeline,
+                       UUID serverId, DeploymentData deployments, ServerAuthority authority) {
         this.apps = apps;
         this.strikes = strikes;
         this.evaluator = evaluator;
         this.pipeline = pipeline;
+        this.serverId = serverId;
+        this.deployments = deployments;
+        this.authority = authority;
     }
 
     /**
@@ -100,13 +109,15 @@ public final class ScriptHost {
         // 没有后端的项整项不挂（E12）：item / cycle / store / sealed / currencies（本步）全是 null
         CtxBuilder.Backends backends = new CtxBuilder.Backends(new SharedState(), null, null, null, null, null);
         RhinoEvaluator evaluator = new RhinoEvaluator(apps, strikes, backends, server::execute);
-        ScriptPipeline pipeline = new ScriptPipeline(ServerIdentity.idOf(server),
+        UUID serverId = ServerIdentity.idOf(server);
+        ServerAuthority authorityView = new ServerAuthority(deployments, authority);
+        ScriptPipeline pipeline = new ScriptPipeline(serverId,
                 new IdempotencyLedger(System::currentTimeMillis),
                 new ScriptRateLimiter(System::currentTimeMillis),
-                new ServerDeployments(deployments), new ServerAuthority(deployments, authority), evaluator);
+                new ServerDeployments(deployments), authorityView, evaluator);
         // 登记之后 ScriptRpcHandler.handle 才会把请求交给这条管线（此前一律 NOT_DEPLOYED）
         ScriptRpcHandler.install(pipeline);
-        current = new ScriptHost(apps, strikes, evaluator, pipeline);
+        current = new ScriptHost(apps, strikes, evaluator, pipeline, serverId, deployments, authorityView);
         MCphone.LOGGER.info("[MCphone] 脚本宿主已装配：apps={}，已批准部署 {}，候选 {}{}，管线已登记",
                 apps.size(), deployments.deployments().size(), deployments.candidates().size(),
                 scan.changed() == 0 ? "" : "（本次进队 " + scan.changed() + "）");
@@ -155,15 +166,30 @@ public final class ScriptHost {
         return apps.containsKey(appId);
     }
 
+    /** 这一局的服务器身份（§13.5），握手把它下发给客户端。 */
+    public UUID serverId() {
+        return serverId;
+    }
+
+    /** 已批准部署表。读的人必须守它的线程纪律（主线程装配/命令期写、运行期只读）。 */
+    public DeploymentData deployments() {
+        return deployments;
+    }
+
+    /** 握手筛"这个玩家被授权的动作"用（只给 UX）；判定链本身在管线里各自再查。 */
+    public boolean allows(UUID player, String appId, String actionId) {
+        return authority.allows(player, appId, actionId);
+    }
+
     /**
-     * 玩家登录：给这一次连接一个新 epoch（§15.9）。管线没装（装配失败降级）时安全无操作。
+     * 玩家登录：给这一次连接一个新 epoch（§15.9）。管线没装（装配失败降级）时返回 0、安全无操作。
      *
      * <p>与 {@link #forget(UUID)} <b>必须成对</b>：只建不忘 ⇒ epochs 表按玩家无界增长；
      * 只忘不建 ⇒ 所有请求判成过期连接。两个调用点要写在同一个登录/登出接线处。
      */
-    public static void newEpoch(ServerPlayer player) {
+    public static long newEpoch(ServerPlayer player) {
         ScriptHost h = current();
-        if (h != null) h.pipeline.newEpoch(player.getUUID());
+        return h == null ? 0L : h.pipeline.newEpoch(player.getUUID());
     }
 
     /** 玩家登出：只忘 epoch，不清账本（账本保留 24 小时，跨重连命中正是它存在的理由）。 */

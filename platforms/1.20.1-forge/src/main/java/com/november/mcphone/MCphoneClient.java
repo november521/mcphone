@@ -84,6 +84,10 @@ public final class MCphoneClient {
         IEventBus modBus = context.getModEventBus();
 
         modBus.addListener(ClientConfig::onLoad);
+
+        // S17 Stage 2：接住服务端握手（serverId / epoch / 部署表）。必须在进服之前装好 ——
+        // 握手是登录时推的，晚了就丢了（丢了的表现是 connectionEpoch 恒 0，请求判过期连接）
+        com.november.mcphone.core.script.client.ClientHandshake.install();
         modBus.addListener(ClientConfig::onReload);
         context.registerConfig(ModConfig.Type.CLIENT, ClientConfig.SPEC);
 
@@ -137,6 +141,8 @@ public final class MCphoneClient {
                     // 排在最前：它要在下面那些缓存被清掉之前把会话存下来。
                     // 这条路上不能碰 setScreen，理由见 PhoneHud.onWorldLeave
                     PhoneHud.onWorldLeave();
+                    // S17 Stage 2：断线清掉握手状态（serverId/epoch/部署表），下次进服重新握
+                    com.november.mcphone.core.script.client.ClientHandshake.clear();
 
                     // 去重用的记忆跟着世界走：不清的话，进新世界开手机会因为"和上次一样"
                     // 被判成没变，那部手机在别人眼里就不亮

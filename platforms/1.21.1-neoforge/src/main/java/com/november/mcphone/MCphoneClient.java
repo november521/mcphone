@@ -58,6 +58,10 @@ public class MCphoneClient {
         modEventBus.addListener(ClientConfig::onReload);
         container.registerConfig(ModConfig.Type.CLIENT, ClientConfig.SPEC);
 
+        // S17 Stage 2：接住服务端握手（serverId / epoch / 部署表）。必须在进服之前装好 ——
+        // 握手是登录时推的，晚了就丢了（丢了的表现是 connectionEpoch 恒 0，请求判过期连接）
+        com.november.mcphone.core.script.client.ClientHandshake.install();
+
         modEventBus.addListener(MCphoneKeyBindings::register);
 
         // 副手 HUD 那一层。插在原版战利品条之后：玩法 HUD 之上，F3 与聊天框之下
@@ -104,6 +108,8 @@ public class MCphoneClient {
                     // 这条路上不能碰 setScreen，理由见 PhoneHud.onWorldLeave
                     PhoneHud.onWorldLeave();
                     PhoneScreenOnSync.forget();
+                    // S17 Stage 2：断线清掉握手状态（serverId/epoch/部署表），下次进服重新握
+                    com.november.mcphone.core.script.client.ClientHandshake.clear();
 
                     ChatClientCache.clear();
                     ChatImageCache.clear();

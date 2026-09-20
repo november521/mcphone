@@ -32,5 +32,7 @@ public final class ScriptNetworking {
                 ScriptResultRouter::push);
 
         ScriptRpcHandler.installSender(MCphoneNetwork::sendToPlayer);
+        // S17 Stage 2：服务端主动推送（握手）
+        ScriptPushHandler.installSender(MCphoneNetwork::sendToPlayer);
     }
 }

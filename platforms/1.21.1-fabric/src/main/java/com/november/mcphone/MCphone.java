@@ -104,8 +104,10 @@ public class MCphone implements ModInitializer {
         // 玩家进入世界时把服主那份服务端配置推给他（Fabric 没有 NeoForge 的自动同步，
         // shared/ 有三处客户端直读 ServerConfig，没有这个包按钮显隐会静默出错）
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> {
-            // S17：连接 epoch 成对（登出见 DISCONNECT）。客户端拿到的 epoch 经握手下发，那一半在 Stage 2
-            com.november.mcphone.core.script.server.ScriptHost.newEpoch(handler.getPlayer());
+            // S17：连接 epoch 成对（登出见 DISCONNECT）。
+            // Stage 2：拿到 epoch 后立刻把 serverId / epoch / 部署表随握手下发
+            long epoch = com.november.mcphone.core.script.server.ScriptHost.newEpoch(handler.getPlayer());
+            com.november.mcphone.core.script.server.HandshakeService.pushTo(handler.getPlayer(), epoch);
             var cfg = com.november.mcphone.core.ServerConfig.allowFriendTeleport();
             var img = com.november.mcphone.core.ServerConfig.allowChatImages();
             var kb = com.november.mcphone.core.ServerConfig.chatImageMaxBytes() / 1024;

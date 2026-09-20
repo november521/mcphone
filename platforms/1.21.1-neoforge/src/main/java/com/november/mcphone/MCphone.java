@@ -44,7 +44,9 @@ public class MCphone {
         net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener(
                 (net.neoforged.neoforge.event.entity.player.PlayerEvent.PlayerLoggedInEvent e) -> {
                     if (e.getEntity() instanceof net.minecraft.server.level.ServerPlayer p) {
-                        com.november.mcphone.core.script.server.ScriptHost.newEpoch(p);
+                        long epoch = com.november.mcphone.core.script.server.ScriptHost.newEpoch(p);
+                        // S17 Stage 2：把 serverId / epoch / 部署表随握手下发（只含该玩家被授权的动作，UX）
+                        com.november.mcphone.core.script.server.HandshakeService.pushTo(p, epoch);
                     }
                 });
         net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener(
