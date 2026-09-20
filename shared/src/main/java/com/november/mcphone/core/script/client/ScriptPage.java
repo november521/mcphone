@@ -3,6 +3,7 @@ package com.november.mcphone.core.script.client;
 import com.november.mcphone.MCphone;
 import com.november.mcphone.api.client.ui.IPhonePage;
 import com.november.mcphone.api.client.ui.PhoneCanvas;
+import com.november.mcphone.core.client.FontPalette;
 import com.november.mcphone.core.client.PhoneScreen;
 import com.november.mcphone.core.script.client.render.FontMeasure;
 import com.november.mcphone.core.script.client.render.Frame;
@@ -15,11 +16,14 @@ import com.november.mcphone.core.script.layout.LayoutNode;
 import com.november.mcphone.core.script.layout.NodeType;
 import com.november.mcphone.core.script.layout.TextMeasure;
 import com.november.mcphone.core.script.layout.UiState;
+import com.november.mcphone.core.script.net.ScriptRpcResult;
+import com.november.mcphone.core.script.pkg.FrontendDigest;
 import com.november.mcphone.core.script.sfc.SfcCompiler;
 import com.november.mcphone.core.script.sfc.Statements;
 import com.november.mcphone.core.script.sfc.TemplateInstance;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
+import net.minecraft.network.chat.Component;
 
 import java.util.ArrayDeque;
 import java.util.Deque;
@@ -80,6 +84,13 @@ public final class ScriptPage implements IPhonePage {
     private int lastProbe = -1;
     private int lastTextureEpoch = -1;
     private String lastLanguage = "";
+    /** 上一次重排时的握手批次 revision：换服/重连之后 backend.available 会变，得重排一次 */
+    private long lastHandshakeRevision = Long.MIN_VALUE;
+
+    /** 最近一次脚本调用的结果提示（§15.1 的回调风格里那是 toast），到点自己消失。 */
+    private String toast = "";
+    private long toastUntilMs;
+    private static final long TOAST_MS = 3000L;
 
     /**
      * 画布的几何与字体，点击时要用。
@@ -166,6 +177,20 @@ public final class ScriptPage implements IPhonePage {
 
         Frame frame = new Frame(layout, c, state, app.pkg(), pressedNow());
         Renderer.draw(layout, frame);
+        renderToast(c);
+    }
+
+    /** 脚本调用的结果提示画在内容区底部（结果回调在主线程，改了提示下一帧就能看到，不需要重排）。 */
+    private void renderToast(PhoneCanvas c) {
+        if (toast.isEmpty() || System.currentTimeMillis() > toastUntilMs) return;
+        Font font = c.font();
+        String shown = toast;
+        int max = c.width() - 8;
+        if (font.width(shown) > max) shown = font.plainSubstrByWidth(shown, max);
+        c.graphics().drawString(font, shown,
+                c.x() + (c.width() - font.width(shown)) / 2,
+                c.y() + c.height() - font.lineHeight - 3,
+                FontPalette.notice(), true);
     }
 
     /** §7.6 的判定。少一个就是 bug，多问一个的代价只是几十微秒。 */
@@ -175,6 +200,7 @@ public final class ScriptPage implements IPhonePage {
         if (state.revision() != lastRevision) return true;
         if (tm.lineHeight() != lastLineHeight || tm.width(FONT_PROBE) != lastProbe) return true;
         if (AppTextures.epoch() != lastTextureEpoch) return true;
+        if (ClientHandshake.revision() != lastHandshakeRevision) return true;
         return !language().equals(lastLanguage);
     }
 
@@ -183,7 +209,7 @@ public final class ScriptPage implements IPhonePage {
         if (page == null) return;
 
         keepScroll();
-        tree = instance.instantiate(state);
+        tree = instance.instantiate(state, ClientHandshake.backendContext(app.id().toString()));
         for (String w : tree.warnings()) MCphone.LOGGER.warn("[MCphone] {}", w);
 
         layout = LayoutEngine.layout(tree.root(), page.stylesheet(), state, c.width(), c.height(), tm, images());
@@ -195,6 +221,7 @@ public final class ScriptPage implements IPhonePage {
         lastLineHeight = tm.lineHeight();
         lastProbe = tm.width(FONT_PROBE);
         lastTextureEpoch = AppTextures.epoch();
+        lastHandshakeRevision = ClientHandshake.revision();
         lastLanguage = language();
     }
 
@@ -293,11 +320,17 @@ public final class ScriptPage implements IPhonePage {
     /**
      * 一次点击的后果（§9.6）。三个内建动作同时写了的话按 close → back → nav 的先后取一个：
      * 关掉之后再导航没有意义，而方案把先后留给了页面。
+     *
+     * <p>{@code call(...)} 是唯一出网的语句（§15.1），排在导航之前执行：页面关掉也好、
+     * 跳走也好，作者写下的那次调用都得发出去。结果回来时弹一条 toast（回调风格的全部
+     * 能力要等 P1 的 {@code <script>}）。
      */
     private void run(Statements.Outcome outcome) {
         if (outcome == null) return;
         for (String w : outcome.warnings()) MCphone.LOGGER.warn("[MCphone] {}", w);
         if (!outcome.applied()) return;
+
+        for (String action : outcome.calls()) callAction(action);
 
         if (outcome.close()) {
             close();
@@ -308,6 +341,27 @@ public final class ScriptPage implements IPhonePage {
             return;
         }
         if (outcome.nav() != null) navTo(outcome.nav());
+    }
+
+    /**
+     * 发一条 {@code call('动作')}。字段由 {@link ScriptCall} 从握手状态回填 ——
+     * <b>作者改不了</b> epoch/deployRev/摘要，这正是"请求不再停在 epoch 一档"的那一截。
+     */
+    private void callAction(String action) {
+        ScriptCall.call(app.id().toString(), action, new byte[0], FrontendDigest.of(app.pkg()),
+                this::onCallResult);
+    }
+
+    /** 结果回调：主线程，可以安全地改提示与重排判据。 */
+    private void onCallResult(ScriptRpcResult result) {
+        String key = result.messageKey();
+        if (key == null || key.isEmpty()) key = result.code().defaultMessageKey();
+        showToast(Component.translatable(key, result.messageArgs().toArray()).getString());
+    }
+
+    private void showToast(String text) {
+        toast = text == null ? "" : text;
+        toastUntilMs = System.currentTimeMillis() + TOAST_MS;
     }
 
     /** 走到另一页，当前这页压进返回栈。 */

@@ -60,7 +60,7 @@ public final class HandshakeService {
                     if (host.allows(player.getUUID(), d.appId(), action)) actions.add(action);
                 }
                 byte[] data = Handshake.encodeDeployment(new Handshake.Deployment(d.appId(), d.revision(),
-                        d.frontendDigest(), 0, actions));
+                        d.frontendDigest(), 0, d.approvalRevision(), d.approvedAt(), actions));
                 if (data.length > ScriptProtocol.DATA_MAX) {
                     MCphone.LOGGER.warn("[MCphone] 部署 {} 的握手数据 {} 字节，超过单包上限 {}，本次不推（不静默截断动作）",
                             d.appId(), data.length, ScriptProtocol.DATA_MAX);

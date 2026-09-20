@@ -106,7 +106,7 @@ public final class TemplateInstance {
                 }
             }
             Statements.Outcome outcome = bound == null
-                    ? new Statements.Outcome(true, false, false, null, List.of())
+                    ? new Statements.Outcome(true, false, false, null, List.of(), List.of())
                     : bound.run(trial, file);
             if (outcome.applied()) {
                 for (Map.Entry<String, Object> e : trial.values().entrySet()) state.set(e.getKey(), e.getValue());
@@ -115,20 +115,33 @@ public final class TemplateInstance {
         }
     }
 
-    /** 一次实例化的现场：节点预算、已用过的 id、点击表。 */
+    /** 一次实例化的现场：节点预算、已用过的 id、点击表、宿主上下文（点击时也要用同一份）。 */
     private static final class Pass {
         int budget = NodeParser.MAX_NODES;
         boolean truncated;
         final Set<String> ids = new HashSet<>();
         final Map<Node, Statements.Bound> clicks = new IdentityHashMap<>();
         final Set<Node> nodes = Collections.newSetFromMap(new IdentityHashMap<>());
+        final Map<String, Object> host;
+
+        private Pass(Map<String, Object> host) {
+            this.host = host;
+        }
     }
 
     /** 按当前 state 产出一棵树。不抛：超限截断、求值出错降级，原因在 {@link Tree#warnings()}。 */
     public Tree instantiate(UiState state) {
-        EvalContext c = new EvalContext(state.values(), file);
+        return instantiate(state, Map.of());
+    }
+
+    /**
+     * 同上，另外把宿主注入的只读上下文（§13.8 的 {@code backend}）交给表达式。
+     * 每次重排都要按当前握手状态传一次：换服之后同一个 App 的 {@code backend.available} 会变。
+     */
+    public Tree instantiate(UiState state, Map<String, Object> host) {
+        EvalContext c = new EvalContext(state.values(), host, file);
         c.line = compiled.root().line();
-        Pass pass = new Pass();
+        Pass pass = new Pass(host);
         Node root = node(compiled.root(), c, pass, null);
         if (pass.truncated) c.warnAlways("节点超过 " + NodeParser.MAX_NODES + " 个，多出来的没有进树");
         return new Tree(root, c.warnings(), pass.truncated, pass.clicks, pass.nodes, file);
@@ -183,7 +196,8 @@ public final class TemplateInstance {
 
         Node out = new Node(e.type(), id, e.classes(), Collections.unmodifiableMap(props), List.copyOf(kids), null, null);
         pass.nodes.add(out);
-        if (e.click() != null) pass.clicks.put(out, new Statements.Bound(e.click(), c.boundNames(), c.boundValues()));
+        if (e.click() != null) pass.clicks.put(out,
+                new Statements.Bound(e.click(), c.boundNames(), c.boundValues(), pass.host));
         return out;
     }
 

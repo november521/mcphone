@@ -40,16 +40,18 @@ import java.util.UUID;
 public final class ClientHandshake {
 
     /**
-     * 一个部署在本客户端的可见信息（都是 UX：deployRev 用于版本比对，actions 用于灰按钮，
-     * visibility 给商店/详情页用）。
+     * 一个部署在本客户端的可见信息（都是 UX：deployRev 用于版本比对、actions 用于灰按钮，
+     * visibility 给商店/详情页用、approvalRevision/approvedAt 给详情页三行用）。
      */
-    public record Entry(String deployRev, String frontendDigest, int visibility, List<String> actions) {
+    public record Entry(String deployRev, String frontendDigest, int visibility,
+                        long approvalRevision, long approvedAt, List<String> actions) {
         public Entry {
             actions = List.copyOf(actions);
         }
     }
 
     private static volatile UUID serverId;
+    private static volatile String serverName = "";
     private static volatile long epoch;
     private static volatile boolean complete;
     /** 上一批 BEGIN 的 revision；重放/乱序的旧批不比它大就被忽略。 */
@@ -81,6 +83,7 @@ public final class ClientHandshake {
                         }
                         lastBeginRevision = push.revision();
                         serverId = begin.serverId();
+                        serverName = begin.serverName() == null ? "" : begin.serverName();
                         epoch = begin.epoch();
                         expectedCount = begin.count();
                         receivedCount = 0;
@@ -94,7 +97,7 @@ public final class ClientHandshake {
                         if (complete) return;               // 这一批已经收尾：迟到的明细不认
                         if (expectedCount > 0 && receivedCount >= expectedCount) return;
                         deployments.put(d.appId(), new Entry(d.deployRev(), d.frontendDigest(),
-                                d.visibility(), d.actions()));
+                                d.visibility(), d.approvalRevision(), d.approvedAt(), d.actions()));
                         receivedCount++;
                     }
                 }
@@ -127,6 +130,44 @@ public final class ClientHandshake {
         return serverId;
     }
 
+    /** 服务端显示名（握手的 begin 里带的那一格）；没握手/批次没作数时是空串。 */
+    public static String serverName() {
+        return complete ? serverName : "";
+    }
+
+    /**
+     * 上一批 begin 的 revision。模板里没有任何东西跟着它变，但 {@code ScriptPage} 在重排判据里
+     * 比它 —— 换服/重连之后一整批部署换了，页面得跟着重排一次。
+     */
+    public static long revision() {
+        return lastBeginRevision;
+    }
+
+    /**
+     * 客户端脚本 App 的只读上下文（§13.8）：{@code backend.available / serverName / actions}。
+     *
+     * <p><b>它是 UX，不是边界</b>（§13.8）：客户端拿到这个表之后可以无视它、照样发任何
+     * actionId 的请求；<b>服务端每次都要重新判</b>。谁在这里省掉服务端检查，谁就打开了洞。
+     *
+     * @return 不可变的 map，直接给模板表达式用；{@code backend.available} 与
+     *         {@link #deployment(String)} 一样在批次不完整/作废时是 false
+     */
+    public static Map<String, Object> backendValues(String appId) {
+        synchronized (ClientHandshake.class) {
+            Entry e = complete ? deployments.get(appId) : null;
+            return Map.of(
+                    "available", e != null,
+                    "serverName", complete ? serverName : "",
+                    "actions", e == null ? List.of() : e.actions());
+        }
+    }
+
+    /** 宿主注入名字的完整表：{@code {"backend": {...}}}。{@code TemplateInstance.instantiate} 要的就是它。 */
+    public static Map<String, Object> backendContext(String appId) {
+        // 键名与 sfc 的 ExprParser.Host.BACKEND 是同一个字面量；那边是包私有的，这里只能写字符串
+        return Map.of("backend", backendValues(appId));
+    }
+
     /** 这一次连接要回填进 {@code ScriptRpc} 的 epoch；没握手/不完整时 0（服务端会判过期，这是正确的）。 */
     public static long connectionEpoch() {
         return complete && epoch != 0L ? epoch : 0L;
@@ -144,10 +185,18 @@ public final class ClientHandshake {
         }
     }
 
+    /** 这一批的全部部署（只读快照）。给调试命令与将来的商店来源列目录用。 */
+    public static Map<String, Entry> deployments() {
+        synchronized (ClientHandshake.class) {
+            return complete ? Map.copyOf(deployments) : Map.of();
+        }
+    }
+
     /** 断线/换服/退出时清空——按 serverId 分桶的本地状态由各自的层负责。 */
     public static void clear() {
         synchronized (ClientHandshake.class) {
             serverId = null;
+            serverName = "";
             epoch = 0L;
             complete = false;
             lastBeginRevision = Long.MIN_VALUE;

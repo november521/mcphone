@@ -56,9 +56,12 @@ public final class Handshake {
      * @param actions <b>只含当前玩家被授权的动作</b>（§13.8）。它是 UX 用的 ——
      *                客户端据此把没授权的按钮画灰，<b>不是安全边界</b>，
      *                真正的判定在服务端落地前那一次重查
+     * @param approvalRevision 批准轴（同一 App 每次批准 +1），详情页"版本 N"显示的就是它。
+     *                         <b>不参与</b> deployRev 对齐（那是包轴，见 {@link Deployment#revision()}）
+     * @param approvedAt 批准时刻（epoch 毫秒），详情页来源行用；0 表示没记
      */
     public record Deployment(String appId, String deployRev, String frontendDigest,
-                             int visibility, List<String> actions) {
+                             int visibility, long approvalRevision, long approvedAt, List<String> actions) {
     }
 
     /** 最后一条。带着同一个 epoch，客户端据此确认这一批是完整的。 */
@@ -93,6 +96,8 @@ public final class Handshake {
         buf.writeUtf(d.deployRev(), ScriptProtocol.ID_MAX);
         buf.writeUtf(d.frontendDigest(), ScriptProtocol.DIGEST_MAX);
         buf.writeVarInt(d.visibility());
+        buf.writeVarLong(d.approvalRevision());
+        buf.writeVarLong(d.approvedAt());
         Wire.writeList(buf, d.actions(), ScriptProtocol.MAX_ACTIONS_PER_DEPLOYMENT,
                 (s, b) -> b.writeUtf(s, ScriptProtocol.ID_MAX));
         return bytes(buf);
@@ -105,6 +110,8 @@ public final class Handshake {
                 buf.readUtf(ScriptProtocol.ID_MAX),
                 buf.readUtf(ScriptProtocol.DIGEST_MAX),
                 buf.readVarInt(),
+                buf.readVarLong(),
+                buf.readVarLong(),
                 Wire.readList(buf, ScriptProtocol.MAX_ACTIONS_PER_DEPLOYMENT,
                         b -> b.readUtf(ScriptProtocol.ID_MAX)));
     }

@@ -49,6 +49,10 @@ final class ScriptParser {
                 throw SfcError.at(Code.E_SCRIPT_STATE, k.line(), k.col(), key, "键名要" + StateRules.KEY_RULE);
             }
             if (out.containsKey(key)) throw SfcError.at(Code.E_SCRIPT_STATE, k.line(), k.col(), key, "写了两次");
+            if (ExprParser.Host.is(key)) {
+                // 宿主注入的只读上下文（§13.8）不许被 state 顶掉：运行时它是宿主先查，写进来只会静默失效
+                throw SfcError.at(Code.E_SCRIPT_STATE, k.line(), k.col(), key, "是宿主保留的名字，不能写进 state");
+            }
             if (out.size() == StateRules.MAX_KEYS) {
                 throw SfcError.at(Code.E_SCRIPT_STATE, k.line(), k.col(), key, "state 最多 " + StateRules.MAX_KEYS + " 个键");
             }
