@@ -12,13 +12,27 @@ public final class ScriptProtocol {
      * 脚本 RPC 自己的协议号，与加载器的握手版本无关。
      *
      * <p><b>它不是冗余的</b>：三个平台里只有两个有加载器级的版本闸
-     * （1.20.1-forge 的 {@code PROTOCOL_VERSION = "5"}、1.21.1-neoforge 的 {@code registrar("2")}），
-     * <b>1.21.1-fabric 一个都没有</b>（全平台 grep 零命中）。Fabric 上这个字段就是唯一的版本闸。
+     * （1.20.1-forge 的 {@code PROTOCOL_VERSION = "6"}、1.21.1-neoforge 的 {@code registrar("3")}），
+     * <b>1.21.1-fabric 一个都没有</b>（对 {@code platforms/1.21.1-fabric} 的 grep 零命中）。
+     * Fabric 上这个字段是 RPC 方向唯一的版本闸；<b>握手方向的闸是 {@link #SCRIPT_API}</b>。
      *
      * <p>所以对不上时必须回 {@link ScriptErrorCode#VERSION_MISMATCH}，<b>不许断线</b> ——
      * 断线在 Fabric 上会把版本不一致表现成"连不上服务器"，玩家无从知道该更新。
      */
     public static final int PROTOCOL = 1;
+
+    /**
+     * 握手线格式版本（{@code begin.scriptApi}）。<b>改 {@link Handshake} 里任何一个编解码就是改它。</b>
+     *
+     * <p>1 = Stage 2 第一批的形态；2 = 部署项加了 {@code approvalRevision} / {@code approvedAt}
+     * 两个 varlong（旧读法会把批准轴当动作表长度，从批准时刻的字节里读 UTF，解不开）。
+     *
+     * <p>为什么必须有：这个仓库的成文规矩是"字段格式变了就抬闸"，而三个目标里
+     * 1.20.1-forge / 1.21.1-neoforge 有加载器闸可抬，<b>Fabric 没有</b> —— 混版本在 Fabric 上
+     * 唯一能被识别的点就是 {@code begin} 里的这个数。客户端对不上就整批不应用
+     * （表现是"本服没有已批准部署"，而不是拿到半批垃圾）。
+     */
+    public static final int SCRIPT_API = 2;
 
     /** {@code params} 与 {@code data} 的上限（§15.3）。解码侧必须带着它读，否则是内存放大面。 */
     public static final int PARAMS_MAX = 4096;
@@ -70,15 +84,11 @@ public final class ScriptProtocol {
     public static final String TOPIC_HANDSHAKE_END = "mcphone:handshake/end";
 
     /**
-     * 一次握手最多推几个部署。
+     * 待批候选表的上限（{@code DeploymentData.MAX_CANDIDATES} 用的就是它）。
      *
-     * <p>握手<b>一个部署一条 push</b>，不把整张表塞进一个 4 KiB 的 data ——
-     * 按字段上限算，一个部署要 815 字节，4 KiB 只装得下 4 个；按典型值算 20 个部署是 4466 字节，
-     * 也超。分片则要在客户端加一套重组状态机，凭空多一个内存放大面。
-     *
-     * <p>封顶在这里是为了另一头：一个装了 200 个 App 的服务器不该在玩家进服的那一刻推 200 个包。
-     * 超过就只推 {@link Handshake.Begin}（带总数），明细由客户端按需用 {@code script_rpc} 拉
-     * （{@link #HOST_APP_ID} + {@code actionId = "deployments"}），不必加第四个包。
+     * <p><b>握手不再按条数封顶</b>：推不推由<b>每条的编码字节数</b>决定 —— 一条 deployment
+     * 编码后 &gt; {@link #DATA_MAX} 就整条跳过并告警（见 {@code HandshakeService}）。
+     * 超过本值只是候选表按 LRU 淘汰，与握手推几条没有关系；客户端不再有"按需去拉"的分支。
      */
     public static final int HANDSHAKE_MAX_DEPLOYMENTS = 64;
 

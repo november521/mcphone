@@ -77,7 +77,7 @@ public final class HandshakeService {
             long rev = SEQ.incrementAndGet();
             ScriptPushHandler.push(player, Handshake.push(ScriptProtocol.TOPIC_HANDSHAKE_BEGIN,
                     Handshake.encodeBegin(new Handshake.Begin(host.serverId(), serverName,
-                            ScriptProtocol.PROTOCOL, epoch, payloads.size(),
+                            ScriptProtocol.SCRIPT_API, epoch, payloads.size(),
                             new Handshake.Features(false, false, true))), rev));
             for (int i = 0; i < payloads.size(); i++) {
                 ScriptPushHandler.push(player, Handshake.push(ScriptProtocol.TOPIC_HANDSHAKE_DEPLOYMENT,

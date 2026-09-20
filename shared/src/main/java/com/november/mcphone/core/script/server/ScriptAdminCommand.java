@@ -123,7 +123,14 @@ public final class ScriptAdminCommand {
         List<String> actions = parseList(actionsArg);
         List<String> caps = parseList(capsArg);
         UUID approver = src.getEntity() instanceof ServerPlayer p ? p.getUUID() : null;
-        DeploymentData.Approval ap = dd.approve(candidate, actions, caps, approver, System.currentTimeMillis());
+        DeploymentData.Approval ap;
+        try {
+            ap = dd.approve(candidate, actions, caps, approver, System.currentTimeMillis());
+        } catch (IllegalArgumentException e) {
+            // 装不进握手的部署（ADV-S2b-5）：批准了客户端也永远收不到，在这里拒掉并说清字节数
+            fail(src, "[脚本] 批准被拒：" + e.getMessage());
+            return 0;
+        }
         Deployment d = ap.deployment();
         // 批准之后立刻在主线程重装配（S17 Stage 2 约束 1）：成功即生效，不用重启
         boolean degraded = ScriptHost.current() == null;

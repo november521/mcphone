@@ -69,7 +69,8 @@ public final class ScriptClientCommand {
                 + "  serverId=" + ClientHandshake.serverId()
                 + "  serverName='" + ClientHandshake.serverName() + "'"
                 + "  epoch=" + ClientHandshake.connectionEpoch()
-                + "  批次修订=" + ClientHandshake.revision()));
+                + "  批次修订=" + ClientHandshake.revision()
+                + (ClientHandshake.scriptApiMismatch() ? "  ⚠ 握手版本不匹配（整批未应用，需更新客户端/服务端）" : "")));
 
         Map<String, ClientHandshake.Entry> deployments = ClientHandshake.deployments();
         if (deployments.isEmpty()) {

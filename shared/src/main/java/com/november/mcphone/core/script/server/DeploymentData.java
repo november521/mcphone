@@ -2,6 +2,7 @@ package com.november.mcphone.core.script.server;
 
 import com.november.mcphone.MCphone;
 import com.november.mcphone.core.PhoneSavedData;
+import com.november.mcphone.core.script.net.Handshake;
 import com.november.mcphone.core.script.net.ScriptProtocol;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
@@ -108,6 +109,10 @@ public final class DeploymentData extends PhoneSavedData {
      * <p><b>批准集合的默认值（对抗组 Q3）</b>：{@code approvedActions == null} = 显式"按声明全批"；
      * 传<b>空列表 = 什么都不批</b>（fail-closed）—— 原先"空 = 全批"是 fail-open，命令面/界面只要少收一次
      * 选择集就是静默全量授权。不在声明集合里的项被丢掉，并经 {@link Approval#droppedActions()} 回显给命令面。
+     *
+     * <p><b>装不进握手的部署在这里就拒</b>（定向对抗 ADV-S2b-5）：线上一条 deployment 的上限是
+     * {@link ScriptProtocol#DATA_MAX}，超了就永远推不到客户端（表现是"本服没部署"），批准它
+     * 只会制造一个查不出原因的假象。抛 {@link IllegalArgumentException}，命令面捕获后带字节数报错。
      */
     public Approval approve(Candidate c, List<String> approvedActions, List<String> approvedCapabilities,
                             UUID approver, long now) {
@@ -121,6 +126,12 @@ public final class DeploymentData extends PhoneSavedData {
         Deployment d = new Deployment(c.appId(), deploymentIdFor(c), c.packageDigest(), approvalRevision,
                 c.packageDigest(), c.frontendDigest(), c.declaredActions(), actions,
                 c.declaredCapabilities(), caps, approver, now);
+        int wireBytes = Handshake.wireSize(d);
+        if (wireBytes > ScriptProtocol.DATA_MAX) {
+            throw new IllegalArgumentException("这条部署的握手表示 " + wireBytes + " 字节，超过单条上限 "
+                    + ScriptProtocol.DATA_MAX + "（中文动作名按 3 字节/字符算）："
+                    + "请减短动作名或减少动作数后再批准（否则客户端永远收不到这条部署）");
+        }
         deployments.put(d.appId(), d.toTag());
         candidates.remove(c.packageDigest());
         setDirty();

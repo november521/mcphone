@@ -8,9 +8,12 @@ import com.november.mcphone.core.net.MCphoneNetwork;
  * <p>与 neoforge 那一支同形，只是这一支的门面不收 {@code registrar}。
  * 包装类在 {@code layers/version/1.20.5+/}，两个 1.21.1 目标共用同一份 —— <b>不产生孪生</b>。
  *
- * <p>⚠ <b>这一支没有任何加载器级的版本闸</b>（全平台 grep {@code PROTOCOL_VERSION} 与
- * {@code registrar(} 零命中），所以 {@link ScriptProtocol#PROTOCOL} 这个字段在这里是唯一的一道。
- * 对不上必须回 {@code VERSION_MISMATCH}，不许断线。
+ * <p>⚠ <b>这一支没有任何加载器级的版本闸</b>（对 {@code platforms/1.21.1-fabric} grep
+ * {@code PROTOCOL_VERSION} 与 {@code registrar(} 零命中；forge 是 {@code "6"}、neoforge 是
+ * {@code registrar("3")}，别把这句话误读成"全平台都没有"）。所以：
+ * RPC 方向靠 {@link ScriptProtocol#PROTOCOL}，<b>握手方向靠 {@link ScriptProtocol#SCRIPT_API}</b>
+ * （{@code begin.scriptApi}，客户端对不上就整批不应用）。RPC 对不上必须回
+ * {@code VERSION_MISMATCH}，不许断线。
  */
 public final class ScriptNetworking {
 

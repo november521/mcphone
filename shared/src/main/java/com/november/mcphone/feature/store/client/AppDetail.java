@@ -12,7 +12,6 @@ import com.november.mcphone.core.script.client.ClientHandshake;
 import com.november.mcphone.core.script.client.LocalScriptSource;
 import com.november.mcphone.core.script.client.ScriptApp;
 import com.november.mcphone.core.script.client.ScriptAppAdapter;
-import com.november.mcphone.core.script.pkg.FrontendDigest;
 import com.november.mcphone.core.script.pkg.SigCopy;
 import com.november.mcphone.feature.store.AppPriceRegistry;
 import com.november.mcphone.feature.store.client.AppSourceRegistry;
@@ -353,9 +352,10 @@ public final class AppDetail {
         y = factLine(g, font, x, y, w, bodyBottom, "mcphone.store.detail.source", source);
 
         // 前端摘要只回显「界面被本地改过」——这不是安全边界（§13.3）：
-        // 恶意客户端伪造它什么也换不来，服务端的判定一次都不会看它
-        if (deployed && script.pkg() != null) {
-            String local = FrontendDigest.of(script.pkg());
+        // 恶意客户端伪造它什么也换不来，服务端的判定一次都不会看它。
+        // 摘要在 ScriptApp 装载时算过一次（ADV-S2b-7），这里读缓存，不在渲染路径上重算
+        if (deployed && script.frontendDigest() != null) {
+            String local = script.frontendDigest();
             if (entry.frontendDigest() != null && !entry.frontendDigest().isEmpty()
                     && !entry.frontendDigest().equals(local)
                     && y + font.lineHeight <= bodyBottom) {

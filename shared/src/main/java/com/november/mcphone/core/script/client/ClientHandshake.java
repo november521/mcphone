@@ -29,12 +29,16 @@ import java.util.UUID;
  * <h2>一批要"收齐"才算数（定向对抗 S2-2/S2-3）</h2>
  *
  * <ul>
+ *   <li><b>版本闸</b>：{@code BEGIN.scriptApi} 必须是 {@link ScriptProtocol#SCRIPT_API}，否则整批不应用
+ *       （Fabric 没有加载器级版本闸，这是唯一的混版本识别点；状态清空并记 {@link #scriptApiMismatch()}）。</li>
  *   <li><b>拒旧批</b>：{@code BEGIN} 的 {@link ScriptPush#revision()} 不比上一批大就整条忽略 ——
  *       重放旧 begin 改不动状态（服务端的 revision 跨登录单调）。</li>
  *   <li><b>收齐</b>：{@code END} 必须 epoch 一致<b>且</b>收到的 deployment 条数 == begin 的 count，
  *       否则整批作废（epoch 清 0、内容清空）。</li>
  *   <li><b>不完整不可见</b>：{@link #deployment(String)} 在 {@code !complete} 时一律返回 null ——
  *       进行中的半成品与作废批次的残留都不会被界面当成"本服有部署"。</li>
+ *   <li><b>批次外与倒退的明细不收</b>：没有打开批次时的 deployment 忽略；同一个 App 的
+ *       {@code approvalRevision} 只增不减，批次进行中重放旧的盖不回新的（定向对抗 ADV-S2b-8.3）。</li>
  * </ul>
  */
 public final class ClientHandshake {
@@ -54,6 +58,10 @@ public final class ClientHandshake {
     private static volatile String serverName = "";
     private static volatile long epoch;
     private static volatile boolean complete;
+    /** 一批 BEGIN 已经打开、还没被 END 收尾或作废。批次之外的 deployment 一条都不收。 */
+    private static volatile boolean batchOpen;
+    /** 上一次 BEGIN 的 scriptApi 与本机对不上（供诊断命令显示；混版本在 Fabric 上只有这一个识别点）。 */
+    private static volatile boolean scriptApiMismatch;
     /** 上一批 BEGIN 的 revision；重放/乱序的旧批不比它大就被忽略。 */
     private static volatile long lastBeginRevision = Long.MIN_VALUE;
     private static volatile int expectedCount;
@@ -82,20 +90,45 @@ public final class ClientHandshake {
                             return;
                         }
                         lastBeginRevision = push.revision();
+                        // 握手线格式对不上：整批不应用（Fabric 上没有加载器级闸，这里是唯一识别点）。
+                        // 与"坏数据"同一条路：清状态、留一个可查的标记，绝不让半批生效
+                        scriptApiMismatch = begin.scriptApi() != ScriptProtocol.SCRIPT_API;
+                        if (scriptApiMismatch) {
+                            MCphone.LOGGER.warn("[MCphone] 握手版本对不上：服务端 {} vs 本机 {}，整批不应用",
+                                    begin.scriptApi(), ScriptProtocol.SCRIPT_API);
+                            serverId = null;
+                            serverName = "";
+                            epoch = 0L;
+                            expectedCount = 0;
+                            receivedCount = 0;
+                            complete = false;
+                            batchOpen = false;
+                            deployments.clear();
+                            return;
+                        }
                         serverId = begin.serverId();
                         serverName = begin.serverName() == null ? "" : begin.serverName();
                         epoch = begin.epoch();
                         expectedCount = begin.count();
                         receivedCount = 0;
                         complete = false;
+                        batchOpen = true;
                         deployments.clear();      // 新的一批：先清空，等 end 才算齐
                     }
                 }
                 case ScriptProtocol.TOPIC_HANDSHAKE_DEPLOYMENT -> {
                     Handshake.Deployment d = Handshake.decodeDeployment(push.data());
                     synchronized (ClientHandshake.class) {
+                        if (!batchOpen) return;             // 没有打开的批次：这条无主，不收
                         if (complete) return;               // 这一批已经收尾：迟到的明细不认
                         if (expectedCount > 0 && receivedCount >= expectedCount) return;
+                        // 同 App 的批准轴只增不减：批次进行中重放一条旧的，不许把新的盖回去
+                        Entry known = deployments.get(d.appId());
+                        if (known != null && known.approvalRevision() >= d.approvalRevision()) {
+                            MCphone.LOGGER.warn("[MCphone] 忽略一条旧的部署明细 {}（批准轴 {} <= {}）",
+                                    d.appId(), d.approvalRevision(), known.approvalRevision());
+                            return;
+                        }
                         deployments.put(d.appId(), new Entry(d.deployRev(), d.frontendDigest(),
                                 d.visibility(), d.approvalRevision(), d.approvedAt(), d.actions()));
                         receivedCount++;
@@ -105,7 +138,7 @@ public final class ClientHandshake {
                     Handshake.End end = Handshake.decodeEnd(push.data());
                     synchronized (ClientHandshake.class) {
                         // epoch 对 + 条数收齐，这一批才可用；否则整批作废（内容清空，别让界面看见半批）
-                        if (end.epoch() == epoch && receivedCount == expectedCount) {
+                        if (batchOpen && end.epoch() == epoch && receivedCount == expectedCount) {
                             complete = true;
                         } else {
                             MCphone.LOGGER.warn("[MCphone] 握手批次作废：epoch {} vs {}，条数 {} vs {}",
@@ -114,6 +147,7 @@ public final class ClientHandshake {
                             epoch = 0L;
                             deployments.clear();
                         }
+                        batchOpen = false;
                     }
                 }
                 default -> {
@@ -178,6 +212,11 @@ public final class ClientHandshake {
         return complete;
     }
 
+    /** 上一次 BEGIN 的握手线版本与本机对不上（整批没有应用）。诊断命令用它把"没部署"与"版本不匹配"分开。 */
+    public static boolean scriptApiMismatch() {
+        return scriptApiMismatch;
+    }
+
     /** 某个 App 的部署信息；本服没有、或握手还没收齐/已作废时 null（界面据此走空壳降级，§13.7）。 */
     public static Entry deployment(String appId) {
         synchronized (ClientHandshake.class) {
@@ -199,6 +238,8 @@ public final class ClientHandshake {
             serverName = "";
             epoch = 0L;
             complete = false;
+            batchOpen = false;
+            scriptApiMismatch = false;
             lastBeginRevision = Long.MIN_VALUE;
             expectedCount = 0;
             receivedCount = 0;

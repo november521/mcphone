@@ -17,7 +17,6 @@ import com.november.mcphone.core.script.layout.NodeType;
 import com.november.mcphone.core.script.layout.TextMeasure;
 import com.november.mcphone.core.script.layout.UiState;
 import com.november.mcphone.core.script.net.ScriptRpcResult;
-import com.november.mcphone.core.script.pkg.FrontendDigest;
 import com.november.mcphone.core.script.sfc.SfcCompiler;
 import com.november.mcphone.core.script.sfc.Statements;
 import com.november.mcphone.core.script.sfc.TemplateInstance;
@@ -92,6 +91,9 @@ public final class ScriptPage implements IPhonePage {
     private long toastUntilMs;
     private static final long TOAST_MS = 3000L;
 
+    /** 这一页已经关了（{@link #onClose()} 调过）：结果回来时不再有可渲染的地方，只能记日志。 */
+    private boolean closed;
+
     /**
      * 画布的几何与字体，点击时要用。
      *
@@ -123,6 +125,7 @@ public final class ScriptPage implements IPhonePage {
 
     @Override
     public void onOpen() {
+        closed = false;
         openPage("");
     }
 
@@ -139,6 +142,7 @@ public final class ScriptPage implements IPhonePage {
         tree = null;
         scroll.clear();
         states.clear();
+        closed = true;
     }
 
     /** 切到某一页：重建 state 与实例，滚动位置不跨页保留。 */
@@ -322,8 +326,12 @@ public final class ScriptPage implements IPhonePage {
      * 关掉之后再导航没有意义，而方案把先后留给了页面。
      *
      * <p>{@code call(...)} 是唯一出网的语句（§15.1），排在导航之前执行：页面关掉也好、
-     * 跳走也好，作者写下的那次调用都得发出去。结果回来时弹一条 toast（回调风格的全部
-     * 能力要等 P1 的 {@code <script>}）。
+     * 跳走也好，作者写下的那次调用都得发出去。
+     *
+     * <p><b>结果的可见性有边界</b>：同一个 App 内 {@code nav} 到别的页仍是同一个
+     * {@code ScriptPage} 实例，toast 照常画；但 {@code close()} 之后这个实例不再渲染 ——
+     * 结果回来时只在客户端日志留一条（见 {@link #onCallResult}），<b>不再承诺弹提示</b>。
+     * 跨页面也可见的提示要等宿主那一层（`UNKNOWN` 这类"钱可能动了"的码最终得走那儿）。
      */
     private void run(Statements.Outcome outcome) {
         if (outcome == null) return;
@@ -346,9 +354,10 @@ public final class ScriptPage implements IPhonePage {
     /**
      * 发一条 {@code call('动作')}。字段由 {@link ScriptCall} 从握手状态回填 ——
      * <b>作者改不了</b> epoch/deployRev/摘要，这正是"请求不再停在 epoch 一档"的那一截。
+     * 摘要读 {@link ScriptApp#frontendDigest()}（装载时算过一次），不在点击路径上重算。
      */
     private void callAction(String action) {
-        ScriptCall.call(app.id().toString(), action, new byte[0], FrontendDigest.of(app.pkg()),
+        ScriptCall.call(app.id().toString(), action, new byte[0], app.frontendDigest(),
                 this::onCallResult);
     }
 
@@ -356,7 +365,14 @@ public final class ScriptPage implements IPhonePage {
     private void onCallResult(ScriptRpcResult result) {
         String key = result.messageKey();
         if (key == null || key.isEmpty()) key = result.code().defaultMessageKey();
-        showToast(Component.translatable(key, result.messageArgs().toArray()).getString());
+        String text = Component.translatable(key, result.messageArgs().toArray()).getString();
+        if (closed) {
+            // 页面已经关了：没有可渲染的地方。留一条日志（至少可查），别假装弹了提示
+            MCphone.LOGGER.warn("[MCphone] 调用结果回来时页面已关，本次提示只记日志：app={} code={} {}",
+                    app.id(), result.code(), text);
+            return;
+        }
+        showToast(text);
     }
 
     private void showToast(String text) {

@@ -53,6 +53,16 @@ public record Manifest(
     /** 内建 App 的命名空间。第三方占了它，PhoneScreenRegistry 的 id 去重会把内建 App 挡在外面。 */
     public static final String RESERVED_NAMESPACE = "mcphone";
 
+    /**
+     * 整条 {@code namespace:path} 的长度上限，与线格式的 {@code ScriptProtocol.ID_MAX}、
+     * 部署表的 {@code Deployment.MAX_ID_LEN} <b>是同一个数</b>（三处各有一个 64，改一个就得三处一起改）。
+     *
+     * <p><b>注意 {@link #ID_SEGMENT} 那个 64 是「每段」的上限</b>：两段各 64 拼出来 129 字符，
+     * 客户端装得下、`ScriptRpc` 却编码不出来（writeUtf 上限 64），服务端也永远批不了。
+     * 所以在清单入口就按整条卡死（ADV-S2b-3）。
+     */
+    public static final int MAX_ID = 64;
+
     /** JSON 嵌套深度上限。清单是一层对象加一个 ui 子对象，给到 8 已经宽得没边。 */
     private static final int MAX_JSON_DEPTH = 8;
 
@@ -159,6 +169,9 @@ public record Manifest(
         }
 
         String id = requireString(root, "id");
+        if (id.length() > MAX_ID) {
+            throw PackageError.of(PackageError.Code.E_PKG_ID_TOO_LONG, MAX_ID, id.length(), id);
+        }
         int colon = id.indexOf(':');
         if (colon < 0 || id.indexOf(':', colon + 1) >= 0) {
             throw PackageError.of(PackageError.Code.E_PKG_BAD_ID, id);

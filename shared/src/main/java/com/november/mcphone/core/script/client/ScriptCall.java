@@ -40,6 +40,18 @@ import java.util.function.Consumer;
  *
  * 超了立即回 {@code IN_PROGRESS}，<b>不排队</b> —— 排队会让玩家连点之后看到一串迟到的 toast。
  *
+ * <h2>没有客户端超时（定向对抗 ADV-S2b-4 的裁定）</h2>
+ *
+ * 名额回收只依赖三条，任何一条断了都不该由"客户端超时"来补：
+ * <ol>
+ *   <li><b>服务端对每条请求恰好回一条结果</b>（管线八条返回路径条条回包，队列满也回）；</li>
+ *   <li><b>连接断开</b>时三平台在 {@code LoggingOut} 调 {@link #clear()}，名额与 pending 一起回收；</li>
+ *   <li><b>本地编/发失败</b>时回滚名额并本地合成 {@code UNAVAILABLE}（见 {@link #call}）。</li>
+ * </ol>
+ * 加超时是反的：名额放掉之后结果仍可能到达并已在服务端落地（甚至钱已动），玩家看不到反馈
+ * 就会再点 —— 那是<b>新的 requestId / 新的幂等键</b>，服务端会再执行一次。真要回收，必须由
+ * 服务端定义超时并回 {@code UNKNOWN}（"结果未知，别自动重试"），客户端只展示。
+ *
  * <h2>线程</h2>
  *
  * 生产里的调用点（{@code ScriptPage} 的点击）与结果回调（网络层已切回主线程）都在客户端
@@ -125,9 +137,22 @@ public final class ScriptCall {
                 ? localFrontendDigest
                 : (entry == null ? "" : entry.frontendDigest());
 
+        // 发送这一步是"本地编码 + 交给网络层"，字段超限（如 appId > 64 字符）会当场抛。
+        // 不兜的话异常冲出点击处理 = 崩客户端，而名额与 pending 已经记上，4 次之后这个 App
+        // 会被卡死成永远 IN_PROGRESS。失败必须回滚成一次本地 UNAVAILABLE（ADV-S2b-2）
         pending.put(id, new Pending(appId, actionId, callback));
-        s.send(new ScriptRpc(ScriptProtocol.PROTOCOL, id, epoch, appId, deployRev, actionId,
-                params == null ? new byte[0] : params, digest));
+        try {
+            s.send(new ScriptRpc(ScriptProtocol.PROTOCOL, id, epoch, appId, deployRev, actionId,
+                    params == null ? new byte[0] : params, digest));
+        } catch (VirtualMachineError fatal) {
+            throw fatal;
+        } catch (Throwable t) {
+            pending.remove(id);
+            release(appId);
+            MCphone.LOGGER.error("[MCphone] 脚本调用在本地发不出去（已回滚名额）id={} app={} action={}",
+                    id, appId, actionId, t);
+            return finishNow(id, ScriptErrorCode.UNAVAILABLE, callback);
+        }
         return id;
     }
 
@@ -147,9 +172,17 @@ public final class ScriptCall {
             return finishNow(id, ScriptErrorCode.UNAVAILABLE, callback);
         }
         pending.put(id, new Pending(appId, actionId, callback));
-        s.send(new ScriptRpc(ScriptProtocol.PROTOCOL, id, ClientHandshake.connectionEpoch(),
-                appId, deployRev == null ? "" : deployRev, actionId, new byte[0],
-                frontendDigest == null ? "" : frontendDigest));
+        try {
+            s.send(new ScriptRpc(ScriptProtocol.PROTOCOL, id, ClientHandshake.connectionEpoch(),
+                    appId, deployRev == null ? "" : deployRev, actionId, new byte[0],
+                    frontendDigest == null ? "" : frontendDigest));
+        } catch (VirtualMachineError fatal) {
+            throw fatal;
+        } catch (Throwable t) {
+            pending.remove(id);
+            MCphone.LOGGER.error("[MCphone] 调试调用在本地发不出去 id={} app={} action={}", id, appId, actionId, t);
+            return finishNow(id, ScriptErrorCode.UNAVAILABLE, callback);
+        }
         return id;
     }
 

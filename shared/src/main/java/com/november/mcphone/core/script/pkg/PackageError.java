@@ -29,6 +29,7 @@ public final class PackageError extends RuntimeException {
         E_PKG_MISSING_FIELD("manifest.json 缺少必填字段 '%s'"),
         E_PKG_BAD_TYPE("manifest.json 的字段 '%s' 要 %s，给的是 %s"),
         E_PKG_BAD_ID("manifest.json 的 id 要写成 namespace:path，两段都匹配 [a-z0-9_.-]{1,64}，收到 '%s'"),
+        E_PKG_ID_TOO_LONG("manifest.json 的 id 是整条 namespace:path，最长 %d 个字符，收到 %d 个（'%s'）—— 线格式与部署表都按整条算"),
         E_PKG_RESERVED_NAMESPACE("manifest.json 的 id 不许用 mcphone 命名空间：那是内建 App 的，占了会把内建 App 挡在注册表外"),
         E_PKG_BAD_VERSION("manifest.json 的 version 要写成 x.y.z 三段数字，收到 '%s'"),
         E_PKG_TEXT_TOO_LONG("manifest.json 的字段 '%s' 超长：上限 %d，收到 %d"),
