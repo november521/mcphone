@@ -45,4 +45,9 @@ public record DiscState(ItemStack disc, long startedTick) {
     public DiscState stopped() {
         return startedTick < 0 ? this : new DiscState(disc, -1L);
     }
+
+    /** 循环播放时覆盖当前时刻的轮次起点；纯算术见 {@link DiscLoop#periodStart}。 */
+    public static long loopPeriodStart(long startedTick, long length, long now) {
+        return DiscLoop.periodStart(startedTick, length, now);
+    }
 }

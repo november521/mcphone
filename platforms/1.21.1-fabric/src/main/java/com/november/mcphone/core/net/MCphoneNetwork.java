@@ -1,5 +1,6 @@
 package com.november.mcphone.core.net;
 
+import com.november.mcphone.MCphone;
 import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.network.RegistryFriendlyByteBuf;
@@ -83,8 +84,26 @@ public final class MCphoneNetwork {
             BiConsumer<T, ServerPlayer> handler) {
 
         PayloadTypeRegistry.playC2S().register(type, codec);
-        ServerPlayNetworking.registerGlobalReceiver(type,
-                (packet, ctx) -> handler.accept(packet, ctx.player()));
+        ServerPlayNetworking.registerGlobalReceiver(type, (packet, ctx) -> {
+            // 与类注释一致：玩家为空只可能是"包排队期间连接断了"，静默丢弃。
+            // 原来直接把 ctx.player() 交给 handleSafely，而它 catch 里要用 player.getUUID() ——
+            // 处理函数一旦也抛了，日志行自己会 NPE 逃出兜底。forge/neoforge 两份都有判空，
+            // 只有这一份没有（顺带：ctx.player() 原先被求值两次，现在只一次）。
+            ServerPlayer player = ctx.player();
+            if (player == null) return;
+            handleSafely(packet, player, () -> handler.accept(packet, player));
+        });
+    }
+
+    private static void handleSafely(Object packet, ServerPlayer player, Runnable action) {
+        try {
+            action.run();
+        } catch (VirtualMachineError fatal) {
+            throw fatal;
+        } catch (Throwable failure) {
+            MCphone.LOGGER.error("[MCphone] contained C2S handler failure packet={} player={}",
+                    packet == null ? "null" : packet.getClass().getName(), player.getUUID(), failure);
+        }
     }
 
     /**

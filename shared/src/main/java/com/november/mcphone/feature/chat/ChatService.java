@@ -200,6 +200,7 @@ public final class ChatService {
 
     /** 已读时刻由服务端盖章：采信客户端的话报一个未来时间就能让红点永远不出现 */
     public static void markRead(ServerPlayer self, UUID peer) {
+        if (!FriendData.get(self.server).areFriends(self.getUUID(), peer)) return;
         markReadAt(self, peer, System.currentTimeMillis());
     }
 

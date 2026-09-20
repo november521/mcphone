@@ -76,18 +76,21 @@ public final class NotesNetworking {
 
     /** 无论成败都回发列表：成了让客户端拿到服务端分配的 id，没成让列表回到真值 */
     private static void handleSaveNote(SaveNotePacket packet, ServerPlayer player) {
+        if (!RequestThrottle.allow(player, RequestThrottle.Kind.NOTE_ACTION)) return;
         NoteService.saveNote(player, packet.id(), packet.body());
         MCphoneNetwork.sendToPlayer(player, new SyncNoteListPacket(NoteService.buildSummaries(player)));
     }
 
     /** 同样无论成败都回发列表 */
     private static void handleDeleteNote(DeleteNotePacket packet, ServerPlayer player) {
+        if (!RequestThrottle.allow(player, RequestThrottle.Kind.NOTE_ACTION)) return;
         NoteService.deleteNote(player, packet.id());
         MCphoneNetwork.sendToPlayer(player, new SyncNoteListPacket(NoteService.buildSummaries(player)));
     }
 
     /** 正文取服务端存的那份，不采信包里的内容；结果用动作栏告知玩家 */
     private static void handlePrintNote(PrintNotePacket packet, ServerPlayer player) {
+        if (!RequestThrottle.allow(player, RequestThrottle.Kind.NOTE_ACTION)) return;
         if (!PhoneItem.isCarriedBy(player)) return;
 
         boolean done = NoteService.getNote(player, packet.id())

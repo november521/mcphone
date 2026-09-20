@@ -47,12 +47,14 @@ public final class ScriptModules {
 
     public ScriptModules(Map<String, String> sources) {
         if (sources.size() > MAX_MODULES) {
-            throw new ScriptAbort(ScriptAbort.Reason.HOST,
-                    "包内 .js 有 " + sources.size() + " 个，上限 " + MAX_MODULES);
+            throw HostError.quota("包内 .js 有 " + sources.size() + " 个，上限 " + MAX_MODULES);
         }
         for (String name : sources.keySet()) {
             if (!name.endsWith(".js")) {
-                throw new ScriptAbort(ScriptAbort.Reason.HOST, "模块表里有非 .js：" + name);
+                throw HostError.invalid("模块表里有非 .js：" + name);
+            }
+            if (!isCanonicalName(name)) {
+                throw HostError.invalid("模块表里有非规范名：" + name);
             }
         }
         this.sources = Map.copyOf(sources);
@@ -70,24 +72,25 @@ public final class ScriptModules {
      * @param spec 脚本写的那一串，必须 {@code ./} 或 {@code ../} 开头
      * @param from 发起 require 的那个模块的规范名，入口是 {@code "server.js"}
      */
-    public Object require(String spec, String from, Loader loader) {
+    public synchronized Object require(String spec, String from, Loader loader) {
         if (spec == null || (!spec.startsWith("./") && !spec.startsWith("../"))) {
-            throw new ScriptAbort(ScriptAbort.Reason.HOST, "require 只许包内相对路径：" + spec);
+            throw HostError.invalid("require 只许包内相对路径：" + spec);
         }
         String key = normalize(parentOf(from), spec);
         if (key == null || !sources.containsKey(key)) {
-            throw new ScriptAbort(ScriptAbort.Reason.HOST, "require 找不到：" + spec);
+            throw HostError.invalid("require 找不到：" + spec);
         }
         // 缓存命中不计深度也不计模块数
         if (cache.containsKey(key)) return cache.get(key);
 
         if (loading.contains(key)) {
             List<String> chain = new ArrayList<>(loading);
+            java.util.Collections.reverse(chain);
             chain.add(key);
-            throw new ScriptAbort(ScriptAbort.Reason.HOST, "循环依赖：" + String.join(" -> ", chain));
+            throw HostError.invalid("循环依赖：" + String.join(" -> ", chain));
         }
         if (loading.size() >= MAX_DEPTH) {
-            throw new ScriptAbort(ScriptAbort.Reason.HOST, "require 深度超过 " + MAX_DEPTH);
+            throw HostError.quota("require 深度超过 " + MAX_DEPTH);
         }
 
         loading.push(key);
@@ -111,8 +114,19 @@ public final class ScriptModules {
     }
 
     /** 当前 require 栈多深。只给测试用。 */
-    public int depth() {
+    public synchronized int depth() {
         return loading.size();
+    }
+
+    private static boolean isCanonicalName(String name) {
+        if (name == null || name.isEmpty() || name.startsWith("/") || name.endsWith("/")) return false;
+        if (name.indexOf('\\') >= 0 || name.indexOf(':') >= 0 || name.contains("//")) return false;
+        for (String part : name.split("/", -1)) {
+            if (part.isEmpty() || part.equals(".") || part.equals("..")) return false;
+            String stem = part.endsWith(".js") ? part.substring(0, part.length() - 3) : part;
+            if (stem.isEmpty() || stem.chars().allMatch(c -> c == '.')) return false;
+        }
+        return true;
     }
 
     // ---------------------------------------------------------------- 纯字符串的规范化

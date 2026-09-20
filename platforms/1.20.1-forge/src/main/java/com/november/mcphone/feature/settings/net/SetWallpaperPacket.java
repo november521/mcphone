@@ -1,5 +1,6 @@
 package com.november.mcphone.feature.settings.net;
 
+import com.november.mcphone.feature.settings.WallpaperData;
 import net.minecraft.network.FriendlyByteBuf;
 
 /**
@@ -19,10 +20,10 @@ import net.minecraft.network.FriendlyByteBuf;
 public record SetWallpaperPacket(String wallpaperFileName) {
 
     public static void encode(SetWallpaperPacket msg, FriendlyByteBuf buf) {
-        buf.writeUtf(msg.wallpaperFileName());
+        buf.writeUtf(msg.wallpaperFileName(), WallpaperData.MAX_FILE_NAME);
     }
 
     public static SetWallpaperPacket decode(FriendlyByteBuf buf) {
-        return new SetWallpaperPacket(buf.readUtf());
+        return new SetWallpaperPacket(buf.readUtf(WallpaperData.MAX_FILE_NAME));
     }
 }

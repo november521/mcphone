@@ -1,5 +1,6 @@
 package com.november.mcphone.core.net;
 
+import com.november.mcphone.MCphone;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
@@ -72,9 +73,20 @@ public final class MCphoneNetwork {
 
         registrar.playToServer(type, codec, (packet, ctx) -> ctx.enqueueWork(() -> {
             if (ctx.player() instanceof ServerPlayer player) {
-                handler.accept(packet, player);
+                handleSafely(packet, player, () -> handler.accept(packet, player));
             }
         }));
+    }
+
+    private static void handleSafely(Object packet, ServerPlayer player, Runnable action) {
+        try {
+            action.run();
+        } catch (VirtualMachineError fatal) {
+            throw fatal;
+        } catch (Throwable failure) {
+            MCphone.LOGGER.error("[MCphone] contained C2S handler failure packet={} player={}",
+                    packet == null ? "null" : packet.getClass().getName(), player.getUUID(), failure);
+        }
     }
 
     /**

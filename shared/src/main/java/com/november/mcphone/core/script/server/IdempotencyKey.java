@@ -8,7 +8,7 @@ import java.util.UUID;
 /**
  * 幂等键（施工方案 §15.6）：
  *
- * <pre>SHA-256( serverId | playerUUID | appId | deployRev | actionId | requestId )</pre>
+ * <pre>SHA-256( length-prefixed(serverId, playerUUID, appId, deployRev, actionId, requestId) )</pre>
  *
  * <h2>为什么键里没有 connectionEpoch</h2>
  *
@@ -31,9 +31,6 @@ public final class IdempotencyKey {
 
     private IdempotencyKey() {
     }
-
-    /** 分隔符。用它而不是直接拼接：{@code ("ab","c")} 与 {@code ("a","bc")} 拼出来是同一串。 */
-    private static final byte SEP = 0x1f;
 
     /** 算一个键。返回 32 字节。 */
     public static byte[] of(UUID serverId, UUID player, String appId,
@@ -67,8 +64,21 @@ public final class IdempotencyKey {
     }
 
     private static void put(MessageDigest md, String s) {
-        md.update((s == null ? "" : s).getBytes(StandardCharsets.UTF_8));
-        md.update(SEP);
+        if (s == null) {
+            putLength(md, -1);
+            return;
+        }
+        byte[] bytes = s.getBytes(StandardCharsets.UTF_8);
+        putLength(md, bytes.length);
+        md.update(bytes);
+    }
+
+    /** 固定四字节大端长度；-1 专门表示 null，所以 null 与空串也不会碰撞。 */
+    private static void putLength(MessageDigest md, int length) {
+        md.update((byte) (length >>> 24));
+        md.update((byte) (length >>> 16));
+        md.update((byte) (length >>> 8));
+        md.update((byte) length);
     }
 
     private static MessageDigest sha256() {

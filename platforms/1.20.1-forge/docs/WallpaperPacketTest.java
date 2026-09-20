@@ -83,16 +83,16 @@ public class WallpaperPacketTest {
     }
 
     /**
-     * 上限：writeUtf 不带参数时是 32767 个字符。
+     * 上限与服务端保存的文件名上限一致，避免先收一个超长值再在 handler 丢弃。
      *
      * 这条在测的是"上限确实存在"，不是"上限是多少好看"。读的是客户端送来的
      * 字节，没有上限就等于允许任何人往服务端存档里塞任意长的串。
      */
     static void hasALengthCap() {
-        String justUnder = "a".repeat(32767);
-        eq(roundTripSet(justUnder), justUnder, "32767 字符应当能过");
+        String justUnder = "a".repeat(WallpaperData.MAX_FILE_NAME);
+        eq(roundTripSet(justUnder), justUnder, "文件名上限应当能过");
 
-        String tooLong = "a".repeat(32768);
+        String tooLong = "a".repeat(WallpaperData.MAX_FILE_NAME + 1);
         boolean rejected = false;
         try {
             FriendlyByteBuf buf = new FriendlyByteBuf(Unpooled.buffer());
@@ -100,7 +100,16 @@ public class WallpaperPacketTest {
         } catch (RuntimeException expected) {
             rejected = true;
         }
-        check(rejected, "32768 字符应当被拒绝");
+        check(rejected, "超过文件名上限应当被拒绝");
+    }
+
+    static void serverSanitizesFileName() {
+        eq(WallpaperData.sanitize(""), "", "空串表示默认壁纸");
+        eq(WallpaperData.sanitize("my 壁纸.png"), "my 壁纸.png", "正常 PNG 文件名保留");
+        for (String bad : new String[]{"../x.png", "a/b.png", "a\\b.png", "x.jpg",
+                "evil\n.png", "evil\u202e.png", "a".repeat(256)}) {
+            eq(WallpaperData.sanitize(bad), "", "非法文件名被拒绝: " + debug(bad));
+        }
     }
 
     /**
@@ -163,6 +172,7 @@ public class WallpaperPacketTest {
         bothDirectionsRoundTrip();
         consumesExactlyWhatItWrote();
         hasALengthCap();
+        serverSanitizesFileName();
         wallpaperCodecRoundTrip();
         badNbtIsRejectedNotThrown();
 

@@ -1,7 +1,7 @@
 package com.november.mcphone.core.script.server.store;
 
 /**
- * {@code ctx.sealed.put/get} 的后端（施工方案 §16.5、§17.4.5、§32.7）。
+ * sealed 存储的内部后端（施工方案 §16.5、§17.4.5、§32.7）。
  *
  * <h2>服务端只搬字节</h2>
  *
@@ -13,8 +13,8 @@ package com.november.mcphone.core.script.server.store;
  *       想写 {@code if (ctx.sealed.get('token') === '...')} 的人要明白：服务端拿到的是密文</li>
  * </ul>
  *
- * <p>脚本面的名字以 §16.5 的 API 表为准：{@code ctx.sealed.put} / {@code ctx.sealed.get}。
- * §17.4.5 正文里那两个平铺的名字已经作废，<b>不许两套并存</b>。
+ * <p>当前脚本面只挂有真实消费路径的 {@code ctx.sealed.get}。写入消费方接通前不暴露
+ * 永远失败的 {@code ctx.sealed.put} 空壳。
  *
  * <p>解密只发生在客户端，见 {@link VaultClient}。
  */

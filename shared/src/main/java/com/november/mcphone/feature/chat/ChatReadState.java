@@ -16,6 +16,24 @@ public record ChatReadState(Map<UUID, Long> lastRead) {
 
     public static final ChatReadState DEFAULT = new ChatReadState(Map.of());
 
+    /** Current friends plus a small amount of churn; decoded data is clamped to this bound too. */
+    public static final int MAX_PEERS = FriendData.MAX_FRIENDS;
+
+    public ChatReadState {
+        if (lastRead == null || lastRead.isEmpty()) {
+            lastRead = Map.of();
+        } else if (lastRead.size() > MAX_PEERS) {
+            Map<UUID, Long> bounded = new java.util.LinkedHashMap<>();
+            lastRead.entrySet().stream()
+                    .sorted(Map.Entry.<UUID, Long>comparingByValue().reversed())
+                    .limit(MAX_PEERS)
+                    .forEach(e -> bounded.put(e.getKey(), e.getValue()));
+            lastRead = Map.copyOf(bounded);
+        } else {
+            lastRead = Map.copyOf(lastRead);
+        }
+    }
+
     public static final Codec<ChatReadState> CODEC = RecordCodecBuilder.create(instance ->
             instance.group(
                     // 键必须编成字符串：NBT 复合标签只接受字符串键，默认 UUIDUtil.CODEC 写不进去
@@ -34,6 +52,12 @@ public record ChatReadState(Map<UUID, Long> lastRead) {
         if (getLastRead(peer) >= time) return this;
 
         Map<UUID, Long> next = new HashMap<>(lastRead);
+        if (!next.containsKey(peer) && next.size() >= MAX_PEERS) {
+            UUID oldest = next.entrySet().stream()
+                    .min(Map.Entry.comparingByValue())
+                    .map(Map.Entry::getKey).orElse(null);
+            if (oldest != null) next.remove(oldest);
+        }
         next.put(peer, time);
         return new ChatReadState(Map.copyOf(next));
     }

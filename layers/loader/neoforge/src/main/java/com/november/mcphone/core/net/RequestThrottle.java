@@ -112,6 +112,16 @@ public final class RequestThrottle {
         NOTE,
         /** 购买记录 */
         PURCHASED,
+        /** 真正执行购买 */
+        PURCHASE(PRESS_INTERVAL_MS),
+        /** 好友关系变更 */
+        FRIEND_ACTION(PRESS_INTERVAL_MS),
+        /** 笔记写入、删除或打印 */
+        NOTE_ACTION(PRESS_INTERVAL_MS),
+        /** 设备名与壁纸设置 */
+        SETTINGS(PRESS_INTERVAL_MS),
+        /** 手机亮屏状态同步 */
+        SCREEN_STATE(PRESS_INTERVAL_MS),
         /** 传送到好友身边。"做事情"的包之一，理由见类注释 */
         TELEPORT,
         /** 唱片仓的状态查询。打开音乐 App 时来一次 */

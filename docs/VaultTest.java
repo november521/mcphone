@@ -359,8 +359,17 @@ public class VaultTest {
         eq(g2.get(ScriptGuards.guardKey(ns, "daily", "2026-09-18")), 1L, "当前周期的留着");
     }
 
+    static void localPathsStayInsideRoot() {
+        eq(LocalStore.safe("."), "_", "local 路径不接受单点段");
+        eq(LocalStore.safe(".."), "_", "local 路径不接受双点段");
+        eq(LocalStore.safe("NUL"), "_NUL", "Windows NUL 设备名被改写");
+        eq(LocalStore.safe("nul.json"), "_nul.json", "带扩展名的设备名也被改写");
+        eq(LocalStore.safe("example:app"), "example_app", "普通 appId 仅替换分隔符");
+    }
+
     public static void main(String[] args) throws Exception {
         quotas();
+        localPathsStayInsideRoot();
         guardsAreSeparate();
         roundTripAndAad();
         aadNoAmbiguity();

@@ -2,6 +2,7 @@ package com.november.mcphone.feature.settings.net;
 
 import com.mojang.logging.LogUtils;
 import com.november.mcphone.MCphone;
+import com.november.mcphone.feature.settings.WallpaperData;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
@@ -22,11 +23,11 @@ public record SetWallpaperPacket(String wallpaperFileName) implements CustomPack
             StreamCodec.of((buf, msg) -> encode(msg, buf), SetWallpaperPacket::decode);
 
     public static void encode(SetWallpaperPacket msg, FriendlyByteBuf buf) {
-        buf.writeUtf(msg.wallpaperFileName());
+        buf.writeUtf(msg.wallpaperFileName(), WallpaperData.MAX_FILE_NAME);
     }
 
     public static SetWallpaperPacket decode(FriendlyByteBuf buf) {
-        return new SetWallpaperPacket(buf.readUtf());
+        return new SetWallpaperPacket(buf.readUtf(WallpaperData.MAX_FILE_NAME));
     }
 
     @Override

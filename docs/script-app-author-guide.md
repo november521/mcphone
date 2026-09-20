@@ -26,10 +26,9 @@
 
 服主看不到值，但**看得到 key 的名字**。所以：
 
-```javascript
-ctx.sealed.put('k1', cipher)                 // ✅
-ctx.sealed.put('anthropic_api_key', cipher)  // ❌ 名字本身就把事情说完了
-```
+服务端脚本目前只暴露 `ctx.sealed.get(key)`；写入端尚无真实消费方，因此不会挂一个永远失败的
+`ctx.sealed.put` 空壳。将来写入链路接通后，key 仍必须使用不泄密的代号（例如 `k1`，不要用
+`anthropic_api_key`）。
 
 值的长度已经靠 64 字节对齐填充缓解了；key 名没有任何东西替你挡。
 
@@ -39,8 +38,7 @@ ctx.sealed.put('anthropic_api_key', cipher)  // ❌ 名字本身就把事情说�
 if (ctx.sealed.get('token') === '...') { }   // ❌ 服务端拿到的是密文
 ```
 
-`sealed` 只有两个操作：`ctx.sealed.put(key, cipher)` 与 `ctx.sealed.get(key)`。
-解密只发生在客户端。
+当前服务端脚本只提供 `ctx.sealed.get(key)`；解密只发生在客户端。
 
 ### 忘了保险箱口令 = 数据永久丢失
 
@@ -59,6 +57,17 @@ if (ctx.sealed.get('token') === '...') { }   // ❌ 服务端拿到的是密文
 | 写入频率 | —— | 10 次/秒 |
 
 ## 后端脚本的语法
+
+### 原生容器操作的容量边界
+
+字符串和数组的原生方法也受 64 KiB 字符串、4096 元素数组的执行前检查约束。
+小型 `array.flat(depth)` 可以使用；如果展开后可能超过 4096 项、存在 getter、循环引用或超过
+32 层嵌套，会在分配前拒绝。`array.flatMap(...)` 的输出取决于脚本回调，无法可靠预检，
+当前在受限沙箱中禁用；请改写成有明确上限的循环并逐项 `push`。
+
+`Array.from(...)` 只接受最多 4096 项的原生数组、字符串，或带数值型普通 `length`
+数据属性的普通 array-like 对象。自定义 iterable、生成器、`length`/元素 getter、映射回调，
+以及改写过迭代器或原型的数组/字符串会在执行前拒绝；同样请改写成有明确上限的循环。
 
 Rhino 1.9.1，**没有** `class` / `for...of` / `export` / `import` / `async` / `await`。
 用 `var` 与 `function`，箭头函数可以用。`BigInt` 可以用，而且是大数的正路

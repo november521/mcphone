@@ -1,6 +1,6 @@
 package com.november.mcphone.core.script.server.economy;
 
-import com.november.mcphone.core.script.engine.ScriptAbort;
+import com.november.mcphone.core.script.engine.HostError;
 
 import java.math.BigInteger;
 
@@ -39,12 +39,11 @@ public final class Amounts {
     /** 脚本给的 BigInt → 宿主的 long。不是 BigInt、或者超出 long 范围，都当场中断本次调用。 */
     public static long toLong(Object scriptValue, String where) {
         if (!(scriptValue instanceof BigInteger b)) {
-            throw new ScriptAbort(ScriptAbort.Reason.HOST,
+            throw HostError.invalid(
                     where + " 的金额要 BigInt（写成 123n 或 BigInt('123')），不是数字也不是字符串");
         }
         if (b.bitLength() > 63) {
-            throw new ScriptAbort(ScriptAbort.Reason.HOST,
-                    where + " 的金额超出 long 范围：" + b);
+            throw HostError.invalid(where + " 的金额超出 long 范围：" + b);
         }
         return b.longValueExact();
     }

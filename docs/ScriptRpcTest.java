@@ -194,10 +194,16 @@ public class ScriptRpcTest {
         check(!IdempotencyKey.hex(a).equals(IdempotencyKey.hex(
                 IdempotencyKey.of(SERVER, P1, "app", "rev", "act2", 1))), "换 actionId 换键");
 
-        // 分隔符：不加的话 ("ab","c") 与 ("a","bc") 会撞
+        // 长度前缀：既不能在相邻字段之间借位，也不能靠把旧分隔符挪到另一个字段来碰撞
         check(!IdempotencyKey.hex(IdempotencyKey.of(SERVER, P1, "ab", "c", "act", 1))
                         .equals(IdempotencyKey.hex(IdempotencyKey.of(SERVER, P1, "a", "bc", "act", 1))),
-                "拼接要有分隔符，否则相邻字段能互相借位");
+                "长度前缀阻止相邻字段借位");
+        check(!IdempotencyKey.hex(IdempotencyKey.of(SERVER, P1, "a\u001fb", "c", "act", 1))
+                        .equals(IdempotencyKey.hex(IdempotencyKey.of(SERVER, P1, "a", "b\u001fc", "act", 1))),
+                "字段里即使含旧分隔符也不能碰撞");
+        check(!IdempotencyKey.hex(IdempotencyKey.of(SERVER, P1, null, "rev", "act", 1))
+                        .equals(IdempotencyKey.hex(IdempotencyKey.of(SERVER, P1, "", "rev", "act", 1))),
+                "null 与空串不能碰撞");
     }
 
     // ================================================================ §15.6 账本
@@ -300,6 +306,23 @@ public class ScriptRpcTest {
         t.set(t.get() + IdempotencyLedger.TTL_MS * 10);
         l.sweep();
         eq(l.size(P1), 1, "RESERVED 的一条都不许扫 —— 效果可能已经发生");
+
+        // check() is a decision-only API. Even when a full box contains expired entries, actual
+        // eviction happens only when the caller follows Fresh with reserve().
+        AtomicLong t2 = new AtomicLong(1);
+        IdempotencyLedger pure = ledger(t2);
+        for (int i = 0; i < IdempotencyLedger.MAX_PER_PLAYER; i++) {
+            byte[] old = IdempotencyKey.of(SERVER, P2, "app", "rev", "act", i);
+            pure.reserve(P2, old, d);
+            pure.settle(P2, old, ScriptErrorCode.OK, new byte[0], 0, 0);
+        }
+        t2.addAndGet(IdempotencyLedger.TTL_MS);
+        byte[] fresh = IdempotencyKey.of(SERVER, P2, "app", "rev", "act", 9999);
+        check(pure.check(P2, fresh, d) instanceof IdempotencyLedger.Verdict.Fresh,
+                "满箱中有过期条目时可接收新请求");
+        eq(pure.size(P2), IdempotencyLedger.MAX_PER_PLAYER, "check 不修改账本");
+        pure.reserve(P2, fresh, d);
+        eq(pure.size(P2), 1, "reserve 才清理过期条目并写入新条目");
     }
 
     /** 结果太大不进账本，重放时回 UNKNOWN 而不是一个空的 OK。 */
@@ -458,6 +481,26 @@ public class ScriptRpcTest {
         eq(landed.size(), 0, "意图一条都没落地");
     }
 
+    static void authorityFailureClosesReservation() {
+        AtomicLong t = new AtomicLong(0);
+        IdempotencyLedger ledger = ledger(t);
+        List<ScriptRpcResult> out = new ArrayList<>();
+        ScriptPipeline p = new ScriptPipeline(SERVER, ledger, new ScriptRateLimiter(t::get),
+                allDeployed("rev1"), (player, appId, actionId) -> {
+                    throw new NoSuchMethodError("broken authority provider");
+                }, instant(ActionEvaluator.Outcome.ok(new byte[0], 1, List.of())));
+        long epoch = p.newEpoch(P1);
+        ScriptRpc request = rpc(77, epoch, new byte[0]);
+        p.accept(request, snap(P1), out::add);
+        eq(out.get(0).code(), ScriptErrorCode.INTERNAL, "授权实现异常返回 INTERNAL");
+
+        byte[] key = IdempotencyKey.of(SERVER, P1, request.appId(), request.deployRev(),
+                request.actionId(), request.requestId());
+        byte[] digest = IdempotencyKey.digestOf(request.params());
+        check(ledger.check(P1, key, digest) instanceof IdempotencyLedger.Verdict.Replay,
+                "授权实现异常后 RESERVED 已结算，不会永久 IN_PROGRESS");
+    }
+
     /** 队列满：回 RATE_LIMITED，而且用的是"服务器忙"那个键，不是"你太快了"。 */
     static void queueFull() {
         AtomicLong t = new AtomicLong(0);
@@ -547,6 +590,7 @@ public class ScriptRpcTest {
         uploadQuota();
         epochMismatch();
         authorityRevokedBeforeLanding();
+        authorityFailureClosesReservation();
         queueFull();
         protocolMismatch();
         unknownAppMakesNoBucket();

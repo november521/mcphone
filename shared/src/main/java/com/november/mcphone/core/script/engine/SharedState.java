@@ -1,6 +1,7 @@
 package com.november.mcphone.core.script.engine;
 
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -33,6 +34,9 @@ public final class SharedState {
     /** 这一轮哪些 App 的哪些键脏了，主线程落盘时读它。 */
     private final Map<String, java.util.Set<String>> dirty = new ConcurrentHashMap<>();
 
+    /** Serializes dirty-set mutation with snapshot-and-clear; value reads/writes stay lock-free. */
+    private final Object dirtyLock = new Object();
+
     public String get(String appId, String key) {
         Map<String, String> m = byApp.get(appId);
         return m == null ? null : m.get(key);
@@ -64,29 +68,36 @@ public final class SharedState {
 
     /** 取出并清空脏键。主线程落盘时调。 */
     public Map<String, java.util.Set<String>> drainDirty() {
-        Map<String, java.util.Set<String>> out = Map.copyOf(dirty);
-        dirty.clear();
-        return out;
+        synchronized (dirtyLock) {
+            Map<String, java.util.Set<String>> out = new java.util.HashMap<>();
+            dirty.forEach((app, keys) -> out.put(app, Set.copyOf(keys)));
+            dirty.clear();
+            return Map.copyOf(out);
+        }
     }
 
     /** 服务器停止时清掉 —— 静态表会把上一个世界钉住。 */
     public void clear() {
         byApp.clear();
-        dirty.clear();
+        synchronized (dirtyLock) {
+            dirty.clear();
+        }
     }
 
     private void markDirty(String appId, String key) {
-        dirty.computeIfAbsent(appId, a -> ConcurrentHashMap.newKeySet()).add(key);
+        synchronized (dirtyLock) {
+            dirty.computeIfAbsent(appId, a -> ConcurrentHashMap.newKeySet()).add(key);
+        }
     }
 
     private void check(String appId, String key, String value) {
-        if (key == null || key.isEmpty()) throw new ScriptAbort(ScriptAbort.Reason.HOST, "shared 的键不能为空");
+        if (key == null || key.isEmpty()) throw HostError.invalid("shared 的键不能为空");
         if (value != null && value.length() > MAX_VALUE) {
-            throw new ScriptAbort(ScriptAbort.Reason.SIZE, "shared 的值 " + value.length() + " 字符，上限 " + MAX_VALUE);
+            throw HostError.quota("shared 的值 " + value.length() + " 字符，上限 " + MAX_VALUE);
         }
         Map<String, String> m = byApp.get(appId);
         if (m != null && m.size() >= MAX_KEYS_PER_APP && !m.containsKey(key)) {
-            throw new ScriptAbort(ScriptAbort.Reason.HOST, appId + " 的 shared 键数超过 " + MAX_KEYS_PER_APP);
+            throw HostError.quota(appId + " 的 shared 键数超过 " + MAX_KEYS_PER_APP);
         }
     }
 }

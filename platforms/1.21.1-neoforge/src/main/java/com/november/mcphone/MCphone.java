@@ -68,6 +68,9 @@ public class MCphone {
         net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener(
                 (net.neoforged.neoforge.event.tick.ServerTickEvent.Post e) -> com.november.mcphone.core.script.server.economy.EconomyRuntime.tick());
         net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener(
+                (net.neoforged.neoforge.event.tick.ServerTickEvent.Post e) ->
+                        tickDiscLoop(e.getServer().getPlayerList().getPlayers()));
+        net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener(
                 (net.neoforged.neoforge.event.RegisterCommandsEvent e) -> com.november.mcphone.core.script.server.economy.EconomyCommand.register(e.getDispatcher()));
 
         // SERVER 而非 COMMON：必须由服主一份说了算，且 NeoForge 会同步给客户端供界面藏按钮
@@ -85,6 +88,24 @@ public class MCphone {
         version = modContainer.getModInfo().getVersion().toString();
 
         LOGGER.info("MCphone 模组加载完成 —— 手机已就绪");
+    }
+
+    /** 接续唱片仓单曲循环；状态变化后立刻同步本轮的新终点。 */
+    private static void tickDiscLoop(Iterable<net.minecraft.server.level.ServerPlayer> players) {
+        for (net.minecraft.server.level.ServerPlayer player : players) {
+            try {
+                if (com.november.mcphone.feature.music.DiscService.tickLoop(player)) {
+                    com.november.mcphone.feature.music.DiscService.syncState(player);
+                }
+            } catch (VirtualMachineError fatal) {
+                throw fatal;
+            } catch (Throwable failure) {
+                // 与 C2S 的 handleSafely 同一个理由，而这里是【每 tick × 每个玩家】的扇出：
+                // 一个人身上出的事（例如仓里有个会让 JukeboxSong.fromStack 抛的物品栈）不隔离的话，
+                // 排在他后面的玩家这一 tick 全被跳过，而且每 tick 复现 —— 是跨玩家的影响。
+                LOGGER.error("[MCphone] 唱片循环的每 tick 扇出失败 player={}", player.getUUID(), failure);
+            }
+        }
     }
 
     /** 本模组版本号，如 "1.0.0"。模组构造前调用会得到空串。 */

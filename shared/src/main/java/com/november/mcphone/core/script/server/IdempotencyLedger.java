@@ -2,10 +2,8 @@ package com.november.mcphone.core.script.server;
 
 import com.november.mcphone.core.script.net.ScriptErrorCode;
 
-import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -104,7 +102,7 @@ public final class IdempotencyLedger {
         if (box == null) return new Verdict.Fresh();
         Entry e = box.get(IdempotencyKey.hex(key));
         if (e == null) {
-            return box.size() >= MAX_PER_PLAYER && !evictOne(box)
+            return box.size() >= MAX_PER_PLAYER && !hasExpired(box)
                     ? new Verdict.Full(FULL_RETRY_AFTER_MS)
                     : new Verdict.Fresh();
         }
@@ -115,7 +113,15 @@ public final class IdempotencyLedger {
 
     /** 记下"开始处理了"。调用方在 {@link Verdict.Fresh} 之后调。 */
     public void reserve(UUID player, byte[] key, byte[] paramsDigest) {
-        box(player).put(IdempotencyKey.hex(key),
+        LinkedHashMap<String, Entry> entries = box(player);
+        String hex = IdempotencyKey.hex(key);
+        if (!entries.containsKey(hex) && entries.size() >= MAX_PER_PLAYER) {
+            evictExpired(entries);
+        }
+        if (!entries.containsKey(hex) && entries.size() >= MAX_PER_PLAYER) {
+            throw new IllegalStateException("reserve called after a Full verdict");
+        }
+        entries.put(hex,
                 new Entry(State.RESERVED, paramsDigest, clock.getAsLong(),
                         ScriptErrorCode.INTERNAL, new byte[0], 0, 0));
     }
@@ -158,16 +164,18 @@ public final class IdempotencyLedger {
         return byPlayer.computeIfAbsent(player, p -> new LinkedHashMap<>());
     }
 
-    /** 淘汰掉一条已结束且已过期的。<b>RESERVED 的一条都不许淘汰</b>：效果可能已经发生了。 */
-    private boolean evictOne(LinkedHashMap<String, Entry> box) {
+    private boolean hasExpired(LinkedHashMap<String, Entry> box) {
         long now = clock.getAsLong();
-        List<String> dead = new ArrayList<>();
         for (Map.Entry<String, Entry> e : box.entrySet()) {
-            if (expired(e.getValue(), now)) dead.add(e.getKey());
+            if (expired(e.getValue(), now)) return true;
         }
-        if (dead.isEmpty()) return false;
-        for (String k : dead) box.remove(k);
-        return true;
+        return false;
+    }
+
+    /** Mutation belongs to reserve/sweep, never to the read-only {@link #check} decision. */
+    private void evictExpired(LinkedHashMap<String, Entry> box) {
+        long now = clock.getAsLong();
+        box.entrySet().removeIf(e -> expired(e.getValue(), now));
     }
 
     private static boolean expired(Entry e, long now) {

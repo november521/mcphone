@@ -72,7 +72,7 @@ public enum ScriptErrorCode {
      * 少了它，实现者只能在 {@link #OK} 和 {@link #INTERNAL} 之间二选一，两个选择都会造成
      * 重复发奖或漏发。本步还有一处会走到它：重放命中但上次的 {@code data} 太大没进账本
      * （见 {@code IdempotencyLedger.REPLAYABLE_DATA_MAX}）。
-     * 货币调用结果不明（{@code OutcomeUnknown}：provider 动钱时抛了或没给结果）也回它。
+     * 货币调用结果不明（{@code OutcomeUnknown}：provider 动钱时抛了或没给结果）也回它；脚本自己 {@code ctx.fail('UNKNOWN')} 同样回得出来。
      */
     UNKNOWN,
 

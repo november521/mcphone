@@ -5,6 +5,7 @@ import com.november.mcphone.core.ModCapabilities;
 import com.november.mcphone.core.PhoneItem;
 import com.november.mcphone.feature.music.net.PlayNetSongPacket;
 import com.november.mcphone.feature.music.net.StopNetSongPacket;
+import com.november.mcphone.feature.music.net.SyncDiscStatePacket;
 import net.minecraft.core.RegistryAccess;
 import com.november.mcphone.core.net.MCphoneNetwork;
 import net.minecraft.network.protocol.game.ClientboundStopSoundPacket;
@@ -115,6 +116,31 @@ public final class DiscService {
 
     private static boolean isPlaying(ServerPlayer player, DiscState state) {
         return playingUntil(player, state) != DiscState.NOT_PLAYING;
+    }
+
+    /** 每个服务端 tick 调用；到达轮次边界时重放，并把起点推进到稳定的整轮边界。 */
+    public static boolean tickLoop(ServerPlayer player) {
+        DiscState state = ModCapabilities.of(player).disc();
+        if (state.startedTick() < 0L || !state.hasDisc()) return false;
+        if (!PhoneItem.isCarriedBy(player)) {
+            stopPlayback(player);
+            return true;
+        }
+
+        long length = lengthInTicks(player, state.disc());
+        long now = player.level().getGameTime();
+        if (!DiscLoop.isDue(state.startedTick(), length, now)) return false;
+
+        long periodStart = DiscLoop.periodStart(state.startedTick(), length, now);
+        if (!startSound(player, state.disc())) return false;
+        ModCapabilities.of(player).setDisc(state.playingSince(periodStart));
+        return true;
+    }
+
+    /** 循环接棒或因手机离身停止后，把新的真值推回客户端。 */
+    public static void syncState(ServerPlayer player) {
+        MCphoneNetwork.sendToPlayer(player, new SyncDiscStatePacket(
+                ModCapabilities.of(player).disc().disc().copy(), playingUntil(player)));
     }
 
     /** 仓里那张东西有多长（游戏刻）；NetMusic CD 的秒数也换算到刻。不认识返回 -1 */
