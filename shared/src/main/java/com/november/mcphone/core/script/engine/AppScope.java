@@ -81,7 +81,14 @@ public final class AppScope {
     /**
      * 调用结束扫一遍驻留量。超限就把 scope 丢掉重建，下次调用重新装载。
      *
-     * @return 超没超。超了调用方要记一条审计
+     * <h2>只许在<b>持有 Context</b> 的时候调（E35④）</h2>
+     *
+     * 它读 scope 的顶层属性值，而那个动作会走到脚本自己的 getter 上 ——
+     * 脚本 {@code Object.defineProperty(globalThis, 'g', {get: ...})} 就能让这里抛。
+     * 调用方（{@code RhinoEvaluator}）因此把它放在 Context 还活着的时候、并整体接住
+     * {@code Throwable}：一个 getter 炸弹不许把 worker 线程带走、也不许吞掉 {@code onDone}。
+     *
+     * @return 超没超。超了调用方要走审计（<b>不记过失</b>：那是宿主的驻留策略，不是脚本行为）
      */
     public boolean sweepRetained() {
         if (scope == null) return false;
@@ -90,12 +97,37 @@ public final class AppScope {
         for (Object id : scope.getIds()) {          // 只看脚本自己声明的（可枚举的那些）
             if (++seen > MAX_SCANNED) break;
             if (!(id instanceof String name)) continue;
-            Object v = ScriptableObject.getProperty(scope, name);
+            Object v = readTopLevel(scope, name);
             if (v instanceof CharSequence cs) chars += cs.length();   // ConsString 上是 O(1)
         }
         if (chars <= MAX_RETAINED_CHARS) return false;
         scope = null;                                // 下次 scope(cx) 会重建
         return true;
+    }
+
+    /**
+     * 读一个顶层属性的值。
+     *
+     * <h2>为什么要走 accessor 这一条显式路径</h2>
+     *
+     * <b>实测</b>（Rhino 1.9.1）：脚本用
+     * {@code Object.defineProperty(globalThis, 'g', {get: function(){...}})} 装出来的 getter，
+     * {@code ScriptableObject.getProperty(scope, "g")} <b>不会</b>去调它（拿到的是那个函数对象本身）；
+     * 而脚本这样一个 getter 就是 E35④ 里"把驻留清扫炸掉"的那条路 —— 不把它走到，
+     * 清扫里那个 try/catch 就是一段没人验过的代码。
+     *
+     * <p>所以这里显式问 accessor 并在有 Context 的域内调用它（调用方保证）：
+     * 它抛就抛，由 {@code RhinoEvaluator.sweepRetained} 整体接住。
+     */
+    private static Object readTopLevel(ScriptableObject scope, String name) {
+        // 公开 API：拿到 accessor 本身（没有就返回 null），再自己调它。
+        // GetterSlot 是包内可见的，碰不到；这个重载是 public 的。
+        Object accessor = scope.getGetterOrSetter(name, 0, false);
+        if (accessor instanceof org.mozilla.javascript.Callable getter) {
+            return getter.call(org.mozilla.javascript.Context.getCurrentContext(), scope, scope,
+                    new Object[0]);
+        }
+        return ScriptableObject.getProperty(scope, name);
     }
 
     /** 服务器停止或 App 卸载时叫。 */

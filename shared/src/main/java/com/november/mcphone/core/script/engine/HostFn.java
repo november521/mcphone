@@ -28,6 +28,14 @@ import java.util.List;
  * 实测 {@code FunctionObject} 会把宿主抛的 RuntimeException 转成脚本 {@code catch} 得到的
  * {@code InternalError}；而中断信号是 {@link ScriptAbort}（extends Error），
  * 两种写法下 {@code catch} 与 {@code finally} 都吞不掉它。
+ *
+ * <p><b>S15h/S15i 实测更正</b>：后半句按探针重写过。宿主 {@code LambdaFunction} 里
+ * <b>抛非 RhinoException 的东西（含 RuntimeException 与一切 Error 子类，也就是 {@link ScriptAbort}）
+ * 根本进不了脚本的 catch</b> —— 它直接穿出求值；只有 {@code RhinoException} 子类进得去
+ * （那就是 {@link HostError} 之所以继承 {@code WrappedException} 的全部理由）。
+ * 所以"不许 FunctionObject"这条纪律照旧（换掉它会把异常形态整个改一遍），
+ * 但"RuntimeException 能被脚本 catch 住"这个说法是错的，别照着它设计错误处理。
+ * 详见 {@code docs/script-failure-audit.md} 的 §0.1。
  */
 public final class HostFn {
 
@@ -78,38 +86,55 @@ public final class HostFn {
             SizeGate.check(cs, where);
             return cs.toString();
         }
-        throw new ScriptAbort(ScriptAbort.Reason.HOST, where + " 第 " + i + " 个参数要字符串");
+        throw typeError(args, where, i, "字符串");
     }
 
-    public static long num(Object[] args, int i, String where) {
-        Object v = at(args, i);
-        if (v instanceof Number n) return n.longValue();
-        throw new ScriptAbort(ScriptAbort.Reason.HOST, where + " 第 " + i + " 个参数要数字");
+    /**
+     * 精确的 {@code long} 参数。越界、小数、{@code NaN}、{@code Infinity} 一律 {@link HostError}
+     * （可接住、不记过失、<b>写前就抛</b>），理由见 {@link ExactLong}。
+     */
+    public static long exactLong(Object[] args, int i, String where) {
+        return ExactLong.of(at(args, i), where);
     }
 
     public static boolean bool(Object[] args, int i, String where) {
         Object v = at(args, i);
         if (v instanceof Boolean b) return b;
-        throw new ScriptAbort(ScriptAbort.Reason.HOST, where + " 第 " + i + " 个参数要布尔");
+        throw typeError(args, where, i, "布尔");
     }
 
     /** 一串字符串。元素数受 {@link SizeGate#MAX_ARRAY} 限。 */
     public static List<String> strList(Object[] args, int i, String where) {
         Object v = at(args, i);
         if (!(v instanceof NativeArray arr)) {
-            throw new ScriptAbort(ScriptAbort.Reason.HOST, where + " 第 " + i + " 个参数要数组");
+            throw typeError(args, where, i, "数组");
         }
         SizeGate.check(arr, where);
         List<String> out = new ArrayList<>();
         for (int k = 0; k < arr.getLength(); k++) {
             Object e = arr.get(k, arr);
             if (!(e instanceof CharSequence cs)) {
-                throw new ScriptAbort(ScriptAbort.Reason.HOST, where + " 的第 " + k + " 个元素要字符串");
+                throw HostError.invalid(where + " 的第 " + k + " 个元素要字符串");
             }
             SizeGate.check(cs, where);
             out.add(cs.toString());
         }
         return out;
+    }
+
+    /**
+     * 类型不对。
+     *
+     * <p>这里<b>不用</b> {@code ScriptAbort}：类型对不对是宿主对输入的校验，
+     * 脚本接得住才好写"这个字段没填就换个分支"；而记过失会连着几次禁玩家、熔断整个 App ——
+     * 那是在罚玩家（S15h/S15i，勘误 E31/E32）。
+     *
+     * <p>给对象就直接拒，<b>不做</b> {@code valueOf} 转换：那等于让脚本在宿主方法执行到一半时重入宿主。
+     */
+    private static HostError typeError(Object[] args, String where, int i, String want) {
+        Object v = at(args, i);
+        return HostError.invalid(where + " 第 " + i + " 个参数要" + want
+                + "，收到 " + (v == null ? "null" : v.getClass().getSimpleName()));
     }
 
     public static boolean present(Object[] args, int i) {
