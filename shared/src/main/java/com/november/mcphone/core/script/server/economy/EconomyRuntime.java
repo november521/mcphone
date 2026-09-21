@@ -72,6 +72,11 @@ public final class EconomyRuntime {
      * {@code null} 只出现在断言测试直接注入 provider 查找函数的那个构造器里。
      */
     private final CurrencyRegistry registry;
+    /**
+     * 本次注册的"配置面注意事项"（plan warning + "没有默认货币"这类），供命令面查（对抗 D′4）：
+     * 光进日志的话，服主在 S2/S5/S6 三种终止态下只能看到一行 warn，对不上账。
+     */
+    private final List<String> configNotes;
     private long nextSweepAt;
     private int lastOrphaned;
     private int lastFailed;
@@ -81,21 +86,22 @@ public final class EconomyRuntime {
     /** 断言测试用：直接喂一个 provider 查找函数（{@link #registry()} 为 null）。 */
     EconomyRuntime(EconomyData data, TxnLog log, CurrencyGateway gateway,
                    Function<String, ICurrencyProvider> providers, long now) {
-        this(data, log, gateway, null, providers, now);
+        this(data, log, gateway, null, providers, List.of(), now);
     }
 
     private EconomyRuntime(EconomyData data, TxnLog log, CurrencyGateway gateway,
-                           CurrencyRegistry registry, long now) {
-        this(data, log, gateway, registry, registry::get, now);
+                           CurrencyRegistry registry, List<String> configNotes, long now) {
+        this(data, log, gateway, registry, registry::get, configNotes, now);
     }
 
     private EconomyRuntime(EconomyData data, TxnLog log, CurrencyGateway gateway,
                            CurrencyRegistry registry,
-                           Function<String, ICurrencyProvider> providers, long now) {
+                           Function<String, ICurrencyProvider> providers, List<String> configNotes, long now) {
         this.data = data;
         this.log = log;
         this.gateway = gateway;
         this.registry = registry;
+        this.configNotes = List.copyOf(configNotes);
         this.providers = providers;
         this.nextSweepAt = now + SWEEP_INTERVAL_MS;
     }
@@ -164,12 +170,14 @@ public final class EconomyRuntime {
     static EconomyRuntime wire(EconomyData data, TxnLog log, CurrencyGateway gateway, long now,
                                List<CurrencySpec> specs, Supplier<MinecraftServer> server) {
         CurrencyRegistry registry = new CurrencyRegistry(gateway);
+        List<String> notes;
         if (specs == null) {
             registerAvailable(registry, data, log);   // 旧兜底：没有配置时的行为，一个字节不变
+            notes = List.of();
         } else {
-            registerConfigured(registry, data, log, specs, server);
+            notes = registerConfigured(registry, data, log, specs, server);
         }
-        return new EconomyRuntime(data, log, gateway, registry, now);
+        return new EconomyRuntime(data, log, gateway, registry, notes, now);
     }
 
     /**
@@ -177,11 +185,15 @@ public final class EconomyRuntime {
      * <b>存档兜底</b>：存档里出现过、配置里没有的货币仍按 builtin 注册 + 一条 WARN
      * （漏掉等于把玩家已经拥有的钱变成不可达，卡约束 3）。
      */
-    private static void registerConfigured(CurrencyRegistry registry, EconomyData data, TxnLog log,
-                                           List<CurrencySpec> specs, Supplier<MinecraftServer> server) {
+    private static List<String> registerConfigured(CurrencyRegistry registry, EconomyData data, TxnLog log,
+                                                   List<CurrencySpec> specs, Supplier<MinecraftServer> server) {
         Set<String> configured = new java.util.LinkedHashSet<>();
+        List<String> notes = new java.util.ArrayList<>();
         EconomyProviders.Plan plan = EconomyProviders.plan(specs, EconomyProviders.hasEmcWallet());
-        for (String w : plan.warnings()) MCphone.LOGGER.warn("[MCphone] 货币配置：{}", w);
+        for (String w : plan.warnings()) {
+            MCphone.LOGGER.warn("[MCphone] 货币配置：{}", w);
+            notes.add(w);
+        }
         for (EconomyProviders.Planned p : plan.entries()) {
             CurrencySpec spec = p.spec();
             configured.add(spec.id());
@@ -212,6 +224,19 @@ public final class EconomyRuntime {
                         + "（要让它带元数据/走别的档，请写进 mcphone-economy.json）", id);
             }
         }
+        // D′4：没有默认货币要单独说一句，并留给命令面查 —— 只在启动日志里的话服主对不上账
+        if (registry.defaultCurrency() == null) {
+            String note = "本服没有默认货币（default=true 都落在未注册的档上，或配置里没写）；"
+                    + "ctx.currency.default() 回 null";
+            MCphone.LOGGER.warn("[MCphone] {}", note);
+            notes.add(note);
+        }
+        return notes;
+    }
+
+    /** 本次注册的配置面注意事项（命令面用；见 {@link #registerConfigured}）。 */
+    List<String> configNotes() {
+        return configNotes;
     }
 
     /** 跳过原因键 → 服主看得懂的一句话。 */

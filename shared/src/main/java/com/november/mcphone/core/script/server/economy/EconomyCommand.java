@@ -25,7 +25,44 @@ public final class EconomyCommand {
         dispatcher.register(Commands.literal("mcphone")
                 .then(Commands.literal("economy")
                         .requires(src -> src.hasPermission(3))
+                        .then(Commands.literal("status").executes(ctx -> status(ctx.getSource())))
                         .then(Commands.literal("audit").executes(ctx -> audit(ctx.getSource())))));
+    }
+
+    /**
+     * {@code /mcphone economy status}（S15d′，对抗 D′4）：本服注册了哪些货币、哪条是默认、
+     * 配置面有什么要注意的。不改判定逻辑，只让"钱走哪条"可查。
+     */
+    private static int status(CommandSourceStack src) {
+        EconomyRuntime rt = EconomyRuntime.current();
+        if (rt == null) {
+            src.sendFailure(Component.literal("[货币] 货币系统没在运行"));
+            return 0;
+        }
+        CurrencyRegistry registry = rt.registry();
+        if (registry == null || registry.size() == 0) {
+            src.sendSuccess(() -> Component.literal("[货币] 本服还没有注册任何货币"), false);
+        } else {
+            String dflt = registry.defaultCurrency();
+            src.sendSuccess(() -> Component.literal("[货币] 本服注册了 " + registry.size() + " 种，默认："
+                    + (dflt == null ? "（无）" : dflt)), false);
+            for (String id : registry.ids()) {
+                ICurrencyProvider raw = unwrap(registry.get(id));
+                long max = raw.maxBalance();
+                src.sendSuccess(() -> Component.literal("  " + id + "  " + tierOf(raw)
+                        + "  decimals=" + raw.currency().decimals()
+                        + "  default=" + id.equals(dflt)
+                        + "  max=" + (max == Long.MAX_VALUE ? "无上限" : String.valueOf(max))), false);
+            }
+        }
+        if (registry != null && registry.defaultCurrency() == null) {
+            src.sendSuccess(() -> Component.literal("[货币] ⚠ 没有默认货币：ctx.currency.default() 回 null")
+                    .withStyle(ChatFormatting.YELLOW), false);
+        }
+        for (String note : rt.configNotes()) {
+            src.sendSuccess(() -> Component.literal("[货币] 配置：" + note), false);
+        }
+        return 1;
     }
 
     private static int audit(CommandSourceStack src) {

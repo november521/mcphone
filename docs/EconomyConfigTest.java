@@ -317,6 +317,22 @@ public class EconomyConfigTest {
         check(rt.registry().get("test:emc") == null, "被跳过的档没有注册（不挂空壳）");
     }
 
+    /** D′4：配置面 warning 与"没有默认货币"要能查（不再只进启动日志）。 */
+    static void configNotesAreQueryable() throws Exception {
+        EconomyConfig.Result onlySkipped = EconomyConfig.parse(
+                "{\"currency\":[{\"id\":\"test:emc\",\"provider\":\"emc_legacy\",\"default\":true}]}");
+        Path dir = tmp("notes");
+        EconomyData data = EconomyData.createFor(dir.resolve("world"), dir.resolve("snapshot"),
+                System::currentTimeMillis);
+        TxnLog log = new TxnLog(dir.resolve("economy"), java.time.ZoneId.systemDefault());
+        CurrencyGateway gateway = new CurrencyGateway(Runnable::run, () -> true);
+        EconomyRuntime rt = EconomyRuntime.wire(data, log, gateway, 1L, onlySkipped.specs(), () -> null);
+        check(rt.configNotes().stream().anyMatch(n -> n.contains("顺延")),
+                "被跳过的 default 的顺延 warning 可查：" + rt.configNotes());
+        check(rt.configNotes().stream().anyMatch(n -> n.contains("没有默认货币")),
+                "没有默认货币单独报一句：" + rt.configNotes());
+    }
+
     public static void main(String[] args) throws Exception {
         goodConfig();
         templateIsWrittenOnceAndReadOnly();
@@ -335,6 +351,7 @@ public class EconomyConfigTest {
         lineNumbersAlignAcrossNonObjects();
         sizeGuards();
         skippedDefaultFallsThrough();
+        configNotesAreQueryable();
 
         System.out.println("断言 " + checks + " 条");
         if (!failures.isEmpty()) {
