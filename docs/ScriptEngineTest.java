@@ -1217,7 +1217,11 @@ public class ScriptEngineTest {
         };
         return new CtxBuilder.Backends(shared, fakeItems(),
                 new CtxBuilder.Cycle(ZoneId.of("Asia/Shanghai"), LocalTime.of(4, 0)),
-                store, sealed, null, true,
+                store, sealed,
+                new com.november.mcphone.core.script.server.economy.CurrencyRegistry(
+                        new com.november.mcphone.core.script.server.economy.CurrencyGateway(
+                                Runnable::run, () -> true)),
+                true,
                 (id, p) -> {
                     predicateCalls.add(id);
                     return Boolean.TRUE;
@@ -1287,7 +1291,7 @@ public class ScriptEngineTest {
         CtxBuilder.Backends b = gatedBackends(new java.util.ArrayList<>(),
                 new java.util.ArrayList<>(), new SharedState());
         eq(withCtx("Object.getOwnPropertyNames(ctx).sort().join(',')", b),
-                "attr,cycle,effect,fail,give,item,log,loot,ok,player,predicate,score,sealed,shared,store,time",
+                "attr,currency,cycle,effect,fail,give,item,log,loot,ok,player,predicate,score,sealed,shared,store,time",
                 "顶层成员集合（新增成员必须来这里签字）");
         eq(withCtx("Object.getOwnPropertyNames(ctx.attr).sort().join(',')", b), "grant,revoke", "ctx.attr");
         eq(withCtx("Object.getOwnPropertyNames(ctx.loot).sort().join(',')", b), "roll", "ctx.loot");
@@ -1295,6 +1299,8 @@ public class ScriptEngineTest {
         eq(withCtx("Object.getOwnPropertyNames(ctx.score).sort().join(',')", b), "add,get,set", "ctx.score");
         eq(withCtx("Object.getOwnPropertyNames(ctx.predicate).sort().join(',')", b), "test", "ctx.predicate");
         eq(withCtx("Object.getOwnPropertyNames(ctx.sealed).sort().join(',')", b), "get", "ctx.sealed");
+        eq(withCtx("Object.getOwnPropertyNames(ctx.currency).sort().join(',')", b),
+                "balance,burn,default,format,hold,list,mint,parse,pay,refund,release", "ctx.currency");
         eq(withCtx("Object.getOwnPropertyNames(ctx.store).sort().join(',')", b),
                 "getBool,getLong,getString,keys,remove,setBool,setLong,setString", "ctx.store");
         eq(withCtx("Object.getOwnPropertyNames(ctx.shared).sort().join(',')", b),

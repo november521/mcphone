@@ -5,6 +5,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.november.mcphone.MCphone;
+import com.november.mcphone.core.script.JsonScan;
 import net.minecraft.world.level.storage.LevelResource;
 import net.minecraft.server.MinecraftServer;
 
@@ -78,16 +79,29 @@ public final class CapabilityConfig {
 
     private static final Boundary ALL_OFF = new Boundary(false, false, false, false, false, false);
 
+    /** {@code disabled} 数组长度上限（S18-E5）：远超目录条数（33）就只取前这么多，多的一条汇总警告。 */
+    public static final int MAX_DISABLED = 256;
+
+    /** 配置文件大小闸（S18-E5）：正常模板 1 KiB 量级，64 KiB 已经宽得没边。 */
+    public static final int MAX_FILE_BYTES = 64 * 1024;
+
     private final Preset preset;
     private final Set<String> disabled;
     private final Boundary boundary;
     private final List<String> warnings;
+    /** 非空 = 这份配置<b>不可用</b>（坏 JSON/重复键/超限），调用方应保留上一份快照。 */
+    private final String error;
 
     private CapabilityConfig(Preset preset, Set<String> disabled, Boundary boundary, List<String> warnings) {
+        this(preset, disabled, boundary, warnings, "");
+    }
+
+    private CapabilityConfig(Preset preset, Set<String> disabled, Boundary boundary, List<String> warnings, String error) {
         this.preset = preset;
         this.disabled = Collections.unmodifiableSet(disabled);
         this.boundary = boundary;
         this.warnings = List.copyOf(warnings);
+        this.error = error == null ? "" : error;
     }
 
     /** 原版默认：standard + 什么都不关 + 边界全关。 */
@@ -114,6 +128,21 @@ public final class CapabilityConfig {
     }
 
     /**
+     * 非空 = 这份配置<b>不可用</b>（坏 JSON / 重复键 / 顶层不是对象 / 文件超限）——
+     * 调用方必须保留上一份生效的快照，别拿这份"默认值"去覆盖（S18-E3/E4）。
+     */
+    public String loadError() {
+        return error;
+    }
+
+    /** 保留这份配置的值，只把 error 换掉（供 {@link #load(Path, CapabilityConfig)} 保留上一份时用）。 */
+    CapabilityConfig withError(String message) {
+        List<String> ws = new ArrayList<>(warnings);
+        if (message != null && !message.isEmpty()) ws.add(message);
+        return new CapabilityConfig(preset, disabled, boundary, ws, message);
+    }
+
+    /**
      * 这项能力被服主关掉了吗。<b>关掉包括 plain 档</b>——免审批不等于服主管不了（§18.8）。
      * 不认识的 id 一律 false（它根本没有路径可关）。
      */
@@ -128,16 +157,33 @@ public final class CapabilityConfig {
         return worldRoot.resolve(FILE);
     }
 
-    /** 从服务器读。<b>任何失败都不抛</b>：默认值 + ERROR 日志，服务器照常起。 */
+    /** 从服务器读。<b>任何失败都不抛</b>：坏配置不覆盖上一份、服务器照常起。 */
     public static CapabilityConfig load(MinecraftServer server) {
         Path world = server.getWorldPath(LevelResource.ROOT);
-        return load(pathIn(world));
+        return load(pathIn(world), null);
     }
 
-    /** 从文件读；文件不存在就生成模板。测试用这个重载。 */
+    /** 从服务器读，解析失败时保留 {@code previous}（{@code /mcphone script capabilities reload}）。 */
+    public static CapabilityConfig load(MinecraftServer server, CapabilityConfig previous) {
+        Path world = server.getWorldPath(LevelResource.ROOT);
+        return load(pathIn(world), previous);
+    }
+
+    /** 从文件读；文件不存在就生成模板。测试用这个重载（没有上一份可保留）。 */
     public static CapabilityConfig load(Path file) {
+        return load(file, null);
+    }
+
+    /**
+     * 从文件读，<b>解析失败时保留 {@code previous}</b>（S18-E3/E4）：一个手滑的 JSON 不该把
+     * 服主关掉的能力全部重新打开。{@code previous == null}（首次加载）才退回 {@link #defaults()}，
+     * 并在 {@link #loadError()} 里报出来。
+     */
+    public static CapabilityConfig load(Path file, CapabilityConfig previous) {
+        CapabilityConfig fallback = previous == null ? defaults() : previous;
         try {
             if (!Files.isRegularFile(file)) {
+                if (previous != null) return previous;   // 文件被删了：保留上一份，别默默全开
                 try {
                     Files.createDirectories(file.getParent());
                     Files.writeString(file, template(), StandardCharsets.UTF_8);
@@ -147,34 +193,55 @@ public final class CapabilityConfig {
                 }
                 return defaults();
             }
+            long size = Files.size(file);
+            if (size > MAX_FILE_BYTES) {
+                return reject(fallback, "配置文件太大（" + size + " 字节 > " + MAX_FILE_BYTES + "）");
+            }
             String json = Files.readString(file, StandardCharsets.UTF_8);
             CapabilityConfig cfg = parse(json);
+            if (!cfg.loadError().isEmpty()) {
+                return reject(fallback, cfg.loadError());
+            }
             for (String w : cfg.warnings()) MCphone.LOGGER.warn("[MCphone] 能力配置 {}：{}", file, w);
             return cfg;
         } catch (IOException e) {
-            MCphone.LOGGER.error("[MCphone] 能力配置读不出来（{}），按默认值继续", file, e);
-            return defaults();
+            return reject(fallback, "读不出来：" + e.getMessage());
         }
     }
 
+    /** 本次配置被拒：保留上一份（或默认），把原因挂上去 + 一条 ERROR。 */
+    private static CapabilityConfig reject(CapabilityConfig fallback, String why) {
+        MCphone.LOGGER.error("[MCphone] 能力配置本次不生效，保留上一份：{}", why);
+        return fallback.withError(why);
+    }
+
+    /** 直接拒掉一份解析结果（parse 用；调用方看到 loadError 就不会采用它）。 */
+    private static CapabilityConfig rejected(String why, List<String> warnings) {
+        warnings.add(why + "，按默认值处理（已生效的那一份不会被覆盖）");
+        return new CapabilityConfig(Preset.STANDARD, Set.of(), ALL_OFF, warnings, why);
+    }
+
     /**
-     * 解析一段 JSON。<b>不抛</b>：结构错、字段错都只记 warning 并用默认值/跳过该条。
-     *
-     * <p>可自动验的部分都在这：预设、显式覆盖、未知键、未知能力 id、类型错。文件 IO 不在里面。
+     * 解析一段 JSON。<b>不抛</b>：结构错、字段错都只记 warning 并用默认值/跳过该条；
+     * <b>不可用的解析结果</b>（坏 JSON、重复键、顶层不是对象）会记在 {@link #loadError()}，
+     * 调用方据此保留上一份快照（S18-E3/E4）。文件 IO 不在这里。
      */
     public static CapabilityConfig parse(String json) {
         List<String> warnings = new ArrayList<>();
+        // S18-E4：先严格扫描（宽容语法/重复键/嵌套深度）—— 安全开关不能有两种读法。
+        JsonScan.Problem problem = JsonScan.check(json);
+        if (problem != null) {
+            return rejected(problem.detail(), warnings);
+        }
         JsonObject root;
         try {
             JsonElement parsed = JsonParser.parseString(json);
             if (!parsed.isJsonObject()) {
-                warnings.add("顶层必须是一个 JSON 对象，按默认值处理");
-                return new CapabilityConfig(Preset.STANDARD, Set.of(), ALL_OFF, warnings);
+                return rejected("顶层必须是一个 JSON 对象", warnings);
             }
             root = parsed.getAsJsonObject();
         } catch (RuntimeException e) {
-            warnings.add("不是合法 JSON（" + e.getMessage() + "），按默认值处理");
-            return new CapabilityConfig(Preset.STANDARD, Set.of(), ALL_OFF, warnings);
+            return rejected("不是合法 JSON（" + e.getMessage() + "）", warnings);
         }
 
         Preset preset = Preset.of(str(root, "preset", warnings), warnings);
@@ -194,7 +261,13 @@ public final class CapabilityConfig {
             if (d.isJsonArray()) {
                 disabled.clear();
                 JsonArray arr = d.getAsJsonArray();
-                for (JsonElement e : arr) {
+                int take = Math.min(arr.size(), MAX_DISABLED);
+                if (arr.size() > take) {
+                    warnings.add("disabled 有 " + arr.size() + " 条，超过上限 " + MAX_DISABLED
+                            + "，只取前 " + take + " 条");
+                }
+                for (int i = 0; i < take; i++) {
+                    JsonElement e = arr.get(i);
                     if (!e.isJsonPrimitive() || !e.getAsJsonPrimitive().isString()) {
                         warnings.add("disabled 里有一条不是字符串，跳过：" + e);
                         continue;
@@ -278,6 +351,7 @@ public final class CapabilityConfig {
         return "{\n"
                 + "  \"_comment\": [\n"
                 + "    \"MCphone 能力与边界配置。文件不存在时自动生成；此后只读，不会被改写。\",\n"
+                + "    \"坏 JSON / 重复键 / 顶层不是对象时整份不生效：保留上一份继续跑，不会静默全开（/mcphone script capabilities reload 会报原因）。\",\n"
                 + "    \"preset: hardcore | standard | open（默认 standard）。下面任何一项显式写出都覆盖预设。\",\n"
                 + "    \"disabled: 全服关闭的能力 id 列表，含 plain 档 —— 关掉后所有 App（含已装）都拿不到。\",\n"
                 + "    \"能力 id 与档位见能力目录（/mcphone script capabilities 可以列出来）。\"\n"

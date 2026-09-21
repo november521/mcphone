@@ -164,11 +164,73 @@ public class CapabilityConfigTest {
                 "boundary 开关的消费者集合 = 接线白名单（本步为空；接了线就来这里签字）");
     }
 
+    /**
+     * S18-E3：坏 JSON / 顶层不是对象 ⇒ {@code loadError} 非空（"这份不可用"），
+     * {@code load(file, previous)} 保留上一份生效的关停项，不许静默全开。
+     */
+    static void badJsonKeepsPrevious() throws Exception {
+        check(!CapabilityConfig.parse("[]").loadError().isEmpty(), "顶层不是对象：loadError 非空");
+        check(!CapabilityConfig.parse("{oops").loadError().isEmpty(), "坏 JSON：loadError 非空");
+
+        Path dir = Files.createTempDirectory("mcphone-cap-previous");
+        Path file = CapabilityConfig.pathIn(dir);
+        CapabilityConfig previous = CapabilityConfig.parse("{\"disabled\":[\"storage.self\"]}");
+        check(previous.loadError().isEmpty(), "好配置没有 loadError");
+        Files.createDirectories(file.getParent());
+
+        Files.writeString(file, "{oops", StandardCharsets.UTF_8);
+        CapabilityConfig kept = CapabilityConfig.load(file, previous);
+        check(!kept.loadError().isEmpty(), "坏文件：loadError 非空");
+        check(kept.isDisabled("storage.self"), "坏文件没有把上一份的关停清掉");
+
+        Files.writeString(file, "{\"disabled\":[\"loot.roll\"]}", StandardCharsets.UTF_8);
+        CapabilityConfig fresh = CapabilityConfig.load(file, previous);
+        check(fresh.loadError().isEmpty(), "好文件：loadError 空");
+        check(fresh.isDisabled("loot.roll") && !fresh.isDisabled("storage.self"), "好文件正常替换快照");
+    }
+
+    /** S18-E4：重复键 = 两种读法 ⇒ 整份拒（和 manifest 同一套严格扫描）。 */
+    static void duplicateKeysRejected() {
+        CapabilityConfig dup = CapabilityConfig.parse(
+                "{\"disabled\":[\"storage.global.read\"],\"disabled\":[]}");
+        check(!dup.loadError().isEmpty(), "重复键：loadError 非空");
+        check(warned(dup, "重复键"), "重复键要报出来");
+        check(!dup.isDisabled("storage.global.read"), "重复键的结果不生效（整份被拒）");
+    }
+
+    /** S18-E5：disabled 超限截断 + 一条汇总警告；超大文件整份拒（保留上一份）。 */
+    static void sizeGuards() throws Exception {
+        StringBuilder big = new StringBuilder("{\"disabled\":[");
+        for (int i = 0; i < CapabilityConfig.MAX_DISABLED + 20; i++) {
+            if (i > 0) big.append(',');
+            big.append("\"command.template:t").append(i).append('"');
+        }
+        big.append("]}");
+        CapabilityConfig capped = CapabilityConfig.parse(big.toString());
+        check(capped.loadError().isEmpty(), "超限不是不可用，只是截断");
+        eq(capped.disabled().size(), CapabilityConfig.MAX_DISABLED, "截断到上限条");
+        check(capped.isDisabled("command.template:t0"), "前 256 条留着");
+        check(!capped.isDisabled("command.template:t" + CapabilityConfig.MAX_DISABLED), "第 257 条没进来");
+        check(warned(capped, "超过上限"), "要有一条汇总警告");
+
+        Path dir = Files.createTempDirectory("mcphone-cap-big");
+        Path file = CapabilityConfig.pathIn(dir);
+        Files.createDirectories(file.getParent());
+        Files.writeString(file, "{\"disabled\":[]}" + " ".repeat(CapabilityConfig.MAX_FILE_BYTES),
+                StandardCharsets.UTF_8);
+        CapabilityConfig over = CapabilityConfig.load(file);
+        check(!over.loadError().isEmpty(), "超大文件：loadError 非空");
+        check(over.loadError().contains("太大"), "报出'太大'：" + over.loadError());
+    }
+
     public static void main(String[] args) throws Exception {
         defaultsAndPresets();
         explicitOverrides();
         badInput();
         fileIsReadOnly();
+        badJsonKeepsPrevious();
+        duplicateKeysRejected();
+        sizeGuards();
         boundaryConsumers();
 
         System.out.println("断言 " + checks + " 条");

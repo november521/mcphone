@@ -145,6 +145,8 @@ cd platforms/1.21.1-neoforge
 | 关掉 `score.rw` 后 `call('points')` | 同上（读点也过门） |
 | 把 `"preset"` 从 `standard` 换成 `open` + reload | `/mcphone script capabilities` 里 preset 变；显式 `disabled` 仍压过预设 |
 | `"disabled": ["nope.unknown"]` + reload | 服务端日志/命令回显一条"不认识的能力 id，跳过"warning，**不崩服** |
+| 把配置文件故意写成坏 JSON（少个逗号）+ reload | 命令回 `fail`："能力配置被拒（仍按上一份生效）：…"；**行为与改动前完全一致**（上一份的 disabled 没有被清掉）；`/mcphone script capabilities` 里也能看到这条 loadError |
+| 删掉配置文件 + reload | 保留上一份（不回到"全开"）；重开服才会按默认重新生成模板 |
 
 ## 7. 顺带收尾清单（那一次窗口里一起跑）
 

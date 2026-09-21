@@ -278,13 +278,20 @@ public final class ScriptHost {
      * <p>只换配置快照，<b>不重建 App scope、不动 epoch、不动部署表</b>：服务端脚本与部署是两回事。
      * 换完之后 worker 上的能力判定读到的就是新值（"切换预设后已装 App 的行为随之改变"，§31.4）。
      *
-     * @return 没开服（脚本后端降级/未装）时 false
+     * <p><b>坏配置不覆盖好配置</b>（S18-E3/E4）：解析不可用时保留上一份生效的快照，
+     * 返回 false，命令面用 {@link #capabilities()}{@code .loadError()} 报原因。
+     *
+     * @return 没开服（脚本后端降级/未装）时 false；配置不可用时也 false
      */
     public static synchronized boolean reloadCapabilities(MinecraftServer server) {
         ScriptHost h = current;
         if (h == null) return false;
-        CapabilityConfig fresh = CapabilityConfig.load(server);
+        CapabilityConfig fresh = CapabilityConfig.load(server, h.capabilityPolicy.config());
         h.capabilityPolicy.reload(fresh);
+        if (!fresh.loadError().isEmpty()) {
+            MCphone.LOGGER.error("[MCphone] 能力配置重载被拒：{}（仍按上一份生效）", fresh.loadError());
+            return false;
+        }
         MCphone.LOGGER.info("[MCphone] 能力配置已重载：预设 {}，全服关闭 {} 项{}",
                 fresh.preset(), fresh.disabled().size(),
                 fresh.disabled().isEmpty() ? "" : "（" + String.join("、", fresh.disabled()) + "）");

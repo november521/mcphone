@@ -128,15 +128,23 @@ public final class ScriptAdminCommand {
             ok(src, "[脚本] 脚本后端未启用，能力配置读不到");
             return 1;
         }
+        if (!cfg.loadError().isEmpty()) {
+            fail(src, "[脚本] ⚠ 配置文件这次没生效（仍按上一份跑）：" + cfg.loadError());
+        }
         ok(src, "[脚本] 预设 " + cfg.preset() + "，全服关闭 " + cfg.disabled().size() + " 项"
                 + (cfg.disabled().isEmpty() ? "" : "：" + String.join("、", cfg.disabled())));
         return 1;
     }
 
-    /** 重读能力配置文件。只换配置快照：不动部署、不动 epoch、不重建 scope。 */
+    /** 重读能力配置文件。只换配置快照：不动部署、不动 epoch、不重建 scope。坏配置保留上一份。 */
     private static int reloadCapabilities(CommandSourceStack src) {
         if (!ScriptHost.reloadCapabilities(src.getServer())) {
-            fail(src, "[脚本] 脚本后端未启用，能力配置要等开服后才会读");
+            ScriptHost host = ScriptHost.current();
+            if (host == null) {
+                fail(src, "[脚本] 脚本后端未启用，能力配置要等开服后才会读");
+            } else {
+                fail(src, "[脚本] 能力配置被拒（仍按上一份生效）：" + host.capabilities().loadError());
+            }
             return 0;
         }
         ScriptHost host = ScriptHost.current();

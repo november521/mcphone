@@ -138,11 +138,30 @@ public class CapabilityCatalogTest {
         return n;
     }
 
+    /**
+     * S18-E1：granted 档（凭空造物/改上限）的开放项要么有门、要么在**专门**的白名单里 ——
+     * 这档漏一个比 plain 漏一个严重得多，所以单独签字，不混在通用 notYet 里。
+     */
+    static void grantedEnforcement() {
+        java.util.Set<String> grantedNotYet = java.util.Set.of("currency.mint", "item.give.other");
+        for (CapabilityCatalog.Entry e : CapabilityCatalog.open()) {
+            if (e.tier() != CapabilityTier.GRANTED) continue;
+            check(CapabilityCatalog.enforced(e.id()) || grantedNotYet.contains(e.id()),
+                    "granted 开放项要么有门、要么在 grantedNotYet 白名单：" + e.id());
+        }
+        for (String id : grantedNotYet) {
+            CapabilityCatalog.Entry e = CapabilityCatalog.of(id);
+            check(e != null && e.tier() == CapabilityTier.GRANTED, id + " 必须在目录里且是 granted");
+            check(!CapabilityCatalog.enforced(id), id + " 已在'无门'白名单里，不该同时又 enforced");
+        }
+    }
+
     public static void main(String[] args) throws Exception {
         catalogSize();
         tiers();
         declared();
         enforced();
+        grantedEnforcement();
         gatingOnlyInHelpers();
 
         System.out.println("断言 " + checks + " 条");
