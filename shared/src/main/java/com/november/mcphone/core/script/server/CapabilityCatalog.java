@@ -33,14 +33,19 @@ import java.util.Set;
  * {@code trade.escrow}/{@code message.self}/{@code currency.mint}/{@code item.give.other}
  * 归后续卡片）。{@link #enforced()} 才是"调用点已接 {@code gate.require}、{@code disabled}
  * 真的会拒"的那一组：`/mcphone script capabilities` 会分别标出来，避免服主以为关掉就生效。
- * 钉死它的是<b>运行时探针</b> {@code ScriptEngineTest.enforcedGateProbe()}：用记录门建一次 ctx、
- * 把每个受门成员都调一遍，断言"观察到的 id 集合 = ENFORCED"——间接写法（变量/帮助函数）也看得见。
+ * 钉死它的是<b>挂载时登记</b>：受门成员只许走 {@code CtxBuilder.gated()}/{@code gatedGetter()}
+ * 两个帮助函数，挂载时就把 id 记进 {@code Result.gatedMembers} ——
+ * {@code ScriptEngineTest.gatedMountRegistry()} 断言"登记集合 = ENFORCED"，
+ * {@code enforcedDenyProbe()} 再用永远拒绝的门证明"拒了就一个后端都没碰"。
+ * 间接写法（变量/帮助函数）不影响这两条，因为登记与拦截都在帮助函数里做。
  *
  * <p><b>纪律（PM 裁定，S18 之后）</b>：后续卡片给某个开放项接上调用点时，<b>必须同时把它挪进
  * {@link #ENFORCED}</b> —— 否则它会长期停在"可审批、不可关、也不生效"的中间态。
- * 忘了登记也没法混过去：探针两个方向都红（代码有门、目录没登记；或目录登记了、调用点却没有）。
+ * 忘了登记也没法混过去：{@code gatedMountRegistry} 两个方向都红（代码挂了门、目录没登记；
+ * 或目录登记了、却没挂门）。{@code CapabilityCatalogTest.gatingOnlyInHelpers()} 另外钉死
+ * "CtxBuilder 里只许有两个 {@code gate.require} 调用点（都在帮助函数里）、不许有字面量"。
  * 同理，新增 {@code ActionIntent} 种类时，它映射到的能力必须已在 ENFORCED 里
- * （{@code InventoryFitTest} 钉）。
+ * （{@code InventoryFitTest} 反射枚举全部种类常量，新增自动进闸）。
  *
  * <p>原文里成组出现的（{@code read.self.position / inventory / stats / gamemode}、
  * {@code read.world.time / weather}、{@code read.players.online_count / list}、
@@ -162,10 +167,11 @@ public final class CapabilityCatalog {
     }
 
     /**
-     * 调用点已接 {@code gate.require} 的开放 id —— <b>{@code disabled} 对它们真的生效</b>。
+     * 调用点已接门、<b>{@code disabled} 对它们真的生效</b>的开放 id。
      *
-     * <p>这张表必须和 {@code CtxBuilder} 里的 {@code gate.require} 一字不差
-     * （{@code CapabilityCatalogTest.enforcedMatchesCode()} 读源码逐条钉）。
+     * <p>这张表必须和 {@code CtxBuilder} 的挂载登记一字不差
+     * （{@code ScriptEngineTest.gatedMountRegistry()} 建一次 ctx 不调成员、逐条对；
+     * {@code CapabilityCatalogTest.gatingOnlyInHelpers()} 钉住"只许两个登记/拦截点"）。
      */
     private static final Set<String> ENFORCED = Set.of(
             "read.self.gamemode",

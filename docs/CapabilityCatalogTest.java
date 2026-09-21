@@ -110,28 +110,32 @@ public class CapabilityCatalogTest {
     }
 
     /**
-     * S18-B2 的一半：{@code CtxBuilder} 里的**字面量** {@code gate.require("x")} 必须都在
-     * {@code enforced} 里 —— 新增一条门却没登记，这里当场红（哪怕那个成员没被探针脚本调到）。
-     * 反向不查（目录有、代码里是间接写法时不该误报）；间接写法与"登记了没门"由
-     * {@code ScriptEngineTest.enforcedGateProbe()} 的运行时探针兜。
+     * S18-C0 的源码腿：受门成员只许走 {@code CtxBuilder} 的 {@code gated()} / {@code gatedGetter()}
+     * 两个帮助函数（挂载时登记 + 调用时拦截都在里面）。所以：
+     * <ul>
+     *   <li>{@code gate.require(} 在 CtxBuilder 里只许出现 2 次（两个帮助函数各一次）；</li>
+     *   <li>不许出现 {@code gate.require("x")} 字面量（间接写法的漏洞就堵在这里：谁手写第三处，
+     *       次数就不是 2）。</li>
+     * </ul>
+     * 挂载登记是否等于目录 enforced，由 {@code ScriptEngineTest.gatedMountRegistry()} 钉。
      */
-    static void gateLiteralsKnown() throws Exception {
+    static void gatingOnlyInHelpers() throws Exception {
         java.nio.file.Path src = java.nio.file.Path.of("..", "..", "shared", "src", "main", "java",
                 "com", "november", "mcphone", "core", "script", "engine", "CtxBuilder.java")
                 .toAbsolutePath().normalize();
         check(java.nio.file.Files.isRegularFile(src), "CtxBuilder 源码在：" + src);
         if (!java.nio.file.Files.isRegularFile(src)) return;
         String text = java.nio.file.Files.readString(src, java.nio.charset.StandardCharsets.UTF_8);
-        java.util.regex.Matcher m = java.util.regex.Pattern
-                .compile("gate\\.require\\(\"([^\"]+)\"\\)").matcher(text);
-        java.util.Set<String> found = new java.util.TreeSet<>();
-        while (m.find()) {
-            found.add(m.group(1));
-            check(CapabilityCatalog.enforced(m.group(1)),
-                    "CtxBuilder 里的字面量门必须在 enforced 里：" + m.group(1));
-        }
-        eq(found.size(), CapabilityCatalog.enforcedIds().size(),
-                "字面量门（去重）条数 = enforced 条数（间接写法会让这条红，请改成字面量或更新探针）");
+        eq(count(text, "gate.require("), 2,
+                "gate.require 只许出现在 gated()/gatedGetter() 里（新增帮助函数请同步这个数）");
+        eq(count(text, "gate.require(\""), 0,
+                "调用点不许写死能力 id 字面量；一律走帮助函数，挂载时登记");
+    }
+
+    static int count(String haystack, String needle) {
+        int n = 0;
+        for (int i = haystack.indexOf(needle); i >= 0; i = haystack.indexOf(needle, i + needle.length())) n++;
+        return n;
     }
 
     public static void main(String[] args) throws Exception {
@@ -139,7 +143,7 @@ public class CapabilityCatalogTest {
         tiers();
         declared();
         enforced();
-        gateLiteralsKnown();
+        gatingOnlyInHelpers();
 
         System.out.println("断言 " + checks + " 条");
         if (!failures.isEmpty()) {

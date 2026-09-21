@@ -151,10 +151,13 @@ public class CapabilityConfigTest {
                     .filter(p -> p.toString().replace('\\', '/').contains("/src/main/java/"))
                     .toList()) {
                 if (f.getFileName().toString().equals("CapabilityConfig.java")) continue;
+                // 宽口径（S18-C3）：只认 `.boundary()` 这个取用点，不要求后面紧跟链式调用 ——
+                // `Boundary b = cfg.boundary();` 这种两步读取也要进闸。类内部的局部变量
+                // `boundary.resourceMove()` 前面没有点，不会误报。
                 java.util.regex.Matcher m = java.util.regex.Pattern
-                        .compile("\\.boundary\\(\\)\\.(\\w+)\\(")
+                        .compile("\\.boundary\\(\\)")
                         .matcher(Files.readString(f, StandardCharsets.UTF_8));
-                while (m.find()) observed.add(m.group(1));
+                while (m.find()) observed.add(f.getFileName().toString());
             }
         }
         eq(observed, new java.util.TreeSet<>(wired),

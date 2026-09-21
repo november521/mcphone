@@ -70,13 +70,25 @@ public class InventoryFitTest {
                 "种类 → 能力映射（effect.give）");
         eq(new ActionIntent("wat", new byte[0]).capability(), null, "没登记的种类没有能力");
 
-        // S18-B2：意图种类映射到的能力必须在 enforced 里 —— 新增一个意图接到"本步无调用点"的项
-        // （比如 item.give.other）时这里当场红，逼接线者同步 CapabilityCatalog.ENFORCED。
-        for (String kind : new String[]{ActionIntent.ITEM_GIVE, ActionIntent.LOOT_ROLL,
-                ActionIntent.ATTR_GRANT, ActionIntent.ATTR_REVOKE, ActionIntent.EFFECT_GIVE}) {
-            String cap = new ActionIntent(kind, new byte[0]).capability();
-            check(CapabilityCatalog.enforced(cap), kind + " → " + cap + " 必须在 enforced 里");
+        // S18-B2/C1：反射枚举 ActionIntent 的全部 public static final String 常量 —— 新增意图种类
+        // 自动进闸（不靠有人记得改测试）；每个种类要么不接能力（落地会按 INVALID_ARGUMENT 拒），
+        // 要么接的能力必须已在 enforced 里（否则它会停在"可审批、不可关"的中间态）。
+        int kinds = 0;
+        for (java.lang.reflect.Field f : ActionIntent.class.getDeclaredFields()) {
+            if (f.getType() != String.class) continue;
+            int mods = f.getModifiers();
+            if (!java.lang.reflect.Modifier.isStatic(mods) || !java.lang.reflect.Modifier.isPublic(mods)) continue;
+            kinds++;
+            try {
+                String kind = (String) f.get(null);
+                String cap = new ActionIntent(kind, new byte[0]).capability();
+                check(cap == null || CapabilityCatalog.enforced(cap),
+                        kind + " → " + cap + "：要么不接能力，要么必须在 enforced 里");
+            } catch (ReflectiveOperationException e) {
+                check(false, "读意图常量失败：" + f.getName() + " —— " + e);
+            }
         }
+        eq(kinds, 5, "意图种类常量 = 5 个（新增种类请同步这条数）");
 
         ActionIntent.Effect effect = ActionIntent.effectGive("minecraft:speed", 600, 2).asEffect();
         eq(effect.effectId(), "minecraft:speed", "effect.give 往返：效果 id");
