@@ -37,4 +37,10 @@ public final class ServerDeployments implements DeploymentView {
         Deployment d = appId == null ? null : data.deployment(appId);
         return d == null ? null : d.revision();
     }
+
+    @Override
+    public java.util.Set<String> approvedCapabilities(String appId) {
+        Deployment d = appId == null ? null : data.deployment(appId);
+        return d == null ? java.util.Set.of() : new java.util.LinkedHashSet<>(d.approvedCapabilities());
+    }
 }

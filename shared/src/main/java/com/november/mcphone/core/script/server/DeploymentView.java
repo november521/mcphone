@@ -17,4 +17,12 @@ public interface DeploymentView {
 
     /** 服务端认的部署版本。与客户端报的对不上就是 VERSION_MISMATCH。 */
     String deployRev(String appId);
+
+    /**
+     * 这个 App 已批准的能力集（S18：落地前逐条重查用）。
+     * <b>默认空集</b>：老替身天然是"什么能力都没批"，方向安全。
+     */
+    default java.util.Set<String> approvedCapabilities(String appId) {
+        return java.util.Set.of();
+    }
 }

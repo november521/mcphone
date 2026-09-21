@@ -63,15 +63,16 @@ public final class ScriptHost {
     /** 生产授权视图。握手要用它把"这个玩家被授权的动作"筛出来（只给 UX）。 */
     private final ServerAuthority authority;
     /**
-     * 能力与边界配置（S18）。<b>volatile</b>：{@code capabilities reload} 会在主线程换新的一份，
-     * 之后 worker 上的能力判定读到的必须是新值（"切换后已装 App 的行为随之改变"）。
+     * 能力与边界配置 + 判定（S18）。<b>policy 的配置是 volatile 快照</b>：
+     * {@code capabilities reload} 在主线程换一份，之后 worker 上的能力判定读到的就是新值
+     * （"切换后已装 App 的行为随之改变"）。部署/epoch/scope 都不动。
      */
-    private volatile CapabilityConfig capabilities;
+    private final CapabilityPolicy capabilityPolicy;
 
     private ScriptHost(Map<String, AppScope> apps, StrikeTracker strikes,
                        RhinoEvaluator evaluator, ScriptPipeline pipeline,
                        UUID serverId, DeploymentData deployments, ServerAuthority authority,
-                       CapabilityConfig capabilities) {
+                       CapabilityPolicy capabilityPolicy) {
         this.apps = apps;
         this.strikes = strikes;
         this.evaluator = evaluator;
@@ -79,7 +80,7 @@ public final class ScriptHost {
         this.serverId = serverId;
         this.deployments = deployments;
         this.authority = authority;
-        this.capabilities = capabilities;
+        this.capabilityPolicy = capabilityPolicy;
     }
 
     /**
@@ -118,18 +119,22 @@ public final class ScriptHost {
         StrikeTracker strikes = new StrikeTracker(System::currentTimeMillis);
         // 能力与边界配置：独立文件、坏配置不崩服（S18）。它只在这里读一次 + 命令 reload。
         CapabilityConfig capabilities = CapabilityConfig.load(server);
-        // 没有后端的项整项不挂（E12）：item / cycle / store / sealed / currencies（本步）全是 null
-        CtxBuilder.Backends backends = new CtxBuilder.Backends(new SharedState(), null, null, null, null, null);
-        RhinoEvaluator evaluator = new RhinoEvaluator(apps, strikes, backends, server::execute);
+        CapabilityPolicy capabilityPolicy = new CapabilityPolicy(capabilities);
+        // 没有后端的项整项不挂（E12）：item / cycle / store / sealed / currencies（本步）全是 null；
+        // actionIntents=true 表示挂 ctx.give（落地端 ServerIntentApplier 已接）。
+        CtxBuilder.Backends backends = new CtxBuilder.Backends(new SharedState(), null, null, null, null, null, true);
+        RhinoEvaluator evaluator = new RhinoEvaluator(apps, strikes, backends, server::execute, capabilityPolicy);
         UUID serverId = ServerIdentity.idOf(server);
         ServerAuthority authorityView = new ServerAuthority(deployments, authority);
         ScriptPipeline pipeline = new ScriptPipeline(serverId,
                 new IdempotencyLedger(System::currentTimeMillis),
                 new ScriptRateLimiter(System::currentTimeMillis),
-                new ServerDeployments(deployments), authorityView, evaluator);
+                new ServerDeployments(deployments), authorityView, evaluator,
+                new ServerIntentApplier(uuid -> server.getPlayerList().getPlayer(uuid)),
+                capabilityPolicy);
         // 登记之后 ScriptRpcHandler.handle 才会把请求交给这条管线（此前一律 NOT_DEPLOYED）
         ScriptRpcHandler.install(pipeline);
-        current = new ScriptHost(apps, strikes, evaluator, pipeline, serverId, deployments, authorityView, capabilities);
+        current = new ScriptHost(apps, strikes, evaluator, pipeline, serverId, deployments, authorityView, capabilityPolicy);
         MCphone.LOGGER.info("[MCphone] 脚本宿主已装配：apps={}，已批准部署 {}，候选 {}{}，管线已登记",
                 apps.size(), deployments.deployments().size(), deployments.candidates().size(),
                 scan.changed() == 0 ? "" : "（本次进队 " + scan.changed() + "）");
@@ -181,7 +186,12 @@ public final class ScriptHost {
      * 能力与边界配置（S18）。<b>运行期只读</b>；{@code capabilities reload} 或重开服时整份替换。
      */
     public CapabilityConfig capabilities() {
-        return capabilities;
+        return capabilityPolicy.config();
+    }
+
+    /** 能力判定（S18）。worker 上可直接调：配置是 volatile 快照、判定无副作用。 */
+    public CapabilityPolicy capabilityPolicy() {
+        return capabilityPolicy;
     }
 
     /**
@@ -196,7 +206,7 @@ public final class ScriptHost {
         ScriptHost h = current;
         if (h == null) return false;
         CapabilityConfig fresh = CapabilityConfig.load(server);
-        h.capabilities = fresh;
+        h.capabilityPolicy.reload(fresh);
         MCphone.LOGGER.info("[MCphone] 能力配置已重载：预设 {}，全服关闭 {} 项{}",
                 fresh.preset(), fresh.disabled().size(),
                 fresh.disabled().isEmpty() ? "" : "（" + String.join("、", fresh.disabled()) + "）");

@@ -54,11 +54,13 @@ public class ScriptRpcTest {
     // ================================================================ §15.4 错误码表
 
     static void errorTable() {
-        eq(ScriptErrorCode.values().length, 15, "§15.4 是 15 行（§15.9 那句「14 个」与表对不上，以表为准）");
+        // §15.4 是 15 行；S18 按 §20.9/§23.4 的允许追加了第 16 个 INVENTORY_FULL（只许追加在末尾）
+        eq(ScriptErrorCode.values().length, 16, "§15.4 的 15 行 + S18 追加的 INVENTORY_FULL");
 
         // 序号即身份：中间插一个就会让旧客户端把 A 当 B
         eq(ScriptErrorCode.OK.toWire(), 0, "OK 是 0");
-        eq(ScriptErrorCode.INTERNAL.toWire(), 14, "INTERNAL 在末尾");
+        eq(ScriptErrorCode.INTERNAL.toWire(), 14, "INTERNAL 仍在第 15 位（旧客户端认得它）");
+        eq(ScriptErrorCode.INVENTORY_FULL.toWire(), 15, "INVENTORY_FULL 追加在末尾");
         for (ScriptErrorCode c : ScriptErrorCode.values()) {
             eq(ScriptErrorCode.fromWire(c.toWire()), c, "往返 " + c);
             check(!c.defaultMessageKey().isEmpty(), c + " 要有可读文案键");

@@ -59,18 +59,37 @@ public final class CtxBuilder {
 
     /** 能接上的后端。为 null 的那一项<b>整个不挂</b>。 */
     public record Backends(SharedState shared, ItemView item, Cycle cycle,
-                           KvBackend store, SealedBackend sealed, CurrencyRegistry currencies) {
+                           KvBackend store, SealedBackend sealed, CurrencyRegistry currencies,
+                           /** 要不要挂"产意图"的能力节点（{@code ctx.give} / {@code ctx.loot} / {@code ctx.attr}）。
+                            *  落地端由宿主注入；为 false 时整项不挂（E12：不挂空壳）。 */
+                           boolean actionIntents) {
 
         /** 只有 S13 那几样的旧写法。 */
         public Backends(SharedState shared, ItemView item, Cycle cycle) {
-            this(shared, item, cycle, null, null, null);
+            this(shared, item, cycle, null, null, null, false);
         }
 
         /** S14 那一版。 */
         public Backends(SharedState shared, ItemView item, Cycle cycle,
                         KvBackend store, SealedBackend sealed) {
-            this(shared, item, cycle, store, sealed, null);
+            this(shared, item, cycle, store, sealed, null, false);
         }
+
+        /** S15 那一版（不挂能力节点）。 */
+        public Backends(SharedState shared, ItemView item, Cycle cycle,
+                        KvBackend store, SealedBackend sealed, CurrencyRegistry currencies) {
+            this(shared, item, cycle, store, sealed, currencies, false);
+        }
+    }
+
+    /** 能力门（S18）：拒绝时抛 {@link HostError#denied}，脚本可 catch、没接住按结果码回去。 */
+    @FunctionalInterface
+    public interface CapabilityGate {
+        void require(String capabilityId);
+
+        /** 没有门（断言/旧路径）时用它：全放行。 */
+        CapabilityGate ALLOW_ALL = capabilityId -> {
+        };
     }
 
     /** 脚本调 {@code ctx.ok} / {@code ctx.fail} 之后落在这里。 */
@@ -80,6 +99,9 @@ public final class CtxBuilder {
         public List<String> messageArgs = List.of();
         public String dataJson = "";
         public final java.util.List<String> logs = new java.util.ArrayList<>();
+        /** worker 想对世界做的事（S18）。落地一律回主线程，落地前重查授权与能力。 */
+        public final java.util.List<com.november.mcphone.core.script.server.ActionIntent> intents =
+                new java.util.ArrayList<>();
     }
 
     private static final AtomicLong SEQ = new AtomicLong();
@@ -87,12 +109,23 @@ public final class CtxBuilder {
     /** 建一个 {@code ctx}。{@code result} 由调用方持有，求值结束后读它。 */
     public static ScriptableObject build(Context cx, Scriptable scope, String appId,
                                          PlayerSnapshot player, Backends backends, Result result) {
-        return build(cx, scope, appId, player, backends, result, new MoneyLedger());
+        return build(cx, scope, appId, player, backends, result, new MoneyLedger(), CapabilityGate.ALLOW_ALL);
     }
 
     public static ScriptableObject build(Context cx, Scriptable scope, String appId,
                                          PlayerSnapshot player, Backends backends, Result result,
                                          MoneyLedger ledger) {
+        return build(cx, scope, appId, player, backends, result, ledger, CapabilityGate.ALLOW_ALL);
+    }
+
+    /**
+     * 带能力门的建法（S18）。每个受能力约束的节点（{@code ctx.give} / {@code ctx.loot} /
+     * {@code ctx.attr}）在调用时先过 {@code gate}：拒绝就抛可接住的 {@link HostError#denied}，
+     * <b>意图一条都不产</b>（于是不可能出现"拒了但物品已经给了"）。
+     */
+    public static ScriptableObject build(Context cx, Scriptable scope, String appId,
+                                         PlayerSnapshot player, Backends backends, Result result,
+                                         MoneyLedger ledger, CapabilityGate gate) {
         ScriptableObject ctx = HostFn.obj(cx, scope);
 
         // ---- ctx.player：四个字段（§32.7），都是 JS 字符串，不是 Java 对象
@@ -353,6 +386,23 @@ public final class CtxBuilder {
 
             cur.sealObject();
             ScriptableObject.putProperty(ctx, "currency", cur);
+        }
+
+        // ---- ctx.give（S18）：只产意图，不在这里碰世界。
+        // 节点存在与否由宿主决定（落地端没接上就不挂 —— E12 不挂空壳）。
+        // ctx.loot / ctx.attr 的节点随 platform/LootAccess 与 platform/PlayerAbilities 门面一起到货（下一提交）。
+        if (backends.actionIntents()) {
+            HostFn.put(ctx, scope, "give", 2, (c, s, a) -> {
+                gate.require("item.give");
+                String itemId = HostFn.str(a, 0, "ctx.give");
+                long n = HostFn.exactLong(a, 1, "ctx.give");
+                if (n < 1 || n > com.november.mcphone.core.script.server.ActionIntent.MAX_GIVE) {
+                    throw HostError.invalid("ctx.give 的数量要在 1.."
+                            + com.november.mcphone.core.script.server.ActionIntent.MAX_GIVE + "，收到 " + n);
+                }
+                result.intents.add(com.november.mcphone.core.script.server.ActionIntent.itemGive(itemId, (int) n, ""));
+                return null;
+            });
         }
 
         // ---- ctx.ok / ctx.fail / ctx.log

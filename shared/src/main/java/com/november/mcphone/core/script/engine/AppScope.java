@@ -5,6 +5,7 @@ import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
 
 import java.util.Map;
+import java.util.Set;
 
 /**
  * 一个 App 的后端 scope（施工方案 §16.3"每个 App 一个独立 scope"、§15.2 的 {@code actions} 表）。
@@ -38,6 +39,11 @@ public final class AppScope {
     private final String appId;
     private final ScriptBudget budget;
     private final ScriptModules modules;
+    /**
+     * 这个 App 已批准的能力集（S18）：来自 {@code Deployment.approvedCapabilities}，
+     * <b>装配期冻结</b>（worker 不许读部署表）。重新批准走 {@code reassemble} 换 scope。
+     */
+    private final java.util.Set<String> capabilities;
 
     private volatile ScriptableObject scope;
 
@@ -45,14 +51,26 @@ public final class AppScope {
     public record Invocation(Scriptable callScope, Scriptable actions) {
     }
 
+    /** 没有能力集的旧写法（断言用）。 */
     public AppScope(String appId, ScriptBudget budget, Map<String, String> jsSources) {
+        this(appId, budget, jsSources, java.util.Set.of());
+    }
+
+    public AppScope(String appId, ScriptBudget budget, Map<String, String> jsSources,
+                    java.util.Set<String> capabilities) {
         this.appId = appId;
         this.budget = budget;
         this.modules = new ScriptModules(jsSources);
+        this.capabilities = capabilities == null ? java.util.Set.of() : Set.copyOf(capabilities);
     }
 
     public String appId() {
         return appId;
+    }
+
+    /** 已批准能力集（冻结快照）。判定用 {@code CapabilityPolicy}。 */
+    public java.util.Set<String> capabilities() {
+        return capabilities;
     }
 
     public ScriptModules modules() {

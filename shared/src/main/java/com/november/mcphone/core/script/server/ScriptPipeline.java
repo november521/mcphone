@@ -7,7 +7,9 @@ import com.november.mcphone.core.script.net.ScriptRpc;
 import com.november.mcphone.core.script.net.ScriptRpcResult;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Consumer;
 
@@ -53,6 +55,10 @@ public final class ScriptPipeline {
     private final AuthorityView authority;
     private final ActionEvaluator evaluator;
     private final UUID serverId;
+    /** 意图落地端（S18）。没接上时是 {@link IntentApplier#UNWIRED}：明确回"做不了"，不静默吞。 */
+    private final IntentApplier intentApplier;
+    /** 能力门（S18）。null 时带意图的请求一律 UNAVAILABLE（老断言没有它）。 */
+    private final CapabilityPolicy capabilities;
 
     /** 玩家 → 这一次连接的 epoch。登录时写，登出时删。 */
     private final Map<UUID, Long> epochs = new HashMap<>();
@@ -61,12 +67,21 @@ public final class ScriptPipeline {
 
     public ScriptPipeline(UUID serverId, IdempotencyLedger ledger, ScriptRateLimiter limiter,
                           DeploymentView deployments, AuthorityView authority, ActionEvaluator evaluator) {
+        this(serverId, ledger, limiter, deployments, authority, evaluator,
+                IntentApplier.UNWIRED, null);
+    }
+
+    public ScriptPipeline(UUID serverId, IdempotencyLedger ledger, ScriptRateLimiter limiter,
+                          DeploymentView deployments, AuthorityView authority, ActionEvaluator evaluator,
+                          IntentApplier intentApplier, CapabilityPolicy capabilities) {
         this.serverId = serverId;
         this.ledger = ledger;
         this.limiter = limiter;
         this.deployments = deployments;
         this.authority = authority;
         this.evaluator = evaluator;
+        this.intentApplier = intentApplier == null ? IntentApplier.UNWIRED : intentApplier;
+        this.capabilities = capabilities;
     }
 
     /** 玩家登录时给一个新 epoch，随握手下发。 */
@@ -177,6 +192,13 @@ public final class ScriptPipeline {
      */
     public ScriptRpcResult land(ScriptRpc rpc, UUID player, byte[] key, ActionEvaluator.Outcome outcome) {
         try {
+            // S18：落地前重查部署版本（stage1 模型遗留的 extra 2）。排队期间换了包、或撤了重批，
+            // 这次结果就是按旧包算的 —— 不能落地，也不能让账本带着旧结果结清。
+            String liveRev = deployments.deployRev(rpc.appId());
+            if (liveRev != null && !liveRev.equals(rpc.deployRev())) {
+                ledger.settle(player, key, ScriptErrorCode.VERSION_MISMATCH, new byte[0], 0, 0);
+                return fail(rpc, ScriptErrorCode.VERSION_MISMATCH, "");
+            }
             if (!authority.allows(player, rpc.appId(), rpc.actionId())) {
                 // 重查没过：意图一条都不落地。但【钱已经动过】时不能回 NOT_AUTHORIZED ——
                 // 那会让玩家以为"没动、重试一下"，而钱可能已经付了（E35③）。回 UNKNOWN，客户端绝不自动重试。
@@ -186,7 +208,12 @@ public final class ScriptPipeline {
                     MCphone.LOGGER.warn("[MCphone] 落地前重查授权没过，但本次求值里钱已动过 app={} action={}，回 UNKNOWN 不回 NOT_AUTHORIZED",
                             rpc.appId(), rpc.actionId());
                 }
-                return ScriptRpcResult.fail(rpc.requestId(), code);
+                return fail(rpc, code, "");
+            }
+            // S18：意图落地。能力逐条重查 → 主线程执行；失败不谎报成功（见 applyIntents）。
+            if (!outcome.intents().isEmpty()) {
+                ScriptRpcResult denied = applyIntents(rpc, player, key, outcome);
+                if (denied != null) return denied;
             }
             ledger.settle(player, key, outcome.code(), outcome.data(), outcome.retryAfterMs(), outcome.stateRevision());
             return new ScriptRpcResult(rpc.requestId(), outcome.code(), outcome.data(),
@@ -196,8 +223,54 @@ public final class ScriptPipeline {
             // an authority implementation is broken; otherwise one callback can pin the key forever.
             MCphone.LOGGER.error("[MCphone] script landing failed app={} action={} request={}",
                     rpc.appId(), rpc.actionId(), rpc.requestId(), failure);
-            ledger.settle(player, key, ScriptErrorCode.INTERNAL, new byte[0], 0, 0);
-            return ScriptRpcResult.fail(rpc.requestId(), ScriptErrorCode.INTERNAL);
+            ScriptErrorCode code = outcome.moneyMoved() ? ScriptErrorCode.UNKNOWN : ScriptErrorCode.INTERNAL;
+            ledger.settle(player, key, code, new byte[0], 0, 0);
+            return fail(rpc, code, "");
         }
+    }
+
+    /**
+     * 逐条意图的能力重查 + 执行。<b>执行端没接上 / 玩家离线 / 背包满 / 能力被撤销，
+     * 都在这里变成明确的失败码</b>，绝不静默成功。
+     *
+     * @return 失败时的结果；全部落地成功返回 null
+     */
+    private ScriptRpcResult applyIntents(ScriptRpc rpc, UUID player, byte[] key, ActionEvaluator.Outcome outcome) {
+        Set<String> approved = deployments.approvedCapabilities(rpc.appId());
+        for (ActionIntent intent : outcome.intents()) {
+            String cap = intent.capability();
+            if (cap == null) {
+                ledger.settle(player, key, ScriptErrorCode.INVALID_ARGUMENT, new byte[0], 0, 0);
+                return fail(rpc, ScriptErrorCode.INVALID_ARGUMENT, "");
+            }
+            if (capabilities == null) {
+                ledger.settle(player, key, ScriptErrorCode.UNAVAILABLE, new byte[0], 0, 0);
+                return fail(rpc, ScriptErrorCode.UNAVAILABLE, "mcphone.script.intent_unavailable");
+            }
+            CapabilityPolicy.Verdict verdict = capabilities.check(cap, approved);
+            if (verdict != CapabilityPolicy.Verdict.OK) {
+                ScriptErrorCode code = verdict == CapabilityPolicy.Verdict.NOT_APPROVED
+                        ? ScriptErrorCode.NOT_AUTHORIZED : ScriptErrorCode.UNAVAILABLE;
+                ledger.settle(player, key, code, new byte[0], 0, 0);
+                return fail(rpc, code, CapabilityPolicy.messageKey(verdict));
+            }
+        }
+        IntentApplier.Landed landed = intentApplier.apply(player, outcome.intents());
+        if (!landed.succeeded()) {
+            // 落地失败：账本按失败码结清（钱动过时优先 UNKNOWN —— 不谎报"没动"）
+            ScriptErrorCode code = landed.code();
+            if (outcome.moneyMoved() && code != ScriptErrorCode.UNKNOWN) {
+                code = ScriptErrorCode.UNKNOWN;
+            }
+            ledger.settle(player, key, code, new byte[0], 0, 0);
+            return fail(rpc, code, landed.messageKey());
+        }
+        return null;
+    }
+
+    /** 一条失败结果，带本地化键；键为空时用码的默认键。 */
+    private static ScriptRpcResult fail(ScriptRpc rpc, ScriptErrorCode code, String messageKey) {
+        String key = messageKey == null || messageKey.isEmpty() ? code.defaultMessageKey() : messageKey;
+        return new ScriptRpcResult(rpc.requestId(), code, new byte[0], key, List.of(), 0, 0);
     }
 }

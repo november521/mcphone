@@ -76,8 +76,9 @@ public final class ServerAppAssembler {
                 MCphone.LOGGER.warn("[MCphone] {} 的后端静态预检没过，本次不装配：{}", d.appId(), why);
                 return null;
             }
-            // 模块条数与规范名的校验在 AppScope/ScriptModules 构造器里；超限就跳过这个 App
-            return new AppScope(d.appId(), ScriptBudget.server(), sources);
+            // 模块条数与规范名的校验在 AppScope/ScriptModules 构造器里；超限就跳过这个 App。
+            // 已批准能力集在装配期冻结进 scope：worker 不许读部署表（S17 线程纪律），重批准走 reassemble。
+            return new AppScope(d.appId(), ScriptBudget.server(), sources, new java.util.LinkedHashSet<>(d.approvedCapabilities()));
         } catch (VirtualMachineError fatal) {
             throw fatal;
         } catch (Throwable t) {
