@@ -3,11 +3,14 @@ package com.november.mcphone.core.script.server;
 import com.november.mcphone.MCphone;
 import com.november.mcphone.core.script.engine.AppScope;
 import com.november.mcphone.core.script.engine.CtxBuilder;
+import com.november.mcphone.core.script.engine.HostError;
 import com.november.mcphone.core.script.engine.RhinoEvaluator;
 import com.november.mcphone.core.script.engine.SharedState;
 import com.november.mcphone.core.script.engine.StrikeTracker;
+import com.november.mcphone.core.script.net.ScriptErrorCode;
 import com.november.mcphone.core.script.net.ScriptRpcHandler;
 import com.november.mcphone.core.script.pkg.AppPackage;
+import com.november.mcphone.core.script.server.economy.Scores;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 
@@ -122,7 +125,35 @@ public final class ScriptHost {
         CapabilityPolicy capabilityPolicy = new CapabilityPolicy(capabilities);
         // 没有后端的项整项不挂（E12）：item / cycle / store / sealed / currencies（本步）全是 null；
         // actionIntents=true 表示挂 ctx.give（落地端 ServerIntentApplier 已接）；
-        // ctx.predicate（§18.3）接平台门面：只读判定，玩家按 uuid 现查。
+        // ctx.predicate（§18.3）接平台门面：只读判定，玩家按 uuid 现查；
+        // ctx.score（§18.6）借经济的网关回主线程；网关不在（没装经济/停服中）就不挂。
+        com.november.mcphone.core.script.server.economy.CurrencyGateway scoreGateway =
+                com.november.mcphone.core.script.server.economy.EconomyRuntime.gatewayOrNull();
+        CtxBuilder.ScoreView scoreView = scoreGateway == null ? null : new CtxBuilder.ScoreView() {
+            @Override
+            public int get(java.util.UUID player, String objective) {
+                return scoreCall(scoreGateway, () -> Scores.get(server, objective, scoreHolder(server, player)));
+            }
+
+            @Override
+            public void set(java.util.UUID player, String objective, int value) {
+                scoreCall(scoreGateway, () -> {
+                    scoreWritable(server, objective);
+                    Scores.set(server, objective, scoreHolder(server, player), value);
+                    return null;
+                });
+            }
+
+            @Override
+            public void add(java.util.UUID player, String objective, int value) {
+                scoreCall(scoreGateway, () -> {
+                    scoreWritable(server, objective);
+                    String holder = scoreHolder(server, player);
+                    Scores.set(server, objective, holder, Scores.get(server, objective, holder) + value);
+                    return null;
+                });
+            }
+        };
         CtxBuilder.Backends backends = new CtxBuilder.Backends(new SharedState(), null, null, null, null, null, true,
                 (predicateId, snapshot) -> {
                     ServerPlayer player = server.getPlayerList().getPlayer(snapshot.uuid());
@@ -131,7 +162,8 @@ public final class ScriptHost {
                             net.minecraft.resources.ResourceLocation.tryParse(predicateId);
                     if (id == null) return null;
                     return com.november.mcphone.platform.Predicates.test(player, id);
-                });
+                },
+                scoreView);
         RhinoEvaluator evaluator = new RhinoEvaluator(apps, strikes, backends, server::execute, capabilityPolicy);
         UUID serverId = ServerIdentity.idOf(server);
         ServerAuthority authorityView = new ServerAuthority(deployments, authority);
@@ -150,6 +182,43 @@ public final class ScriptHost {
         MCphone.LOGGER.info("[MCphone] 能力配置：预设 {}，全服关闭 {} 项{}",
                 capabilities.preset(), capabilities.disabled().size(),
                 capabilities.disabled().isEmpty() ? "" : "（" + String.join("、", capabilities.disabled()) + "）");
+    }
+
+    /** 计分板用不了的本地化键（主线程忙、只读 objective、查不到玩家名都走它）。 */
+    static final String SCORE_UNAVAILABLE = "mcphone.script.score.unavailable";
+
+    /**
+     * 经网关回主线程执行计分板操作。<b>只在这里碰 {@link Scores}</b>。
+     * 网关自己的拒绝（正在停/排队满/主线程忙/等超了）与主线程上的任何 RuntimeException
+     * 都换成脚本接得住的 {@code UNAVAILABLE} —— 它是"此刻做不了"，不是"脚本写错了"。
+     */
+    private static <T> T scoreCall(com.november.mcphone.core.script.server.economy.CurrencyGateway gateway,
+                                   java.util.function.Supplier<T> op) {
+        try {
+            return gateway.call(op);
+        } catch (HostError e) {
+            throw e;
+        } catch (RuntimeException e) {
+            throw HostError.denied(ScriptErrorCode.UNAVAILABLE, SCORE_UNAVAILABLE,
+                    "计分板调用没做成：" + e.getClass().getSimpleName());
+        }
+    }
+
+    /** 建不出来（只读 objective 占了名字/创建失败）就是"用不了"，不是 0 分。 */
+    private static void scoreWritable(MinecraftServer server, String objective) {
+        if (!Scores.ensureObjective(server, objective, objective)) {
+            throw HostError.denied(ScriptErrorCode.UNAVAILABLE, SCORE_UNAVAILABLE,
+                    "计分项建不出来（名字被只读 objective 占了？）：" + objective);
+        }
+    }
+
+    /** 计分板按玩家名存（服主用 /scoreboard 就能看能改）；查不到名字就是"用不了"。 */
+    private static String scoreHolder(MinecraftServer server, java.util.UUID player) {
+        String holder = Scores.nameOf(server, player);
+        if (holder == null) {
+            throw HostError.denied(ScriptErrorCode.UNAVAILABLE, SCORE_UNAVAILABLE, "查不到玩家名");
+        }
+        return holder;
     }
 
     /**

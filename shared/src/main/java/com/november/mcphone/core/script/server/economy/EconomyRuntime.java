@@ -260,6 +260,18 @@ public final class EconomyRuntime {
     }
 
     /**
+     * 当前这一份的主线程网关；<b>没装经济、或已停服就是 null</b>。
+     *
+     * <p>S18 的 {@code ctx.score} 借它回主线程：{@code Scoreboard} 和账本一样不是线程安全的，
+     * 不该为了计分板再养一个队列。网关一关（停服顺序里在脚本之前），计分板调用就和货币一样
+     * 拿到"正在停"的拒绝 —— 这正是我们要的。
+     */
+    public static CurrencyGateway gatewayOrNull() {
+        EconomyRuntime r = current;
+        return r == null ? null : r.gateway;
+    }
+
+    /**
      * @param refunded 退成了几笔
      * @param failed   provider 拒了几笔（比如那种货币的存档锁住了）—— 还在托管里，下次再试
      * @param orphaned 找不到 provider 的几笔 —— 没动

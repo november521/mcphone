@@ -341,7 +341,7 @@ public class ScriptEngineTest {
         check(!withCtx("ctx.evil=1; typeof ctx.evil", FULL).equals("number"), "ctx 封了，加不了属性");
 
         // 表里没有的一律没有（§32.7：store/currency/mailbox/fetch 的后端还没到货）
-        for (String absent : new String[]{"store", "currency", "mailbox", "fetch", "give", "loot", "command", "predicate"}) {
+        for (String absent : new String[]{"store", "currency", "mailbox", "fetch", "give", "loot", "command", "predicate", "score"}) {
             eq(withCtx("typeof ctx." + absent, FULL), "undefined",
                     "ctx." + absent + " 本步没有后端，就不该挂出来");
         }
@@ -362,6 +362,40 @@ public class ScriptEngineTest {
         check(noSuch instanceof com.november.mcphone.core.script.engine.HostError he
                         && "mcphone.script.predicate.unavailable".equals(he.messageKey()),
                 "认不得的谓词是配置错：回专门的文案键，不当判否 —— " + noSuch);
+
+        // S18 计分板：有门面才挂；objective 名自动加 App 前缀（t:app → t_app_），别的插件的名字碰不到
+        java.util.List<String> scoreCalls = new java.util.ArrayList<>();
+        CtxBuilder.ScoreView fakeScore = new CtxBuilder.ScoreView() {
+            @Override
+            public int get(java.util.UUID p, String o) {
+                scoreCalls.add("get:" + o);
+                return 7;
+            }
+
+            @Override
+            public void set(java.util.UUID p, String o, int v) {
+                scoreCalls.add("set:" + o + "=" + v);
+            }
+
+            @Override
+            public void add(java.util.UUID p, String o, int v) {
+                scoreCalls.add("add:" + o + "+" + v);
+            }
+        };
+        CtxBuilder.Backends withScore = new CtxBuilder.Backends(
+                new SharedState(), fakeItems(),
+                new CtxBuilder.Cycle(ZoneId.of("Asia/Shanghai"), LocalTime.of(4, 0)),
+                null, null, null, false, null, fakeScore);
+        eq(withCtx("Object.getOwnPropertyNames(ctx.score).sort().join(',')", withScore),
+                "add,get,set", "ctx.score 只有 get/set/add");
+        eq(withCtx("String(Object.getPrototypeOf(ctx.score))", withScore), "null", "ctx.score 也没有原型链");
+        eq(withCtx("ctx.score.get('days')", withScore), "7", "get 结果透传");
+        eq(withCtx("ctx.score.set('days', 3); ctx.score.add('days', -1); 'ok'", withScore), "ok", "set/add 透传");
+        eq(String.join(" ", scoreCalls), "get:t_app_days set:t_app_days=3 add:t_app_days+-1",
+                "objective 名自动带 App 前缀，读写原样到门面");
+        Throwable overflow = thrownBy("ctx.score.set('days', 2147483648)", withScore);
+        check(overflow != null && String.valueOf(overflow.getMessage()).contains("32 位整数"),
+                "分值是 32 位整数：越界不静默截断 —— " + overflow);
     }
 
     /** E2 顺延项：opaque 在脚本侧既解析不了也构造不了。 */

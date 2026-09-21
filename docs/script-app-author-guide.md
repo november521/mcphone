@@ -140,6 +140,7 @@ manifest 里的 `capabilities` 是一个字符串数组，元素必须是**服�
 | `attr.grant` | `ctx.attr.grant('minecraft:generic.movement_speed', 0.1)` | 属性认不得 → `INVALID_ARGUMENT`；修饰符是瞬时的，重登失效 |
 | 同上（撤销） | `ctx.attr.revoke('minecraft:generic.movement_speed')` | 只撤这个 App 自己那条，别人的不碰 |
 | （plain）谓词 | `ctx.predicate.test('myserver:is_vip')` | 认不得的谓词 → `UNAVAILABLE`（是服主还没写这个数据包文件）；求值出错按 `false` 算 |
+| （plain）计分板 | `ctx.score.get/set/add('days')` | objective 名自动带 App 前缀（`example_app_` → 服主看到 `example_app_days`）；主线程忙/名字被只读 objective 占了 → `UNAVAILABLE` |
 
 这些调用只登记"意图"：真正的落地在服务器主线程、落地前会重查授权与能力。
 **回调里的 `OK` 才代表真的生效**；`UNKNOWN` 表示"可能已经生效"，**绝不要自动重试**。

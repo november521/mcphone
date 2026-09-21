@@ -64,13 +64,22 @@ public final class CtxBuilder {
                             *  落地端由宿主注入；为 false 时整项不挂（E12：不挂空壳）。 */
                            boolean actionIntents,
                            /** 数据包谓词判定（S18 §18.3）。为 null 时整个 {@code ctx.predicate} 不挂。 */
-                           PredicateView predicate) {
+                           PredicateView predicate,
+                           /** 计分板读写（S18 §18.6）。为 null 时整个 {@code ctx.score} 不挂。 */
+                           ScoreView score) {
 
-        /** 不挂谓词的写法（S18 之前的路径与大多数断言）。 */
+        /** 不挂谓词/计分板的写法（S18 之前的路径与大多数断言）。 */
         public Backends(SharedState shared, ItemView item, Cycle cycle,
                         KvBackend store, SealedBackend sealed, CurrencyRegistry currencies,
                         boolean actionIntents) {
-            this(shared, item, cycle, store, sealed, currencies, actionIntents, null);
+            this(shared, item, cycle, store, sealed, currencies, actionIntents, null, null);
+        }
+
+        /** 只加谓词的写法。 */
+        public Backends(SharedState shared, ItemView item, Cycle cycle,
+                        KvBackend store, SealedBackend sealed, CurrencyRegistry currencies,
+                        boolean actionIntents, PredicateView predicate) {
+            this(shared, item, cycle, store, sealed, currencies, actionIntents, predicate, null);
         }
 
         /** 只有 S13 那几样的旧写法。 */
@@ -109,6 +118,22 @@ public final class CtxBuilder {
          *         （配置错，不是判否 —— 脚本收到可接住的 {@link HostError#denied}）
          */
         Boolean test(String predicateId, PlayerSnapshot player);
+    }
+
+    /**
+     * 计分板读写（S18 §18.6）。<b>实现方负责线程</b>：生产实现经 {@code CurrencyGateway}
+     * 回主线程执行（{@code Scoreboard} 不是线程安全的）。
+     *
+     * <p>objective 名是<b>已经拼好前缀的完整名</b>（前缀由 {@link #scoreObjective} 生成），
+     * 实现方不用再判断归属。实现里出问题（主线程忙、只读 objective、查不到玩家名）请抛
+     * {@link HostError#denied}，脚本收到的是可接住的 {@code UNAVAILABLE}。
+     */
+    public interface ScoreView {
+        int get(java.util.UUID player, String objective);
+
+        void set(java.util.UUID player, String objective, int value);
+
+        void add(java.util.UUID player, String objective, int value);
     }
 
     /** 脚本调 {@code ctx.ok} / {@code ctx.fail} 之后落在这里。 */
@@ -424,6 +449,25 @@ public final class CtxBuilder {
             ScriptableObject.putProperty(ctx, "predicate", predicate);
         }
 
+        // ---- ctx.score（S18 §18.6）：限 App 自己的前缀；读写由宿主经主线程往返执行。
+        if (backends.score() != null) {
+            ScriptableObject score = HostFn.obj(cx, scope);
+            HostFn.put(score, scope, "get", 1, (c, s, a) ->
+                    backends.score().get(player.uuid(), scoreObjective(appId, HostFn.str(a, 0, "score.get"))));
+            HostFn.put(score, scope, "set", 2, (c, s, a) -> {
+                backends.score().set(player.uuid(), scoreObjective(appId, HostFn.str(a, 0, "score.set")),
+                        scoreValue(HostFn.exactLong(a, 1, "score.set")));
+                return Boolean.TRUE;
+            });
+            HostFn.put(score, scope, "add", 2, (c, s, a) -> {
+                backends.score().add(player.uuid(), scoreObjective(appId, HostFn.str(a, 0, "score.add")),
+                        scoreValue(HostFn.exactLong(a, 1, "score.add")));
+                return Boolean.TRUE;
+            });
+            score.sealObject();
+            ScriptableObject.putProperty(ctx, "score", score);
+        }
+
         // ---- ctx.give / ctx.loot / ctx.attr（S18）：只产意图，不在这里碰世界。
         // 节点存在与否由宿主决定（落地端没接上就不挂 —— E12 不挂空壳）。
         if (backends.actionIntents()) {
@@ -489,6 +533,39 @@ public final class CtxBuilder {
 
         ctx.sealObject();
         return ctx;
+    }
+
+    /**
+     * 完整 objective 名：{@code <App id 变形>_<App 自己起的名字>}。
+     * App id 里不属于 {@code [a-z0-9_.-]} 的字符统一换成 {@code _}（{@code example:app} → {@code example_app_}）——
+     * 服主在 {@code /scoreboard} 上一看前缀就知道是谁写的，别的插件的 objective 一概碰不到。
+     */
+    static String scoreObjective(String appId, String name) {
+        if (name == null || name.isEmpty()) throw HostError.invalid("score 的名字不能为空");
+        String full = scorePrefix(appId) + name;
+        if (full.length() > 64) {
+            throw HostError.invalid("score 的名字太长（含前缀最多 64）：" + full.length());
+        }
+        return full;
+    }
+
+    static String scorePrefix(String appId) {
+        StringBuilder b = new StringBuilder(appId.length() + 1);
+        for (int i = 0; i < appId.length(); i++) {
+            char ch = appId.charAt(i);
+            boolean ok = (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9')
+                    || ch == '_' || ch == '.' || ch == '-';
+            b.append(ok ? ch : '_');
+        }
+        return b.append('_').toString();
+    }
+
+    /** 计分板分值是 32 位整数：超出范围的数字不静默截断（和 {@code exactLong} 同一个口径）。 */
+    static int scoreValue(long v) {
+        if (v < Integer.MIN_VALUE || v > Integer.MAX_VALUE) {
+            throw HostError.invalid("计分板分值是 32 位整数，收到 " + v);
+        }
+        return (int) v;
     }
 
     /**
