@@ -8,29 +8,20 @@ import java.util.Locale;
 import java.util.Map;
 
 /**
- * {@code mcphone-server.toml} 里一条 {@code [[economy.currency]]}（施工方案 §22.7、§22.8）。
+ * 货币配置里一条货币（施工方案 §22.7、§22.8）。来源：独立配置
+ * {@code <世界目录>/serverconfig/mcphone-economy.json} 的 {@code currency} 数组
+ * （{@link EconomyConfig}；E28 取代旧的 {@code mcphone-server.toml} 方案）。
  *
  * <pre>
- * [[economy.currency]]
- * id       = "server:coin"
- * name     = "金币"
- * symbol   = "¢"
- * decimals = 2
- * provider = "scoreboard"
- * default  = true
- * max      = 2000000000
+ * { "id": "server:coin", "name": "金币", "symbol": "¢",
+ *   "decimals": 2, "provider": "scoreboard", "default": true, "max": 2000000000 }
  * </pre>
  *
  * <h2>为什么是纯函数</h2>
  *
- * 各加载器读 toml 的机制不一样（Forge/NeoForge 是 {@code ForgeConfigSpec}，Fabric 另一套），
- * 而「这七个字段怎么解释、哪些值不合法」在三个加载器上是同一件事。分开之后这一份能在
- * {@code docs/} 的断言测试里跑 —— 那边是裸 JavaExec，起不了服务器。
- *
- * <p><b>眼下还没有任何一处把 {@code [[economy.currency]]} 真的从 toml 里读出来</b>：
- * S15 的四种 provider 都是代码里 {@code register} 的。这个类是那条路的前半截，
- * 后半截（把这一段接进各加载器的 ServerConfig）对 builtin 与 scoreboard 是同一件事，
- * 不是 scoreboard 这一档特有的。
+ * 各加载器读配置的机制不一样，而「这七个字段怎么解释、哪些值不合法」在三个加载器上是同一件事。
+ * 分开之后这一份能在 {@code docs/} 的断言测试里跑 —— 那边是裸 JavaExec，起不了服务器。
+ * {@link EconomyConfig} 只负责"读文件 + 定位行号"，校验规则只有这里一份。
  */
 public record CurrencySpec(String id, String name, String symbol, int decimals,
                            String provider, boolean isDefault, long max) {

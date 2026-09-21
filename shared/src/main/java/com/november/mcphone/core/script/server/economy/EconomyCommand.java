@@ -1,6 +1,7 @@
 package com.november.mcphone.core.script.server.economy;
 
 import com.mojang.brigadier.CommandDispatcher;
+import com.november.mcphone.api.economy.ICurrencyProvider;
 import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
@@ -44,6 +45,7 @@ public final class EconomyCommand {
             return 1;
         }
         Set<String> locked = data.lockedCurrencies();
+        CurrencyRegistry registry = rt.registry();
         int unbalanced = 0;
         for (String id : ids) {
             if (locked.contains(id)) {
@@ -51,9 +53,20 @@ public final class EconomyCommand {
                 unbalanced++;
                 continue;
             }
-            // 一律按 builtin 档对：余额取自世界存档。S15f 只为"存档里已出现过的货币"注册 builtin 档
-            // （面额表属 S15d′），所以现在账上不可能出现别的档。等 S15d′ 按配置注册计分板/外部钱包档之后，
-            // 这里要按 provider 的档区分 —— 计分板档的余额不在这份存档里，照这样对出来必然不平
+            // S15d′：按 provider 的档分派 —— 只有 builtin 档的余额在我们的存档里，能对；
+            // 别的档（计分板/外部钱包）打"不可对账"，既不报平也不算进不平（卡约束 8）。
+            ICurrencyProvider raw = unwrap(registry == null ? null : registry.get(id));
+            if (raw == null) {
+                src.sendSuccess(() -> Component.literal("[对账] " + id + "：没有注册的 provider，跳过"), false);
+                continue;
+            }
+            if (!(raw instanceof BuiltinProvider)) {
+                String tier = tierOf(raw);
+                src.sendSuccess(() -> Component.literal("[对账] " + id + "：" + tier
+                                + " 档的余额不在我们的存档里，不可对账")
+                        .withStyle(ChatFormatting.YELLOW), false);
+                continue;
+            }
             EconomyAudit.Result r = EconomyAudit.run(id, data);
             if (!r.balanced()) unbalanced++;
             Component line = Component.literal(r.describe())
@@ -61,5 +74,17 @@ public final class EconomyCommand {
             src.sendSuccess(() -> line, false);
         }
         return unbalanced == 0 ? 1 : 0;
+    }
+
+    /** 注册表交出来的是网关包装；对账要看里面那一档。 */
+    private static ICurrencyProvider unwrap(ICurrencyProvider provider) {
+        return provider instanceof GatedCurrencyProvider gated ? gated.inner() : provider;
+    }
+
+    private static String tierOf(ICurrencyProvider provider) {
+        if (provider instanceof ScoreboardProvider) return "scoreboard";
+        if (provider instanceof LegacyWalletProvider) return "emc_legacy";
+        if (provider instanceof AdapterProvider) return "adapter";
+        return provider.getClass().getSimpleName();
     }
 }

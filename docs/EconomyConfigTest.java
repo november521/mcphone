@@ -210,6 +210,26 @@ public class EconomyConfigTest {
         eq(EconomyConfig.parse(json).specs(), EconomyConfig.parse(json).specs(), "同一条配置 → 同一个 List<CurrencySpec>");
     }
 
+    /** S15d′ 接线：按配置注册（含默认货币与 scoreboard 档）+ 存档兜底不许漏。 */
+    static void wiringRegistersConfigured() throws Exception {
+        Path dir = tmp("wire");
+        EconomyData data = EconomyData.createFor(dir.resolve("world"), dir.resolve("snapshot"),
+                System::currentTimeMillis);
+        TxnLog log = new TxnLog(dir.resolve("economy"), java.time.ZoneId.systemDefault());
+        CurrencyGateway gateway = new CurrencyGateway(Runnable::run, () -> true);
+        data.set(java.util.UUID.randomUUID(), "test:legacy", 5L);   // 存档里已有、配置里没有
+
+        List<CurrencySpec> specs = EconomyConfig.parse("{\"currency\":["
+                + "{\"id\":\"test:coin\",\"default\":true},"
+                + "{\"id\":\"test:gem\",\"provider\":\"scoreboard\"}]}").specs();
+        EconomyRuntime rt = EconomyRuntime.wire(data, log, gateway, 1L, specs, () -> null);
+
+        check(rt.registry().get("test:coin") != null, "配置里的 builtin 注册了");
+        check(rt.registry().get("test:gem") != null, "scoreboard 档注册了");
+        check(rt.registry().get("test:legacy") != null, "存档里已有的、配置里没有的：兜底注册");
+        eq(rt.registry().defaultCurrency(), "test:coin", "默认货币 = 配置里第一条 default=true");
+    }
+
     public static void main(String[] args) throws Exception {
         goodConfig();
         templateIsWrittenOnceAndReadOnly();
@@ -223,6 +243,7 @@ public class EconomyConfigTest {
         plannedSkips();
         nonPrimitiveFieldRejected();
         parseIsDeterministic();
+        wiringRegistersConfigured();
 
         System.out.println("断言 " + checks + " 条");
         if (!failures.isEmpty()) {

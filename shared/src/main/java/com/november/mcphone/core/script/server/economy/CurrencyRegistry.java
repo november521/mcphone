@@ -9,8 +9,9 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 服务器上有哪几种钱（施工方案 §22.7、§22.8）。来自 {@code mcphone-server.toml} 的
- * {@code [[economy.currency]]}。
+ * 服务器上有哪几种钱（施工方案 §22.7、§22.8）。来自独立配置
+ * {@code <世界目录>/serverconfig/mcphone-economy.json}（{@link EconomyConfig}；E28），
+ * 由 {@link EconomyRuntime} 按配置顺序注册。
  *
  * <h2>App 不许写死货币 id</h2>
  *

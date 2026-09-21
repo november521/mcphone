@@ -16,7 +16,7 @@ import java.util.UUID;
  * <p><b>类名里不带旧单位名</b>：§22.12 有一条判据要求脚本层不出现那个旧单位名
  * （见 docs/script-app-s15-verification.md 的收口一节）——
  * 旧接口把单位名写进了类型，那正是 §22.2 批评它的第一条，新代码不该跟着犯。
- * 服主在 {@code mcphone-server.toml} 里写的 provider 名仍然是 {@code emc_legacy}（§22.7 的那一行）。
+ * 服主在 {@code mcphone-economy.json} 里写的 provider 名仍然是 {@code emc_legacy}（§22.7 的那一行）。
  *
  * <h2>为什么保留它</h2>
  *
