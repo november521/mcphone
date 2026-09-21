@@ -103,7 +103,7 @@ public class DeploymentAuthorityTest {
         check(!auth.allows(P1, APP, "buy"), "撤了之后授权也不放行");
     }
 
-    /** Q3：批准集合的默认值必须 fail-closed；null 才是显式全批。 */
+    /** Q3 + S18-A1：动作轴 null = 显式全批；能力轴 null 只自动批 plain，granted 必须显式。 */
     static void approvalDefaultsAreFailClosed() {
         DeploymentData none = new DeploymentData();
         none.putCandidate(candidate());
@@ -112,9 +112,29 @@ public class DeploymentAuthorityTest {
 
         DeploymentData all = new DeploymentData();
         all.putCandidate(candidate());
-        Deployment dAll = all.approve(all.candidate(PKG), null, null, P1, 1L).deployment();
-        eq(dAll.approvedActions(), List.of("buy", "sell", "grant"), "null = 显式按声明全批");
-        eq(dAll.approvedCapabilities(), List.of("currency.mint"), "能力同理 null = 全批");
+        Deployment dAll = all.approve(all.candidate(PKG), null, List.of("currency.mint"), P1, 1L).deployment();
+        eq(dAll.approvedActions(), List.of("buy", "sell", "grant"), "动作：null = 按声明全批（S17 口径）");
+        eq(dAll.approvedCapabilities(), List.of("currency.mint"), "能力：显式列出才批");
+
+        // S18-A1：能力的省略只自动批 plain；声明里有 granted 时必须显式（- / all / 逐个列）
+        DeploymentData implicit = new DeploymentData();
+        implicit.putCandidate(candidate());
+        try {
+            implicit.approve(implicit.candidate(PKG), List.of("buy"), null, P1, 1L);
+            check(false, "声明含 granted 时省略能力列表应当拒");
+        } catch (IllegalArgumentException e) {
+            check(e.getMessage().contains("显式") && e.getMessage().contains("currency.mint"),
+                    "拒绝理由点明要显式的能力：" + e.getMessage());
+        }
+
+        // 全是 plain 的候选：省略照旧 = 按声明全批（便利不丢）
+        DeploymentData plainOnly = new DeploymentData();
+        String plainDigest = "5".repeat(64);
+        plainOnly.putCandidate(new DeploymentData.Candidate(APP, plainDigest, FRONT, 1L,
+                List.of("buy"), List.of("storage.self")));
+        eq(plainOnly.approve(plainOnly.candidate(plainDigest), null, null, P1, 1L)
+                        .deployment().approvedCapabilities(),
+                List.of("storage.self"), "全是 plain：省略 = 全批");
 
         // 换包重新批准：批准轴单调 +1，且回显"这是覆盖"
         DeploymentData.Approval second = all.approve(
@@ -154,7 +174,7 @@ public class DeploymentAuthorityTest {
     static void malformedDataIsRejectedNotThrown() {
         DeploymentData dd = new DeploymentData();
         dd.putCandidate(candidate());
-        Deployment d = dd.approve(dd.candidate(PKG), null, null, P1, 7L).deployment();
+        Deployment d = dd.approve(dd.candidate(PKG), null, List.of("currency.mint"), P1, 7L).deployment();
 
         // 批准人坏了：不丢整条部署，只丢批准人
         CompoundTag dt = d.toTag();

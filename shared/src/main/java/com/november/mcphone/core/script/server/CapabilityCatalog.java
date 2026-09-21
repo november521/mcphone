@@ -12,16 +12,27 @@ import java.util.Set;
  *
  * <h2>与 §18.8 的对齐口径</h2>
  *
- * §18.8 的三张表逐条展开是 <b>32 个条目</b>（见 {@link #all()} 的注释列），其中：
+ * §18.8 的三张表逐条展开是 <b>32 个条目</b>；S18 对抗轮 S18-A3 之后追加
+ * {@code predicate.test}（§32.6 明确"恢复"的 plain 读判定，原先既不可枚举也不可关），
+ * 现在是 <b>33 个条目</b>。其中：
  * <ul>
- *   <li><b>开放 22 个</b>（{@link #open()}）＝ plain(17) + granted(7) 减去
+ *   <li><b>开放 23 个</b>（{@link #open()}）＝ plain(18) + granted(6) 减去
  *       {@code net.fetch}（本步不做 {@code ctx.fetch}）与 {@code container.read}
- *       （本步不做 {@code ctx.container.read}）。<b>这才是 step26 卡里"22 个"指的那一组</b>：
- *       首版有执行路径、且 {@code ctx} 上会出现的能力。</li>
+ *       （本步不做 {@code ctx.container.read}）。<b>这是 step26 卡里"22 个"指的那一组加一条</b>
+ *       （那 22 条 + {@code predicate.test}）：首版有执行路径、且 {@code ctx} 上会出现的能力。</li>
  *   <li><b>不开放 10 个</b>：restricted 一档 7 个、{@code container.write}、
  *       以及上面减掉的两个。它们在目录里有确定档位，但没有 {@code ctx} 路径，
  *       OP 审批界面与未来的管理界面要看到它们。</li>
  * </ul>
+ *
+ * <h2>{@code open} 不等于"能关"：{@link #enforced()}</h2>
+ *
+ * {@code open} 说的是"档位允许、目录里有它"，但其中一部分的 ctx 调用点<b>不在 S18</b>
+ * （{@code read.world.*}/{@code read.players.*} 等还没有节点，{@code item.take.self}/
+ * {@code trade.escrow}/{@code message.self}/{@code currency.mint}/{@code item.give.other}
+ * 归后续卡片）。{@link #enforced()} 才是"调用点已接 {@code gate.require}、{@code disabled}
+ * 真的会拒"的那一组：`/mcphone script capabilities` 会分别标出来，避免服主以为关掉就生效。
+ * 断言 {@code CapabilityCatalogTest.enforcedMatchesCode()} 逐条对着 {@code CtxBuilder} 源码钉死。
  *
  * <p>原文里成组出现的（{@code read.self.position / inventory / stats / gamemode}、
  * {@code read.world.time / weather}、{@code read.players.online_count / list}、
@@ -73,6 +84,8 @@ public final class CapabilityCatalog {
         add(m, "trade.escrow", CapabilityTier.PLAIN, true, "总量守恒、双方各自确认");
         add(m, "score.rw", CapabilityTier.PLAIN, true, "限 myapp_* 前缀；跨前缀那一档本版不提供");
         add(m, "message.self", CapabilityTier.PLAIN, true, "只发给自己");
+        add(m, "predicate.test", CapabilityTier.PLAIN, true,
+                "§18.3 谓词判定（§32.6 恢复的 ctx.predicate.test）；只读、可关（对抗 S18-A3）");
         add(m, "net.fetch", CapabilityTier.PLAIN, false,
                 "S18 不做 ctx.fetch（§21 的客户端外网）；档位先记着");
 
@@ -138,6 +151,35 @@ public final class CapabilityCatalog {
     /** 全部 id（含不开放的）。 */
     public static Set<String> ids() {
         return ENTRIES.keySet();
+    }
+
+    /**
+     * 调用点已接 {@code gate.require} 的开放 id —— <b>{@code disabled} 对它们真的生效</b>。
+     *
+     * <p>这张表必须和 {@code CtxBuilder} 里的 {@code gate.require} 一字不差
+     * （{@code CapabilityCatalogTest.enforcedMatchesCode()} 读源码逐条钉）。
+     */
+    private static final Set<String> ENFORCED = Set.of(
+            "read.self.gamemode",
+            "storage.self",
+            "storage.global.read",
+            "storage.global.write",
+            "sealed.store",
+            "score.rw",
+            "predicate.test",
+            "item.give",
+            "loot.roll",
+            "attr.grant",
+            "effect.give");
+
+    /** 这个开放能力关掉之后，调用点真的会拒吗。 */
+    public static boolean enforced(String id) {
+        return id != null && ENFORCED.contains(id);
+    }
+
+    /** 有调用点、{@code disabled} 会生效的那一组（见 {@link #enforced(String)}）。 */
+    public static Set<String> enforcedIds() {
+        return ENFORCED;
     }
 
     /** 首版开放的 id。 */

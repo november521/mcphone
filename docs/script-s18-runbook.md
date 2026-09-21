@@ -80,8 +80,17 @@ cd platforms/1.21.1-neoforge
 - **一个"永远假"的谓词** `data/myserver/predicate/never.json`（同上格式 + `"condition": "minecraft:inverted"` 包一层，
   或直接用 `minecraft:random_chance` 概率 0 → 不稳定，建议 inverted）。
 
+- **礼包白名单**：默认 `#mcphone:giftable`（`data/mcphone/tags/item/default_giftable.json`）**不含硬通货**
+  （钻石/下界合金等），所以默认状态 `ctx.give('minecraft:diamond', 3)` 会被拒。第 5 节要把钻石加进去：
+  `data/mcphone/tags/item/giftable.json` 写成
+  `{ "replace": false, "values": ["#mcphone:default_giftable", "minecraft:diamond"] }`。
+
 `/reload` 之后：`/mcphone script approve <完整digest> daily,loot,buff,unbuff,points,vip -`
 （动作列表逗号分隔；能力列表传 `-` ＝ **一个能力都不批**，第 6 行剧本要用它；后面再单独批能力）。
+⚠ **省略能力列表现在会失败**：候选声明了 granted（本包有 `item.give`/`loot.roll`/`attr.grant`/`effect.give`），
+`/mcphone script approve <digest> daily,...` 会被拒并提示"必须显式写能力列表"——这是对抗 S18-A1 的修复，
+命令面自证第一行就跑它：`/mcphone script approve <digest> daily,loot,buff,unbuff,points,vip` → 期望报错；
+`... -` → 成功且能力一个没批。
 
 ## 3. §13.6 第 1/2 行（改前端）
 
@@ -98,7 +107,7 @@ cd platforms/1.21.1-neoforge
 |---|---|---|
 | 6a | 把 `manifest.json` 的能力清单改大（加 `"block.set"`、`"item.take.other"`），重签、放进 `incoming/` | manifest 在摘要里 → **摘要变**，服务端认的是新候选（要重新批准）；旧部署对不上，请求 `VERSION_MISMATCH` |
 | 6b | 不动包，直接 `/mcphoneclient rpc s18test:demo daily <真rev> <真摘要>`（此时 `item.give` **没批**） | `→ NOT_AUTHORIZED` + `mcphone.script.capability.not_approved`（服务端用自己的 Deployment，不用包里的声明） |
-| 6b′ | `/mcphone script approve <digest> - item.give`（只补批能力，动作重批时已批）后重试 | `→ OK`，背包 +3 钻石；再过一遍 §5 标签用例 |
+| 6b′ | `/mcphone script approve <digest> daily,loot,buff,unbuff,points,vip item.give`（**动作要重列**：`-` 会清空动作轴）后重试 | `→ OK`，背包 +3 钻石；再过一遍 §5 标签用例 |
 | 7 | 改 MCphone 的 jar 去掉客户端所有检查（本步最省事的等价做法：把 `ScriptPage` 里 `backend.actions` 灰按钮逻辑删掉，或直接用 `/mcphoneclient rpc` 手工构造请求） | 与改前完全一致：服务端照判 —— 未批 `NOT_AUTHORIZED`、没部署 `NOT_DEPLOYED`、白名单外 `INVALID_ARGUMENT`；**拿不到任何额外特权** |
 
 ## 5. 五层实测（逐条记录原始输出）
@@ -108,7 +117,7 @@ cd platforms/1.21.1-neoforge
 | 战利品表 | 批准 `loot.roll` 后 `call('loot')` | 背包 +2 钻石（**一条命令都没用**）；服务端日志有表 id。`ctx.loot.roll('myserver:nope')`（临时改 server.js）→ `INVALID_ARGUMENT` + `no_such_table` |
 | 谓词 | 批准所有动作后 `call('vip')` | `vip: true`（**没有自造条件语言**）；`ctx.predicate.test('myserver:nope')` → `UNAVAILABLE` + `predicate.unavailable`；把 `is_vip.json` 换成"永远假"再跑 → `vip: false`，**不用重批** |
 | 属性修饰符 | `call('buff')` 后在创造模式用命令再给同一属性一条修饰符：1.21.1 `/attribute @s minecraft:generic.movement_speed modifier add 11111111-1111-1111-1111-111111111111 test 0.5 add_multiplied_base`（1.20.1 操作用 `multiply_base`），然后 `call('unbuff')` | 撤销**只掉自己那一条**：命令那条还在（`/attribute @s minecraft:generic.movement_speed get` 对照）；app 的那条是 Transient，重登即消失 |
-| 标签白名单 | 服主数据包写 `data/mcphone/tags/item/giftable.json`：`{ "replace": true, "values": ["minecraft:apple"] }`，`/reload` 后 `call('daily')` | `INVALID_ARGUMENT` + `mcphone.script.give.not_giftable`，一个物品都不给；改回默认（或 `replace:false` 追加）→ `daily` 又 OK；**App digest 不变、不用重新审批** |
+| 标签白名单 | 默认直接 `call('daily')`；然后把 `data/mcphone/tags/item/giftable.json` 改成 `{"replace": false, "values": ["#mcphone:default_giftable", "minecraft:diamond"]}` 再 `/reload`、再 `call('daily')`；最后改成 `{"replace": true, "values": ["minecraft:apple"]}` 再跑 | 默认 `INVALID_ARGUMENT` + `mcphone.script.give.not_giftable`（**默认白名单不含硬通货**）→ 加钻石后 OK（**App digest 不变、不用重新审批**）→ 换成只许苹果后钻石又被拒；全程不重批 |
 | `IItemHandler` | ⚠ **本 PR 未做** `ctx.container.read`（卡第 8 条"本步不做"、§32.7 排期靠后、目录标不开放） | 与卡验收"五层各有一条真实实测"冲突，**待 PM 裁定**：要么把这条实测挪到开 `container.read` 的卡，要么本 PR 追加 `platform/ItemCaps` 门面后在此补跑。当前状态：不跑 |
 
 ## 6. `[capabilities] disabled` 与预设（§18.8/§31）
@@ -119,6 +128,9 @@ cd platforms/1.21.1-neoforge
 |---|---|
 | `"disabled": ["loot.roll"]` + `/mcphone script capabilities reload`；已装 App `call('loot')` | `UNAVAILABLE` + `mcphone.script.capability.disabled`；`daily`（item.give）照常 |
 | `"disabled": ["storage.self"]`（**plain 档**）+ reload；App 里加一个 `ctx.store.getString('k')` 的按钮再点 | `UNAVAILABLE` + `capability.disabled` —— **免审批 ≠ 服主管不了**；`"disabled": []` reload 后恢复 |
+| `"disabled": ["predicate.test"]` + reload；`call('vip')` | `UNAVAILABLE` + `capability.disabled`（对抗 S18-A3 之后谓词也进了目录、可关） |
+| `"disabled": ["read.self.gamemode"]` + reload；App 里加一个读 `ctx.player.gameMode` 的按钮 | 读它 → `UNAVAILABLE` + `capability.disabled`；**不读它的动作一点不受影响**（getter 只在读时判门） |
+| `/mcphone script capabilities` | 每条后面标 `[可关]` 或 `[本步无调用点]`：只有前者关掉才有运行期效果 |
 | 关掉 `score.rw` 后 `call('points')` | 同上（读点也过门） |
 | 把 `"preset"` 从 `standard` 换成 `open` + reload | `/mcphone script capabilities` 里 preset 变；显式 `disabled` 仍压过预设 |
 | `"disabled": ["nope.unknown"]` + reload | 服务端日志/命令回显一条"不认识的能力 id，跳过"warning，**不崩服** |

@@ -58,14 +58,23 @@ public class CapabilityConfigTest {
     }
 
     static void explicitOverrides() {
-        // 显式 disabled 覆盖预设底稿（哪怕写空数组）
+        // 显式 disabled 覆盖预设底稿（哪怕写空数组）—— 覆盖本身是语义，但覆盖掉底稿要警告（S18-A4）
         CapabilityConfig c = CapabilityConfig.parse(
                 "{\"preset\":\"hardcore\",\"disabled\":[\"item.give\"]}");
         check(c.isDisabled("item.give"), "显式 disabled 生效");
         check(!c.isDisabled("trade.escrow"), "显式 disabled 覆盖掉了预设底稿");
+        check(warned(c, "trade.escrow"), "覆盖掉预设底稿要警告（免得静默放开）");
 
         CapabilityConfig empty = CapabilityConfig.parse("{\"preset\":\"hardcore\",\"disabled\":[]}");
         eq(empty.disabled().size(), 0, "写空数组 = 一个都不关（预设被覆盖）");
+        check(warned(empty, "覆盖了预设"), "空数组清掉底稿同样要警告");
+
+        CapabilityConfig kept = CapabilityConfig.parse(
+                "{\"preset\":\"hardcore\",\"disabled\":[\"trade.escrow\",\"item.give\"]}");
+        check(!warned(kept, "覆盖了预设"), "底稿原样保留：没有覆盖警告");
+
+        CapabilityConfig standardEmpty = CapabilityConfig.parse("{\"preset\":\"standard\",\"disabled\":[]}");
+        check(!warned(standardEmpty, "覆盖了预设"), "standard 底稿为空：没有覆盖警告");
 
         // 显式 boundary 逐项覆盖预设
         CapabilityConfig b = CapabilityConfig.parse(

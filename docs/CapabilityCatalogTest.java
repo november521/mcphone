@@ -7,9 +7,10 @@ import java.util.Objects;
 /**
  * S18 断言：能力目录（§18.8）的唯一查表。
  *
- * <p>先把口径钉死：<b>目录 32 条</b>（§18.8 三张表逐条展开），其中<b>首版开放 22 条</b>
- * （plain 16 + granted 6；减去本步不做的 {@code net.fetch}/{@code container.read}）。
- * step26 卡里的"22 个"指的就是这组开放项。
+ * <p>先把口径钉死：<b>目录 33 条</b>（§18.8 三张表逐条展开 32 条 + 对抗 S18-A3 追加的
+ * {@code predicate.test}），其中<b>首版开放 23 条</b>
+ * （plain 18 + granted 6；减去本步不做的 {@code net.fetch}/{@code container.read}）。
+ * step26 卡里的"22 个"指的就是这组开放项去掉 {@code predicate.test} 的那 22 条。
  */
 public class CapabilityCatalogTest {
 
@@ -27,9 +28,9 @@ public class CapabilityCatalogTest {
     }
 
     static void catalogSize() {
-        eq(CapabilityCatalog.all().size(), 32, "目录共 32 条（§18.8 逐条展开）");
-        eq(CapabilityCatalog.open().size(), 22, "首版开放 22 条（ctx 上会出现的就是这组）");
-        eq(CapabilityCatalog.openIds().size(), 22, "openIds 与 open() 同数");
+        eq(CapabilityCatalog.all().size(), 33, "目录共 33 条（§18.8 展开 + predicate.test）");
+        eq(CapabilityCatalog.open().size(), 23, "首版开放 23 条（ctx 上会出现的就是这组）");
+        eq(CapabilityCatalog.openIds().size(), 23, "openIds 与 open() 同数");
         for (CapabilityCatalog.Entry e : CapabilityCatalog.open()) {
             check(e.open(), e.id() + " 在 open() 里必须标 open");
             check(e.tier() != CapabilityTier.RESTRICTED, e.id() + " 开放项不许是 restricted（首版全不开放）");
@@ -49,6 +50,7 @@ public class CapabilityCatalogTest {
         eq(tier("trade.escrow"), CapabilityTier.PLAIN, "trade.escrow 是 plain（守恒的等价交换）");
         eq(tier("score.rw"), CapabilityTier.PLAIN, "score.rw 是 plain（限 myapp_* 前缀）");
         eq(tier("item.take.self"), CapabilityTier.PLAIN, "item.take.self 是 plain");
+        eq(tier("predicate.test"), CapabilityTier.PLAIN, "predicate.test 是 plain（§32.6 恢复，可关）");
         eq(tier("ability.fly"), CapabilityTier.RESTRICTED, "ability.fly 是 restricted");
         eq(tier("block.set"), CapabilityTier.RESTRICTED, "block.set 是 restricted");
         eq(tier("read.nearby.entities"), CapabilityTier.RESTRICTED, "read.nearby.entities 是 restricted");
@@ -80,10 +82,52 @@ public class CapabilityCatalogTest {
         check(!CapabilityCatalog.knownDeclared(tooLong), "模板 id 超过 64 不认");
     }
 
-    public static void main(String[] args) {
+    /**
+     * S18-A2：{@code open} 要分得清"有调用点 / 本步还没有"—— 前者 {@code disabled} 真的会拒，
+     * 后者只影响目录展示。这份白名单是**故意写死**的：新增一条"没调用点"的开放项要有人来这里签字。
+     */
+    static void enforced() {
+        java.util.Set<String> notYet = java.util.Set.of(
+                "read.self.position", "read.self.inventory", "read.self.stats",
+                "read.world.time", "read.world.weather",
+                "read.players.online_count", "read.players.list",
+                "item.take.self", "trade.escrow", "message.self",
+                "currency.mint", "item.give.other");
+        for (String id : CapabilityCatalog.enforcedIds()) {
+            check(CapabilityCatalog.openIds().contains(id), "enforced 的必须是开放项：" + id);
+        }
+        for (String id : CapabilityCatalog.openIds()) {
+            check(CapabilityCatalog.enforced(id) || notYet.contains(id),
+                    "开放项要么有调用点、要么在显式白名单里：" + id);
+        }
+        eq(CapabilityCatalog.enforcedIds().size() + notYet.size(), CapabilityCatalog.openIds().size(),
+                "两类加起来正好是全部开放项（不多不少）");
+        check(!CapabilityCatalog.enforced("net.fetch"), "不开放的项谈不上 enforced");
+        check(!CapabilityCatalog.enforced("container.read"), "container.read 本步不开放也不设门");
+    }
+
+    /** 门集合与 {@code CtxBuilder} 源码一字不差（防"目录说能关、代码里没门"）。 */
+    static void enforcedMatchesCode() throws Exception {
+        java.nio.file.Path src = java.nio.file.Path.of("..", "..", "shared", "src", "main", "java",
+                "com", "november", "mcphone", "core", "script", "engine", "CtxBuilder.java")
+                .toAbsolutePath().normalize();
+        check(java.nio.file.Files.isRegularFile(src), "CtxBuilder 源码在：" + src);
+        if (!java.nio.file.Files.isRegularFile(src)) return;
+        String text = java.nio.file.Files.readString(src, java.nio.charset.StandardCharsets.UTF_8);
+        java.util.regex.Matcher m = java.util.regex.Pattern
+                .compile("gate\\.require\\(\"([^\"]+)\"\\)").matcher(text);
+        java.util.Set<String> found = new java.util.TreeSet<>();
+        while (m.find()) found.add(m.group(1));
+        eq(found, new java.util.TreeSet<>(CapabilityCatalog.enforcedIds()),
+                "CtxBuilder 的 gate.require 集合 = enforced 集合");
+    }
+
+    public static void main(String[] args) throws Exception {
         catalogSize();
         tiers();
         declared();
+        enforced();
+        enforcedMatchesCode();
 
         System.out.println("断言 " + checks + " 条");
         if (!failures.isEmpty()) {

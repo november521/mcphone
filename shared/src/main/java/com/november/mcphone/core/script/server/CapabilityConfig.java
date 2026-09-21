@@ -168,13 +168,15 @@ public final class CapabilityConfig {
         Preset preset = Preset.of(str(root, "preset", warnings), warnings);
 
         // 预设底稿：hardcore 关掉全服市场；open 打开两个边界开关（§31.2）
-        Set<String> disabled = new LinkedHashSet<>();
-        if (preset == Preset.HARDCORE) disabled.add("trade.escrow");
+        Set<String> presetBase = new LinkedHashSet<>();
+        if (preset == Preset.HARDCORE) presetBase.add("trade.escrow");
+        Set<String> disabled = new LinkedHashSet<>(presetBase);
         Boundary boundary = preset == Preset.OPEN
                 ? new Boundary(true, false, false, true, false, false)
                 : ALL_OFF;
 
-        // 显式 disabled 覆盖预设底稿（写空数组 = 一个都不关）
+        // 显式 disabled 覆盖预设底稿（写空数组 = 一个都不关）。覆盖本身是 §31.2 的语义，
+        // 但被覆盖掉的那几条要说一声 —— 免得从旧版本沿用的空数组静默放开（对抗 S18-A4）。
         if (root.has("disabled")) {
             JsonElement d = root.get("disabled");
             if (d.isJsonArray()) {
@@ -191,6 +193,12 @@ public final class CapabilityConfig {
                         continue;
                     }
                     disabled.add(id);
+                }
+                for (String base : presetBase) {
+                    if (!disabled.contains(base)) {
+                        warnings.add("显式 disabled 覆盖了预设 " + preset + " 的底稿：少了 " + base
+                                + "（要保留请把它写进 disabled 数组）");
+                    }
                 }
             } else {
                 warnings.add("disabled 必须是字符串数组，按预设值处理");

@@ -177,7 +177,13 @@ public final class CtxBuilder {
         ScriptableObject.putProperty(p, "uuid", player.uuid().toString());
         ScriptableObject.putProperty(p, "name", player.name());
         ScriptableObject.putProperty(p, "dimension", player.dimension());
-        ScriptableObject.putProperty(p, "gameMode", player.gameMode());
+        // gameMode 走 getter：读到才判门 —— 服主关掉 read.self.gamemode 之后，
+        // 读它的 App 会拒，不读的 App 一点不受影响（对抗 S18-A2）。
+        // uuid/name/dimension 没有对应的目录 id，保持无条件注入。
+        p.defineProperty(cx, "gameMode", (Scriptable thisObj) -> {
+            gate.require("read.self.gamemode");
+            return player.gameMode();
+        }, ScriptableObject.READONLY | ScriptableObject.PERMANENT);
         p.sealObject();
         ScriptableObject.putProperty(ctx, "player", p);
 
@@ -446,10 +452,11 @@ public final class CtxBuilder {
         }
 
         // ---- ctx.predicate（S18 §18.3）：引用服主数据包里的谓词，不自造条件语言。
-        // 只读判定，plain 档，不过能力门；认不得的 id 是配置错，回"本服没有这个谓词"。
+        // plain 档但仍过门（可被 disabled 关，对抗 S18-A3）；认不得的 id 是配置错，回"本服没有这个谓词"。
         if (backends.predicate() != null) {
             ScriptableObject predicate = HostFn.obj(cx, scope);
             HostFn.put(predicate, scope, "test", 1, (c, s, a) -> {
+                gate.require("predicate.test");
                 String id = HostFn.str(a, 0, "predicate.test");
                 Boolean r = backends.predicate().test(id, player);
                 if (r == null) {

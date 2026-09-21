@@ -20,7 +20,8 @@ import java.util.UUID;
  * /mcphone script identity                              服务器身份（客户端按它分桶）
  * /mcphone script reload                                重扫 incoming 待审目录
  * /mcphone script list                                  候选 + 已批准部署 + 授权范围
- * /mcphone script approve &lt;digest&gt; [动作列表] [能力列表]   批准候选；省略 = 按声明全批，{@code -} = 一个都不批，
+ * /mcphone script approve &lt;digest&gt; [动作列表] [能力列表]   批准候选；动作轴省略 = 按声明全批、{@code -} = 一个都不批，
+ *                                                      能力轴省略 = 只自动批 plain（声明含 granted 必须显式写，{@code all} = 全批），
  *                                                      否则按逗号拆的逐条勾选（动作与能力两条轴都逐条）
  * /mcphone script remove &lt;app&gt;                          撤掉一个部署
  * /mcphone script authorize &lt;app&gt; all|&lt;玩家名|UUID&gt;      授权
@@ -120,6 +121,7 @@ public final class ScriptAdminCommand {
         for (CapabilityCatalog.Entry e : CapabilityCatalog.all()) {
             boolean off = cfg != null && cfg.isDisabled(e.id());
             ok(src, "  " + (e.open() ? "开放" : "不开放") + "  " + e.tier() + "  " + e.id()
+                    + (CapabilityCatalog.enforced(e.id()) ? "  [可关]" : (e.open() ? "  [本步无调用点]" : ""))
                     + (off ? "  【本服已关闭】" : ""));
         }
         if (cfg == null) {
@@ -147,8 +149,10 @@ public final class ScriptAdminCommand {
     }
 
     /**
-     * {@code actionsArg}/{@code capsArg} 为 null = 按声明全批；{@code -} = 一个都不批；
-     * 否则按逗号拆的逐条勾选（两条轴都逐条，能力轴不再是恒全批 —— 定向对抗 M3）。
+     * 动作轴：{@code null} = 按声明全批；{@code -} = 一个都不批；否则按逗号拆的逐条勾选。
+     * 能力轴（S18）：{@code null} = <b>只自动批 plain</b>（声明里有 granted/restricted 就报错，
+     * 要全批必须显式 {@code all}）；{@code -} = 一个都不批；{@code all}/{@code *} = 按声明全批；
+     * 否则逐条勾选。定向对抗 S18-A1。
      */
     private static int approve(CommandSourceStack src, String digest, String actionsArg, String capsArg) {
         MinecraftServer server = src.getServer();
@@ -159,7 +163,7 @@ public final class ScriptAdminCommand {
             return 0;
         }
         List<String> actions = parseList(actionsArg);
-        List<String> caps = parseList(capsArg);
+        List<String> caps = isAll(capsArg) ? List.copyOf(candidate.declaredCapabilities()) : parseList(capsArg);
         UUID approver = src.getEntity() instanceof ServerPlayer p ? p.getUUID() : null;
         DeploymentData.Approval ap;
         try {
@@ -274,6 +278,11 @@ public final class ScriptAdminCommand {
         if (arg == null) return null;
         if (arg.equals("-")) return List.of();
         return split(arg);
+    }
+
+    /** 能力轴的显式全批写法（只作用于能力轴，避免与动作 id 撞名）。 */
+    private static boolean isAll(String arg) {
+        return "all".equals(arg) || "*".equals(arg);
     }
 
     /** 在线玩家名或 UUID；离线玩家必须给 UUID（授权表按 UUID 存）。 */

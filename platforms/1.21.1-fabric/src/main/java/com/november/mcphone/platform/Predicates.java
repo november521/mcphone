@@ -25,6 +25,10 @@ import java.util.Optional;
  * <b>只读</b>。随机源用本线程新开的，不去碰世界的那一份 —— 求值在 worker 上，
  * 不能和主线程抢同一个 {@code RandomSource}。
  *
+ * <p><b>配合 {@code /reload} 是安全的</b>：{@code MinecraftServer.resources} 在重载时整份换新
+ * （{@code MinecraftServer.java} 的 {@code this.resources = ...}），{@code Holder} 里的
+ * {@code RegistryAccess.Frozen} 不可变 —— worker 读到的一律是一份快照，不会和主线程撕。
+ *
  * <p>1.20.1 没有 {@code reloadableRegistries()}，取谓词走 {@code getLootData()}；
  * 判定那一段两边逐字相同。
  */

@@ -127,9 +127,13 @@ manifest 里的 `capabilities` 是一个字符串数组，元素必须是**服�
 - **档位由服务端查表**：`plain` 免审批、`granted` 要 OP 逐条批准、`restricted` 首版全部不开放。
   **App 在 manifest 里自称什么档都不作数**，写 `plain` 不会让一个 `item.give` 免审批。
 - **目录外的名字入队即拒**：`economy.pay` 这种自造 id 会让整个包进不了审批队列。
-  当前目录用 `/mcphone script capabilities` 列出来（首版开放 22 个）。
+  当前目录用 `/mcphone script capabilities` 列出来（首版开放 23 个；其中标 `[可关]` 的
+  是服主 `disabled` 真能关掉的，标 `[本步无调用点]` 的还没有执行路径、关了只影响目录展示）。
 - 服主可以**全服关掉任意一项**（包括 `plain`）：关掉的调用会返回 `UNAVAILABLE`，
   与"你没有被授权"是两回事。App 要按 §13.7 的风格优雅降级。
+- **granted 必须被 OP 显式批准**：`/mcphone script approve <摘要>` 的能力轴省略时只自动批
+  `plain`；声明里有 `item.give`/`loot.roll`/`attr.grant`/`effect.give` 时，服主要显式写
+  `-`（都不批）、`all`（全批）或逐个列。**不存在"顺手把造物权限批了"这条路。**
 
 ### 现在能用的能力节点（S18 本批）
 
@@ -140,7 +144,7 @@ manifest 里的 `capabilities` 是一个字符串数组，元素必须是**服�
 | `attr.grant` | `ctx.attr.grant('minecraft:generic.movement_speed', 0.1)` | 属性认不得 → `INVALID_ARGUMENT`；修饰符是瞬时的，重登失效 |
 | 同上（撤销） | `ctx.attr.revoke('minecraft:generic.movement_speed')` | 只撤这个 App 自己那条，别人的不碰 |
 | `effect.give` | `ctx.effect.give('minecraft:speed', 30, 1)` | 效果认不得 → `INVALID_ARGUMENT`（`mcphone.script.effect.unavailable`）；最长 3600 秒；有时限、到期自然消失 |
-| （plain）谓词 | `ctx.predicate.test('myserver:is_vip')` | 认不得的谓词 → `UNAVAILABLE`（是服主还没写这个数据包文件）；求值出错按 `false` 算 |
+| （plain）谓词 | `ctx.predicate.test('myserver:is_vip')` | 认不得的谓词 → `UNAVAILABLE`（是服主还没写这个数据包文件）；求值出错按 `false` 算；服主可用 `disabled: ["predicate.test"]` 关掉 |
 | （plain）计分板 | `ctx.score.get/set/add('days')` | objective 名自动带 App 前缀（`example_app_` → 服主看到 `example_app_days`）；主线程忙/名字被只读 objective 占了 → `UNAVAILABLE` |
 
 这些调用只登记"意图"：真正的落地在服务器主线程、落地前会重查授权与能力。

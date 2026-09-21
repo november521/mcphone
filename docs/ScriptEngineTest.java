@@ -1128,7 +1128,10 @@ public class ScriptEngineTest {
         eq(String.join(",", required), "score.rw,score.rw", "计分板读写都过 score.rw");
         required.clear();
         eq(withCtxGate("ctx.predicate.test('myserver:x'); 'ok'", b, gate), "ok", "谓词照常");
-        eq(required.size(), 0, "谓词不是声明型能力，不过门（也就关不掉）");
+        eq(String.join(",", required), "predicate.test", "谓词过 predicate.test（S18-A3：可关）");
+        required.clear();
+        eq(withCtxGate("ctx.player.gameMode; 'ok'", b, gate), "ok", "读 gameMode 照常");
+        eq(String.join(",", required), "read.self.gamemode", "gameMode 是 getter：读到才判门（S18-A2）");
 
         // 关掉之后：脚本拿到可接住的能力拒绝，而且写入根本没发生
         CtxBuilder.CapabilityGate denied = id -> {
