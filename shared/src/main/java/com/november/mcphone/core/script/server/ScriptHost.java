@@ -121,8 +121,17 @@ public final class ScriptHost {
         CapabilityConfig capabilities = CapabilityConfig.load(server);
         CapabilityPolicy capabilityPolicy = new CapabilityPolicy(capabilities);
         // 没有后端的项整项不挂（E12）：item / cycle / store / sealed / currencies（本步）全是 null；
-        // actionIntents=true 表示挂 ctx.give（落地端 ServerIntentApplier 已接）。
-        CtxBuilder.Backends backends = new CtxBuilder.Backends(new SharedState(), null, null, null, null, null, true);
+        // actionIntents=true 表示挂 ctx.give（落地端 ServerIntentApplier 已接）；
+        // ctx.predicate（§18.3）接平台门面：只读判定，玩家按 uuid 现查。
+        CtxBuilder.Backends backends = new CtxBuilder.Backends(new SharedState(), null, null, null, null, null, true,
+                (predicateId, snapshot) -> {
+                    ServerPlayer player = server.getPlayerList().getPlayer(snapshot.uuid());
+                    if (player == null) return null;
+                    net.minecraft.resources.ResourceLocation id =
+                            net.minecraft.resources.ResourceLocation.tryParse(predicateId);
+                    if (id == null) return null;
+                    return com.november.mcphone.platform.Predicates.test(player, id);
+                });
         RhinoEvaluator evaluator = new RhinoEvaluator(apps, strikes, backends, server::execute, capabilityPolicy);
         UUID serverId = ServerIdentity.idOf(server);
         ServerAuthority authorityView = new ServerAuthority(deployments, authority);

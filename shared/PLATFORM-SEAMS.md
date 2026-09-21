@@ -264,7 +264,7 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 - `platform.client.SystemFiles`
 - `platform.client.VanillaAudio`
 
-#### 平台内部的（14）
+#### 平台内部的（15）
 
 只在这个平台自己的代码里用到。新平台不必提供同名类型。
 
@@ -281,6 +281,7 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 - `feature.terminal.integration.ae2.Ae2wtlibSupport`
 - `feature.terminal.integration.ae2.TerminalSlotLocator`
 - `feature.terminal.net.TerminalNetworking`　—— 加载器导入
+- `platform.Predicates`
 - `platform.client.ClientTicks`　—— 加载器导入
 
 <!-- 1.21.1-neoforge 结束 -->
@@ -375,7 +376,7 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 - `platform.client.SystemFiles`
 - `platform.client.VanillaAudio`
 
-#### 平台内部的（33）
+#### 平台内部的（34）
 
 只在这个平台自己的代码里用到。新平台不必提供同名类型。
 
@@ -411,6 +412,7 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 - `feature.terminal.integration.ae2.TerminalSlotLocator`
 - `feature.terminal.net.SyncTerminalSlotPacket`
 - `feature.terminal.net.TerminalNetworking`
+- `platform.Predicates`
 - `platform.client.ClientTicks`　—— 加载器导入
 
 <!-- 1.20.1-forge 结束 -->
@@ -460,7 +462,7 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 - `platform.client.SystemFiles`
 - `platform.client.VanillaAudio`
 
-#### 平台内部的（28）
+#### 平台内部的（29）
 
 只在这个平台自己的代码里用到。新平台不必提供同名类型。
 
@@ -491,6 +493,7 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 - `mixin.client.MouseHandlerMixin`
 - `mixin.client.SoundEngineMixin`
 - `platform.Holder`
+- `platform.Predicates`
 - `platform.client.ClientTicks`　—— 加载器导入
 
 <!-- 1.21.1-fabric 结束 -->

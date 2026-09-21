@@ -92,6 +92,7 @@
   "mcphone.script.capability.unknown": "Unknown capability",
   "mcphone.script.intent_unavailable": "This server cannot perform this action yet",
   "mcphone.script.loot.no_such_table": "This server has no such loot table",
+  "mcphone.script.predicate.unavailable": "This server has no such predicate",
   "mcphone.script.attr.unavailable": "This server does not have that attribute",
   "mcphone.settings.vault": "Vault",
   "mcphone.vault.title": "Vault passphrase",

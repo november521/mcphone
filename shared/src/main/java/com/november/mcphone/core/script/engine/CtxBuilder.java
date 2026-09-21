@@ -62,7 +62,16 @@ public final class CtxBuilder {
                            KvBackend store, SealedBackend sealed, CurrencyRegistry currencies,
                            /** 要不要挂"产意图"的能力节点（{@code ctx.give} / {@code ctx.loot} / {@code ctx.attr}）。
                             *  落地端由宿主注入；为 false 时整项不挂（E12：不挂空壳）。 */
-                           boolean actionIntents) {
+                           boolean actionIntents,
+                           /** 数据包谓词判定（S18 §18.3）。为 null 时整个 {@code ctx.predicate} 不挂。 */
+                           PredicateView predicate) {
+
+        /** 不挂谓词的写法（S18 之前的路径与大多数断言）。 */
+        public Backends(SharedState shared, ItemView item, Cycle cycle,
+                        KvBackend store, SealedBackend sealed, CurrencyRegistry currencies,
+                        boolean actionIntents) {
+            this(shared, item, cycle, store, sealed, currencies, actionIntents, null);
+        }
 
         /** 只有 S13 那几样的旧写法。 */
         public Backends(SharedState shared, ItemView item, Cycle cycle) {
@@ -90,6 +99,16 @@ public final class CtxBuilder {
         /** 没有门（断言/旧路径）时用它：全放行。 */
         CapabilityGate ALLOW_ALL = capabilityId -> {
         };
+    }
+
+    /** 数据包谓词判定（S18 §18.3）。宿主把平台门面注入进来，引擎只管挂节点。 */
+    @FunctionalInterface
+    public interface PredicateView {
+        /**
+         * @return {@code TRUE}/{@code FALSE} 判定结果；{@code null} = 本服没有这个谓词
+         *         （配置错，不是判否 —— 脚本收到可接住的 {@link HostError#denied}）
+         */
+        Boolean test(String predicateId, PlayerSnapshot player);
     }
 
     /** 脚本调 {@code ctx.ok} / {@code ctx.fail} 之后落在这里。 */
@@ -388,6 +407,23 @@ public final class CtxBuilder {
             ScriptableObject.putProperty(ctx, "currency", cur);
         }
 
+        // ---- ctx.predicate（S18 §18.3）：引用服主数据包里的谓词，不自造条件语言。
+        // 只读判定，plain 档，不过能力门；认不得的 id 是配置错，回"本服没有这个谓词"。
+        if (backends.predicate() != null) {
+            ScriptableObject predicate = HostFn.obj(cx, scope);
+            HostFn.put(predicate, scope, "test", 1, (c, s, a) -> {
+                String id = HostFn.str(a, 0, "predicate.test");
+                Boolean r = backends.predicate().test(id, player);
+                if (r == null) {
+                    throw HostError.denied(ScriptErrorCode.UNAVAILABLE, NO_SUCH_PREDICATE,
+                            "predicate.test 认不得：" + id);
+                }
+                return r;
+            });
+            predicate.sealObject();
+            ScriptableObject.putProperty(ctx, "predicate", predicate);
+        }
+
         // ---- ctx.give / ctx.loot / ctx.attr（S18）：只产意图，不在这里碰世界。
         // 节点存在与否由宿主决定（落地端没接上就不挂 —— E12 不挂空壳）。
         if (backends.actionIntents()) {
@@ -480,6 +516,9 @@ public final class CtxBuilder {
     }
 
     static final String NO_SUCH_CURRENCY = "mcphone.economy.no_such_currency";
+
+    /** 谓词 id 这一支认不得时的本地化键（S18 §18.3）。 */
+    static final String NO_SUCH_PREDICATE = "mcphone.script.predicate.unavailable";
 
     /**
      * 会动钱的 provider 调用。provider 抛了、或者没给结果 = 结果不明（可能已经动了一半）：打一条带来龙去脉与 provider 堆栈的 ERROR

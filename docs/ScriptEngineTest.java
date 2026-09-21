@@ -341,10 +341,27 @@ public class ScriptEngineTest {
         check(!withCtx("ctx.evil=1; typeof ctx.evil", FULL).equals("number"), "ctx 封了，加不了属性");
 
         // 表里没有的一律没有（§32.7：store/currency/mailbox/fetch 的后端还没到货）
-        for (String absent : new String[]{"store", "currency", "mailbox", "fetch", "give", "loot", "command"}) {
+        for (String absent : new String[]{"store", "currency", "mailbox", "fetch", "give", "loot", "command", "predicate"}) {
             eq(withCtx("typeof ctx." + absent, FULL), "undefined",
                     "ctx." + absent + " 本步没有后端，就不该挂出来");
         }
+
+        // S18 谓词：有门面才挂；只有 test 一个方法，判定结果原样透传（plain 档、不过能力门）
+        CtxBuilder.Backends withPredicate = new CtxBuilder.Backends(
+                new SharedState(), fakeItems(),
+                new CtxBuilder.Cycle(ZoneId.of("Asia/Shanghai"), LocalTime.of(4, 0)),
+                null, null, null, false,
+                (id, snapshot) -> "myserver:is_vip".equals(id) ? Boolean.TRUE : null);
+        eq(withCtx("Object.getOwnPropertyNames(ctx.predicate).sort().join(',')", withPredicate),
+                "test", "ctx.predicate 只有 test");
+        eq(withCtx("String(Object.getPrototypeOf(ctx.predicate))", withPredicate), "null",
+                "ctx.predicate 也没有原型链");
+        eq(withCtx("ctx.predicate.test('myserver:is_vip')", withPredicate), "true",
+                "谓词判定结果透传");
+        Throwable noSuch = thrownBy("ctx.predicate.test('myserver:nope')", withPredicate);
+        check(noSuch instanceof com.november.mcphone.core.script.engine.HostError he
+                        && "mcphone.script.predicate.unavailable".equals(he.messageKey()),
+                "认不得的谓词是配置错：回专门的文案键，不当判否 —— " + noSuch);
     }
 
     /** E2 顺延项：opaque 在脚本侧既解析不了也构造不了。 */
