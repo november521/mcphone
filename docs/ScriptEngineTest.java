@@ -1315,6 +1315,29 @@ public class ScriptEngineTest {
                 "label,nextBoundary", "ctx.cycle");
     }
 
+    /**
+     * S18-E1：成员 ↔ 能力 的对应必须<b>逐条签字</b> —— 光钉集合不够：把 {@code item.give} 与
+     * {@code attr.grant} 的 id 互换，集合仍是那 11 个、拒绝探针也照样全拒，可"批准 A 得 B"
+     * 却成立了。这里记录门逐成员调用，断言每个成员观测到的 id == 签字表（顺序 = 调用顺序）。
+     * 与 {@code gatedMountRegistry}（钉集合）、{@code plainGates}（钉 plain 的逐成员对应）互补。
+     */
+    static void grantedGates() {
+        java.util.List<String> observed = new java.util.ArrayList<>();
+        CtxBuilder.CapabilityGate gate = observed::add;
+        CtxBuilder.Backends b = gatedBackends(new java.util.ArrayList<>(),
+                new java.util.ArrayList<>(), new SharedState());
+
+        String src = "ctx.give('minecraft:diamond', 1);"
+                + "ctx.loot.roll('myserver:gift');"
+                + "ctx.attr.grant('minecraft:generic.movement_speed', 0.1);"
+                + "ctx.attr.revoke('minecraft:generic.movement_speed');"
+                + "ctx.effect.give('minecraft:speed', 1);"
+                + "'ok'";
+        eq(withCtxGate(src, b, gate), "ok", "五个动作成员整段跑通");
+        eq(observed, java.util.List.of("item.give", "loot.roll", "attr.grant", "attr.grant", "effect.give"),
+                "成员 ↔ 能力 的对应（逐条，不许互换）");
+    }
+
     public static void main(String[] args) {
         escapes();
         currencyBalanceUnavailable();
@@ -1332,6 +1355,7 @@ public class ScriptEngineTest {
         ctxBasics();
         actionIntents();
         plainGates();
+        grantedGates();
         gatedMountRegistry();
         gatedSurfaceIsSigned();
         enforcedDenyProbe();
