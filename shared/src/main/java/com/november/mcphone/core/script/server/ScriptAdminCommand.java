@@ -165,6 +165,8 @@ public final class ScriptAdminCommand {
         List<String> actions = parseList(actionsArg);
         List<String> caps = isAll(capsArg) ? List.copyOf(candidate.declaredCapabilities()) : parseList(capsArg);
         UUID approver = src.getEntity() instanceof ServerPlayer p ? p.getUUID() : null;
+        // 覆盖前先看一眼旧的批准集：重新批准是"整条轴替换"，两轴都要重列 —— 拍在这里好回显（对完 S18-A1 的丑话）。
+        Deployment before = dd.deployment(candidate.appId());
         DeploymentData.Approval ap;
         try {
             ap = dd.approve(candidate, actions, caps, approver, System.currentTimeMillis());
@@ -180,6 +182,10 @@ public final class ScriptAdminCommand {
         String effect = degraded ? "（脚本后端未启用，重开服生效）"
                 : live ? "（已重装配，立即生效；在飞的请求仍用旧 scope）"
                 : "（⚠ 重装配失败，该 App 现在不可执行 NOT_DEPLOYED；修好后重新 approve 或重启）";
+        boolean actionsShrank = before != null && !before.approvedActions().equals(d.approvedActions())
+                && !d.approvedActions().containsAll(before.approvedActions());
+        boolean capsShrank = before != null && !before.approvedCapabilities().equals(d.approvedCapabilities())
+                && !d.approvedCapabilities().containsAll(before.approvedCapabilities());
         ok(src, "[脚本] 已批准 " + d.appId() + "（版本 " + d.approvalRevision() + "）"
                 + "，批准动作 " + d.approvedActions() + " / 声明 " + d.declaredActions()
                 + "；批准能力 " + d.approvedCapabilities() + " / 声明 " + d.declaredCapabilities()
@@ -187,6 +193,10 @@ public final class ScriptAdminCommand {
                         : "，丢掉（不在声明里）：动作 " + ap.droppedActions() + "、能力 " + ap.droppedCapabilities())
                 + (ap.replaced() ? "；覆盖了旧部署" : "")
                 + (d.approvedActions().isEmpty() ? "【注意：批准动作是空的，这个 App 现在什么都不给】" : "")
+                + (actionsShrank ? "【注意：动作轴每次都要重列，`-` 会清空动作轴；这次动作从 "
+                        + before.approvedActions() + " 变成 " + d.approvedActions() + "】" : "")
+                + (capsShrank ? "【注意：能力轴同理，这次能力从 " + before.approvedCapabilities()
+                        + " 变成 " + d.approvedCapabilities() + "】" : "")
                 + effect);
         return 1;
     }

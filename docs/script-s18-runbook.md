@@ -118,7 +118,7 @@ cd platforms/1.21.1-neoforge
 | 谓词 | 批准所有动作后 `call('vip')` | `vip: true`（**没有自造条件语言**）；`ctx.predicate.test('myserver:nope')` → `UNAVAILABLE` + `predicate.unavailable`；把 `is_vip.json` 换成"永远假"再跑 → `vip: false`，**不用重批** |
 | 属性修饰符 | `call('buff')` 后在创造模式用命令再给同一属性一条修饰符：1.21.1 `/attribute @s minecraft:generic.movement_speed modifier add 11111111-1111-1111-1111-111111111111 test 0.5 add_multiplied_base`（1.20.1 操作用 `multiply_base`），然后 `call('unbuff')` | 撤销**只掉自己那一条**：命令那条还在（`/attribute @s minecraft:generic.movement_speed get` 对照）；app 的那条是 Transient，重登即消失 |
 | 标签白名单 | 默认直接 `call('daily')`；然后把 `data/mcphone/tags/item/giftable.json` 改成 `{"replace": false, "values": ["#mcphone:default_giftable", "minecraft:diamond"]}` 再 `/reload`、再 `call('daily')`；最后改成 `{"replace": true, "values": ["minecraft:apple"]}` 再跑 | 默认 `INVALID_ARGUMENT` + `mcphone.script.give.not_giftable`（**默认白名单不含硬通货**）→ 加钻石后 OK（**App digest 不变、不用重新审批**）→ 换成只许苹果后钻石又被拒；全程不重批 |
-| `IItemHandler` | ⚠ **本 PR 未做** `ctx.container.read`（卡第 8 条"本步不做"、§32.7 排期靠后、目录标不开放） | 与卡验收"五层各有一条真实实测"冲突，**待 PM 裁定**：要么把这条实测挪到开 `container.read` 的卡，要么本 PR 追加 `platform/ItemCaps` 门面后在此补跑。当前状态：不跑 |
+| `IItemHandler` | **不跑（PM 裁定）**：`ctx.container.read` 属 §32.7"排期靠后（设计保留，P1 不做）"，§18.9 那一行是整份 §18 的清单、载体不在本步。真服清单已加 **#23**（AE2 + 原版箱子同一段代码能读），owner = 开 `container.read` 的卡，最迟验证点 = 该卡合并后第一个真客户端窗口（勘误 E40） | **记录里写"没跑 + 原因"**（见 §8 的未跑条目表）；别留空、别写通过 |
 
 ## 6. `[capabilities] disabled` 与预设（§18.8/§31）
 
@@ -158,4 +158,12 @@ cd platforms/1.21.1-neoforge
   原始输出：<日志/截图>
 ```
 
-跑完把每行的"实际 + 原始输出"贴进 PR #46 的评论或描述；§5 的 `IItemHandler` 之争在 PR 里写明裁定结果。
+**未跑条目表**（一条都不许留空、不许写"通过"；"哪条为什么没跑"本身就是证据）：
+
+| 条目 | 状态 | 原因 / 去向 |
+|---|---|---|
+| §5 `IItemHandler`（AE2 + 原版箱子） | 未跑 | PM 裁定（E40）：`container.read` 属 §32.7 排期靠后；真服清单 #23 记账，owner = 开 `container.read` 的卡 |
+| （窗口里还有哪条没跑、条件不满足、或撞上环境问题，逐条写在这里） |  |  |
+
+跑完把每行的"实际 + 原始输出"贴进 PR #46 的评论或描述；`[本步无调用点]` 的能力只记"登记未接线"，
+**既不是缺陷、也不能当"已实现"的证据**（PM 裁定）。

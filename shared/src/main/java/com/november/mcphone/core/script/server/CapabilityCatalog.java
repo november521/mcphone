@@ -34,6 +34,10 @@ import java.util.Set;
  * 真的会拒"的那一组：`/mcphone script capabilities` 会分别标出来，避免服主以为关掉就生效。
  * 断言 {@code CapabilityCatalogTest.enforcedMatchesCode()} 逐条对着 {@code CtxBuilder} 源码钉死。
  *
+ * <p><b>纪律（PM 裁定，S18 之后）</b>：后续卡片给某个开放项接上调用点时，<b>必须同时把它挪进
+ * {@link #ENFORCED}</b> —— 否则它会长期停在"可审批、不可关、也不生效"的中间态。
+ * 忘了登记也没法混过去：{@code enforcedMatchesCode()} 会因为"代码里有门、目录里没有"当场红。
+ *
  * <p>原文里成组出现的（{@code read.self.position / inventory / stats / gamemode}、
  * {@code read.world.time / weather}、{@code read.players.online_count / list}、
  * {@code storage.global.read / write}）在这里都展开成<b>独立 id</b> —— 审批与拒绝原因
