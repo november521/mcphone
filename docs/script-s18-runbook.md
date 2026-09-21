@@ -92,6 +92,10 @@ cd platforms/1.21.1-neoforge
 命令面自证第一行就跑它：`/mcphone script approve <digest> daily,loot,buff,unbuff,points,vip` → 期望报错；
 `... -` → 成功且能力一个没批。
 
+**覆盖批准要看回显**：第二次批准时故意只列部分动作（比如漏掉 `daily`），命令会显式回显
+`【注意：动作轴每次都要重列，- 会清空动作轴；这次动作从 […] 变成 […]】`——把这一行原文记下来，
+它是 PM 要求的"易踩处明确文案"。
+
 ## 3. §13.6 第 1/2 行（改前端）
 
 | # | 操作 | 期望 |
@@ -131,6 +135,9 @@ cd platforms/1.21.1-neoforge
 | `"disabled": ["predicate.test"]` + reload；`call('vip')` | `UNAVAILABLE` + `capability.disabled`（对抗 S18-A3 之后谓词也进了目录、可关） |
 | `"disabled": ["read.self.gamemode"]` + reload；App 里加一个读 `ctx.player.gameMode` 的按钮 | 读它 → `UNAVAILABLE` + `capability.disabled`；**不读它的动作一点不受影响**（getter 只在读时判门） |
 | `/mcphone script capabilities` | 每条后面标 `[可关]` 或 `[本步无调用点]`：只有前者关掉才有运行期效果 |
+
+> PM 裁定：`[本步无调用点]` 的条目**只记"登记未接线"** —— 既不是缺陷，也不能当"已实现"的证据；
+> 后续卡片接上调用点时必须同时把它挪进 `CapabilityCatalog.enforced()`（忘了会被源码断言抓住）。
 | 关掉 `score.rw` 后 `call('points')` | 同上（读点也过门） |
 | 把 `"preset"` 从 `standard` 换成 `open` + reload | `/mcphone script capabilities` 里 preset 变；显式 `disabled` 仍压过预设 |
 | `"disabled": ["nope.unknown"]` + reload | 服务端日志/命令回显一条"不认识的能力 id，跳过"warning，**不崩服** |
