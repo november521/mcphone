@@ -8,29 +8,20 @@ import java.util.Locale;
 import java.util.Map;
 
 /**
- * {@code mcphone-server.toml} 里一条 {@code [[economy.currency]]}（施工方案 §22.7、§22.8）。
+ * 货币配置里一条货币（施工方案 §22.7、§22.8）。来源：独立配置
+ * {@code <世界目录>/serverconfig/mcphone-economy.json} 的 {@code currency} 数组
+ * （{@link EconomyConfig}；E28：独立 JSON 取代旧的 ServerConfig/toml 方案）。
  *
  * <pre>
- * [[economy.currency]]
- * id       = "server:coin"
- * name     = "金币"
- * symbol   = "¢"
- * decimals = 2
- * provider = "scoreboard"
- * default  = true
- * max      = 2000000000
+ * { "id": "server:coin", "name": "金币", "symbol": "¢",
+ *   "decimals": 2, "provider": "scoreboard", "default": true, "max": 2000000000 }
  * </pre>
  *
  * <h2>为什么是纯函数</h2>
  *
- * 各加载器读 toml 的机制不一样（Forge/NeoForge 是 {@code ForgeConfigSpec}，Fabric 另一套），
- * 而「这七个字段怎么解释、哪些值不合法」在三个加载器上是同一件事。分开之后这一份能在
- * {@code docs/} 的断言测试里跑 —— 那边是裸 JavaExec，起不了服务器。
- *
- * <p><b>眼下还没有任何一处把 {@code [[economy.currency]]} 真的从 toml 里读出来</b>：
- * S15 的四种 provider 都是代码里 {@code register} 的。这个类是那条路的前半截，
- * 后半截（把这一段接进各加载器的 ServerConfig）对 builtin 与 scoreboard 是同一件事，
- * 不是 scoreboard 这一档特有的。
+ * 各加载器读配置的机制不一样，而「这七个字段怎么解释、哪些值不合法」在三个加载器上是同一件事。
+ * 分开之后这一份能在 {@code docs/} 的断言测试里跑 —— 那边是裸 JavaExec，起不了服务器。
+ * {@link EconomyConfig} 只负责"读文件 + 定位行号"，校验规则只有这里一份。
  */
 public record CurrencySpec(String id, String name, String symbol, int decimals,
                            String provider, boolean isDefault, long max) {
@@ -109,18 +100,24 @@ public record CurrencySpec(String id, String name, String symbol, int decimals,
     private static long num(Map<String, Object> t, String k, long dflt) {
         Object v = t.get(k);
         if (v == null) return dflt;
-        if (v instanceof Number n) return n.longValue();
-        try {
-            return Long.parseLong(String.valueOf(v).trim());
-        } catch (NumberFormatException e) {
-            throw new IllegalArgumentException(k + " 不是整数：" + v);
+        if (v instanceof Number n) {
+            long asLong = n.longValue();
+            if ((n instanceof Double || n instanceof Float) && asLong != n.doubleValue()) {
+                throw new IllegalArgumentException(k + " 要写整数（不要带小数），收到 " + v);
+            }
+            return asLong;
         }
+        // 严格：数字字段只收 JSON 数字。带引号的 "2" 看着像数、读出来是文本 ——
+        // 静默替服主做决定比报一条错危险（对抗 D′1：数字档严、布尔档松的不对称）。
+        throw new IllegalArgumentException(k + " 要写整数（不要加引号），收到 " + v);
     }
 
     private static boolean bool(Map<String, Object> t, String k, boolean dflt) {
         Object v = t.get(k);
         if (v == null) return dflt;
         if (v instanceof Boolean b) return b;
-        return Boolean.parseBoolean(String.valueOf(v).trim());
+        // "yes" / "1" / "TRUE " 一律不猜：Boolean.parseBoolean 会把它们静默吞成 false，
+        // 服主以为配了默认货币、运行期却拿不到（对抗 D′1）。
+        throw new IllegalArgumentException(k + " 要写 true/false（不要加引号），收到 " + v);
     }
 }

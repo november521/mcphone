@@ -955,6 +955,20 @@ public class CurrencyTest {
         eq(bal.get(b, "myserver:coin"), 300L, "受益人收到了");
     }
 
+    /**
+     * S15d′：同一条配置文件 → 同一个 {@code List<CurrencySpec>}（解析器是纯函数，
+     * 换台机器 / 换次开服不该变）。坏配置的细节用例在 {@code EconomyConfigTest}。
+     */
+    static void economyConfigDeterministic() {
+        String json = "{\"currency\":[{\"id\":\"test:coin\",\"decimals\":2},"
+                + "{\"id\":\"test:gem\",\"provider\":\"scoreboard\"}]}";
+        var a = com.november.mcphone.core.script.server.economy.EconomyConfig.parse(json);
+        var b = com.november.mcphone.core.script.server.economy.EconomyConfig.parse(json);
+        check(a.clean(), "配置解析干净");
+        eq(a.specs(), b.specs(), "同一条配置 → 同一个 List<CurrencySpec>");
+        eq(a.specs().get(1).provider(), "scoreboard", "scoreboard 档在表里");
+    }
+
     public static void main(String[] args) throws Exception {
         nonPositiveRejected();
         ceilingAndOverflow();
@@ -978,6 +992,7 @@ public class CurrencyTest {
         scoreboardAmounts();
         scoreboardObjectiveNamespace();
         scoreboardSpec();
+        economyConfigDeterministic();
         partiesInvariant();
         escrowCurrencyInvariant();
         allProvidersRejectSelfTransfer();
