@@ -32,9 +32,10 @@ actions.vip = function (ctx) {
 };
 
 // 只读钱包：#6 的两台服务器用不同货币 id，这段代码不改，靠 default() 适配。
+// list() 只调用、不运算返回值（宿主交出来的是 Java 对象，别在脚本里按 JS 数组用它）。
 actions.wallet = function (ctx) {
     var id = ctx.currency.default();
-    var list = ctx.currency.list();
+    ctx.currency.list();
     var balance = id === null ? null : ctx.currency.balance(id);
-    return ctx.ok({ defaultId: id, currencyCount: list.length, balance: balance });
+    return ctx.ok({ defaultId: id, balance: balance });
 };
