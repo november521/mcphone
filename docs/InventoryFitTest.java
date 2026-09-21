@@ -85,25 +85,18 @@ public class InventoryFitTest {
         check(threw, "坏物品 id（大写命名空间）在产出点就拒");
     }
 
-    static void resolve() {
-        // 物品解析要碰 BuiltInRegistries（docs 里没有 Bootstrap），真物品的解析归 PR③ 的真服用例；
-        // 这里只钉不碰注册表的两条：门面未接通的能力与不认识的种类。
-        ServerIntentApplier.Resolved loot = ServerIntentApplier.resolve(
-                List.of(ActionIntent.lootRoll("myserver:daily")));
-        eq(loot.error().code(), ScriptErrorCode.UNAVAILABLE,
-                "loot.roll 的门面未接通 → UNAVAILABLE（不谎报）");
-        eq(loot.error().messageKey(), "mcphone.script.intent_unavailable", "带专门的文案键");
-        eq(loot.stacks().size(), 0, "不做不了的事就不产出物品");
-
-        ServerIntentApplier.Resolved unknown = ServerIntentApplier.resolve(
-                List.of(new ActionIntent("wat", new byte[0])));
-        eq(unknown.error().code(), ScriptErrorCode.INVALID_ARGUMENT, "不认识的种类 → INVALID_ARGUMENT");
+    /** 两条失败口径的文案键必须在（真跑落地要主线程 + 真玩家，归 PR③ 的真服用例）。 */
+    static void failureKeys() {
+        check(ServerIntentApplier.NO_SUCH_TABLE.startsWith("mcphone.script."), "表不存在有本地化键");
+        check(ServerIntentApplier.ATTR_UNAVAILABLE.startsWith("mcphone.script."), "属性认不得有本地化键");
+        eq(ScriptErrorCode.INVENTORY_FULL.defaultMessageKey(), "mcphone.script.code.inventory_full",
+                "背包满用追加的第 16 个码");
     }
 
     public static void main(String[] args) {
         capacity();
         intentCodec();
-        resolve();
+        failureKeys();
 
         System.out.println("断言 " + checks + " 条");
         if (!failures.isEmpty()) {

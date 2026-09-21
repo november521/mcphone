@@ -91,6 +91,8 @@
   "mcphone.script.capability.not_open": "这个功能首版还不开放",
   "mcphone.script.capability.unknown": "不认识的能力",
   "mcphone.script.intent_unavailable": "本服暂时无法执行这个动作",
+  "mcphone.script.loot.no_such_table": "本服没有这张礼包表",
+  "mcphone.script.attr.unavailable": "本服没有这个属性",
   "mcphone.settings.vault": "保险箱",
   "mcphone.vault.title": "保险箱口令",
   "mcphone.vault.set": "设置口令",

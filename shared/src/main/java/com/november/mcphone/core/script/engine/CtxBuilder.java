@@ -388,9 +388,8 @@ public final class CtxBuilder {
             ScriptableObject.putProperty(ctx, "currency", cur);
         }
 
-        // ---- ctx.give（S18）：只产意图，不在这里碰世界。
+        // ---- ctx.give / ctx.loot / ctx.attr（S18）：只产意图，不在这里碰世界。
         // 节点存在与否由宿主决定（落地端没接上就不挂 —— E12 不挂空壳）。
-        // ctx.loot / ctx.attr 的节点随 platform/LootAccess 与 platform/PlayerAbilities 门面一起到货（下一提交）。
         if (backends.actionIntents()) {
             HostFn.put(ctx, scope, "give", 2, (c, s, a) -> {
                 gate.require("item.give");
@@ -403,6 +402,34 @@ public final class CtxBuilder {
                 result.intents.add(com.november.mcphone.core.script.server.ActionIntent.itemGive(itemId, (int) n, ""));
                 return null;
             });
+
+            ScriptableObject loot = HostFn.obj(cx, scope);
+            HostFn.put(loot, scope, "roll", 1, (c, s, a) -> {
+                gate.require("loot.roll");
+                result.intents.add(com.november.mcphone.core.script.server.ActionIntent.lootRoll(
+                        HostFn.str(a, 0, "ctx.loot.roll")));
+                return null;
+            });
+            loot.sealObject();
+            ScriptableObject.putProperty(ctx, "loot", loot);
+
+            ScriptableObject attr = HostFn.obj(cx, scope);
+            HostFn.put(attr, scope, "grant", 2, (c, s, a) -> {
+                gate.require("attr.grant");
+                String attrId = HostFn.str(a, 0, "ctx.attr.grant");
+                result.intents.add(com.november.mcphone.core.script.server.ActionIntent.attrGrant(
+                        attrId, HostFn.num(a, 1, "ctx.attr.grant"), 0, modifierKey(appId, attrId)));
+                return null;
+            });
+            HostFn.put(attr, scope, "revoke", 1, (c, s, a) -> {
+                gate.require("attr.grant");
+                String attrId = HostFn.str(a, 0, "ctx.attr.revoke");
+                result.intents.add(com.november.mcphone.core.script.server.ActionIntent.attrRevoke(
+                        attrId, modifierKey(appId, attrId)));
+                return null;
+            });
+            attr.sealObject();
+            ScriptableObject.putProperty(ctx, "attr", attr);
         }
 
         // ---- ctx.ok / ctx.fail / ctx.log
@@ -426,6 +453,21 @@ public final class CtxBuilder {
 
         ctx.sealObject();
         return ctx;
+    }
+
+    /**
+     * 属性修饰符在包内的 key：{@code <appId 的 path>/<属性 id 去冒号>}。
+     * 落地端再拼成 {@code mcphone:script/<key>}。同一个 App 对同一个属性只有一条（可覆盖），
+     * 不同 App 之间不会互相踩。
+     */
+    static String modifierKey(String appId, String attrId) {
+        int colon = appId.indexOf(':');
+        String path = colon >= 0 ? appId.substring(colon + 1) : appId;
+        String key = path + "/" + attrId.replace(':', '/');
+        if (key.length() > com.november.mcphone.core.script.server.ActionIntent.MAX_ID) {
+            throw HostError.invalid("属性 id 拼出来的修饰符 key 太长：" + key.length());
+        }
+        return key;
     }
 
     /** 服务器上没有这种货币（多半是服主改了配置）：抛脚本接得住的 Error，不中断。 */

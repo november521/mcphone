@@ -131,8 +131,19 @@ manifest 里的 `capabilities` 是一个字符串数组，元素必须是**服�
 - 服主可以**全服关掉任意一项**（包括 `plain`）：关掉的调用会返回 `UNAVAILABLE`，
   与"你没有被授权"是两回事。App 要按 §13.7 的风格优雅降级。
 
-## 装配期静态预检（S18 起）
+### 现在能用的能力节点（S18 本批）
 
+| 能力 | 写法 | 落地失败时 |
+|---|---|---|
+| `item.give` | `ctx.give('minecraft:diamond', 3)` | 背包满 → `INVENTORY_FULL`（先把背包腾出来，<b>不会掉地上</b>） |
+| `loot.roll` | `ctx.loot.roll('myserver:daily_gift')` | 表不存在 → `INVALID_ARGUMENT`；只掷服主数据包里的表 |
+| `attr.grant` | `ctx.attr.grant('minecraft:generic.movement_speed', 0.1)` | 属性认不得 → `INVALID_ARGUMENT`；修饰符是瞬时的，重登失效 |
+| 同上（撤销） | `ctx.attr.revoke('minecraft:generic.movement_speed')` | 只撤这个 App 自己那条，别人的不碰 |
+
+这些调用只登记"意图"：真正的落地在服务器主线程、落地前会重查授权与能力。
+**回调里的 `OK` 才代表真的生效**；`UNKNOWN` 表示"可能已经生效"，**绝不要自动重试**。
+
+## 装配期静态预检（S18 起）
 装配后端时服务端**只编译、只解析模块，不执行任何一行代码**（零副作用）：
 
 - `require(...)` 的参数**必须是字符串字面量**、以 `./` 或 `../` 开头：
