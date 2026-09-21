@@ -60,6 +60,12 @@ public final class EconomyConfig {
     public static final List<String> FIELDS =
             List.of("id", "name", "symbol", "decimals", "provider", "default", "max");
 
+    /** 配置文件大小闸（对抗 D′3，与能力配置同一档）：正常模板 1 KiB 量级，64 KiB 已经宽得没边。 */
+    public static final int MAX_FILE_BYTES = 64 * 1024;
+
+    /** 货币条数上限（对抗 D′3）：一台服远用不到这么多；超出的只取前 N 条 + 一条汇总 problem。 */
+    public static final int MAX_CURRENCIES = 64;
+
     /** 解析结果：可用的表（顺序 = 文件顺序）+ 逐条 problem（人类可读，带行号）。 */
     public record Result(List<CurrencySpec> specs, List<String> problems) {
         public Result {
@@ -92,6 +98,12 @@ public final class EconomyConfig {
                     MCphone.LOGGER.error("[MCphone] 生成货币配置模板失败（{}），按空表继续", file, e);
                 }
                 return new Result(List.of(), List.of());
+            }
+            long size = Files.size(file);
+            if (size > MAX_FILE_BYTES) {
+                MCphone.LOGGER.error("[MCphone] 货币配置太大（{} 字节 > {}），按空表继续", size, MAX_FILE_BYTES);
+                return new Result(List.of(), List.of("配置文件太大（" + size + " 字节 > "
+                        + MAX_FILE_BYTES + "），整份不加载"));
             }
             String json = Files.readString(file, StandardCharsets.UTF_8);
             return parse(json);
@@ -140,7 +152,12 @@ public final class EconomyConfig {
                 continue;
             }
             JsonArray arr = e.getValue().getAsJsonArray();
-            for (int i = 0; i < arr.size(); i++) {
+            int take = Math.min(arr.size(), MAX_CURRENCIES);
+            if (arr.size() > take) {
+                problems.add("'currency' 有 " + arr.size() + " 条，超过上限 " + MAX_CURRENCIES
+                        + "，只取前 " + take + " 条");
+            }
+            for (int i = 0; i < take; i++) {
                 int entryLine = i < lines.entryLines().size() ? lines.entryLines().get(i) : 1;
                 if (!arr.get(i).isJsonObject()) {
                     problems.add("第 " + entryLine + " 行：这一条不是对象（已丢弃）");
@@ -199,7 +216,7 @@ public final class EconomyConfig {
             try {
                 return Long.valueOf(raw);
             } catch (NumberFormatException e) {
-                return raw;   // 小数/科学计数交给 CurrencySpec.from 按"不是整数"拒
+                return p.getAsDouble();   // 小数/科学计数：让 CurrencySpec 的 num 按"要整数"拒
             }
         }
         return p.getAsString();
@@ -215,6 +232,9 @@ public final class EconomyConfig {
     /**
      * 轻量行号扫描：只找"顶层键"与 "currency 数组每个元素的行 + 元素内字段的行"。
      * 字符串/转义感知地走一遍原文；不判合法（{@link JsonScan} 已经判过），够给错误定位就行。
+     *
+     * <p><b>行号按"元素序号"对齐</b>（对抗 D′2）：数组里混非对象（`[{}, 5, {}]`）或嵌套数组时，
+     * 行表与 `parse` 的下标也要一一对应；非对象元素同样占一行（空字段表），不许按 `{` 数量错位。
      */
     static Lines scanLines(String json) {
         Map<String, Integer> topKeys = new LinkedHashMap<>();
@@ -224,12 +244,17 @@ public final class EconomyConfig {
         int depth = 0;
         boolean inCurrency = false;
         int currencyDepth = -1;
+        boolean expectElement = false;
         String lastTopKey = "";
         int i = 0;
         while (i < json.length()) {
             char c = json.charAt(i);
             if (c == '\n') {
                 line++;
+                i++;
+                continue;
+            }
+            if (Character.isWhitespace(c)) {
                 i++;
                 continue;
             }
@@ -247,6 +272,11 @@ public final class EconomyConfig {
                 }
                 String text = unescape(json.substring(start, Math.min(i, json.length())));
                 i = Math.min(i + 1, json.length());
+                if (inCurrency && depth == currencyDepth && expectElement) {
+                    entryLines.add(line);
+                    entryKeyLines.add(new LinkedHashMap<>());
+                    expectElement = false;
+                }
                 int j = i;
                 while (j < json.length() && Character.isWhitespace(json.charAt(j))) j++;
                 boolean isKey = j < json.length() && json.charAt(j) == ':';
@@ -261,15 +291,29 @@ public final class EconomyConfig {
                 continue;
             }
             if (c == '{' || c == '[') {
-                depth++;
-                if (c == '{' && inCurrency && depth == currencyDepth + 1) {
+                if (inCurrency && depth == currencyDepth && expectElement) {
                     entryLines.add(line);
                     entryKeyLines.add(new LinkedHashMap<>());
+                    expectElement = false;
                 }
+                depth++;
                 if (c == '[' && depth == 2 && SECTION.equals(lastTopKey)) {
                     inCurrency = true;
                     currencyDepth = depth;
+                    expectElement = true;
                 }
+                i++;
+                continue;
+            }
+            if (c == ',') {
+                if (inCurrency && depth == currencyDepth) expectElement = true;
+                i++;
+                continue;
+            }
+            if (c == ']' && inCurrency && depth == currencyDepth) {
+                inCurrency = false;
+                expectElement = false;
+                depth--;
                 i++;
                 continue;
             }
@@ -278,6 +322,12 @@ public final class EconomyConfig {
                 if (inCurrency && depth < currencyDepth) inCurrency = false;
                 i++;
                 continue;
+            }
+            // 数字 / true / false / null 这类裸元素：也是数组的一员，同样占一行
+            if (inCurrency && depth == currencyDepth && expectElement) {
+                entryLines.add(line);
+                entryKeyLines.add(new LinkedHashMap<>());
+                expectElement = false;
             }
             i++;
         }

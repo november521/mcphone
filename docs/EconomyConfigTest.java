@@ -230,6 +230,68 @@ public class EconomyConfigTest {
         eq(rt.registry().defaultCurrency(), "test:coin", "默认货币 = 配置里第一条 default=true");
     }
 
+    /** D′1：带引号的布尔/数字不静默解释（宽松面只留给无歧义的形态）。 */
+    static void quotedTypesRejected() {
+        EconomyConfig.Result def = EconomyConfig.parse(
+                "{\"currency\":[{\"id\":\"test:coin\",\"default\":\"yes\"}]}");
+        eq(def.specs().size(), 0, "带引号的 default 不静默吞成 false");
+        check(problemContains(def, "default") && problemContains(def, "true/false"),
+                "报字段名与合法取值：" + def.problems());
+
+        EconomyConfig.Result dec = EconomyConfig.parse(
+                "{\"currency\":[{\"id\":\"test:coin\",\"decimals\":\"2\"}]}");
+        eq(dec.specs().size(), 0, "带引号的 decimals 不静默收下");
+        check(problemContains(dec, "decimals"), "报字段名：" + dec.problems());
+
+        EconomyConfig.Result frac = EconomyConfig.parse(
+                "{\"currency\":[{\"id\":\"test:coin\",\"decimals\":2.5}]}");
+        eq(frac.specs().size(), 0, "小数 decimals 不截断");
+        check(problemContains(frac, "decimals"), "报字段名：" + frac.problems());
+    }
+
+    /** D′2：行号按元素序号对齐 —— 混非对象/嵌套数组时，"不是对象"要指到元素自己的行。 */
+    static void lineNumbersAlignAcrossNonObjects() {
+        EconomyConfig.Result mix = EconomyConfig.parse("{\n"
+                + "  \"currency\": [\n"
+                + "    {},\n"
+                + "    5,\n"
+                + "    { \"id\": \"test:coin\" }\n"
+                + "  ]\n"
+                + "}");
+        eq(mix.specs().size(), 1, "混着非对象：对象照常解析");
+        check(problemContains(mix, "第 4 行：这一条不是对象"), "非对象元素的行号 = 元素自己的行：" + mix.problems());
+
+        EconomyConfig.Result nested = EconomyConfig.parse("{\n"
+                + "  \"currency\": [\n"
+                + "    [ { \"id\": \"test:coin\" } ]\n"
+                + "  ]\n"
+                + "}");
+        eq(nested.specs().size(), 0, "嵌套数组不算一条");
+        check(problemContains(nested, "第 3 行：这一条不是对象"), "嵌套数组指向元素行：" + nested.problems());
+    }
+
+    /** D′3：条数上限截断 + 文件大小闸（与能力配置同一档）。 */
+    static void sizeGuards() throws Exception {
+        StringBuilder many = new StringBuilder("{\"currency\":[");
+        for (int i = 0; i < EconomyConfig.MAX_CURRENCIES + 5; i++) {
+            if (i > 0) many.append(',');
+            many.append("{\"id\":\"test:c").append(i).append("\"}");
+        }
+        many.append("]}");
+        EconomyConfig.Result capped = EconomyConfig.parse(many.toString());
+        eq(capped.specs().size(), EconomyConfig.MAX_CURRENCIES, "超限截断到上限");
+        check(capped.specs().get(0).id().equals("test:c0"), "保留的从第一条起");
+        check(problemContains(capped, "超过上限"), "一条汇总 problem");
+
+        Path file = EconomyConfig.pathIn(tmp("big"));
+        Files.createDirectories(file.getParent());
+        Files.writeString(file, "{\"currency\":[]}" + " ".repeat(EconomyConfig.MAX_FILE_BYTES),
+                StandardCharsets.UTF_8);
+        EconomyConfig.Result big = EconomyConfig.load(file);
+        check(big.specs().isEmpty() && problemContains(big, "太大"),
+                "超大文件整份不加载：" + big.problems());
+    }
+
     public static void main(String[] args) throws Exception {
         goodConfig();
         templateIsWrittenOnceAndReadOnly();
@@ -244,6 +306,9 @@ public class EconomyConfigTest {
         nonPrimitiveFieldRejected();
         parseIsDeterministic();
         wiringRegistersConfigured();
+        quotedTypesRejected();
+        lineNumbersAlignAcrossNonObjects();
+        sizeGuards();
 
         System.out.println("断言 " + checks + " 条");
         if (!failures.isEmpty()) {

@@ -100,18 +100,24 @@ public record CurrencySpec(String id, String name, String symbol, int decimals,
     private static long num(Map<String, Object> t, String k, long dflt) {
         Object v = t.get(k);
         if (v == null) return dflt;
-        if (v instanceof Number n) return n.longValue();
-        try {
-            return Long.parseLong(String.valueOf(v).trim());
-        } catch (NumberFormatException e) {
-            throw new IllegalArgumentException(k + " 不是整数：" + v);
+        if (v instanceof Number n) {
+            long asLong = n.longValue();
+            if ((n instanceof Double || n instanceof Float) && asLong != n.doubleValue()) {
+                throw new IllegalArgumentException(k + " 要写整数（不要带小数），收到 " + v);
+            }
+            return asLong;
         }
+        // 严格：数字字段只收 JSON 数字。带引号的 "2" 看着像数、读出来是文本 ——
+        // 静默替服主做决定比报一条错危险（对抗 D′1：数字档严、布尔档松的不对称）。
+        throw new IllegalArgumentException(k + " 要写整数（不要加引号），收到 " + v);
     }
 
     private static boolean bool(Map<String, Object> t, String k, boolean dflt) {
         Object v = t.get(k);
         if (v == null) return dflt;
         if (v instanceof Boolean b) return b;
-        return Boolean.parseBoolean(String.valueOf(v).trim());
+        // "yes" / "1" / "TRUE " 一律不猜：Boolean.parseBoolean 会把它们静默吞成 false，
+        // 服主以为配了默认货币、运行期却拿不到（对抗 D′1）。
+        throw new IllegalArgumentException(k + " 要写 true/false（不要加引号），收到 " + v);
     }
 }
