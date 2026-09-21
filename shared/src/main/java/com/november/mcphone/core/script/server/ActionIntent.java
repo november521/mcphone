@@ -21,7 +21,9 @@ import java.util.Locale;
  *   <li>{@code item.give}（capability {@code item.give}）—— 给发起者物品；</li>
  *   <li>{@code loot.roll}（capability {@code loot.roll}）—— 掷一张战利品表并给发起者；</li>
  *   <li>{@code attr.grant} / {@code attr.revoke}（capability {@code attr.grant}）——
- *       给自己加/撤一条<b>瞬时</b>属性修饰符。</li>
+ *       给自己加/撤一条<b>瞬时</b>属性修饰符；</li>
+ *   <li>{@code effect.give}（capability {@code effect.give}）—— 给自己一个药水效果
+ *       （<b>有时限</b>，到期自然消失，不写存档）。</li>
  * </ul>
  *
  * <p>payload 用 {@code DataOutputStream} 写：只有字符串与整数/浮点，不碰注册表；
@@ -36,12 +38,19 @@ public record ActionIntent(String kind, byte[] payload) {
     public static final String LOOT_ROLL = "loot.roll";
     public static final String ATTR_GRANT = "attr.grant";
     public static final String ATTR_REVOKE = "attr.revoke";
+    public static final String EFFECT_GIVE = "effect.give";
 
     /** 一次意图最多带多少个物品（与 {@code ItemRef.MAX_BATCH} 同一量级）。 */
     public static final int MAX_GIVE = 27;
 
     /** 属性修饰符 id 的自定义部分上限。 */
     public static final int MAX_ID = 64;
+
+    /** 药水效果最长 1 小时（72000 tick）：S18 还没接配额（§28），先给一条写死的上限。 */
+    public static final int MAX_EFFECT_TICKS = 72_000;
+
+    /** 效果等级（amplifier）上限：原版网络格式是 8 位。 */
+    public static final int MAX_AMPLIFIER = 255;
 
     public ActionIntent {
         if (kind == null || kind.isEmpty()) throw new IllegalArgumentException("ActionIntent.kind 不能为空");
@@ -55,6 +64,7 @@ public record ActionIntent(String kind, byte[] payload) {
             case ITEM_GIVE -> "item.give";
             case LOOT_ROLL -> "loot.roll";
             case ATTR_GRANT, ATTR_REVOKE -> "attr.grant";
+            case EFFECT_GIVE -> "effect.give";
             default -> null;
         };
     }
@@ -102,6 +112,21 @@ public record ActionIntent(String kind, byte[] payload) {
         }));
     }
 
+    public static ActionIntent effectGive(String effectId, int durationTicks, int amplifier) {
+        checkId(effectId, "effect.give 的效果 id");
+        if (durationTicks < 1 || durationTicks > MAX_EFFECT_TICKS) {
+            throw new IllegalArgumentException("effect.give 的时长要在 1.." + MAX_EFFECT_TICKS + " tick：" + durationTicks);
+        }
+        if (amplifier < 0 || amplifier > MAX_AMPLIFIER) {
+            throw new IllegalArgumentException("effect.give 的等级要在 0.." + MAX_AMPLIFIER + "：" + amplifier);
+        }
+        return new ActionIntent(EFFECT_GIVE, write(w -> {
+            w.writeUTF(effectId);
+            w.writeInt(durationTicks);
+            w.writeInt(amplifier);
+        }));
+    }
+
     // ---------------------------------------------------------------- 读
 
     public record Give(String itemId, int count, String customName) {
@@ -111,6 +136,9 @@ public record ActionIntent(String kind, byte[] payload) {
     }
 
     public record Attr(String attributeId, double amount, int operation, String modifierKey) {
+    }
+
+    public record Effect(String effectId, int durationTicks, int amplifier) {
     }
 
     public Give asGive() {
@@ -127,6 +155,10 @@ public record ActionIntent(String kind, byte[] payload) {
 
     public Attr asRevoke() {
         return read(ATTR_REVOKE, r -> new Attr(r.readUTF(), 0d, 0, r.readUTF()));
+    }
+
+    public Effect asEffect() {
+        return read(EFFECT_GIVE, r -> new Effect(r.readUTF(), r.readInt(), r.readInt()));
     }
 
     // ---------------------------------------------------------------- 内部

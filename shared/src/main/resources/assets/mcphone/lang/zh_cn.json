@@ -96,6 +96,7 @@
   "mcphone.script.score.unavailable": "计分板此刻用不了（主线程忙，或这个计分项被占了）",
   "mcphone.script.give.not_giftable": "这个物品不在服主的礼包白名单（#mcphone:giftable）里",
   "mcphone.script.attr.unavailable": "本服没有这个属性",
+  "mcphone.script.effect.unavailable": "本服没有这个药水效果",
   "mcphone.settings.vault": "保险箱",
   "mcphone.vault.title": "保险箱口令",
   "mcphone.vault.set": "设置口令",

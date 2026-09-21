@@ -5,6 +5,7 @@ import com.november.mcphone.core.script.ItemRefs;
 import com.november.mcphone.core.script.net.ScriptErrorCode;
 import com.november.mcphone.platform.LootAccess;
 import com.november.mcphone.platform.PlayerAbilities;
+import com.november.mcphone.platform.PlayerEffects;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
@@ -49,6 +50,9 @@ public final class ServerIntentApplier implements IntentApplier {
     /** 物品不在礼包白名单时的本地化键（§18.5）。 */
     public static final String NOT_GIFTABLE = "mcphone.script.give.not_giftable";
 
+    /** 效果 id 这一支认不得时的本地化键。 */
+    public static final String EFFECT_UNAVAILABLE = "mcphone.script.effect.unavailable";
+
     /** 礼包白名单的标签 id：默认只含原版，服主在数据包里维护（改标签不用重新审批）。 */
     private static final TagKey<Item> GIFTABLE =
             TagKey.create(Registries.ITEM, ResourceLocation.fromNamespaceAndPath("mcphone", "giftable"));
@@ -73,6 +77,7 @@ public final class ServerIntentApplier implements IntentApplier {
         // ---- 第一步：校验 + 物化（只读；掷表不把东西给谁）
         List<ItemStack> stacks = new ArrayList<>();
         List<ActionIntent> attrs = new ArrayList<>();
+        List<ActionIntent> effects = new ArrayList<>();
         for (ActionIntent intent : intents) {
             switch (intent.kind()) {
                 case ActionIntent.ITEM_GIVE -> {
@@ -105,6 +110,13 @@ public final class ServerIntentApplier implements IntentApplier {
                     }
                     attrs.add(intent);
                 }
+                case ActionIntent.EFFECT_GIVE -> {
+                    ResourceLocation id = effectId(intent);
+                    if (id == null || !PlayerEffects.available(id)) {
+                        return new Landed(ScriptErrorCode.INVALID_ARGUMENT, EFFECT_UNAVAILABLE);
+                    }
+                    effects.add(intent);
+                }
                 default -> {
                     MCphone.LOGGER.warn("[MCphone] 不认识的意图种类：{}", intent.kind());
                     return fail(ScriptErrorCode.INVALID_ARGUMENT, "");
@@ -129,7 +141,7 @@ public final class ServerIntentApplier implements IntentApplier {
                     ScriptErrorCode.INVENTORY_FULL.defaultMessageKey());
         }
 
-        // ---- 第三步：落地。先属性后物品；走到这里再失败就是结果不明。
+        // ---- 第三步：落地。先属性、再效果、后物品；走到这里再失败就是结果不明。
         for (ActionIntent intent : attrs) {
             ResourceLocation attrId = attrId(intent);
             ResourceLocation modifierId = modifierId(intent);
@@ -138,6 +150,14 @@ public final class ServerIntentApplier implements IntentApplier {
                     : PlayerAbilities.revoke(player, attrId, modifierId);
             if (!ok) {
                 MCphone.LOGGER.error("[MCphone] 属性落地在预检之后仍然失败，结果不明：{}", intent);
+                return fail(ScriptErrorCode.UNKNOWN, "");
+            }
+        }
+        for (ActionIntent intent : effects) {
+            ActionIntent.Effect e = intent.asEffect();
+            ResourceLocation effectId = ResourceLocation.tryParse(e.effectId());
+            if (effectId == null || !PlayerEffects.give(player, effectId, e.durationTicks(), e.amplifier())) {
+                MCphone.LOGGER.error("[MCphone] 效果落地在预检之后仍然失败，结果不明：{}", intent);
                 return fail(ScriptErrorCode.UNKNOWN, "");
             }
         }
@@ -162,6 +182,10 @@ public final class ServerIntentApplier implements IntentApplier {
         String raw = intent.kind().equals(ActionIntent.ATTR_GRANT)
                 ? intent.asAttr().attributeId() : intent.asRevoke().attributeId();
         return ResourceLocation.tryParse(raw);
+    }
+
+    private static ResourceLocation effectId(ActionIntent intent) {
+        return ResourceLocation.tryParse(intent.asEffect().effectId());
     }
 
     /** 修饰符 id：{@code mcphone:script/<intent 里那个 key>}。key 由产出侧拼好（含 appId 路径）。 */

@@ -96,6 +96,7 @@
   "mcphone.script.score.unavailable": "The scoreboard is unavailable right now (main thread busy, or that objective is taken)",
   "mcphone.script.give.not_giftable": "That item is not on the server's gift whitelist (#mcphone:giftable)",
   "mcphone.script.attr.unavailable": "This server does not have that attribute",
+  "mcphone.script.effect.unavailable": "This server does not have that potion effect",
   "mcphone.settings.vault": "Vault",
   "mcphone.vault.title": "Vault passphrase",
   "mcphone.vault.set": "Set passphrase",

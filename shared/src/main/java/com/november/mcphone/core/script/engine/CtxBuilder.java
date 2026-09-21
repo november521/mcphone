@@ -60,7 +60,7 @@ public final class CtxBuilder {
     /** 能接上的后端。为 null 的那一项<b>整个不挂</b>。 */
     public record Backends(SharedState shared, ItemView item, Cycle cycle,
                            KvBackend store, SealedBackend sealed, CurrencyRegistry currencies,
-                           /** 要不要挂"产意图"的能力节点（{@code ctx.give} / {@code ctx.loot} / {@code ctx.attr}）。
+                           /** 要不要挂"产意图"的能力节点（{@code ctx.give} / {@code ctx.loot} / {@code ctx.attr} / {@code ctx.effect}）。
                             *  落地端由宿主注入；为 false 时整项不挂（E12：不挂空壳）。 */
                            boolean actionIntents,
                            /** 数据包谓词判定（S18 §18.3）。为 null 时整个 {@code ctx.predicate} 不挂。 */
@@ -468,7 +468,7 @@ public final class CtxBuilder {
             ScriptableObject.putProperty(ctx, "score", score);
         }
 
-        // ---- ctx.give / ctx.loot / ctx.attr（S18）：只产意图，不在这里碰世界。
+        // ---- ctx.give / ctx.loot / ctx.attr / ctx.effect（S18）：只产意图，不在这里碰世界。
         // 节点存在与否由宿主决定（落地端没接上就不挂 —— E12 不挂空壳）。
         if (backends.actionIntents()) {
             HostFn.put(ctx, scope, "give", 2, (c, s, a) -> {
@@ -510,6 +510,27 @@ public final class CtxBuilder {
             });
             attr.sealObject();
             ScriptableObject.putProperty(ctx, "attr", attr);
+
+            ScriptableObject effect = HostFn.obj(cx, scope);
+            HostFn.put(effect, scope, "give", 3, (c, s, a) -> {
+                gate.require("effect.give");
+                String effectId = HostFn.str(a, 0, "ctx.effect.give");
+                long seconds = HostFn.exactLong(a, 1, "ctx.effect.give");
+                long amplifier = HostFn.present(a, 2) ? HostFn.exactLong(a, 2, "ctx.effect.give") : 0L;
+                int maxSeconds = com.november.mcphone.core.script.server.ActionIntent.MAX_EFFECT_TICKS / 20;
+                if (seconds < 1 || seconds > maxSeconds) {
+                    throw HostError.invalid("ctx.effect.give 的时长要在 1.." + maxSeconds + " 秒，收到 " + seconds);
+                }
+                if (amplifier < 0 || amplifier > com.november.mcphone.core.script.server.ActionIntent.MAX_AMPLIFIER) {
+                    throw HostError.invalid("ctx.effect.give 的等级要在 0.."
+                            + com.november.mcphone.core.script.server.ActionIntent.MAX_AMPLIFIER + "，收到 " + amplifier);
+                }
+                result.intents.add(com.november.mcphone.core.script.server.ActionIntent.effectGive(
+                        effectId, (int) (seconds * 20L), (int) amplifier));
+                return null;
+            });
+            effect.sealObject();
+            ScriptableObject.putProperty(ctx, "effect", effect);
         }
 
         // ---- ctx.ok / ctx.fail / ctx.log
@@ -569,14 +590,12 @@ public final class CtxBuilder {
     }
 
     /**
-     * 属性修饰符在包内的 key：{@code <appId 的 path>/<属性 id 去冒号>}。
+     * 属性修饰符在包内的 key：{@code <appId 去冒号>/<属性 id 去冒号>}（{@code t:app} → {@code t/app/...}）。
      * 落地端再拼成 {@code mcphone:script/<key>}。同一个 App 对同一个属性只有一条（可覆盖），
-     * 不同 App 之间不会互相踩。
+     * 不同 App 之间不会互相踩 —— 连命名空间都不同（{@code a:app} 与 {@code b:app}）也不会。
      */
     static String modifierKey(String appId, String attrId) {
-        int colon = appId.indexOf(':');
-        String path = colon >= 0 ? appId.substring(colon + 1) : appId;
-        String key = path + "/" + attrId.replace(':', '/');
+        String key = appId.replace(':', '/') + "/" + attrId.replace(':', '/');
         if (key.length() > com.november.mcphone.core.script.server.ActionIntent.MAX_ID) {
             throw HostError.invalid("属性 id 拼出来的修饰符 key 太长：" + key.length());
         }

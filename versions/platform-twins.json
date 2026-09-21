@@ -106,6 +106,7 @@
     "com/november/mcphone/platform/LootAccess.java": 10,
     "com/november/mcphone/platform/ModPresence.java": 10,
     "com/november/mcphone/platform/PlayerAbilities.java": 66,
+    "com/november/mcphone/platform/PlayerEffects.java": 28,
     "com/november/mcphone/platform/Predicates.java": 26,
     "com/november/mcphone/platform/Slots.java": 4,
     "com/november/mcphone/platform/StackCodecs.java": 10,

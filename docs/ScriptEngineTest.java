@@ -312,6 +312,24 @@ public class ScriptEngineTest {
         }
     }
 
+    /** 和 withCtx 一样跑一段，但把 {@link CtxBuilder.Result} 交回来（看产了哪些意图）。 */
+    static CtxBuilder.Result resultOf(String src, CtxBuilder.Backends backends) {
+        Context cx = BUDGET.enterContext();
+        try {
+            BUDGET.begin();
+            HostFn.resetDepth();
+            ScriptableObject scope = ScriptSandbox.harden(cx);
+            CtxBuilder.Result r = new CtxBuilder.Result();
+            ScriptableObject ctx = CtxBuilder.build(cx, scope, "t:app", player(), backends, r);
+            ScriptableObject.putProperty(scope, "ctx", ctx);
+            cx.evaluateString(scope, src, "t", 1, null);
+            return r;
+        } finally {
+            BUDGET.end();
+            Context.exit();
+        }
+    }
+
     static final CtxBuilder.Backends FULL = new CtxBuilder.Backends(
             new SharedState(), fakeItems(),
             new CtxBuilder.Cycle(ZoneId.of("Asia/Shanghai"), LocalTime.of(4, 0)));
@@ -1001,6 +1019,50 @@ public class ScriptEngineTest {
         }
     }
 
+    /**
+     * S18 动作节点（{@code ctx.give/loot/attr/effect}）：<b>只产意图</b>，参数在产出点校验。
+     * 落地、能力门、背包容量这些归 {@code IntentLandingTest} / 真服用例。
+     */
+    static void actionIntents() {
+        CtxBuilder.Backends actions = new CtxBuilder.Backends(
+                new SharedState(), fakeItems(),
+                new CtxBuilder.Cycle(ZoneId.of("Asia/Shanghai"), LocalTime.of(4, 0)),
+                null, null, null, true);
+        eq(withCtx("Object.getOwnPropertyNames(ctx).sort().join(',')", actions),
+                "attr,cycle,effect,fail,give,item,log,loot,ok,player,shared,time",
+                "actionIntents=true 时顶层多出 give/loot/attr/effect");
+        eq(withCtx("Object.getOwnPropertyNames(ctx.attr).sort().join(',')", actions),
+                "grant,revoke", "ctx.attr 只有 grant/revoke");
+        eq(withCtx("Object.getOwnPropertyNames(ctx.loot).sort().join(',')", actions),
+                "roll", "ctx.loot 只有 roll");
+        eq(withCtx("ctx.effect.give('minecraft:speed', 3); 'ok'", actions),
+                "ok", "省略等级时默认 0");
+
+        CtxBuilder.Result r = resultOf("ctx.give('minecraft:diamond', 3);"
+                + "ctx.loot.roll('myserver:daily');"
+                + "ctx.attr.grant('minecraft:generic.movement_speed', 0.1);"
+                + "ctx.attr.revoke('minecraft:generic.movement_speed');"
+                + "ctx.effect.give('minecraft:speed', 30);"
+                + "ctx.effect.give('minecraft:speed', 30, 2);", actions);
+        eq(r.intents.size(), 6, "六条意图，一条不多");
+        eq(r.intents.get(0).kind(), "item.give", "第 1 条是发物品");
+        eq(r.intents.get(1).kind(), "loot.roll", "第 2 条是掷表");
+        eq(r.intents.get(2).kind(), "attr.grant", "第 3 条是属性授予");
+        eq(r.intents.get(2).asAttr().modifierKey(), "t/app/minecraft/generic.movement_speed",
+                "修饰符 key 由产出侧拼好（appId 连命名空间一起去冒号）");
+        eq(r.intents.get(3).kind(), "attr.revoke", "第 4 条是属性撤销");
+        eq(r.intents.get(4).asEffect().durationTicks(), 600, "30 秒 = 600 tick");
+        eq(r.intents.get(4).asEffect().amplifier(), 0, "不写等级 = 0");
+        eq(r.intents.get(5).asEffect().amplifier(), 2, "等级原样透传");
+
+        Throwable tooLong = thrownBy("ctx.effect.give('minecraft:speed', 99999)", actions);
+        check(tooLong != null && String.valueOf(tooLong.getMessage()).contains("1..3600"),
+                "效果时长在产出点就卡住（最长 1 小时）—— " + tooLong);
+        Throwable tooMany = thrownBy("ctx.give('minecraft:diamond', 28)", actions);
+        check(tooMany != null && String.valueOf(tooMany.getMessage()).contains("1..27"),
+                "一次发的数量在产出点就卡住 —— " + tooMany);
+    }
+
     public static void main(String[] args) {
         escapes();
         currencyBalanceUnavailable();
@@ -1016,6 +1078,7 @@ public class ScriptEngineTest {
         ctxEnumeration();
         ctxItemOpaque();
         ctxBasics();
+        actionIntents();
         noCoercionCallback();
         requireTable();
         requireCycle();

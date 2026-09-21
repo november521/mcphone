@@ -519,7 +519,8 @@ public class EconomyDataTest {
                 "mcphone.script.capability.not_open", "mcphone.script.capability.unknown",
                 "mcphone.script.intent_unavailable", "mcphone.script.loot.no_such_table",
                 "mcphone.script.predicate.unavailable", "mcphone.script.give.not_giftable",
-                "mcphone.script.score.unavailable", "mcphone.script.attr.unavailable"};
+                "mcphone.script.score.unavailable", "mcphone.script.attr.unavailable",
+                "mcphone.script.effect.unavailable"};
         for (String lang : new String[]{"zh_cn", "en_us"}) {
             var in = EconomyDataTest.class.getClassLoader().getResourceAsStream("assets/mcphone/lang/" + lang + ".json");
             check(in != null, lang + ".json 在 classpath 上");

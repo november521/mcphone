@@ -66,7 +66,14 @@ public class InventoryFitTest {
                 "种类 → 能力映射（loot.roll）");
         eq(new ActionIntent(ActionIntent.ATTR_GRANT, new byte[0]).capability(), "attr.grant",
                 "种类 → 能力映射（attr.grant）");
+        eq(new ActionIntent(ActionIntent.EFFECT_GIVE, new byte[0]).capability(), "effect.give",
+                "种类 → 能力映射（effect.give）");
         eq(new ActionIntent("wat", new byte[0]).capability(), null, "没登记的种类没有能力");
+
+        ActionIntent.Effect effect = ActionIntent.effectGive("minecraft:speed", 600, 2).asEffect();
+        eq(effect.effectId(), "minecraft:speed", "effect.give 往返：效果 id");
+        eq(effect.durationTicks(), 600, "effect.give 往返：时长（tick）");
+        eq(effect.amplifier(), 2, "effect.give 往返：等级");
 
         boolean threw = false;
         try {
@@ -78,6 +85,14 @@ public class InventoryFitTest {
 
         threw = false;
         try {
+            ActionIntent.effectGive("minecraft:speed", 72_001, 0);
+        } catch (IllegalArgumentException e) {
+            threw = true;
+        }
+        check(threw, "效果超过 1 小时在产出点就拒");
+
+        threw = false;
+        try {
             ActionIntent.itemGive("UPPER:Bad", 1, "");
         } catch (IllegalArgumentException e) {
             threw = true;
@@ -85,10 +100,12 @@ public class InventoryFitTest {
         check(threw, "坏物品 id（大写命名空间）在产出点就拒");
     }
 
-    /** 两条失败口径的文案键必须在（真跑落地要主线程 + 真玩家，归 PR③ 的真服用例）。 */
+    /** 失败口径的文案键必须在（真跑落地要主线程 + 真玩家，归 PR③ 的真服用例）。 */
     static void failureKeys() {
         check(ServerIntentApplier.NO_SUCH_TABLE.startsWith("mcphone.script."), "表不存在有本地化键");
         check(ServerIntentApplier.ATTR_UNAVAILABLE.startsWith("mcphone.script."), "属性认不得有本地化键");
+        check(ServerIntentApplier.EFFECT_UNAVAILABLE.startsWith("mcphone.script."), "效果认不得有本地化键");
+        check(ServerIntentApplier.NOT_GIFTABLE.startsWith("mcphone.script."), "不在礼包白名单有本地化键");
         eq(ScriptErrorCode.INVENTORY_FULL.defaultMessageKey(), "mcphone.script.code.inventory_full",
                 "背包满用追加的第 16 个码");
     }
