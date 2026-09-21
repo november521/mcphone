@@ -12,6 +12,4 @@
 
 <style>
   column { padding: 6; gap: 4; }
-  .title { text-style: bold; }
-  .hint { color: #888888; }
 </style>
