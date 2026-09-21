@@ -213,14 +213,17 @@ public final class CtxBuilder {
             SharedState st = backends.shared();
             ScriptableObject shared = HostFn.obj(cx, scope);
             HostFn.put(shared, scope, "get", 1, (c, s, a) -> {
+                gate.require("storage.global.read");
                 String v = st.get(appId, HostFn.str(a, 0, "shared.get"));
                 return v == null ? null : v;
             });
             HostFn.put(shared, scope, "set", 2, (c, s, a) -> {
+                gate.require("storage.global.write");
                 st.set(appId, HostFn.str(a, 0, "shared.set"), HostFn.str(a, 1, "shared.set"));
                 return Boolean.TRUE;
             });
             HostFn.put(shared, scope, "compareAndSet", 3, (c, s, a) -> {
+                gate.require("storage.global.write");
                 String key = HostFn.str(a, 0, "shared.compareAndSet");
                 String expected = HostFn.present(a, 1) ? HostFn.str(a, 1, "shared.compareAndSet") : null;
                 String next = HostFn.str(a, 2, "shared.compareAndSet");
@@ -249,41 +252,50 @@ public final class CtxBuilder {
             KvBackend kv = backends.store();
             ScriptableObject store = HostFn.obj(cx, scope);
             HostFn.put(store, scope, "getString", 2, (c, s, a) -> {
+                gate.require("storage.self");
                 String v = kv.getString(appId, HostFn.str(a, 0, "store.getString"));
                 return v != null ? v : (HostFn.present(a, 1) ? a[1] : null);
             });
             HostFn.put(store, scope, "setString", 2, (c, s, a) -> {
+                gate.require("storage.self");
                 translated(() -> kv.setString(appId, HostFn.str(a, 0, "store.setString"),
                         HostFn.str(a, 1, "store.setString")));
                 return Boolean.TRUE;
             });
             // 数值一律按十进制字符串过：毫秒时间戳与计数会超过 2^53（§23.3 同一条理由）
             HostFn.put(store, scope, "getLong", 2, (c, s, a) -> {
+                gate.require("storage.self");
                 String v = kv.getString(appId, HostFn.str(a, 0, "store.getLong"));
                 return v != null ? v : (HostFn.present(a, 1) ? a[1] : "0");
             });
             HostFn.put(store, scope, "setLong", 2, (c, s, a) -> {
+                gate.require("storage.self");
                 String key = HostFn.str(a, 0, "store.setLong");
                 long value = HostFn.exactLong(a, 1, "store.setLong");
                 translated(() -> kv.setString(appId, key, Long.toString(value)));
                 return Boolean.TRUE;
             });
             HostFn.put(store, scope, "getBool", 2, (c, s, a) -> {
+                gate.require("storage.self");
                 String v = kv.getString(appId, HostFn.str(a, 0, "store.getBool"));
                 return v == null ? (HostFn.present(a, 1) && HostFn.bool(a, 1, "store.getBool")) : "true".equals(v);
             });
             HostFn.put(store, scope, "setBool", 2, (c, s, a) -> {
+                gate.require("storage.self");
                 String key = HostFn.str(a, 0, "store.setBool");
                 boolean value = HostFn.bool(a, 1, "store.setBool");
                 translated(() -> kv.setString(appId, key, Boolean.toString(value)));
                 return Boolean.TRUE;
             });
             HostFn.put(store, scope, "remove", 1, (c, s, a) -> {
+                gate.require("storage.self");
                 translated(() -> kv.remove(appId, HostFn.str(a, 0, "store.remove")));
                 return Boolean.TRUE;
             });
-            HostFn.put(store, scope, "keys", 0, (c, s, a) ->
-                    c.newArray(s, kv.keys(appId).toArray()));
+            HostFn.put(store, scope, "keys", 0, (c, s, a) -> {
+                gate.require("storage.self");
+                return c.newArray(s, kv.keys(appId).toArray());
+            });
             store.sealObject();
             ScriptableObject.putProperty(ctx, "store", store);
         }
@@ -293,6 +305,7 @@ public final class CtxBuilder {
             SealedBackend sb = backends.sealed();
             ScriptableObject sealed = HostFn.obj(cx, scope);
             HostFn.put(sealed, scope, "get", 1, (c, s, a) -> {
+                gate.require("sealed.store");
                 SealedRecord r = sb.get(appId, HostFn.str(a, 0, "sealed.get"));
                 return r == null ? null : java.util.Base64.getEncoder().encodeToString(r.cipher());
             });
@@ -452,14 +465,18 @@ public final class CtxBuilder {
         // ---- ctx.score（S18 §18.6）：限 App 自己的前缀；读写由宿主经主线程往返执行。
         if (backends.score() != null) {
             ScriptableObject score = HostFn.obj(cx, scope);
-            HostFn.put(score, scope, "get", 1, (c, s, a) ->
-                    backends.score().get(player.uuid(), scoreObjective(appId, HostFn.str(a, 0, "score.get"))));
+            HostFn.put(score, scope, "get", 1, (c, s, a) -> {
+                gate.require("score.rw");
+                return backends.score().get(player.uuid(), scoreObjective(appId, HostFn.str(a, 0, "score.get")));
+            });
             HostFn.put(score, scope, "set", 2, (c, s, a) -> {
+                gate.require("score.rw");
                 backends.score().set(player.uuid(), scoreObjective(appId, HostFn.str(a, 0, "score.set")),
                         scoreValue(HostFn.exactLong(a, 1, "score.set")));
                 return Boolean.TRUE;
             });
             HostFn.put(score, scope, "add", 2, (c, s, a) -> {
+                gate.require("score.rw");
                 backends.score().add(player.uuid(), scoreObjective(appId, HostFn.str(a, 0, "score.add")),
                         scoreValue(HostFn.exactLong(a, 1, "score.add")));
                 return Boolean.TRUE;

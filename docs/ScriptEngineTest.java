@@ -330,6 +330,26 @@ public class ScriptEngineTest {
         }
     }
 
+    /** 带能力门的跑法（看哪些调用点了门）。 */
+    static String withCtxGate(String src, CtxBuilder.Backends backends, CtxBuilder.CapabilityGate gate) {
+        Context cx = BUDGET.enterContext();
+        try {
+            BUDGET.begin();
+            HostFn.resetDepth();
+            ScriptableObject scope = ScriptSandbox.harden(cx);
+            CtxBuilder.Result r = new CtxBuilder.Result();
+            ScriptableObject ctx = CtxBuilder.build(cx, scope, "t:app", player(), backends, r,
+                    new com.november.mcphone.core.script.engine.MoneyLedger(), gate);
+            ScriptableObject.putProperty(scope, "ctx", ctx);
+            return String.valueOf(Context.toString(cx.evaluateString(scope, src, "t", 1, null)));
+        } catch (Throwable t) {
+            return t.getClass().getSimpleName() + ": " + String.valueOf(t.getMessage()).split("\n")[0];
+        } finally {
+            BUDGET.end();
+            Context.exit();
+        }
+    }
+
     static final CtxBuilder.Backends FULL = new CtxBuilder.Backends(
             new SharedState(), fakeItems(),
             new CtxBuilder.Cycle(ZoneId.of("Asia/Shanghai"), LocalTime.of(4, 0)));
@@ -1063,6 +1083,66 @@ public class ScriptEngineTest {
                 "一次发的数量在产出点就卡住 —— " + tooMany);
     }
 
+    /**
+     * S18 能力门也管 plain 档：{@code [capabilities] disabled} 关掉之后，已装 App 的这些调用
+     * 当场拒 —— 关的是"这个服开不开"，不是"要不要审批"。读点也过门（关了 read 就不该还能读）。
+     */
+    static void plainGates() {
+        Map<String, String> writes = new java.util.concurrent.ConcurrentHashMap<>();
+        com.november.mcphone.core.script.server.store.KvBackend store =
+                new com.november.mcphone.core.script.server.store.KvBackend() {
+                    public String getString(String appId, String key) { return writes.get(key); }
+                    public void setString(String appId, String key, String value) { writes.put(key, value); }
+                    public void remove(String appId, String key) { writes.remove(key); }
+                    public java.util.List<String> keys(String appId) { return java.util.List.copyOf(writes.keySet()); }
+                };
+        com.november.mcphone.core.script.server.store.SealedBackend sealed =
+                new com.november.mcphone.core.script.server.store.SealedBackend() {
+                    public void put(String appId, String key,
+                                    com.november.mcphone.core.script.server.store.SealedRecord record) { }
+                    public com.november.mcphone.core.script.server.store.SealedRecord get(String appId, String key) {
+                        return null;
+                    }
+                };
+        CtxBuilder.ScoreView score = new CtxBuilder.ScoreView() {
+            public int get(java.util.UUID p, String o) { return 0; }
+            public void set(java.util.UUID p, String o, int v) { }
+            public void add(java.util.UUID p, String o, int v) { }
+        };
+        CtxBuilder.Backends b = new CtxBuilder.Backends(new SharedState(), fakeItems(),
+                new CtxBuilder.Cycle(ZoneId.of("Asia/Shanghai"), LocalTime.of(4, 0)),
+                store, sealed, null, false, (id, p) -> Boolean.TRUE, score);
+        java.util.List<String> required = new java.util.ArrayList<>();
+        CtxBuilder.CapabilityGate gate = required::add;
+
+        eq(withCtxGate("ctx.shared.set('k','v'); ctx.shared.get('k'); 'ok'", b, gate), "ok", "共享读写照常");
+        eq(String.join(",", required), "storage.global.write,storage.global.read", "shared 的读与写各过各的门");
+        required.clear();
+        eq(withCtxGate("ctx.store.setString('k','v'); ctx.store.getString('k'); 'ok'", b, gate), "ok", "store 照常");
+        eq(String.join(",", required), "storage.self,storage.self", "store 每个调用都过 storage.self");
+        required.clear();
+        eq(withCtxGate("ctx.sealed.get('k'); 'ok'", b, gate), "ok", "保险箱读照常");
+        eq(String.join(",", required), "sealed.store", "sealed.get 过 sealed.store");
+        required.clear();
+        eq(withCtxGate("ctx.score.add('p', 1); ctx.score.get('p'); 'ok'", b, gate), "ok", "计分板照常");
+        eq(String.join(",", required), "score.rw,score.rw", "计分板读写都过 score.rw");
+        required.clear();
+        eq(withCtxGate("ctx.predicate.test('myserver:x'); 'ok'", b, gate), "ok", "谓词照常");
+        eq(required.size(), 0, "谓词不是声明型能力，不过门（也就关不掉）");
+
+        // 关掉之后：脚本拿到可接住的能力拒绝，而且写入根本没发生
+        CtxBuilder.CapabilityGate denied = id -> {
+            throw com.november.mcphone.core.script.engine.HostError.denied(
+                    com.november.mcphone.core.script.net.ScriptErrorCode.UNAVAILABLE,
+                    "mcphone.script.capability.disabled", "disabled: " + id);
+        };
+        eq(withCtxGate("try { ctx.store.setString('nope','v') } catch (e) { 'caught' }", b, denied), "caught",
+                "被服主关掉的 plain 能力：脚本接得住");
+        check(!writes.containsKey("nope"), "被关的 storage.self 写入没有发生");
+        eq(withCtxGate("try { ctx.score.get('p') } catch (e) { 'caught' }", b, denied), "caught",
+                "被关的 score.rw 读也拿不到");
+    }
+
     public static void main(String[] args) {
         escapes();
         currencyBalanceUnavailable();
@@ -1079,6 +1159,7 @@ public class ScriptEngineTest {
         ctxItemOpaque();
         ctxBasics();
         actionIntents();
+        plainGates();
         noCoercionCallback();
         requireTable();
         requireCycle();
