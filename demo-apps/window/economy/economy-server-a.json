@@ -1,0 +1,16 @@
+{
+  "_comment": [
+    "服务器 A（清单 #6 的一台）：单一 builtin 货币，默认货币 win:coin。",
+    "放到 <世界目录>/serverconfig/mcphone-economy.json（文件名固定，别改）。"
+  ],
+  "currency": [
+    {
+      "id": "win:coin",
+      "name": "金币",
+      "symbol": "G",
+      "decimals": 0,
+      "provider": "builtin",
+      "default": true
+    }
+  ]
+}

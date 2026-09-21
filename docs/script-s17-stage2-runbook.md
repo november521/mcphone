@@ -40,14 +40,14 @@ server.js
 
 ```vue
 <template>
-  <column>
+  <column class="page">
     <column v-if="!backend.available">
       <text>这个 App 需要「{{ backend.serverName }}」才能使用</text>
       <text>当前服务器没有安装它的后端</text>
     </column>
     <column v-else>
       <text>可用动作：{{ backend.actions.length }}</text>
-      <button @click="call('claim_daily')">领取</button>
+      <button class="btn" @click="call('claim_daily')">领取</button>
     </column>
   </column>
 </template>
@@ -57,8 +57,8 @@ server.js
 </script>
 
 <style>
-  column { padding: 6; gap: 4; }
-  button { width: fill; }
+  .page { padding: 6; gap: 4; }
+  .btn { width: fill; }
 </style>
 ```
 

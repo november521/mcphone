@@ -1,0 +1,23 @@
+{
+  "_comment": [
+    "服务器 B（清单 #6 的另一台 + 审计分档）：默认货币 id 与 A 不同；另带一条 scoreboard 档。",
+    "放到这台服 <世界目录>/serverconfig/mcphone-economy.json；audit 时 scoreboard 一条应打「不可对账」。"
+  ],
+  "currency": [
+    {
+      "id": "win:crown",
+      "name": "王冠",
+      "symbol": "K",
+      "decimals": 2,
+      "provider": "builtin",
+      "default": true
+    },
+    {
+      "id": "win:token",
+      "name": "代币",
+      "symbol": "",
+      "decimals": 0,
+      "provider": "scoreboard"
+    }
+  ]
+}
