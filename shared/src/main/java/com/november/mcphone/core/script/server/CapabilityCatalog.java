@@ -14,16 +14,17 @@ import java.util.Set;
  *
  * §18.8 的三张表逐条展开是 <b>32 个条目</b>；S18 对抗轮 S18-A3 之后追加
  * {@code predicate.test}（§32.6 明确"恢复"的 plain 读判定，原先既不可枚举也不可关），
- * 现在是 <b>33 个条目</b>。其中：
+ * 现在是 <b>33 个条目</b>。逐段算术：
  * <ul>
- *   <li><b>开放 23 个</b>（{@link #open()}）＝ plain(18) + granted(6) 减去
- *       {@code net.fetch}（本步不做 {@code ctx.fetch}）与 {@code container.read}
- *       （本步不做 {@code ctx.container.read}）。<b>这是 step26 卡里"22 个"指的那一组加一条</b>
- *       （那 22 条 + {@code predicate.test}）：首版有执行路径、且 {@code ctx} 上会出现的能力。</li>
- *   <li><b>不开放 10 个</b>：restricted 一档 7 个、{@code container.write}、
- *       以及上面减掉的两个。它们在目录里有确定档位，但没有 {@code ctx} 路径，
- *       OP 审批界面与未来的管理界面要看到它们。</li>
+ *   <li>plain 18 条 = 开放 17（16 条原表 + {@code predicate.test}）+ {@code net.fetch}（不开放）；</li>
+ *   <li>granted 8 条 = 开放 6 + {@code container.read}（不开放）+ {@code container.write}（记 restricted）；</li>
+ *   <li>restricted 7 条，全不开放；</li>
+ *   <li><b>合计 33 条，开放 17 + 6 = 23 条</b>（{@link #open()}）。</li>
  * </ul>
+ *
+ * <p>step26 卡里"22 个"指的就是这组开放项去掉 {@code predicate.test} 的那 22 条；
+ * 不开放的 10 条（restricted 7 + {@code container.write} + 上面两个减掉的）在目录里有确定档位，
+ * OP 审批界面与未来的管理界面要看到它们。
  *
  * <h2>{@code open} 不等于"能关"：{@link #enforced()}</h2>
  *
@@ -32,11 +33,14 @@ import java.util.Set;
  * {@code trade.escrow}/{@code message.self}/{@code currency.mint}/{@code item.give.other}
  * 归后续卡片）。{@link #enforced()} 才是"调用点已接 {@code gate.require}、{@code disabled}
  * 真的会拒"的那一组：`/mcphone script capabilities` 会分别标出来，避免服主以为关掉就生效。
- * 断言 {@code CapabilityCatalogTest.enforcedMatchesCode()} 逐条对着 {@code CtxBuilder} 源码钉死。
+ * 钉死它的是<b>运行时探针</b> {@code ScriptEngineTest.enforcedGateProbe()}：用记录门建一次 ctx、
+ * 把每个受门成员都调一遍，断言"观察到的 id 集合 = ENFORCED"——间接写法（变量/帮助函数）也看得见。
  *
  * <p><b>纪律（PM 裁定，S18 之后）</b>：后续卡片给某个开放项接上调用点时，<b>必须同时把它挪进
  * {@link #ENFORCED}</b> —— 否则它会长期停在"可审批、不可关、也不生效"的中间态。
- * 忘了登记也没法混过去：{@code enforcedMatchesCode()} 会因为"代码里有门、目录里没有"当场红。
+ * 忘了登记也没法混过去：探针两个方向都红（代码有门、目录没登记；或目录登记了、调用点却没有）。
+ * 同理，新增 {@code ActionIntent} 种类时，它映射到的能力必须已在 ENFORCED 里
+ * （{@code InventoryFitTest} 钉）。
  *
  * <p>原文里成组出现的（{@code read.self.position / inventory / stats / gamemode}、
  * {@code read.world.time / weather}、{@code read.players.online_count / list}、
@@ -71,7 +75,7 @@ public final class CapabilityCatalog {
 
     private static Map<String, Entry> build() {
         Map<String, Entry> m = new LinkedHashMap<>();
-        // ---- plain（16 个开放 + net.fetch 暂不开放）----
+        // ---- plain（18 条：17 开放 + net.fetch 暂不开放）----
         add(m, "read.self.position", CapabilityTier.PLAIN, true, "玩家自己屏幕上就看得到");
         add(m, "read.self.inventory", CapabilityTier.PLAIN, true, "玩家自己屏幕上就看得到");
         add(m, "read.self.stats", CapabilityTier.PLAIN, true, "玩家自己屏幕上就看得到");
@@ -145,7 +149,7 @@ public final class CapabilityCatalog {
         return List.copyOf(new ArrayList<>(ENTRIES.values()));
     }
 
-    /** 首版有执行路径的那 22 个。 */
+    /** 首版开放的 23 个。能不能关看 {@link #enforced(String)} —— 里面一部分还没有调用点。 */
     public static List<Entry> open() {
         List<Entry> out = new ArrayList<>();
         for (Entry e : ENTRIES.values()) if (e.open()) out.add(e);

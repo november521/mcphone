@@ -70,6 +70,14 @@ public class InventoryFitTest {
                 "种类 → 能力映射（effect.give）");
         eq(new ActionIntent("wat", new byte[0]).capability(), null, "没登记的种类没有能力");
 
+        // S18-B2：意图种类映射到的能力必须在 enforced 里 —— 新增一个意图接到"本步无调用点"的项
+        // （比如 item.give.other）时这里当场红，逼接线者同步 CapabilityCatalog.ENFORCED。
+        for (String kind : new String[]{ActionIntent.ITEM_GIVE, ActionIntent.LOOT_ROLL,
+                ActionIntent.ATTR_GRANT, ActionIntent.ATTR_REVOKE, ActionIntent.EFFECT_GIVE}) {
+            String cap = new ActionIntent(kind, new byte[0]).capability();
+            check(CapabilityCatalog.enforced(cap), kind + " → " + cap + " 必须在 enforced 里");
+        }
+
         ActionIntent.Effect effect = ActionIntent.effectGive("minecraft:speed", 600, 2).asEffect();
         eq(effect.effectId(), "minecraft:speed", "effect.give 往返：效果 id");
         eq(effect.durationTicks(), 600, "effect.give 往返：时长（tick）");

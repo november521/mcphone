@@ -138,6 +138,10 @@ cd platforms/1.21.1-neoforge
 
 > PM 裁定：`[本步无调用点]` 的条目**只记"登记未接线"** —— 既不是缺陷，也不能当"已实现"的证据；
 > 后续卡片接上调用点时必须同时把它挪进 `CapabilityCatalog.enforced()`（忘了会被源码断言抓住）。
+
+> ⚠ 本步的 `boundary` 六个开关与 preset 只有"目录展示 + warning"的差别：**还没有执行面消费者**
+> （消费方在 §29 资源卡与托管/收件箱卡），别拿 preset 推断运行期安全语义（对抗 S18-B1）。
+> 目录展示与 warning 也可以记，但要写明"本步不生效"。
 | 关掉 `score.rw` 后 `call('points')` | 同上（读点也过门） |
 | 把 `"preset"` 从 `standard` 换成 `open` + reload | `/mcphone script capabilities` 里 preset 变；显式 `disabled` 仍压过预设 |
 | `"disabled": ["nope.unknown"]` + reload | 服务端日志/命令回显一条"不认识的能力 id，跳过"warning，**不崩服** |

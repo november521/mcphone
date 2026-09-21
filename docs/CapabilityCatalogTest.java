@@ -85,6 +85,9 @@ public class CapabilityCatalogTest {
     /**
      * S18-A2：{@code open} 要分得清"有调用点 / 本步还没有"—— 前者 {@code disabled} 真的会拒，
      * 后者只影响目录展示。这份白名单是**故意写死**的：新增一条"没调用点"的开放项要有人来这里签字。
+     *
+     * <p>运行时一致性（门集合 == {@code enforcedIds()}）由 {@code ScriptEngineTest.enforcedGateProbe()}
+     * 用记录门探针钉住（间接写法也看得见）；这里只管"开放项分类不超过这两类"。
      */
     static void enforced() {
         java.util.Set<String> notYet = java.util.Set.of(
@@ -106,28 +109,11 @@ public class CapabilityCatalogTest {
         check(!CapabilityCatalog.enforced("container.read"), "container.read 本步不开放也不设门");
     }
 
-    /** 门集合与 {@code CtxBuilder} 源码一字不差（防"目录说能关、代码里没门"）。 */
-    static void enforcedMatchesCode() throws Exception {
-        java.nio.file.Path src = java.nio.file.Path.of("..", "..", "shared", "src", "main", "java",
-                "com", "november", "mcphone", "core", "script", "engine", "CtxBuilder.java")
-                .toAbsolutePath().normalize();
-        check(java.nio.file.Files.isRegularFile(src), "CtxBuilder 源码在：" + src);
-        if (!java.nio.file.Files.isRegularFile(src)) return;
-        String text = java.nio.file.Files.readString(src, java.nio.charset.StandardCharsets.UTF_8);
-        java.util.regex.Matcher m = java.util.regex.Pattern
-                .compile("gate\\.require\\(\"([^\"]+)\"\\)").matcher(text);
-        java.util.Set<String> found = new java.util.TreeSet<>();
-        while (m.find()) found.add(m.group(1));
-        eq(found, new java.util.TreeSet<>(CapabilityCatalog.enforcedIds()),
-                "CtxBuilder 的 gate.require 集合 = enforced 集合");
-    }
-
-    public static void main(String[] args) throws Exception {
+    public static void main(String[] args) {
         catalogSize();
         tiers();
         declared();
         enforced();
-        enforcedMatchesCode();
 
         System.out.println("断言 " + checks + " 条");
         if (!failures.isEmpty()) {

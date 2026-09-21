@@ -38,6 +38,18 @@ import java.util.Set;
  *
  * {@code preset} 决定底稿，任何显式写出的项都覆盖它（§31.2/§31.4）。三个档都不代人决定
  * "服务端脚本"与"跨服信任"（那两项在别处，且三档都是关的）。
+ *
+ * <h2>⚠ {@code boundary} 与预设的执行面：本步只解析、不生效（对抗 S18-B1）</h2>
+ *
+ * 六个行为开关（{@link Boundary}）与预设的差异<b>目前没有任何执行面消费者</b>：
+ * {@code resource_move} / {@code remote_machine_read} 属 §29 资源 SDK，{@code cross_dimension_transfer}
+ * / {@code escrow_freezes_decay} / {@code store_living_entities} 属托管·收件箱那张卡，
+ * {@code remote_machine_operate} 按 §30.5 <b>永不实现</b>。{@code hardcore} 底稿里的
+ * {@code trade.escrow} 也落在目录的"本步无调用点"白名单里。
+ *
+ * <p>所以：<b>不要用 preset 推断运行期安全语义</b> —— 三个档现在只有"目录展示 + warning"的差别；
+ * 各功能卡接上消费点时，读 {@link #boundary()} 并通过 {@code CapabilityConfigTest.boundaryConsumers()}
+ * 的接线白名单签字（本步为空）。模板里的 {@code _boundary_comment} 也写了这句。
  */
 public final class CapabilityConfig {
 
@@ -270,7 +282,7 @@ public final class CapabilityConfig {
                 + "    \"disabled: 全服关闭的能力 id 列表，含 plain 档 —— 关掉后所有 App（含已装）都拿不到。\",\n"
                 + "    \"能力 id 与档位见能力目录（/mcphone script capabilities 可以列出来）。\"\n"
                 + "  ],\n"
-                + "  \"_boundary_comment\": \"resource_move / cross_dimension_transfer / escrow_freezes_decay / remote_machine_read / remote_machine_operate / store_living_entities\",\n"
+                + "  \"_boundary_comment\": \"resource_move / cross_dimension_transfer / escrow_freezes_decay / remote_machine_read / remote_machine_operate / store_living_entities（本步只解析，没有执行面消费者；不要用 preset 推断运行期语义）\",\n"
                 + "  \"preset\": \"standard\",\n"
                 + "  \"disabled\": [],\n"
                 + "  \"boundary\": {\n"

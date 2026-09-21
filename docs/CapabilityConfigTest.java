@@ -137,11 +137,36 @@ public class CapabilityConfigTest {
         eq(Files.readString(file, StandardCharsets.UTF_8), custom, "装载之后文件一个字节都不动");
     }
 
+    /**
+     * S18-B1：{@code boundary} 六个开关本步没有执行面消费者（所以 preset 现在没有运行期差别）。
+     * 白名单就是**接线签字处**：哪张卡把某个开关接进执行面，就把方法名加进来 —— 否则这里当场红。
+     */
+    static void boundaryConsumers() throws Exception {
+        java.util.Set<String> wired = java.util.Set.of();
+        java.util.Set<String> observed = new java.util.TreeSet<>();
+        Path root = Path.of("..", "..").toAbsolutePath().normalize();
+        try (var stream = Files.walk(root)) {
+            for (Path f : stream
+                    .filter(p -> p.toString().endsWith(".java"))
+                    .filter(p -> p.toString().replace('\\', '/').contains("/src/main/java/"))
+                    .toList()) {
+                if (f.getFileName().toString().equals("CapabilityConfig.java")) continue;
+                java.util.regex.Matcher m = java.util.regex.Pattern
+                        .compile("\\.boundary\\(\\)\\.(\\w+)\\(")
+                        .matcher(Files.readString(f, StandardCharsets.UTF_8));
+                while (m.find()) observed.add(m.group(1));
+            }
+        }
+        eq(observed, new java.util.TreeSet<>(wired),
+                "boundary 开关的消费者集合 = 接线白名单（本步为空；接了线就来这里签字）");
+    }
+
     public static void main(String[] args) throws Exception {
         defaultsAndPresets();
         explicitOverrides();
         badInput();
         fileIsReadOnly();
+        boundaryConsumers();
 
         System.out.println("断言 " + checks + " 条");
         if (!failures.isEmpty()) {

@@ -1146,6 +1146,56 @@ public class ScriptEngineTest {
                 "被关的 score.rw 读也拿不到");
     }
 
+    /**
+     * S18-B2：运行时探针 —— 用记录门建一次 ctx、把每个受门成员都调一遍，断言观察到的 id 集合
+     * = {@code CapabilityCatalog.enforcedIds()}。比"读源码正则"强：间接写法（变量/帮助函数）
+     * 也看得见；两个方向都红（代码有门没登记 / 登记了没门）。
+     */
+    static void enforcedGateProbe() {
+        java.util.Set<String> required = new java.util.TreeSet<>();
+        CtxBuilder.CapabilityGate gate = required::add;
+
+        java.util.Map<String, String> writes = new java.util.concurrent.ConcurrentHashMap<>();
+        com.november.mcphone.core.script.server.store.KvBackend store =
+                new com.november.mcphone.core.script.server.store.KvBackend() {
+                    public String getString(String appId, String key) { return writes.get(key); }
+                    public void setString(String appId, String key, String value) { writes.put(key, value); }
+                    public void remove(String appId, String key) { writes.remove(key); }
+                    public java.util.List<String> keys(String appId) { return java.util.List.copyOf(writes.keySet()); }
+                };
+        com.november.mcphone.core.script.server.store.SealedBackend sealed =
+                new com.november.mcphone.core.script.server.store.SealedBackend() {
+                    public void put(String appId, String key,
+                                    com.november.mcphone.core.script.server.store.SealedRecord record) { }
+                    public com.november.mcphone.core.script.server.store.SealedRecord get(String appId, String key) {
+                        return null;
+                    }
+                };
+        CtxBuilder.ScoreView score = new CtxBuilder.ScoreView() {
+            public int get(java.util.UUID p, String o) { return 0; }
+            public void set(java.util.UUID p, String o, int v) { }
+            public void add(java.util.UUID p, String o, int v) { }
+        };
+        CtxBuilder.Backends b = new CtxBuilder.Backends(new SharedState(), fakeItems(),
+                new CtxBuilder.Cycle(ZoneId.of("Asia/Shanghai"), LocalTime.of(4, 0)),
+                store, sealed, null, true, (id, p) -> Boolean.TRUE, score);
+        String src = "ctx.shared.get('k'); ctx.shared.set('k','v');"
+                + "ctx.store.getString('k');"
+                + "ctx.sealed.get('k');"
+                + "ctx.score.get('p');"
+                + "ctx.predicate.test('myserver:x');"
+                + "String(ctx.player.gameMode);"
+                + "ctx.give('minecraft:diamond', 1);"
+                + "ctx.loot.roll('myserver:gift');"
+                + "ctx.attr.grant('minecraft:generic.movement_speed', 0.1);"
+                + "ctx.effect.give('minecraft:speed', 1);"
+                + "'ok'";
+        eq(withCtxGate(src, b, gate), "ok", "探针脚本整段跑通");
+        eq(required, new java.util.TreeSet<>(
+                        com.november.mcphone.core.script.server.CapabilityCatalog.enforcedIds()),
+                "运行时观察到的门集合 = 目录 enforced 集合");
+    }
+
     public static void main(String[] args) {
         escapes();
         currencyBalanceUnavailable();
@@ -1163,6 +1213,7 @@ public class ScriptEngineTest {
         ctxBasics();
         actionIntents();
         plainGates();
+        enforcedGateProbe();
         noCoercionCallback();
         requireTable();
         requireCycle();
