@@ -1,0 +1,6 @@
+{
+  "pack": {
+    "pack_format": 15,
+    "description": "S18/S15d′ 真服窗口夹具（1.20.1）：giftable 加钻石 / 真谓词 / 真战利品表。目录名用 loot_tables / predicates。用法见 docs/P1-window-fixtures.md"
+  }
+}

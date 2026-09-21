@@ -1,0 +1,13 @@
+{
+  "format": 1,
+  "id": "s15win:demo",
+  "version": "1.0.0",
+  "name": "窗口测试 App（带后端）",
+  "author": "tester",
+  "description": "S18/S15d′ 真服窗口夹具：动作覆盖 ctx.give/loot/attr/effect/predicate/score/currency（只读）。用法见 docs/P1-window-fixtures.md",
+  "icon": "icon.png",
+  "engine": "declarative-1",
+  "deploy": "server",
+  "actions": ["daily", "loot", "buff", "unbuff", "points", "vip", "wallet"],
+  "capabilities": ["item.give", "loot.roll", "attr.grant", "effect.give", "score.rw"]
+}
