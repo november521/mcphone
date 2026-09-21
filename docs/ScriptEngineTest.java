@@ -1278,6 +1278,37 @@ public class ScriptEngineTest {
         check(denied.intents.isEmpty(), "被拒的动作一条意图都没产");
     }
 
+    /**
+     * S18-D0 的封口：把"有门后端全挂时的 ctx 表面"整份签字 —— 顶层与每一级的成员集合逐字钉死。
+     * 新增/删除成员都红，逼提交者在 diff 里交代"这是什么、该不该有门"：有门的必须走
+     * {@code gated*()}（挂载登记与 enforced 对照），没门的要在这里给出理由。
+     */
+    static void gatedSurfaceIsSigned() {
+        CtxBuilder.Backends b = gatedBackends(new java.util.ArrayList<>(),
+                new java.util.ArrayList<>(), new SharedState());
+        eq(withCtx("Object.getOwnPropertyNames(ctx).sort().join(',')", b),
+                "attr,cycle,effect,fail,give,item,log,loot,ok,player,predicate,score,sealed,shared,store,time",
+                "顶层成员集合（新增成员必须来这里签字）");
+        eq(withCtx("Object.getOwnPropertyNames(ctx.attr).sort().join(',')", b), "grant,revoke", "ctx.attr");
+        eq(withCtx("Object.getOwnPropertyNames(ctx.loot).sort().join(',')", b), "roll", "ctx.loot");
+        eq(withCtx("Object.getOwnPropertyNames(ctx.effect).sort().join(',')", b), "give", "ctx.effect");
+        eq(withCtx("Object.getOwnPropertyNames(ctx.score).sort().join(',')", b), "add,get,set", "ctx.score");
+        eq(withCtx("Object.getOwnPropertyNames(ctx.predicate).sort().join(',')", b), "test", "ctx.predicate");
+        eq(withCtx("Object.getOwnPropertyNames(ctx.sealed).sort().join(',')", b), "get", "ctx.sealed");
+        eq(withCtx("Object.getOwnPropertyNames(ctx.store).sort().join(',')", b),
+                "getBool,getLong,getString,keys,remove,setBool,setLong,setString", "ctx.store");
+        eq(withCtx("Object.getOwnPropertyNames(ctx.shared).sort().join(',')", b),
+                "compareAndSet,get,set", "ctx.shared");
+        eq(withCtx("Object.getOwnPropertyNames(ctx.item).sort().join(',')", b),
+                "displayName,isDamaged,matches", "ctx.item");
+        eq(withCtx("Object.getOwnPropertyNames(ctx.player).sort().join(',')", b),
+                "dimension,gameMode,name,uuid", "ctx.player");
+        eq(withCtx("Object.getOwnPropertyNames(ctx.time).sort().join(',')", b),
+                "epochMillis,monotonicNanos,seq", "ctx.time");
+        eq(withCtx("Object.getOwnPropertyNames(ctx.cycle).sort().join(',')", b),
+                "label,nextBoundary", "ctx.cycle");
+    }
+
     public static void main(String[] args) {
         escapes();
         currencyBalanceUnavailable();
@@ -1296,6 +1327,7 @@ public class ScriptEngineTest {
         actionIntents();
         plainGates();
         gatedMountRegistry();
+        gatedSurfaceIsSigned();
         enforcedDenyProbe();
         noCoercionCallback();
         requireTable();
