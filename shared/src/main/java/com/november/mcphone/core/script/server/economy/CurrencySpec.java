@@ -10,7 +10,7 @@ import java.util.Map;
 /**
  * 货币配置里一条货币（施工方案 §22.7、§22.8）。来源：独立配置
  * {@code <世界目录>/serverconfig/mcphone-economy.json} 的 {@code currency} 数组
- * （{@link EconomyConfig}；E28 取代旧的 {@code mcphone-server.toml} 方案）。
+ * （{@link EconomyConfig}；E28：独立 JSON 取代旧的 ServerConfig/toml 方案）。
  *
  * <pre>
  * { "id": "server:coin", "name": "金币", "symbol": "¢",

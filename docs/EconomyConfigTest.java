@@ -292,6 +292,31 @@ public class EconomyConfigTest {
                 "超大文件整份不加载：" + big.problems());
     }
 
+    /** 对抗 #4：被跳过的 default 不许吃掉默认位 —— 默认货币必须落到能注册的那一条。 */
+    static void skippedDefaultFallsThrough() throws Exception {
+        EconomyConfig.Result r = EconomyConfig.parse("{\"currency\":["
+                + "{\"id\":\"test:emc\",\"provider\":\"emc_legacy\",\"default\":true},"
+                + "{\"id\":\"test:coin\",\"default\":true}]}");
+        EconomyProviders.Plan plan = EconomyProviders.plan(r.specs(), false);
+        eq(plan.entries().get(0).register(), false, "没有钱包：第一条跳过");
+        eq(plan.entries().get(0).isDefault(), false, "被跳过的那条不许占默认位");
+        eq(plan.entries().get(1).isDefault(), true, "默认顺延给能注册的第二条");
+        check(plan.warnings().stream().anyMatch(w -> w.contains("顺延")),
+                "要说清为什么顺延：" + plan.warnings());
+        eq(plan.entries().stream().filter(EconomyProviders.Planned::isDefault).count(), 1L,
+                "一个计划里最多一条默认");
+
+        // 接线层也要真的落到第二条
+        Path dir = tmp("skipped-default");
+        EconomyData data = EconomyData.createFor(dir.resolve("world"), dir.resolve("snapshot"),
+                System::currentTimeMillis);
+        TxnLog log = new TxnLog(dir.resolve("economy"), java.time.ZoneId.systemDefault());
+        CurrencyGateway gateway = new CurrencyGateway(Runnable::run, () -> true);
+        EconomyRuntime rt = EconomyRuntime.wire(data, log, gateway, 1L, r.specs(), () -> null);
+        eq(rt.registry().defaultCurrency(), "test:coin", "registry 的默认货币 = 能注册的那条");
+        check(rt.registry().get("test:emc") == null, "被跳过的档没有注册（不挂空壳）");
+    }
+
     public static void main(String[] args) throws Exception {
         goodConfig();
         templateIsWrittenOnceAndReadOnly();
@@ -309,6 +334,7 @@ public class EconomyConfigTest {
         quotedTypesRejected();
         lineNumbersAlignAcrossNonObjects();
         sizeGuards();
+        skippedDefaultFallsThrough();
 
         System.out.println("断言 " + checks + " 条");
         if (!failures.isEmpty()) {

@@ -68,20 +68,42 @@ public final class EconomyProviders {
         List<String> warnings = new ArrayList<>();
         boolean defaultTaken = false;
         for (CurrencySpec spec : specs) {
-            boolean isDefault = spec.isDefault() && !defaultTaken;
-            if (spec.isDefault() && defaultTaken) {
-                warnings.add("多条 default=true：'" + spec.id() + "' 的 default 已忽略（取第一条）");
-            }
-            if (isDefault) defaultTaken = true;
+            // 先定"注册/跳过"，再定默认位 —— **被跳过的 default 不许吃掉默认位**（对抗 #4）：
+            // 否则"第一条 emc_legacy default + 没有钱包"会让后面真正的默认被静默忽略，最后没有默认货币。
+            boolean register;
+            String skipReason;
             switch (spec.provider()) {
-                case "builtin", "scoreboard" -> out.add(new Planned(spec, true, isDefault, ""));
-                case "emc_legacy" -> out.add(hasEmcWallet
-                        ? new Planned(spec, true, isDefault, "")
-                        : new Planned(spec, false, false, SKIP_EMC_NO_WALLET));
+                case "builtin", "scoreboard" -> {
+                    register = true;
+                    skipReason = "";
+                }
+                case "emc_legacy" -> {
+                    register = hasEmcWallet;
+                    skipReason = hasEmcWallet ? "" : SKIP_EMC_NO_WALLET;
+                }
                 // adapter：桥未到货，一律不注册（哪怕将来有桥，也要先在 build 里加实现）
-                case "adapter" -> out.add(new Planned(spec, false, false, SKIP_ADAPTER_NO_BRIDGE));
-                default -> out.add(new Planned(spec, false, false, SKIP_UNKNOWN_PROVIDER));
+                case "adapter" -> {
+                    register = false;
+                    skipReason = SKIP_ADAPTER_NO_BRIDGE;
+                }
+                default -> {
+                    register = false;
+                    skipReason = SKIP_UNKNOWN_PROVIDER;
+                }
             }
+            boolean isDefault = false;
+            if (spec.isDefault()) {
+                if (!register) {
+                    warnings.add("'" + spec.id() + "' 是 default=true，但这一档本次不注册（"
+                            + skipReason + "）；默认货币顺延给下一条 default=true");
+                } else if (defaultTaken) {
+                    warnings.add("多条 default=true：'" + spec.id() + "' 的 default 已忽略（取第一条能注册的）");
+                } else {
+                    isDefault = true;
+                    defaultTaken = true;
+                }
+            }
+            out.add(new Planned(spec, register, isDefault, skipReason));
         }
         return new Plan(out, warnings);
     }
