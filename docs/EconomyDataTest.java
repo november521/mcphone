@@ -513,7 +513,13 @@ public class EconomyDataTest {
                 LegacyWalletProvider.KEY_NO_ESCROW, LegacyWalletProvider.KEY_NO_BALANCE,
                 ScoreboardProvider.KEY_UNKNOWN_PLAYER, "mcphone.economy.adapter.unavailable",
                 "mcphone.economy.no_such_currency", "mcphone.economy.invalid_amount", "mcphone.economy.scoreboard.no_server",
-                "mcphone.economy.scoreboard.off_thread", "mcphone.economy.scoreboard.no_objective"};
+                "mcphone.economy.scoreboard.off_thread", "mcphone.economy.scoreboard.no_objective",
+                // S18：能力拒绝、意图落地与礼包白名单的键也得两份都有
+                "mcphone.script.capability.disabled", "mcphone.script.capability.not_approved",
+                "mcphone.script.capability.not_open", "mcphone.script.capability.unknown",
+                "mcphone.script.intent_unavailable", "mcphone.script.loot.no_such_table",
+                "mcphone.script.predicate.unavailable", "mcphone.script.give.not_giftable",
+                "mcphone.script.attr.unavailable"};
         for (String lang : new String[]{"zh_cn", "en_us"}) {
             var in = EconomyDataTest.class.getClassLoader().getResourceAsStream("assets/mcphone/lang/" + lang + ".json");
             check(in != null, lang + ".json 在 classpath 上");

@@ -135,7 +135,7 @@ manifest 里的 `capabilities` 是一个字符串数组，元素必须是**服�
 
 | 能力 | 写法 | 落地失败时 |
 |---|---|---|
-| `item.give` | `ctx.give('minecraft:diamond', 3)` | 背包满 → `INVENTORY_FULL`（先把背包腾出来，<b>不会掉地上</b>） |
+| `item.give` | `ctx.give('minecraft:diamond', 3)` | 背包满 → `INVENTORY_FULL`（先把背包腾出来，<b>不会掉地上</b>）；物品不在 `#mcphone:giftable` 里 → `INVALID_ARGUMENT`（服主的数据包说了算，改清单不用重新审批） |
 | `loot.roll` | `ctx.loot.roll('myserver:daily_gift')` | 表不存在 → `INVALID_ARGUMENT`；只掷服主数据包里的表 |
 | `attr.grant` | `ctx.attr.grant('minecraft:generic.movement_speed', 0.1)` | 属性认不得 → `INVALID_ARGUMENT`；修饰符是瞬时的，重登失效 |
 | 同上（撤销） | `ctx.attr.revoke('minecraft:generic.movement_speed')` | 只撤这个 App 自己那条，别人的不碰 |

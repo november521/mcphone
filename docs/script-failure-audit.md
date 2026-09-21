@@ -28,6 +28,8 @@
 | 能力未批 / 被服主关 / 首版不开放（S18） | `HostError.denied(NOT_AUTHORIZED/UNAVAILABLE, key)` | 是 | 未捕获时按 `resultCode` 回（`NOT_AUTHORIZED` / `UNAVAILABLE`，带能力文案键）；钱已动则 `UNKNOWN` | `NONE` | worker / 主线程 |
 | 落地端没接通 / 玩家离线（S18） | `IntentApplier.UNWIRED` 或 `ServerIntentApplier` 返回 `Landed(UNAVAILABLE)` | 不适用（求值已结束） | `UNAVAILABLE` + `mcphone.script.intent_unavailable` | `RESET`（不是脚本的错） | 主线程 |
 | 发放时背包满（§20.9 `reject`，S18） | `ServerIntentApplier` 返回 `Landed(INVENTORY_FULL)` | 不适用 | `INVENTORY_FULL`（追加的第 16 个码），一个物品都不放 | `RESET` | 主线程 |
+| 物品不在礼包白名单（§18.5，S18） | `ServerIntentApplier` 返回 `Landed(INVALID_ARGUMENT)` + `NOT_GIFTABLE` | 不适用 | `INVALID_ARGUMENT` + `mcphone.script.give.not_giftable`，一个物品都不放 | `RESET` | 主线程 |
+| 谓词 id 认不得（§18.3，S18） | `HostError.denied(UNAVAILABLE, NO_SUCH_PREDICATE)` | 是 | 未捕获时 `UNAVAILABLE` + `mcphone.script.predicate.unavailable`；是配置错，不当判否 | `NONE` | worker / 主线程 |
 | 落地期间部署换了包 / 撤了重批（S18） | `ScriptPipeline.land` 重查 `deployRev` 不相等 | 不适用 | `VERSION_MISMATCH`，意图一条都不落地 | `NONE`（管线判定，不是脚本行为） | 主线程 |
 | 落地执行到一半失败（S18） | `ServerIntentApplier` 返回 `UNKNOWN` | 不适用 | `UNKNOWN`；钱已动同样是 `UNKNOWN` | `RESET` | 主线程 |
 

@@ -5,9 +5,12 @@ import com.november.mcphone.core.script.ItemRefs;
 import com.november.mcphone.core.script.net.ScriptErrorCode;
 import com.november.mcphone.platform.LootAccess;
 import com.november.mcphone.platform.PlayerAbilities;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.tags.TagKey;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 
 import java.util.ArrayList;
@@ -43,6 +46,13 @@ public final class ServerIntentApplier implements IntentApplier {
     /** 属性 id 这一支认不得时的本地化键。 */
     public static final String ATTR_UNAVAILABLE = "mcphone.script.attr.unavailable";
 
+    /** 物品不在礼包白名单时的本地化键（§18.5）。 */
+    public static final String NOT_GIFTABLE = "mcphone.script.give.not_giftable";
+
+    /** 礼包白名单的标签 id：默认只含原版，服主在数据包里维护（改标签不用重新审批）。 */
+    private static final TagKey<Item> GIFTABLE =
+            TagKey.create(Registries.ITEM, ResourceLocation.fromNamespaceAndPath("mcphone", "giftable"));
+
     /** UUID → 在线玩家。离线返回 null（结果回 UNAVAILABLE，不静默吞）。 */
     private final Function<UUID, ServerPlayer> players;
 
@@ -71,6 +81,11 @@ public final class ServerIntentApplier implements IntentApplier {
                     if (stack.isEmpty()) {
                         MCphone.LOGGER.warn("[MCphone] item.give 的物品 id 解析不出：{}", give.itemId());
                         return fail(ScriptErrorCode.INVALID_ARGUMENT, "");
+                    }
+                    // §18.5：白名单是标签，服主在数据包里维护 —— 改标签不改 App 的 digest
+                    if (!stack.is(GIFTABLE)) {
+                        MCphone.LOGGER.warn("[MCphone] item.give 的物品不在礼包白名单里：{}", give.itemId());
+                        return new Landed(ScriptErrorCode.INVALID_ARGUMENT, NOT_GIFTABLE);
                     }
                     stacks.add(stack);
                 }
