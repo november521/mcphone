@@ -109,11 +109,37 @@ public class CapabilityCatalogTest {
         check(!CapabilityCatalog.enforced("container.read"), "container.read 本步不开放也不设门");
     }
 
-    public static void main(String[] args) {
+    /**
+     * S18-B2 的一半：{@code CtxBuilder} 里的**字面量** {@code gate.require("x")} 必须都在
+     * {@code enforced} 里 —— 新增一条门却没登记，这里当场红（哪怕那个成员没被探针脚本调到）。
+     * 反向不查（目录有、代码里是间接写法时不该误报）；间接写法与"登记了没门"由
+     * {@code ScriptEngineTest.enforcedGateProbe()} 的运行时探针兜。
+     */
+    static void gateLiteralsKnown() throws Exception {
+        java.nio.file.Path src = java.nio.file.Path.of("..", "..", "shared", "src", "main", "java",
+                "com", "november", "mcphone", "core", "script", "engine", "CtxBuilder.java")
+                .toAbsolutePath().normalize();
+        check(java.nio.file.Files.isRegularFile(src), "CtxBuilder 源码在：" + src);
+        if (!java.nio.file.Files.isRegularFile(src)) return;
+        String text = java.nio.file.Files.readString(src, java.nio.charset.StandardCharsets.UTF_8);
+        java.util.regex.Matcher m = java.util.regex.Pattern
+                .compile("gate\\.require\\(\"([^\"]+)\"\\)").matcher(text);
+        java.util.Set<String> found = new java.util.TreeSet<>();
+        while (m.find()) {
+            found.add(m.group(1));
+            check(CapabilityCatalog.enforced(m.group(1)),
+                    "CtxBuilder 里的字面量门必须在 enforced 里：" + m.group(1));
+        }
+        eq(found.size(), CapabilityCatalog.enforcedIds().size(),
+                "字面量门（去重）条数 = enforced 条数（间接写法会让这条红，请改成字面量或更新探针）");
+    }
+
+    public static void main(String[] args) throws Exception {
         catalogSize();
         tiers();
         declared();
         enforced();
+        gateLiteralsKnown();
 
         System.out.println("断言 " + checks + " 条");
         if (!failures.isEmpty()) {
