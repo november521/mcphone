@@ -112,3 +112,53 @@ Rhino 1.9.1，**没有** `class` / `for...of` / `export` / `import` / `async` / 
 
 不写 `backend.available` 分支时，宿主会在商店详情页顶部插一条横幅兜底 —— 但那只覆盖详情页，
 App 里最好还是自己把降级画出来。
+
+## 能力声明（S18 起）
+
+manifest 里的 `capabilities` 是一个字符串数组，元素必须是**服务端能力目录里的 id**：
+
+```json
+"capabilities": ["loot.roll", "item.give"]
+```
+
+> 带参数的形态（`{ "id": "loot.roll", "tables": ["myserver:daily_gift"] }`）是后续卡片的落点；
+> **S18 只认字符串数组**，多写的对象会被拒。
+
+- **档位由服务端查表**：`plain` 免审批、`granted` 要 OP 逐条批准、`restricted` 首版全部不开放。
+  **App 在 manifest 里自称什么档都不作数**，写 `plain` 不会让一个 `item.give` 免审批。
+- **目录外的名字入队即拒**：`economy.pay` 这种自造 id 会让整个包进不了审批队列。
+  当前目录用 `/mcphone script capabilities` 列出来（首版开放 23 个；其中标 `[可关]` 的
+  是服主 `disabled` 真能关掉的，标 `[本步无调用点]` 的还没有执行路径、关了只影响目录展示）。
+- 服主可以**全服关掉任意一项**（包括 `plain`）：关掉的调用会返回 `UNAVAILABLE`，
+  与"你没有被授权"是两回事。App 要按 §13.7 的风格优雅降级。
+- **granted 必须被 OP 显式批准**：`/mcphone script approve <摘要>` 的能力轴省略时只自动批
+  `plain`；声明里有 `item.give`/`loot.roll`/`attr.grant`/`effect.give` 时，服主要显式写
+  `-`（都不批）、`all`（全批）或逐个列。**不存在"顺手把造物权限批了"这条路。**
+
+### 现在能用的能力节点（S18 本批）
+
+| 能力 | 写法 | 落地失败时 |
+|---|---|---|
+| `item.give` | `ctx.give('minecraft:diamond', 3)` | 背包满 → `INVENTORY_FULL`（先把背包腾出来，<b>不会掉地上</b>）；物品不在 `#mcphone:giftable` 里 → `INVALID_ARGUMENT`（服主的数据包说了算，改清单不用重新审批） |
+| `loot.roll` | `ctx.loot.roll('myserver:daily_gift')` | 表不存在 → `INVALID_ARGUMENT`；只掷服主数据包里的表 |
+| `attr.grant` | `ctx.attr.grant('minecraft:generic.movement_speed', 0.1)` | 属性认不得 → `INVALID_ARGUMENT`；修饰符是瞬时的，重登失效 |
+| 同上（撤销） | `ctx.attr.revoke('minecraft:generic.movement_speed')` | 只撤这个 App 自己那条，别人的不碰 |
+| `effect.give` | `ctx.effect.give('minecraft:speed', 30, 1)` | 效果认不得 → `INVALID_ARGUMENT`（`mcphone.script.effect.unavailable`）；最长 3600 秒；有时限、到期自然消失 |
+| （plain）谓词 | `ctx.predicate.test('myserver:is_vip')` | 认不得的谓词 → `UNAVAILABLE`（是服主还没写这个数据包文件）；求值出错按 `false` 算；服主可用 `disabled: ["predicate.test"]` 关掉 |
+| （plain）计分板 | `ctx.score.get/set/add('days')` | objective 名自动带 App 前缀（`example_app_` → 服主看到 `example_app_days`）；主线程忙/名字被只读 objective 占了 → `UNAVAILABLE` |
+
+这些调用只登记"意图"：真正的落地在服务器主线程、落地前会重查授权与能力。
+**回调里的 `OK` 才代表真的生效**；`UNKNOWN` 表示"可能已经生效"，**绝不要自动重试**。
+
+谓词是**服主数据包里的** `predicate/*.json`（原版格式），不要在 App 里自造条件语言：
+位置、维度、时间、天气、手持物品这些服主本来就能写，改谓词**不改 App 的 digest**。
+
+## 装配期静态预检（S18 起）
+装配后端时服务端**只编译、只解析模块，不执行任何一行代码**（零副作用）：
+
+- `require(...)` 的参数**必须是字符串字面量**、以 `./` 或 `../` 开头：
+  `require('./server/util.js')` 可以，`require('./server/' + n + '.js')` 会让预检不过。
+- 模块缺失、语法错、依赖成环 → 整个 App 不装配（所有请求 `NOT_DEPLOYED`），修好重开服。
+- **顶层代码不再在装配期运行**：它在第一次请求时执行一次（定义 `actions` 表）。
+  顶层可以写 `var`/`function`，但别把"必须尽早发生"的事放在顶层 —— 没有请求就不会发生。
+- 顶层直接抛错的包装配期能过，第一次请求时才报 `INTERNAL`。

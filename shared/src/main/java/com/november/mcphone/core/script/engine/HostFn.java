@@ -101,6 +101,14 @@ public final class HostFn {
         return ExactLong.of(at(args, i), where);
     }
 
+    /** 数字参数：JS 的 number 过来是 Double，宿主注入的整数是 Integer；别的类型不转换，直接拒。 */
+    public static double num(Object[] args, int i, String where) {
+        Object v = at(args, i);
+        if (v instanceof Double d && Double.isFinite(d)) return d;
+        if (v instanceof Integer n) return n;
+        throw typeError(args, where, i, "数字");
+    }
+
     public static boolean bool(Object[] args, int i, String where) {
         Object v = at(args, i);
         if (v instanceof Boolean b) return b;

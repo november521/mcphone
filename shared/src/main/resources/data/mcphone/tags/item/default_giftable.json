@@ -1,0 +1,28 @@
+{
+  "replace": false,
+  "values": [
+    "#minecraft:coals",
+    "#minecraft:flowers",
+    "#minecraft:saplings",
+    "#minecraft:boats",
+    "#minecraft:wool",
+    "#minecraft:planks",
+    "#minecraft:logs",
+    "#minecraft:stone_bricks",
+    "#minecraft:arrows",
+    "minecraft:apple",
+    "minecraft:bread",
+    "minecraft:cake",
+    "minecraft:golden_carrot",
+    "minecraft:name_tag",
+    "minecraft:saddle",
+    "minecraft:book",
+    "minecraft:paper",
+    "minecraft:egg",
+    "minecraft:honeycomb",
+    "minecraft:slime_ball",
+    "minecraft:glow_ink_sac",
+    "minecraft:music_disc_13",
+    "minecraft:music_disc_cat"
+  ]
+}

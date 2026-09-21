@@ -80,7 +80,13 @@ public enum ScriptErrorCode {
     REVOKED,
 
     /** 后端脚本抛异常 / 宿主错误。通用失败，已记审计。 */
-    INTERNAL;
+    INTERNAL,
+
+    /**
+     * 发放时背包满（§20.9 的 {@code reject} 策略）。<b>追加在末尾</b>：中间插会让旧客户端把
+     * 后面的码全认错（序号即身份）。S18 先落 {@code reject}；{@code mailbox} 策略等 §20 落地时再谈。
+     */
+    INVENTORY_FULL;
 
     /** 线上的序号。只许追加，不许中间插。 */
     public int toWire() {

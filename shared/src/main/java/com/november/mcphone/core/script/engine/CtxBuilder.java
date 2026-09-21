@@ -59,18 +59,81 @@ public final class CtxBuilder {
 
     /** 能接上的后端。为 null 的那一项<b>整个不挂</b>。 */
     public record Backends(SharedState shared, ItemView item, Cycle cycle,
-                           KvBackend store, SealedBackend sealed, CurrencyRegistry currencies) {
+                           KvBackend store, SealedBackend sealed, CurrencyRegistry currencies,
+                           /** 要不要挂"产意图"的能力节点（{@code ctx.give} / {@code ctx.loot} / {@code ctx.attr} / {@code ctx.effect}）。
+                            *  落地端由宿主注入；为 false 时整项不挂（E12：不挂空壳）。 */
+                           boolean actionIntents,
+                           /** 数据包谓词判定（S18 §18.3）。为 null 时整个 {@code ctx.predicate} 不挂。 */
+                           PredicateView predicate,
+                           /** 计分板读写（S18 §18.6）。为 null 时整个 {@code ctx.score} 不挂。 */
+                           ScoreView score) {
+
+        /** 不挂谓词/计分板的写法（S18 之前的路径与大多数断言）。 */
+        public Backends(SharedState shared, ItemView item, Cycle cycle,
+                        KvBackend store, SealedBackend sealed, CurrencyRegistry currencies,
+                        boolean actionIntents) {
+            this(shared, item, cycle, store, sealed, currencies, actionIntents, null, null);
+        }
+
+        /** 只加谓词的写法。 */
+        public Backends(SharedState shared, ItemView item, Cycle cycle,
+                        KvBackend store, SealedBackend sealed, CurrencyRegistry currencies,
+                        boolean actionIntents, PredicateView predicate) {
+            this(shared, item, cycle, store, sealed, currencies, actionIntents, predicate, null);
+        }
 
         /** 只有 S13 那几样的旧写法。 */
         public Backends(SharedState shared, ItemView item, Cycle cycle) {
-            this(shared, item, cycle, null, null, null);
+            this(shared, item, cycle, null, null, null, false);
         }
 
         /** S14 那一版。 */
         public Backends(SharedState shared, ItemView item, Cycle cycle,
                         KvBackend store, SealedBackend sealed) {
-            this(shared, item, cycle, store, sealed, null);
+            this(shared, item, cycle, store, sealed, null, false);
         }
+
+        /** S15 那一版（不挂能力节点）。 */
+        public Backends(SharedState shared, ItemView item, Cycle cycle,
+                        KvBackend store, SealedBackend sealed, CurrencyRegistry currencies) {
+            this(shared, item, cycle, store, sealed, currencies, false);
+        }
+    }
+
+    /** 能力门（S18）：拒绝时抛 {@link HostError#denied}，脚本可 catch、没接住按结果码回去。 */
+    @FunctionalInterface
+    public interface CapabilityGate {
+        void require(String capabilityId);
+
+        /** 没有门（断言/旧路径）时用它：全放行。 */
+        CapabilityGate ALLOW_ALL = capabilityId -> {
+        };
+    }
+
+    /** 数据包谓词判定（S18 §18.3）。宿主把平台门面注入进来，引擎只管挂节点。 */
+    @FunctionalInterface
+    public interface PredicateView {
+        /**
+         * @return {@code TRUE}/{@code FALSE} 判定结果；{@code null} = 本服没有这个谓词
+         *         （配置错，不是判否 —— 脚本收到可接住的 {@link HostError#denied}）
+         */
+        Boolean test(String predicateId, PlayerSnapshot player);
+    }
+
+    /**
+     * 计分板读写（S18 §18.6）。<b>实现方负责线程</b>：生产实现经 {@code CurrencyGateway}
+     * 回主线程执行（{@code Scoreboard} 不是线程安全的）。
+     *
+     * <p>objective 名是<b>已经拼好前缀的完整名</b>（前缀由 {@link #scoreObjective} 生成），
+     * 实现方不用再判断归属。实现里出问题（主线程忙、只读 objective、查不到玩家名）请抛
+     * {@link HostError#denied}，脚本收到的是可接住的 {@code UNAVAILABLE}。
+     */
+    public interface ScoreView {
+        int get(java.util.UUID player, String objective);
+
+        void set(java.util.UUID player, String objective, int value);
+
+        void add(java.util.UUID player, String objective, int value);
     }
 
     /** 脚本调 {@code ctx.ok} / {@code ctx.fail} 之后落在这里。 */
@@ -80,19 +143,69 @@ public final class CtxBuilder {
         public List<String> messageArgs = List.of();
         public String dataJson = "";
         public final java.util.List<String> logs = new java.util.ArrayList<>();
+        /** worker 想对世界做的事（S18）。落地一律回主线程，落地前重查授权与能力。 */
+        public final java.util.List<com.november.mcphone.core.script.server.ActionIntent> intents =
+                new java.util.ArrayList<>();
+        /**
+         * 这次 build 里<b>挂上的</b>受门能力 id（挂载时登记，不靠调用）。S18-C0 之后它是
+         * "目录 enforced == 真的挂了门"的权威证据：{@code ScriptEngineTest.gatedMountRegistry()}
+         * 断言它等于 {@code CapabilityCatalog.enforcedIds()}。
+         */
+        public final java.util.Set<String> gatedMembers = new java.util.LinkedHashSet<>();
     }
 
     private static final AtomicLong SEQ = new AtomicLong();
 
+    /**
+     * 挂一个受能力门约束的成员。<b>受门成员只许走这两个帮助函数</b>（S18-C0）：
+     * <ul>
+     *   <li><b>挂载时</b>把 id 登记进 {@code result.gatedMembers} —— 哪怕脚本从没调它，
+     *       目录也能看到"这里有一条活的、可关的门"；</li>
+     *   <li><b>调用时</b>先过门再进 body —— 拒绝就没有任何副作用。</li>
+     * </ul>
+     * 登记与拦截都只在这里实现，调用点不再出现 {@code gate.require} 字面量
+     * （{@code CapabilityCatalogTest.gatingOnlyInHelpers()} 钉死这条纪律）。
+     */
+    private static void gated(ScriptableObject target, Scriptable scope, String name, int arity,
+                              String capabilityId, Result result, CapabilityGate gate, HostFn.Body body) {
+        result.gatedMembers.add(capabilityId);
+        HostFn.put(target, scope, name, arity, (c, s, a) -> {
+            gate.require(capabilityId);
+            return body.call(c, s, a);
+        });
+    }
+
+    /** 受门属性（{@code player.gameMode}）：读到才判门；同样在挂载时登记。 */
+    private static void gatedGetter(ScriptableObject target, Context cx, String name,
+                                    String capabilityId, Result result, CapabilityGate gate,
+                                    java.util.function.Supplier<Object> value) {
+        result.gatedMembers.add(capabilityId);
+        target.defineProperty(cx, name, (Scriptable thisObj) -> {
+            gate.require(capabilityId);
+            return value.get();
+        }, ScriptableObject.READONLY | ScriptableObject.PERMANENT);
+    }
+
     /** 建一个 {@code ctx}。{@code result} 由调用方持有，求值结束后读它。 */
     public static ScriptableObject build(Context cx, Scriptable scope, String appId,
                                          PlayerSnapshot player, Backends backends, Result result) {
-        return build(cx, scope, appId, player, backends, result, new MoneyLedger());
+        return build(cx, scope, appId, player, backends, result, new MoneyLedger(), CapabilityGate.ALLOW_ALL);
     }
 
     public static ScriptableObject build(Context cx, Scriptable scope, String appId,
                                          PlayerSnapshot player, Backends backends, Result result,
                                          MoneyLedger ledger) {
+        return build(cx, scope, appId, player, backends, result, ledger, CapabilityGate.ALLOW_ALL);
+    }
+
+    /**
+     * 带能力门的建法（S18）。每个受能力约束的节点（{@code ctx.give} / {@code ctx.loot} /
+     * {@code ctx.attr}）在调用时先过 {@code gate}：拒绝就抛可接住的 {@link HostError#denied}，
+     * <b>意图一条都不产</b>（于是不可能出现"拒了但物品已经给了"）。
+     */
+    public static ScriptableObject build(Context cx, Scriptable scope, String appId,
+                                         PlayerSnapshot player, Backends backends, Result result,
+                                         MoneyLedger ledger, CapabilityGate gate) {
         ScriptableObject ctx = HostFn.obj(cx, scope);
 
         // ---- ctx.player：四个字段（§32.7），都是 JS 字符串，不是 Java 对象
@@ -100,7 +213,10 @@ public final class CtxBuilder {
         ScriptableObject.putProperty(p, "uuid", player.uuid().toString());
         ScriptableObject.putProperty(p, "name", player.name());
         ScriptableObject.putProperty(p, "dimension", player.dimension());
-        ScriptableObject.putProperty(p, "gameMode", player.gameMode());
+        // gameMode 走受门 getter：读到才判门 —— 服主关掉 read.self.gamemode 之后，
+        // 读它的 App 会拒，不读的 App 一点不受影响（对抗 S18-A2）。
+        // uuid/name/dimension 没有对应的目录 id，保持无条件注入。
+        gatedGetter(p, cx, "gameMode", "read.self.gamemode", result, gate, player::gameMode);
         p.sealObject();
         ScriptableObject.putProperty(ctx, "player", p);
 
@@ -135,15 +251,15 @@ public final class CtxBuilder {
         if (backends.shared() != null) {
             SharedState st = backends.shared();
             ScriptableObject shared = HostFn.obj(cx, scope);
-            HostFn.put(shared, scope, "get", 1, (c, s, a) -> {
+            gated(shared, scope, "get", 1, "storage.global.read", result, gate, (c, s, a) -> {
                 String v = st.get(appId, HostFn.str(a, 0, "shared.get"));
                 return v == null ? null : v;
             });
-            HostFn.put(shared, scope, "set", 2, (c, s, a) -> {
+            gated(shared, scope, "set", 2, "storage.global.write", result, gate, (c, s, a) -> {
                 st.set(appId, HostFn.str(a, 0, "shared.set"), HostFn.str(a, 1, "shared.set"));
                 return Boolean.TRUE;
             });
-            HostFn.put(shared, scope, "compareAndSet", 3, (c, s, a) -> {
+            gated(shared, scope, "compareAndSet", 3, "storage.global.write", result, gate, (c, s, a) -> {
                 String key = HostFn.str(a, 0, "shared.compareAndSet");
                 String expected = HostFn.present(a, 1) ? HostFn.str(a, 1, "shared.compareAndSet") : null;
                 String next = HostFn.str(a, 2, "shared.compareAndSet");
@@ -171,41 +287,41 @@ public final class CtxBuilder {
         if (backends.store() != null) {
             KvBackend kv = backends.store();
             ScriptableObject store = HostFn.obj(cx, scope);
-            HostFn.put(store, scope, "getString", 2, (c, s, a) -> {
+            gated(store, scope, "getString", 2, "storage.self", result, gate, (c, s, a) -> {
                 String v = kv.getString(appId, HostFn.str(a, 0, "store.getString"));
                 return v != null ? v : (HostFn.present(a, 1) ? a[1] : null);
             });
-            HostFn.put(store, scope, "setString", 2, (c, s, a) -> {
+            gated(store, scope, "setString", 2, "storage.self", result, gate, (c, s, a) -> {
                 translated(() -> kv.setString(appId, HostFn.str(a, 0, "store.setString"),
                         HostFn.str(a, 1, "store.setString")));
                 return Boolean.TRUE;
             });
             // 数值一律按十进制字符串过：毫秒时间戳与计数会超过 2^53（§23.3 同一条理由）
-            HostFn.put(store, scope, "getLong", 2, (c, s, a) -> {
+            gated(store, scope, "getLong", 2, "storage.self", result, gate, (c, s, a) -> {
                 String v = kv.getString(appId, HostFn.str(a, 0, "store.getLong"));
                 return v != null ? v : (HostFn.present(a, 1) ? a[1] : "0");
             });
-            HostFn.put(store, scope, "setLong", 2, (c, s, a) -> {
+            gated(store, scope, "setLong", 2, "storage.self", result, gate, (c, s, a) -> {
                 String key = HostFn.str(a, 0, "store.setLong");
                 long value = HostFn.exactLong(a, 1, "store.setLong");
                 translated(() -> kv.setString(appId, key, Long.toString(value)));
                 return Boolean.TRUE;
             });
-            HostFn.put(store, scope, "getBool", 2, (c, s, a) -> {
+            gated(store, scope, "getBool", 2, "storage.self", result, gate, (c, s, a) -> {
                 String v = kv.getString(appId, HostFn.str(a, 0, "store.getBool"));
                 return v == null ? (HostFn.present(a, 1) && HostFn.bool(a, 1, "store.getBool")) : "true".equals(v);
             });
-            HostFn.put(store, scope, "setBool", 2, (c, s, a) -> {
+            gated(store, scope, "setBool", 2, "storage.self", result, gate, (c, s, a) -> {
                 String key = HostFn.str(a, 0, "store.setBool");
                 boolean value = HostFn.bool(a, 1, "store.setBool");
                 translated(() -> kv.setString(appId, key, Boolean.toString(value)));
                 return Boolean.TRUE;
             });
-            HostFn.put(store, scope, "remove", 1, (c, s, a) -> {
+            gated(store, scope, "remove", 1, "storage.self", result, gate, (c, s, a) -> {
                 translated(() -> kv.remove(appId, HostFn.str(a, 0, "store.remove")));
                 return Boolean.TRUE;
             });
-            HostFn.put(store, scope, "keys", 0, (c, s, a) ->
+            gated(store, scope, "keys", 0, "storage.self", result, gate, (c, s, a) ->
                     c.newArray(s, kv.keys(appId).toArray()));
             store.sealObject();
             ScriptableObject.putProperty(ctx, "store", store);
@@ -215,7 +331,7 @@ public final class CtxBuilder {
         if (backends.sealed() != null) {
             SealedBackend sb = backends.sealed();
             ScriptableObject sealed = HostFn.obj(cx, scope);
-            HostFn.put(sealed, scope, "get", 1, (c, s, a) -> {
+            gated(sealed, scope, "get", 1, "sealed.store", result, gate, (c, s, a) -> {
                 SealedRecord r = sb.get(appId, HostFn.str(a, 0, "sealed.get"));
                 return r == null ? null : java.util.Base64.getEncoder().encodeToString(r.cipher());
             });
@@ -355,6 +471,102 @@ public final class CtxBuilder {
             ScriptableObject.putProperty(ctx, "currency", cur);
         }
 
+        // ---- ctx.predicate（S18 §18.3）：引用服主数据包里的谓词，不自造条件语言。
+        // plain 档但仍过门（可被 disabled 关，对抗 S18-A3）；认不得的 id 是配置错，回"本服没有这个谓词"。
+        if (backends.predicate() != null) {
+            ScriptableObject predicate = HostFn.obj(cx, scope);
+            gated(predicate, scope, "test", 1, "predicate.test", result, gate, (c, s, a) -> {
+                String id = HostFn.str(a, 0, "predicate.test");
+                Boolean r = backends.predicate().test(id, player);
+                if (r == null) {
+                    throw HostError.denied(ScriptErrorCode.UNAVAILABLE, NO_SUCH_PREDICATE,
+                            "predicate.test 认不得：" + id);
+                }
+                return r;
+            });
+            predicate.sealObject();
+            ScriptableObject.putProperty(ctx, "predicate", predicate);
+        }
+
+        // ---- ctx.score（S18 §18.6）：限 App 自己的前缀；读写由宿主经主线程往返执行。
+        if (backends.score() != null) {
+            ScriptableObject score = HostFn.obj(cx, scope);
+            gated(score, scope, "get", 1, "score.rw", result, gate, (c, s, a) ->
+                    backends.score().get(player.uuid(), scoreObjective(appId, HostFn.str(a, 0, "score.get"))));
+            gated(score, scope, "set", 2, "score.rw", result, gate, (c, s, a) -> {
+                backends.score().set(player.uuid(), scoreObjective(appId, HostFn.str(a, 0, "score.set")),
+                        scoreValue(HostFn.exactLong(a, 1, "score.set")));
+                return Boolean.TRUE;
+            });
+            gated(score, scope, "add", 2, "score.rw", result, gate, (c, s, a) -> {
+                backends.score().add(player.uuid(), scoreObjective(appId, HostFn.str(a, 0, "score.add")),
+                        scoreValue(HostFn.exactLong(a, 1, "score.add")));
+                return Boolean.TRUE;
+            });
+            score.sealObject();
+            ScriptableObject.putProperty(ctx, "score", score);
+        }
+
+        // ---- ctx.give / ctx.loot / ctx.attr / ctx.effect（S18）：只产意图，不在这里碰世界。
+        // 节点存在与否由宿主决定（落地端没接上就不挂 —— E12 不挂空壳）。
+        if (backends.actionIntents()) {
+            gated(ctx, scope, "give", 2, "item.give", result, gate, (c, s, a) -> {
+                String itemId = HostFn.str(a, 0, "ctx.give");
+                long n = HostFn.exactLong(a, 1, "ctx.give");
+                if (n < 1 || n > com.november.mcphone.core.script.server.ActionIntent.MAX_GIVE) {
+                    throw HostError.invalid("ctx.give 的数量要在 1.."
+                            + com.november.mcphone.core.script.server.ActionIntent.MAX_GIVE + "，收到 " + n);
+                }
+                result.intents.add(com.november.mcphone.core.script.server.ActionIntent.itemGive(itemId, (int) n, ""));
+                return null;
+            });
+
+            ScriptableObject loot = HostFn.obj(cx, scope);
+            gated(loot, scope, "roll", 1, "loot.roll", result, gate, (c, s, a) -> {
+                result.intents.add(com.november.mcphone.core.script.server.ActionIntent.lootRoll(
+                        HostFn.str(a, 0, "ctx.loot.roll")));
+                return null;
+            });
+            loot.sealObject();
+            ScriptableObject.putProperty(ctx, "loot", loot);
+
+            ScriptableObject attr = HostFn.obj(cx, scope);
+            gated(attr, scope, "grant", 2, "attr.grant", result, gate, (c, s, a) -> {
+                String attrId = HostFn.str(a, 0, "ctx.attr.grant");
+                result.intents.add(com.november.mcphone.core.script.server.ActionIntent.attrGrant(
+                        attrId, HostFn.num(a, 1, "ctx.attr.grant"), 0, modifierKey(appId, attrId)));
+                return null;
+            });
+            gated(attr, scope, "revoke", 1, "attr.grant", result, gate, (c, s, a) -> {
+                String attrId = HostFn.str(a, 0, "ctx.attr.revoke");
+                result.intents.add(com.november.mcphone.core.script.server.ActionIntent.attrRevoke(
+                        attrId, modifierKey(appId, attrId)));
+                return null;
+            });
+            attr.sealObject();
+            ScriptableObject.putProperty(ctx, "attr", attr);
+
+            ScriptableObject effect = HostFn.obj(cx, scope);
+            gated(effect, scope, "give", 3, "effect.give", result, gate, (c, s, a) -> {
+                String effectId = HostFn.str(a, 0, "ctx.effect.give");
+                long seconds = HostFn.exactLong(a, 1, "ctx.effect.give");
+                long amplifier = HostFn.present(a, 2) ? HostFn.exactLong(a, 2, "ctx.effect.give") : 0L;
+                int maxSeconds = com.november.mcphone.core.script.server.ActionIntent.MAX_EFFECT_TICKS / 20;
+                if (seconds < 1 || seconds > maxSeconds) {
+                    throw HostError.invalid("ctx.effect.give 的时长要在 1.." + maxSeconds + " 秒，收到 " + seconds);
+                }
+                if (amplifier < 0 || amplifier > com.november.mcphone.core.script.server.ActionIntent.MAX_AMPLIFIER) {
+                    throw HostError.invalid("ctx.effect.give 的等级要在 0.."
+                            + com.november.mcphone.core.script.server.ActionIntent.MAX_AMPLIFIER + "，收到 " + amplifier);
+                }
+                result.intents.add(com.november.mcphone.core.script.server.ActionIntent.effectGive(
+                        effectId, (int) (seconds * 20L), (int) amplifier));
+                return null;
+            });
+            effect.sealObject();
+            ScriptableObject.putProperty(ctx, "effect", effect);
+        }
+
         // ---- ctx.ok / ctx.fail / ctx.log
         HostFn.put(ctx, scope, "ok", 1, (c, s, a) -> {
             result.code = ScriptErrorCode.OK;
@@ -378,6 +590,52 @@ public final class CtxBuilder {
         return ctx;
     }
 
+    /**
+     * 完整 objective 名：{@code <App id 变形>_<App 自己起的名字>}。
+     * App id 里不属于 {@code [a-z0-9_.-]} 的字符统一换成 {@code _}（{@code example:app} → {@code example_app_}）——
+     * 服主在 {@code /scoreboard} 上一看前缀就知道是谁写的，别的插件的 objective 一概碰不到。
+     */
+    static String scoreObjective(String appId, String name) {
+        if (name == null || name.isEmpty()) throw HostError.invalid("score 的名字不能为空");
+        String full = scorePrefix(appId) + name;
+        if (full.length() > 64) {
+            throw HostError.invalid("score 的名字太长（含前缀最多 64）：" + full.length());
+        }
+        return full;
+    }
+
+    static String scorePrefix(String appId) {
+        StringBuilder b = new StringBuilder(appId.length() + 1);
+        for (int i = 0; i < appId.length(); i++) {
+            char ch = appId.charAt(i);
+            boolean ok = (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9')
+                    || ch == '_' || ch == '.' || ch == '-';
+            b.append(ok ? ch : '_');
+        }
+        return b.append('_').toString();
+    }
+
+    /** 计分板分值是 32 位整数：超出范围的数字不静默截断（和 {@code exactLong} 同一个口径）。 */
+    static int scoreValue(long v) {
+        if (v < Integer.MIN_VALUE || v > Integer.MAX_VALUE) {
+            throw HostError.invalid("计分板分值是 32 位整数，收到 " + v);
+        }
+        return (int) v;
+    }
+
+    /**
+     * 属性修饰符在包内的 key：{@code <appId 去冒号>/<属性 id 去冒号>}（{@code t:app} → {@code t/app/...}）。
+     * 落地端再拼成 {@code mcphone:script/<key>}。同一个 App 对同一个属性只有一条（可覆盖），
+     * 不同 App 之间不会互相踩 —— 连命名空间都不同（{@code a:app} 与 {@code b:app}）也不会。
+     */
+    static String modifierKey(String appId, String attrId) {
+        String key = appId.replace(':', '/') + "/" + attrId.replace(':', '/');
+        if (key.length() > com.november.mcphone.core.script.server.ActionIntent.MAX_ID) {
+            throw HostError.invalid("属性 id 拼出来的修饰符 key 太长：" + key.length());
+        }
+        return key;
+    }
+
     /** 服务器上没有这种货币（多半是服主改了配置）：抛脚本接得住的 Error，不中断。 */
     private static ICurrencyProvider requireOrError(CurrencyRegistry reg, String id) {
         ICurrencyProvider p = reg.get(id);
@@ -388,6 +646,9 @@ public final class CtxBuilder {
     }
 
     static final String NO_SUCH_CURRENCY = "mcphone.economy.no_such_currency";
+
+    /** 谓词 id 这一支认不得时的本地化键（S18 §18.3）。 */
+    static final String NO_SUCH_PREDICATE = "mcphone.script.predicate.unavailable";
 
     /**
      * 会动钱的 provider 调用。provider 抛了、或者没给结果 = 结果不明（可能已经动了一半）：打一条带来龙去脉与 provider 堆栈的 ERROR

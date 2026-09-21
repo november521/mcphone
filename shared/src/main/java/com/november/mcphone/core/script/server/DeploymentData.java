@@ -117,7 +117,7 @@ public final class DeploymentData extends PhoneSavedData {
     public Approval approve(Candidate c, List<String> approvedActions, List<String> approvedCapabilities,
                             UUID approver, long now) {
         List<String> actions = pick(approvedActions, c.declaredActions());
-        List<String> caps = pick(approvedCapabilities, c.declaredCapabilities());
+        List<String> caps = pickCapabilities(approvedCapabilities, c.declaredCapabilities());
         List<String> droppedActions = dropped(approvedActions, c.declaredActions());
         List<String> droppedCaps = dropped(approvedCapabilities, c.declaredCapabilities());
 
@@ -144,6 +144,27 @@ public final class DeploymentData extends PhoneSavedData {
         List<String> out = new ArrayList<>();
         for (String w : requested) if (declared.contains(w) && !out.contains(w)) out.add(w);
         return out;
+    }
+
+    /**
+     * 能力批准集（S18）。{@code requested == null}（命令面省略）<b>只自动批 plain</b>：
+     * 声明里只要有一个 granted/restricted（或目录外/参数化的名字），就必须显式写能力列表
+     * —— {@code -} = 一个都不批、{@code all} = 全批、或逐个列。
+     * <b>"凭空造物"那一档不能由省略决定</b>（对抗 S18-A1）。
+     */
+    static List<String> pickCapabilities(List<String> requested, List<String> declared) {
+        if (requested != null) return pick(requested, declared);
+        List<String> nonPlain = new ArrayList<>();
+        for (String id : declared) {
+            CapabilityCatalog.Entry e = CapabilityCatalog.of(id);
+            if (e == null || e.tier() != CapabilityTier.PLAIN) nonPlain.add(id);
+        }
+        if (!nonPlain.isEmpty()) {
+            throw new IllegalArgumentException("候选声明了要逐个批准的能力 " + nonPlain
+                    + "（granted/restricted 或目录外的名字）；批准时必须显式写能力列表："
+                    + "`-` = 一个都不批、`all` = 全批、或逐个列。省略只自动批 plain。");
+        }
+        return pick(null, declared);
     }
 
     /** 请求里不在声明集合里的项 —— 回显给命令面，别静默吞掉。 */
@@ -265,6 +286,17 @@ public final class DeploymentData extends PhoneSavedData {
             }
             if (!Deployment.validList(declaredCapabilities)) {
                 throw new IllegalArgumentException("声明能力超限：" + declaredCapabilities);
+            }
+            // S18：能力名必须对得上能力目录（§18.8）。对不上 = 服务端既不知道档位、也没法审批，
+            // 一律在入队时拒（fail-closed）。App 自称什么档都不作数，名字本身必须是我们认得的。
+            java.util.Set<String> seen = new java.util.LinkedHashSet<>();
+            for (String cap : declaredCapabilities) {
+                if (!CapabilityCatalog.knownDeclared(cap)) {
+                    throw new IllegalArgumentException("不认识的能力名（不在能力目录里）：" + cap);
+                }
+                if (!seen.add(cap)) {
+                    throw new IllegalArgumentException("同一条能力声明了两次：" + cap);
+                }
             }
             declaredActions = List.copyOf(declaredActions);
             declaredCapabilities = List.copyOf(declaredCapabilities);

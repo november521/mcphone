@@ -25,6 +25,15 @@
 | 注册表：同一 `currencyId` 第二个实例（S15f） | `CurrencyRegistry.register` 记一条 ERROR 并返回 `false`，不替换 | 不适用（发生在接线/开服，不在脚本求值内） | 原实例保留、新实例不生效；不抛，不改任何结论 | `NONE`（不是脚本行为） | 主线程（开服接线）；测试直调时调用线程 |
 | 注册表为空（新世界、尚无配置，S15f） | `get(id)` 返回 `null`；`ctx.currency` 不挂空壳 | 不适用 | `ctx.currency.default()` 为 `null`、`list()` 为空；App 该 `ctx.fail('UNAVAILABLE', …)`，不崩 | `NONE` | 主线程（开服） |
 | 默认货币未配置（S15f） | `defaultCurrency()` 返回 `null` | 不适用 | 同左；不抛、不猜 | `NONE` | 主线程 |
+| 能力未批 / 被服主关 / 首版不开放（S18） | `HostError.denied(NOT_AUTHORIZED/UNAVAILABLE, key)` | 是 | 未捕获时按 `resultCode` 回（`NOT_AUTHORIZED` / `UNAVAILABLE`，带能力文案键）；钱已动则 `UNKNOWN` | `NONE` | worker / 主线程 |
+| 落地端没接通 / 玩家离线（S18） | `IntentApplier.UNWIRED` 或 `ServerIntentApplier` 返回 `Landed(UNAVAILABLE)` | 不适用（求值已结束） | `UNAVAILABLE` + `mcphone.script.intent_unavailable` | `RESET`（不是脚本的错） | 主线程 |
+| 发放时背包满（§20.9 `reject`，S18） | `ServerIntentApplier` 返回 `Landed(INVENTORY_FULL)` | 不适用 | `INVENTORY_FULL`（追加的第 16 个码），一个物品都不放 | `RESET` | 主线程 |
+| 物品不在礼包白名单（§18.5，S18） | `ServerIntentApplier` 返回 `Landed(INVALID_ARGUMENT)` + `NOT_GIFTABLE` | 不适用 | `INVALID_ARGUMENT` + `mcphone.script.give.not_giftable`，一个物品都不放 | `RESET` | 主线程 |
+| 效果 id 认不得（§18.1 第 2 层，S18） | `ServerIntentApplier` 返回 `Landed(INVALID_ARGUMENT)` + `EFFECT_UNAVAILABLE` | 不适用 | `INVALID_ARGUMENT` + `mcphone.script.effect.unavailable`，意图一条都不落地 | `RESET` | 主线程 |
+| 谓词 id 认不得（§18.3，S18） | `HostError.denied(UNAVAILABLE, NO_SUCH_PREDICATE)` | 是 | 未捕获时 `UNAVAILABLE` + `mcphone.script.predicate.unavailable`；是配置错，不当判否 | `NONE` | worker / 主线程 |
+| 计分板此刻做不了（§18.6，S18） | 网关拒绝 / 只读 objective / 查不到玩家名 → `HostError.denied(UNAVAILABLE, SCORE_UNAVAILABLE)` | 是 | 未捕获时 `UNAVAILABLE` + `mcphone.script.score.unavailable`；读写全在主线程上做 | `NONE` | worker → 网关 → 主线程 |
+| 落地期间部署换了包 / 撤了重批（S18） | `ScriptPipeline.land` 重查 `deployRev` 不相等 | 不适用 | `VERSION_MISMATCH`，意图一条都不落地 | `NONE`（管线判定，不是脚本行为） | 主线程 |
+| 落地执行到一半失败（S18） | `ServerIntentApplier` 返回 `UNKNOWN` | 不适用 | `UNKNOWN`；钱已动同样是 `UNKNOWN` | `RESET` | 主线程 |
 
 注册表级三行与本表其余行不同：它们不经过脚本求值，因此没有"脚本可 catch"与"处分"可言 —— 一律 `NONE`，不记任何玩家过失。第二行是**正常状态**（新世界一种货币都没有），不是错误。
 

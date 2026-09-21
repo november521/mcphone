@@ -2,10 +2,9 @@ package com.november.mcphone.core.script.server;
 
 import com.november.mcphone.MCphone;
 import com.november.mcphone.core.script.engine.AppScope;
-import com.november.mcphone.core.script.engine.HostFn;
 import com.november.mcphone.core.script.engine.ScriptBudget;
+import com.november.mcphone.core.script.engine.ScriptStaticCheck;
 import com.november.mcphone.core.script.pkg.AppPackage;
-import org.mozilla.javascript.Context;
 
 import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
@@ -25,11 +24,13 @@ import java.util.Map;
  * {@code ScriptModules} 的 16 个模块额度（一个前端 js 多的包会让后端整个装不起来），也会被
  * {@code server.js} {@code require} 进来在服务端求值。前端摘要的谓词（"除后端之外的全部"）与之对称。
  *
- * <h2>装配期预检（C5/C6）</h2>
+ * <h2>装配期预检 = 静态核对，不执行代码（S18 约束 1，C8.2）</h2>
  *
- * 每个 App 在装配期就把入口求值跑一遍（<b>在预算内</b>，与请求路径同一套 {@link ScriptBudget}）。
- * 失败就整个跳过并告警：请求路径不再"每次请求都重跑一遍坏入口"（那会按请求速率占住 worker），
- * 生产里后续请求拿到的也已经是建好的 scope —— 停服 {@code discard()} 不会再被首次求值挡在锁上。
+ * 预检只做<b>零副作用</b>的事：语法编译 + {@code require} 字面量的模块解析 + 依赖环检测
+ * （{@link ScriptStaticCheck}）。<b>不建 {@code ctx}、不挂任何后端、不执行 App 代码</b>，
+ * 因此不可能碰世界、动钱、写存储。顶层就抛错的包在这里<b>照样装配成功</b>，它会在第一次请求时
+ * 按正常运行期错误处理（INTERNAL/STRIKE）；坏渲染的入口不再让整个 App 在装配期消失。
+ * 失败（语法错、模块缺失、动态 require、有环）就整个跳过并告警 —— 请求路径不重跑坏入口。
  */
 public final class ServerAppAssembler {
 
@@ -55,7 +56,7 @@ public final class ServerAppAssembler {
     }
 
     /**
-     * 装配<b>单个</b> App 的后端（含装配期预检）。失败返回 {@code null}（已记日志），调用方据此
+     * 装配<b>单个</b> App 的后端（含静态预检）。失败返回 {@code null}（已记日志），调用方据此
      * 决定"跳过"还是"回滚 + 标记不可执行"。重装配路径复用它，保证两条路装出来的是同一个东西。
      */
     static AppScope assembleOne(Deployment d, AppPackage pkg) {
@@ -69,9 +70,17 @@ public final class ServerAppAssembler {
             return null;
         }
         try {
-            // 模块条数与规范名的校验在 AppScope/ScriptModules 构造器里；超限就跳过这个 App
-            AppScope app = new AppScope(d.appId(), ScriptBudget.server(), sources);
-            return preflight(app) ? app : null;
+            // 先静态核对：语法 + require 字面量解析 + 环。零副作用，不执行任何一行脚本。
+            String why = ScriptStaticCheck.check(sources);
+            if (why != null) {
+                MCphone.LOGGER.warn("[MCphone] {} 的后端静态预检没过，本次不装配：{}", d.appId(), why);
+                return null;
+            }
+            // 模块条数与规范名的校验在 AppScope/ScriptModules 构造器里；超限就跳过这个 App。
+            // 已批准能力集在装配期冻结进 scope：worker 不许读部署表（S17 线程纪律），重批准走 reassemble。
+            return new AppScope(d.appId(), ScriptBudget.server(), sources, new java.util.LinkedHashSet<>(d.approvedCapabilities()));
+        } catch (VirtualMachineError fatal) {
+            throw fatal;
         } catch (Throwable t) {
             MCphone.LOGGER.warn("[MCphone] {} 的模块表装不起来（{}），跳过这个 App", d.appId(), t.toString());
             return null;
@@ -82,48 +91,6 @@ public final class ServerAppAssembler {
     static boolean isBackendModule(String path) {
         return path != null && path.endsWith(".js")
                 && (path.equals(ServerPackageScanner.SERVER_ENTRY) || path.startsWith(ServerPackageScanner.SERVER_DIR));
-    }
-
-    /** 装配期把入口跑一遍（预算内）；失败返回 false，调用方整个跳过这个 App。 */
-    private static boolean preflight(AppScope app) {
-        // C8.1：主线程上若已有别的 mod 留下的活动 Rhino Context，enterContext 可能进入"复用"分支 ——
-        // 那样指令/墙钟观察器就不是我们的 factory，两道闸失效，不受信入口会在主线程上无界运行。
-        // 宁可不预检（fail-safe）：该 App 改为首次请求时在 worker 上求值，预算照旧生效。
-        if (Context.getCurrentContext() != null) {
-            MCphone.LOGGER.warn("[MCphone] {} 跳过入口预检：当前线程已有活动的 Rhino Context，"
-                    + "预检的预算闸可能失效；改为首次请求时在 worker 上求值", app.appId());
-            return true;
-        }
-        Context cx = app.budget().enterContext();
-        boolean began = false;
-        try {
-            app.budget().begin();
-            began = true;
-            HostFn.resetDepth();
-            app.scope(cx);          // 加固 → 装 require → 求值入口定义 actions
-            return true;
-        } catch (Throwable t) {
-            MCphone.LOGGER.warn("[MCphone] {} 的入口预检没过（{}），本次不装配这个 App", app.appId(), t.toString());
-            return false;
-        } finally {
-            if (began) {
-                try {
-                    app.budget().end();
-                } catch (Throwable ignored) {
-                    // 预算收尾失败只影响预检这一次，下面照常退出 Context
-                }
-            }
-            try {
-                Context.exit();
-            } catch (Throwable ignored) {
-                // 同上
-            }
-            try {
-                HostFn.resetDepth();
-            } catch (Throwable ignored) {
-                // 同上
-            }
-        }
     }
 
     private static String short8(String digest) {

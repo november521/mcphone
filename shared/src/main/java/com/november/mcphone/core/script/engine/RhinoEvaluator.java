@@ -47,6 +47,8 @@ public final class RhinoEvaluator implements ActionEvaluator {
     private final StrikeTracker strikes;
     private final CtxBuilder.Backends backends;
     private final Consumer<Runnable> mainThread;
+    /** 能力门（S18）。没传时用一个"全放行"的替身（断言/旧路径），生产必须传真的。 */
+    private final com.november.mcphone.core.script.server.CapabilityPolicy capabilities;
 
     /**
      * @param apps       appId → 那个 App 的 scope
@@ -54,10 +56,19 @@ public final class RhinoEvaluator implements ActionEvaluator {
      */
     public RhinoEvaluator(Map<String, AppScope> apps, StrikeTracker strikes,
                           CtxBuilder.Backends backends, Consumer<Runnable> mainThread) {
+        this(apps, strikes, backends, mainThread,
+                new com.november.mcphone.core.script.server.CapabilityPolicy(
+                        com.november.mcphone.core.script.server.CapabilityConfig.defaults()));
+    }
+
+    public RhinoEvaluator(Map<String, AppScope> apps, StrikeTracker strikes,
+                          CtxBuilder.Backends backends, Consumer<Runnable> mainThread,
+                          com.november.mcphone.core.script.server.CapabilityPolicy capabilities) {
         this.apps = apps;
         this.strikes = strikes;
         this.backends = backends;
         this.mainThread = mainThread;
+        this.capabilities = capabilities;
     }
 
     @Override
@@ -202,14 +213,26 @@ public final class RhinoEvaluator implements ActionEvaluator {
         Object fn = ScriptableObject.getProperty(actions, request.actionId());
         if (!(fn instanceof Callable action)) return none(ScriptErrorCode.NOT_DEPLOYED);
 
-        ScriptableObject ctx = CtxBuilder.build(cx, call, request.appId(), request.player(), backends, result, ledger);
+        // 能力门（S18）：拒绝抛可接住的 HostError，脚本没接住时整次调用按它带的码回去。
+        // 判定读的是"装配期冻结的已批准集合 + 当前配置快照"，worker 上无副作用。
+        CtxBuilder.CapabilityGate gate = capability -> {
+            com.november.mcphone.core.script.server.CapabilityPolicy.Verdict verdict =
+                    capabilities.check(capability, app.capabilities());
+            if (verdict == com.november.mcphone.core.script.server.CapabilityPolicy.Verdict.OK) return;
+            boolean unavailable = verdict != com.november.mcphone.core.script.server.CapabilityPolicy.Verdict.NOT_APPROVED;
+            throw HostError.denied(unavailable ? ScriptErrorCode.UNAVAILABLE : ScriptErrorCode.NOT_AUTHORIZED,
+                    com.november.mcphone.core.script.server.CapabilityPolicy.messageKey(verdict),
+                    capability + "：" + verdict);
+        };
+
+        ScriptableObject ctx = CtxBuilder.build(cx, call, request.appId(), request.player(), backends, result, ledger, gate);
         action.call(cx, call, actions, new Object[]{ctx});
 
         ScriptErrorCode code = result.code == null ? ScriptErrorCode.INTERNAL : result.code;
         if (ledger.moved() && code != ScriptErrorCode.OK) return none(ScriptErrorCode.UNKNOWN);
         Outcome outcome = new Outcome(code, result.dataJson.getBytes(StandardCharsets.UTF_8),
                 LogText.filter(result.messageKey), result.messageArgs.stream().map(LogText::filter).toList(),
-                0, 0, List.of(), ledger.moved());
+                0, 0, List.copyOf(result.intents), ledger.moved());
         return new Completion(outcome, Disposition.RESET);
     }
 
@@ -219,6 +242,12 @@ public final class RhinoEvaluator implements ActionEvaluator {
             return none(provider.mutating() || ledger.moved() ? ScriptErrorCode.UNKNOWN : ScriptErrorCode.INTERNAL);
         }
         if (failure instanceof HostError host && HostError.classify(host) != null) {
+            // 业务拒绝（能力门等）：没接住时按它带的码与文案键回去，不记过失。
+            // 钱已经动过时仍按"结果不明"优先（E35③）。
+            if (host.resultCode() != null && !ledger.moved()) {
+                return new Completion(new Outcome(host.resultCode(), new byte[0], host.messageKey(),
+                        List.of(), 0, 0, List.of(), false), Disposition.NONE);
+            }
             return ledger.moved() ? none(ScriptErrorCode.UNKNOWN) : none(ScriptErrorCode.INTERNAL);
         }
         if (failure instanceof ScriptAbort abort) {

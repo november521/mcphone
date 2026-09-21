@@ -3,11 +3,14 @@ package com.november.mcphone.core.script.server;
 import com.november.mcphone.MCphone;
 import com.november.mcphone.core.script.engine.AppScope;
 import com.november.mcphone.core.script.engine.CtxBuilder;
+import com.november.mcphone.core.script.engine.HostError;
 import com.november.mcphone.core.script.engine.RhinoEvaluator;
 import com.november.mcphone.core.script.engine.SharedState;
 import com.november.mcphone.core.script.engine.StrikeTracker;
+import com.november.mcphone.core.script.net.ScriptErrorCode;
 import com.november.mcphone.core.script.net.ScriptRpcHandler;
 import com.november.mcphone.core.script.pkg.AppPackage;
+import com.november.mcphone.core.script.server.economy.Scores;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 
@@ -62,10 +65,17 @@ public final class ScriptHost {
     private final DeploymentData deployments;
     /** 生产授权视图。握手要用它把"这个玩家被授权的动作"筛出来（只给 UX）。 */
     private final ServerAuthority authority;
+    /**
+     * 能力与边界配置 + 判定（S18）。<b>policy 的配置是 volatile 快照</b>：
+     * {@code capabilities reload} 在主线程换一份，之后 worker 上的能力判定读到的就是新值
+     * （"切换后已装 App 的行为随之改变"）。部署/epoch/scope 都不动。
+     */
+    private final CapabilityPolicy capabilityPolicy;
 
     private ScriptHost(Map<String, AppScope> apps, StrikeTracker strikes,
                        RhinoEvaluator evaluator, ScriptPipeline pipeline,
-                       UUID serverId, DeploymentData deployments, ServerAuthority authority) {
+                       UUID serverId, DeploymentData deployments, ServerAuthority authority,
+                       CapabilityPolicy capabilityPolicy) {
         this.apps = apps;
         this.strikes = strikes;
         this.evaluator = evaluator;
@@ -73,6 +83,7 @@ public final class ScriptHost {
         this.serverId = serverId;
         this.deployments = deployments;
         this.authority = authority;
+        this.capabilityPolicy = capabilityPolicy;
     }
 
     /**
@@ -109,21 +120,105 @@ public final class ScriptHost {
 
         // 必须在主线程建：StrikeTracker 的 owner 就是构造它的这条线程
         StrikeTracker strikes = new StrikeTracker(System::currentTimeMillis);
-        // 没有后端的项整项不挂（E12）：item / cycle / store / sealed / currencies（本步）全是 null
-        CtxBuilder.Backends backends = new CtxBuilder.Backends(new SharedState(), null, null, null, null, null);
-        RhinoEvaluator evaluator = new RhinoEvaluator(apps, strikes, backends, server::execute);
+        // 能力与边界配置：独立文件、坏配置不崩服（S18）。它只在这里读一次 + 命令 reload。
+        CapabilityConfig capabilities = CapabilityConfig.load(server);
+        CapabilityPolicy capabilityPolicy = new CapabilityPolicy(capabilities);
+        // 没有后端的项整项不挂（E12）：item / cycle / store / sealed / currencies（本步）全是 null；
+        // actionIntents=true 表示挂 ctx.give（落地端 ServerIntentApplier 已接）；
+        // ctx.predicate（§18.3）接平台门面：只读判定，玩家按 uuid 现查；
+        // ctx.score（§18.6）借经济的网关回主线程；网关不在（没装经济/停服中）就不挂。
+        com.november.mcphone.core.script.server.economy.CurrencyGateway scoreGateway =
+                com.november.mcphone.core.script.server.economy.EconomyRuntime.gatewayOrNull();
+        CtxBuilder.ScoreView scoreView = scoreGateway == null ? null : new CtxBuilder.ScoreView() {
+            @Override
+            public int get(java.util.UUID player, String objective) {
+                return scoreCall(scoreGateway, () -> Scores.get(server, objective, scoreHolder(server, player)));
+            }
+
+            @Override
+            public void set(java.util.UUID player, String objective, int value) {
+                scoreCall(scoreGateway, () -> {
+                    scoreWritable(server, objective);
+                    Scores.set(server, objective, scoreHolder(server, player), value);
+                    return null;
+                });
+            }
+
+            @Override
+            public void add(java.util.UUID player, String objective, int value) {
+                scoreCall(scoreGateway, () -> {
+                    scoreWritable(server, objective);
+                    String holder = scoreHolder(server, player);
+                    Scores.set(server, objective, holder, Scores.get(server, objective, holder) + value);
+                    return null;
+                });
+            }
+        };
+        CtxBuilder.Backends backends = new CtxBuilder.Backends(new SharedState(), null, null, null, null, null, true,
+                (predicateId, snapshot) -> {
+                    ServerPlayer player = server.getPlayerList().getPlayer(snapshot.uuid());
+                    if (player == null) return null;
+                    net.minecraft.resources.ResourceLocation id =
+                            net.minecraft.resources.ResourceLocation.tryParse(predicateId);
+                    if (id == null) return null;
+                    return com.november.mcphone.platform.Predicates.test(player, id);
+                },
+                scoreView);
+        RhinoEvaluator evaluator = new RhinoEvaluator(apps, strikes, backends, server::execute, capabilityPolicy);
         UUID serverId = ServerIdentity.idOf(server);
         ServerAuthority authorityView = new ServerAuthority(deployments, authority);
         ScriptPipeline pipeline = new ScriptPipeline(serverId,
                 new IdempotencyLedger(System::currentTimeMillis),
                 new ScriptRateLimiter(System::currentTimeMillis),
-                new ServerDeployments(deployments), authorityView, evaluator);
+                new ServerDeployments(deployments), authorityView, evaluator,
+                new ServerIntentApplier(uuid -> server.getPlayerList().getPlayer(uuid)),
+                capabilityPolicy);
         // 登记之后 ScriptRpcHandler.handle 才会把请求交给这条管线（此前一律 NOT_DEPLOYED）
         ScriptRpcHandler.install(pipeline);
-        current = new ScriptHost(apps, strikes, evaluator, pipeline, serverId, deployments, authorityView);
+        current = new ScriptHost(apps, strikes, evaluator, pipeline, serverId, deployments, authorityView, capabilityPolicy);
         MCphone.LOGGER.info("[MCphone] 脚本宿主已装配：apps={}，已批准部署 {}，候选 {}{}，管线已登记",
                 apps.size(), deployments.deployments().size(), deployments.candidates().size(),
                 scan.changed() == 0 ? "" : "（本次进队 " + scan.changed() + "）");
+        MCphone.LOGGER.info("[MCphone] 能力配置：预设 {}，全服关闭 {} 项{}",
+                capabilities.preset(), capabilities.disabled().size(),
+                capabilities.disabled().isEmpty() ? "" : "（" + String.join("、", capabilities.disabled()) + "）");
+    }
+
+    /** 计分板用不了的本地化键（主线程忙、只读 objective、查不到玩家名都走它）。 */
+    static final String SCORE_UNAVAILABLE = "mcphone.script.score.unavailable";
+
+    /**
+     * 经网关回主线程执行计分板操作。<b>只在这里碰 {@link Scores}</b>。
+     * 网关自己的拒绝（正在停/排队满/主线程忙/等超了）与主线程上的任何 RuntimeException
+     * 都换成脚本接得住的 {@code UNAVAILABLE} —— 它是"此刻做不了"，不是"脚本写错了"。
+     */
+    private static <T> T scoreCall(com.november.mcphone.core.script.server.economy.CurrencyGateway gateway,
+                                   java.util.function.Supplier<T> op) {
+        try {
+            return gateway.call(op);
+        } catch (HostError e) {
+            throw e;
+        } catch (RuntimeException e) {
+            throw HostError.denied(ScriptErrorCode.UNAVAILABLE, SCORE_UNAVAILABLE,
+                    "计分板调用没做成：" + e.getClass().getSimpleName());
+        }
+    }
+
+    /** 建不出来（只读 objective 占了名字/创建失败）就是"用不了"，不是 0 分。 */
+    private static void scoreWritable(MinecraftServer server, String objective) {
+        if (!Scores.ensureObjective(server, objective, objective)) {
+            throw HostError.denied(ScriptErrorCode.UNAVAILABLE, SCORE_UNAVAILABLE,
+                    "计分项建不出来（名字被只读 objective 占了？）：" + objective);
+        }
+    }
+
+    /** 计分板按玩家名存（服主用 /scoreboard 就能看能改）；查不到名字就是"用不了"。 */
+    private static String scoreHolder(MinecraftServer server, java.util.UUID player) {
+        String holder = Scores.nameOf(server, player);
+        if (holder == null) {
+            throw HostError.denied(ScriptErrorCode.UNAVAILABLE, SCORE_UNAVAILABLE, "查不到玩家名");
+        }
+        return holder;
     }
 
     /**
@@ -163,6 +258,44 @@ public final class ScriptHost {
      */
     public boolean hasApp(String appId) {
         return apps.containsKey(appId);
+    }
+
+    /**
+     * 能力与边界配置（S18）。<b>运行期只读</b>；{@code capabilities reload} 或重开服时整份替换。
+     */
+    public CapabilityConfig capabilities() {
+        return capabilityPolicy.config();
+    }
+
+    /** 能力判定（S18）。worker 上可直接调：配置是 volatile 快照、判定无副作用。 */
+    public CapabilityPolicy capabilityPolicy() {
+        return capabilityPolicy;
+    }
+
+    /**
+     * 重新读一遍能力配置（{@code /mcphone script capabilities reload}）。
+     *
+     * <p>只换配置快照，<b>不重建 App scope、不动 epoch、不动部署表</b>：服务端脚本与部署是两回事。
+     * 换完之后 worker 上的能力判定读到的就是新值（"切换预设后已装 App 的行为随之改变"，§31.4）。
+     *
+     * <p><b>坏配置不覆盖好配置</b>（S18-E3/E4）：解析不可用时保留上一份生效的快照，
+     * 返回 false，命令面用 {@link #capabilities()}{@code .loadError()} 报原因。
+     *
+     * @return 没开服（脚本后端降级/未装）时 false；配置不可用时也 false
+     */
+    public static synchronized boolean reloadCapabilities(MinecraftServer server) {
+        ScriptHost h = current;
+        if (h == null) return false;
+        CapabilityConfig fresh = CapabilityConfig.load(server, h.capabilityPolicy.config());
+        h.capabilityPolicy.reload(fresh);
+        if (!fresh.loadError().isEmpty()) {
+            MCphone.LOGGER.error("[MCphone] 能力配置重载被拒：{}（仍按上一份生效）", fresh.loadError());
+            return false;
+        }
+        MCphone.LOGGER.info("[MCphone] 能力配置已重载：预设 {}，全服关闭 {} 项{}",
+                fresh.preset(), fresh.disabled().size(),
+                fresh.disabled().isEmpty() ? "" : "（" + String.join("、", fresh.disabled()) + "）");
+        return true;
     }
 
     /**
