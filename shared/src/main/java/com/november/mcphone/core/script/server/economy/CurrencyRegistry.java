@@ -28,6 +28,7 @@ public final class CurrencyRegistry {
     private String defaultId;
 
     private final CurrencyGateway gateway;
+    private final SettlementJournal settlements;
 
     /** 断言测试用：不经网关，直接交出 provider。 */
     public CurrencyRegistry() {
@@ -39,8 +40,9 @@ public final class CurrencyRegistry {
      * 拿到注册表的人（{@code ctx.currency}）碰不到没包过的那一个。
      */
     public CurrencyRegistry(CurrencyGateway gateway) {
-        this.gateway = gateway;
+        this(gateway,null);
     }
+    public CurrencyRegistry(CurrencyGateway gateway,SettlementJournal settlements){this.gateway=gateway;this.settlements=settlements;}
 
     /**
      * 注册一种。{@code isDefault} 只许有一个为真，后来的覆盖前面的并记一条警告。
@@ -64,7 +66,7 @@ public final class CurrencyRegistry {
         }
         if (existing == null) {
             // 已经包过的也拆开重包：别的网关（比如 onMainThread 恒为真的那种）包过的等于没包，线程模型只认这一个
-            providers.put(id, gateway == null ? provider : new GatedCurrencyProvider(unwrap(provider), gateway));
+            providers.put(id, gateway == null ? provider : new GatedCurrencyProvider(unwrap(provider), gateway).settlements(settlements));
         }
         if (isDefault) {
             if (defaultId != null && !defaultId.equals(id)) {
@@ -103,6 +105,30 @@ public final class CurrencyRegistry {
 
     public int size() {
         return providers.size();
+    }
+
+    /** 启动主线程上取一份独立只读用途的注册表；保留已包网关的 provider，不再读取运行期可清空的表。 */
+    public CurrencyRegistry snapshot() {
+        CurrencyRegistry frozen = new CurrencyRegistry();
+        frozen.providers.putAll(providers); frozen.defaultId = defaultId;
+        return frozen;
+    }
+
+    /** 每次脚本调用绑定不可伪造的 App 身份；所有实际货币调用在主线程重新查当前部署和授权。 */
+    public CurrencyRegistry forScript(String app,java.util.function.Function<String,com.november.mcphone.api.economy.TxnResult> gate) {
+        CurrencyRegistry bound=new CurrencyRegistry();bound.defaultId=defaultId;
+        providers.forEach((id,provider)->{
+            if(!(provider instanceof GatedCurrencyProvider gated))throw new IllegalStateException("生产脚本货币必须已经绑定主线程网关");
+            bound.providers.put(id,gated.forScript(app,gate));
+        });return bound;
+    }
+    public CurrencyRegistry forScript(ScriptCurrencyEscrows.Scope scope,ScriptCurrencyEscrows bindings,
+            java.util.function.Function<String,com.november.mcphone.api.economy.TxnResult> gate) {
+        java.util.Objects.requireNonNull(bindings);CurrencyRegistry bound=new CurrencyRegistry();bound.defaultId=defaultId;
+        providers.forEach((id,provider)->{
+            if(!(provider instanceof GatedCurrencyProvider gated))throw new IllegalStateException("生产脚本货币必须绑定主线程网关");
+            bound.providers.put(id,gated.forScript(scope,bindings,gate));
+        });return bound;
     }
 
     /** 服务器停止时清掉 —— 静态表会把上一个世界钉住。 */

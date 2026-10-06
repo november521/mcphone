@@ -31,6 +31,10 @@ public final class ScriptNetworking {
                 ScriptPushPayload.TYPE, ScriptPushPayload.STREAM_CODEC,
                 payload -> ScriptResultRouter.push(payload.msg()));
 
+        MCphoneNetwork.registerToServer(registrar,StoreFileRequestPayload.TYPE,StoreFileRequestPayload.STREAM_CODEC,(payload,player)->StoreFileChannel.handle(payload.msg(),player));
+        MCphoneNetwork.registerToClient(registrar,StoreFileReplyPayload.TYPE,StoreFileReplyPayload.STREAM_CODEC,payload->StoreFileChannel.reply(payload.msg()));
+        StoreFileChannel.install(request->MCphoneNetwork.sendToServer(new StoreFileRequestPayload(request)),(player,reply)->MCphoneNetwork.sendToPlayer(player,new StoreFileReplyPayload(reply)));
+
         ScriptRpcHandler.installSender((player, result) ->
                 MCphoneNetwork.sendToPlayer(player, new ScriptRpcResultPayload(result)));
         // S17 Stage 2：服务端主动推送（握手）

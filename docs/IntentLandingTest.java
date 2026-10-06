@@ -175,6 +175,15 @@ public class IntentLandingTest {
         eq(r.code(), ScriptErrorCode.UNKNOWN, "钱已动过 + 发放失败 → UNKNOWN（不谎报没动）");
     }
 
+    static void giveOtherNeedsBoth(){
+        var intent=ActionIntent.itemGiveOther(UUID.randomUUID().toString(),"minecraft:diamond",1);
+        for(Set<String> caps:List.of(Set.of("item.give"),Set.of("item.give.other"),Set.of("item.give","item.give.other"))){
+            FakeApplier applier=new FakeApplier(IntentApplier.Landed.ok());
+            var result=run(deployed("rev1",caps),new CapabilityPolicy(CapabilityConfig.defaults()),evaluating(List.of(intent),false),applier,"rev1");
+            boolean both=caps.size()==2;eq(result.code(),both?ScriptErrorCode.OK:ScriptErrorCode.NOT_AUTHORIZED,"他人物品需同时批准造物与影响他人两项");eq(applier.calls,both?1:0,"缺任意一项就不能触达落地端");
+        }
+    }
+
     public static void main(String[] args) {
         happyPath();
         versionRecheck();
@@ -182,6 +191,7 @@ public class IntentLandingTest {
         unwiredApplier();
         inventoryFull();
         moneyMovedWins();
+        giveOtherNeedsBoth();
 
         System.out.println("断言 " + checks + " 条");
         if (!failures.isEmpty()) {

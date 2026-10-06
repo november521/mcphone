@@ -46,6 +46,9 @@ public final class RhinoEvaluator implements ActionEvaluator {
     private final Map<String, AppScope> apps;
     private final StrikeTracker strikes;
     private final CtxBuilder.Backends backends;
+    private java.util.function.Function<Request, CtxBuilder.Backends> invocationBackends;
+    private Consumer<Request> releaseBackends=request->{};
+    public void releaseBackends(Consumer<Request> release){releaseBackends=java.util.Objects.requireNonNull(release);}
     private final Consumer<Runnable> mainThread;
     /** 能力门（S18）。没传时用一个"全放行"的替身（断言/旧路径），生产必须传真的。 */
     private final com.november.mcphone.core.script.server.CapabilityPolicy capabilities;
@@ -69,7 +72,30 @@ public final class RhinoEvaluator implements ActionEvaluator {
         this.backends = backends;
         this.mainThread = mainThread;
         this.capabilities = capabilities;
+        this.invocationBackends = ignored -> backends;
     }
+
+    /** 启动时注入每玩家后端；不把某一个玩家的 KV 放进全服共用对象。 */
+    public void invocationBackends(java.util.function.Function<Request, CtxBuilder.Backends> factory) {
+        this.invocationBackends = java.util.Objects.requireNonNull(factory);
+    }
+
+    private static CtxBuilder.Backends readonlyBackground(CtxBuilder.Backends source) {
+        var kv=source.store();var score=source.score();
+        com.november.mcphone.core.script.server.store.KvBackend readKv=kv==null?null:new com.november.mcphone.core.script.server.store.KvBackend(){
+            public String getString(String app,String key){return kv.getString(app,key);}
+            public java.util.List<String> keys(String app){return kv.keys(app);}
+            public void setString(String app,String key,String value){throw readonly();}
+            public void remove(String app,String key){throw readonly();}
+        };
+        CtxBuilder.ScoreView readScore=score==null?null:new CtxBuilder.ScoreView(){
+            public int get(UUID player,String objective){return score.get(player,objective);}
+            public void set(UUID player,String objective,int value){throw readonly();}
+            public void add(UUID player,String objective,int value){throw readonly();}
+        };
+        return new CtxBuilder.Backends(source.shared(),source.item(),source.cycle(),readKv,source.sealed(),null,true,source.predicate(),readScore,null,null,source.resources(),source.quota(),source.reads());
+    }
+    private static HostError readonly(){return HostError.denied(ScriptErrorCode.NOT_AUTHORIZED,"mcphone.background.readonly","后台任务不能修改存储或世界");}
 
     @Override
     public boolean submit(Request request, Consumer<Outcome> onDone) {
@@ -138,7 +164,7 @@ public final class RhinoEvaluator implements ActionEvaluator {
             } catch (Throwable failure) {
                 MCphone.LOGGER.error("[MCphone] script completion callback failed app={} action={}",
                         LogText.filter(request.appId()), LogText.filter(request.actionId()), failure);
-            }
+            } finally {releaseBackends.accept(request);}
         }
     }
 
@@ -161,7 +187,7 @@ public final class RhinoEvaluator implements ActionEvaluator {
         try {
             Context cx = budget.enterContext();
             entered = true;
-            budget.begin();
+            budget.begin(request.background()?10_000_000L:Long.MAX_VALUE);
             began = true;
             HostFn.resetDepth();
 
@@ -213,9 +239,17 @@ public final class RhinoEvaluator implements ActionEvaluator {
         Object fn = ScriptableObject.getProperty(actions, request.actionId());
         if (!(fn instanceof Callable action)) return none(ScriptErrorCode.NOT_DEPLOYED);
 
+        try { result.params = com.november.mcphone.core.script.JsonValues.object(request.params()); }
+        catch (IllegalArgumentException e) { return none(ScriptErrorCode.INVALID_ARGUMENT); }
+
+        // 求值可以动钱或存储：进入动作前先在主线程持久化 EFFECT_STARTED，失败时不执行动作。
+        request.beginEffects().run();
+
         // 能力门（S18）：拒绝抛可接住的 HostError，脚本没接住时整次调用按它带的码回去。
         // 判定读的是"装配期冻结的已批准集合 + 当前配置快照"，worker 上无副作用。
         CtxBuilder.CapabilityGate gate = capability -> {
+            if(request.background()&&!java.util.Set.of("read.self.gamemode","read.self.position","read.self.inventory","read.self.stats","read.world.time","read.world.weather","read.players.online_count","read.players.list","storage.self","storage.global.read","sealed.store","predicate.test","score.rw","resource.read.item","notify.self").contains(capability))
+                throw HostError.denied(ScriptErrorCode.NOT_AUTHORIZED,"mcphone.background.readonly","后台任务只允许查询与通知本人");
             com.november.mcphone.core.script.server.CapabilityPolicy.Verdict verdict =
                     capabilities.check(capability, app.capabilities());
             if (verdict == com.november.mcphone.core.script.server.CapabilityPolicy.Verdict.OK) return;
@@ -225,12 +259,15 @@ public final class RhinoEvaluator implements ActionEvaluator {
                     capability + "：" + verdict);
         };
 
-        ScriptableObject ctx = CtxBuilder.build(cx, call, request.appId(), request.player(), backends, result, ledger, gate);
+        CtxBuilder.Backends bound=invocationBackends.apply(request);
+        if(request.background())bound=readonlyBackground(bound);
+        ScriptableObject ctx = CtxBuilder.build(cx, call, request.appId(), request.player(), bound, result, ledger, gate);
         action.call(cx, call, actions, new Object[]{ctx});
+        if(request.background()&&ScriptBudget.wallLeftNanos()<0)throw new ScriptAbort(ScriptAbort.Reason.WALL_CLOCK,"后台计算超过 10 ms");
 
-        ScriptErrorCode code = result.code == null ? ScriptErrorCode.INTERNAL : result.code;
-        if (ledger.moved() && code != ScriptErrorCode.OK) return none(ScriptErrorCode.UNKNOWN);
-        Outcome outcome = new Outcome(code, result.dataJson.getBytes(StandardCharsets.UTF_8),
+        ScriptErrorCode code = result.forcedCode != null ? result.forcedCode : result.code == null ? ScriptErrorCode.INTERNAL : result.code;
+        if (ledger.moved() && code != ScriptErrorCode.OK && code != ScriptErrorCode.PARTIAL && code != ScriptErrorCode.UNKNOWN) return none(ScriptErrorCode.UNKNOWN);
+        Outcome outcome = new Outcome(code, (result.forcedCode != null ? result.forcedDataJson : result.dataJson).getBytes(StandardCharsets.UTF_8),
                 LogText.filter(result.messageKey), result.messageArgs.stream().map(LogText::filter).toList(),
                 0, 0, List.copyOf(result.intents), ledger.moved());
         return new Completion(outcome, Disposition.RESET);

@@ -20,12 +20,12 @@ import java.util.regex.Pattern;
  */
 final class PropRules {
 
-    enum Kind { INT, BOOL, TEXT, STRING, ICON, IMAGE_SRC, BIND_INT, BIND_BOOL, TABS, ARGS }
+    enum Kind { INT, BOOL, TEXT, STRING, ICON, IMAGE_SRC, BIND_INT, BIND_BOOL, BIND_STRING, TABS, ARGS }
 
     /** 一个属性。staticOnly 的只能写字面值（bind 是 key 名），boundOnly 的只能写 :attr（数组）。 */
     record Spec(String name, Kind kind, int min, int max) {
         boolean staticOnly() {
-            return kind == Kind.BIND_INT || kind == Kind.BIND_BOOL;
+            return kind == Kind.BIND_INT || kind == Kind.BIND_BOOL || kind == Kind.BIND_STRING;
         }
 
         boolean boundOnly() {
@@ -47,6 +47,7 @@ final class PropRules {
                 case IMAGE_SRC -> "包内相对路径，以 .png 结尾";
                 case BIND_INT -> "state 里一个 int 的 key 名";
                 case BIND_BOOL -> "state 里一个 bool 的 key 名";
+                case BIND_STRING -> "state 里一个 string 的 key 名";
                 case TABS -> ":tabs=\"[{text:'…'}, …]\"，2–4 项，每项恰好一个 text / i18n / icon";
                 case ARGS -> ":args=\"[…]\"，最多 " + NodeParser.MAX_ARGS + " 个 string 或 int";
             };
@@ -116,6 +117,12 @@ final class PropRules {
                 put(out, "bind", Kind.BIND_INT, 0, 0);
                 put(out, "tabs", Kind.TABS, 0, 0);
             }
+            case TEXT_INPUT -> {
+                put(out, "bind", Kind.BIND_STRING, 0, 0);
+                put(out, "placeholder", Kind.TEXT, 0, 0);
+                put(out, "max-length", Kind.INT, 1, 4096);
+                put(out, "enabled", Kind.BOOL, 0, 0);
+            }
             default -> {
                 // box / column / row / stack / scroll 没有专有属性
             }
@@ -134,7 +141,7 @@ final class PropRules {
             case IMAGE -> List.of(List.of("src"));
             case ICON -> List.of(List.of("name"));
             case ITEM -> List.of(List.of("item"));
-            case TOGGLE -> List.of(List.of("bind"));
+            case TOGGLE, TEXT_INPUT -> List.of(List.of("bind"));
             case TAB_BAR -> List.of(List.of("bind"), List.of("tabs"));
             default -> List.of();
         };

@@ -41,11 +41,19 @@ public final class CompiledTemplate {
 
     private final Element root;
     private final Map<String, Object> state;
+    private final FrontendProgram program;
 
     CompiledTemplate(Element root, Map<String, Object> state) {
+        this(root, state, FrontendProgram.EMPTY);
+    }
+
+    CompiledTemplate(Element root, Map<String, Object> state, FrontendProgram program) {
         this.root = root;
         this.state = state;
+        this.program = program;
     }
+
+    public FrontendProgram program() { return program; }
 
     Element root() {
         return root;

@@ -86,7 +86,10 @@ public enum ScriptErrorCode {
      * 发放时背包满（§20.9 的 {@code reject} 策略）。<b>追加在末尾</b>：中间插会让旧客户端把
      * 后面的码全认错（序号即身份）。S18 先落 {@code reject}；{@code mailbox} 策略等 §20 落地时再谈。
      */
-    INVENTORY_FULL;
+    INVENTORY_FULL,
+
+    /** 存储或服务配额已满。追加序号，旧客户端仍可安全归入 INTERNAL。 */
+    QUOTA;
 
     /** 线上的序号。只许追加，不许中间插。 */
     public int toWire() {

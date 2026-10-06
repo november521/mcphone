@@ -94,6 +94,7 @@ public class MCphone implements ModInitializer {
         ServerTickEvents.END_SERVER_TICK.register(server -> {
             // 超时托管每 5 分钟扫一次（见 EconomyRuntime.tick）
             com.november.mcphone.core.script.server.economy.EconomyRuntime.tick();
+            com.november.mcphone.core.script.server.ScriptHost.tick();
             for (ServerPlayer player : server.getPlayerList().getPlayers()) {
                 com.november.mcphone.feature.terminal.TerminalCharger.onPlayerTick(player);
             }

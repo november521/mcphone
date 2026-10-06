@@ -10,12 +10,10 @@ import java.util.UUID;
 /**
  * 幂等账本（施工方案 §15.6）：同一次点击被重复投递时，不重复执行。
  *
- * <h2>本步是内存账本，落盘是 S20 的事</h2>
+ * <h2>持久化由 ScriptStateData 接入</h2>
  *
- * §27.1 把「S20 幂等账本 §20.7」单列在 P2，那一步管的是重启后
- * {@code RESERVED} → 回滚、{@code EFFECT_STARTED} → {@code UNKNOWN} 那张状态表。
- * 本步只欠 §15.6 的四行行为。<b>所以现在的"只执行一次"在一次服务器会话内成立，跨重启不成立</b> ——
- * 这一条要写在 S12 的验收里，别当成已经有了。
+ * 生产实例的每次转换都会把账本与守卫写进同一份原子快照（§20.4/§20.7）。
+ * 断言可以保留纯内存实例；生产必须先登记 onChanged，再接受请求。
  *
  * <h2>淘汰按状态，不按时间 —— 按时间是一个可被利用的驱逐攻击</h2>
  *
@@ -55,7 +53,11 @@ public final class IdempotencyLedger {
         /** 收下了、还没出结果。重复投递回 {@link ScriptErrorCode#IN_PROGRESS}。 */
         RESERVED,
         /** 出结果了。重复投递回上次的结果。 */
-        SETTLED
+        SETTLED,
+        EFFECT_STARTED,
+        SUCCEEDED,
+        FAILED,
+        UNKNOWN
     }
 
     /** 账本里的一条。 */
@@ -91,9 +93,57 @@ public final class IdempotencyLedger {
 
     /** 现在几点。测试喂一个假的进来。 */
     private final java.util.function.LongSupplier clock;
+    private Runnable changed = () -> { };
+    private java.util.function.LongSupplier retention=()->TTL_MS;
+    public IdempotencyLedger retention(java.util.function.LongSupplier value){retention=value;return this;}
 
     public IdempotencyLedger(java.util.function.LongSupplier clock) {
         this.clock = clock;
+    }
+
+    /** 生产端把账本与守卫写进同一份快照；断言仍可使用纯内存实例。 */
+    public void onChanged(Runnable journal) {
+        this.changed = java.util.Objects.requireNonNull(journal);
+    }
+
+    /** 写 EFFECT_STARTED 必须先于任何可能产生副作用的求值或落地。 */
+    public void effectStarted(UUID player, byte[] key) {
+        String hex = IdempotencyKey.hex(key);
+        Entry e = box(player).get(hex);
+        if (e == null || e.state() != State.RESERVED) throw new IllegalStateException("没有预留");
+        box(player).put(hex, new Entry(State.EFFECT_STARTED, e.paramsDigest(), e.at(),
+                e.code(), e.data(), e.retryAfterMs(), e.stateRevision()));
+        changed.run();
+    }
+
+    /** 防御性快照；调用者不能改账本里的字节数组。 */
+    public Map<UUID, Map<String, Entry>> snapshot() {
+        Map<UUID, Map<String, Entry>> out = new LinkedHashMap<>();
+        byPlayer.forEach((player, entries) -> {
+            Map<String, Entry> copy = new LinkedHashMap<>();
+            entries.forEach((key, e) -> copy.put(key, new Entry(e.state(), e.paramsDigest().clone(), e.at(),
+                    e.code(), e.data().clone(), e.retryAfterMs(), e.stateRevision())));
+            out.put(player, java.util.Collections.unmodifiableMap(copy));
+        });
+        return java.util.Collections.unmodifiableMap(out);
+    }
+
+    /** 开服恢复：没开始的失败，可重领；开始过的结果不明，绝不自动重试。 */
+    public void restore(Map<UUID, Map<String, Entry>> saved) {
+        byPlayer.clear();
+        saved.forEach((player, entries) -> {
+            if (entries.size() > MAX_PER_PLAYER) throw new IllegalArgumentException("账本超额");
+            LinkedHashMap<String, Entry> copy = new LinkedHashMap<>();
+            entries.forEach((key, e) -> {
+                State state = e.state();
+                ScriptErrorCode code = e.code();
+                if (state == State.RESERVED) { state = State.FAILED; code = ScriptErrorCode.INTERNAL; }
+                if (state == State.EFFECT_STARTED) { state = State.UNKNOWN; code = ScriptErrorCode.UNKNOWN; }
+                copy.put(key, new Entry(state, e.paramsDigest().clone(), e.at(), code,
+                        e.data().clone(), e.retryAfterMs(), e.stateRevision()));
+            });
+            byPlayer.put(player, copy);
+        });
     }
 
     /** §15.6 那张四行表。<b>不改状态</b>，只回答"该怎么办"。 */
@@ -107,8 +157,8 @@ public final class IdempotencyLedger {
                     : new Verdict.Fresh();
         }
         if (!java.util.Arrays.equals(e.paramsDigest(), paramsDigest)) return new Verdict.ParamsChanged();
-        if (e.state() == State.RESERVED) return new Verdict.InProgress();
-        return new Verdict.Replay(e.code(), e.data(), e.retryAfterMs(), e.stateRevision());
+        if (e.state() == State.RESERVED || e.state() == State.EFFECT_STARTED) return new Verdict.InProgress();
+        return new Verdict.Replay(e.code(), e.data().clone(), e.retryAfterMs(), e.stateRevision());
     }
 
     /** 记下"开始处理了"。调用方在 {@link Verdict.Fresh} 之后调。 */
@@ -122,8 +172,9 @@ public final class IdempotencyLedger {
             throw new IllegalStateException("reserve called after a Full verdict");
         }
         entries.put(hex,
-                new Entry(State.RESERVED, paramsDigest, clock.getAsLong(),
+                new Entry(State.RESERVED, paramsDigest.clone(), clock.getAsLong(),
                         ScriptErrorCode.INTERNAL, new byte[0], 0, 0));
+        changed.run();
     }
 
     /**
@@ -137,16 +188,27 @@ public final class IdempotencyLedger {
         Entry old = box.get(hex);
         byte[] digest = old == null ? new byte[0] : old.paramsDigest();
         boolean tooBig = data != null && data.length > REPLAYABLE_DATA_MAX;
-        box.put(hex, new Entry(State.SETTLED, digest, clock.getAsLong(),
+        State state = code == ScriptErrorCode.OK ? State.SUCCEEDED
+                : code == ScriptErrorCode.UNKNOWN || code == ScriptErrorCode.PARTIAL ? State.UNKNOWN : State.FAILED;
+        box.put(hex, new Entry(state, digest, clock.getAsLong(),
                 tooBig ? ScriptErrorCode.UNKNOWN : code,
-                tooBig ? new byte[0] : (data == null ? new byte[0] : data),
+                tooBig ? new byte[0] : (data == null ? new byte[0] : data.clone()),
                 retryAfterMs, stateRevision));
+        changed.run();
     }
 
     /** 这个玩家现在有几条。只给测试与日志用。 */
     public int size(UUID player) {
         LinkedHashMap<String, Entry> box = byPlayer.get(player);
         return box == null ? 0 : box.size();
+    }
+
+    /** 人工核对入口只允许处理 UNKNOWN，不能把普通成功请求重新放行。 */
+    public void resolve(UUID player, String hex, boolean delivered) {
+        Entry e = byPlayer.getOrDefault(player, new LinkedHashMap<>()).get(hex);
+        if (e == null || e.state() != State.UNKNOWN) throw new IllegalArgumentException("不是待核对请求");
+        settle(player, java.util.HexFormat.of().parseHex(hex), delivered ? ScriptErrorCode.OK : ScriptErrorCode.INTERNAL,
+                new byte[0], 0, e.stateRevision());
     }
 
     /** 玩家退出时不清 —— 账本保留 24 小时，跨重连命中正是它存在的理由（见 IdempotencyKey）。 */
@@ -178,7 +240,8 @@ public final class IdempotencyLedger {
         box.entrySet().removeIf(e -> expired(e.getValue(), now));
     }
 
-    private static boolean expired(Entry e, long now) {
-        return e.state() == State.SETTLED && now - e.at() >= TTL_MS;
+    private boolean expired(Entry e, long now) {
+        return e.state() != State.RESERVED && e.state() != State.EFFECT_STARTED
+                && e.state() != State.UNKNOWN && now >= e.at() && now - e.at() >= Math.max(3600000L,Math.min(72L*3600000,retention.getAsLong()));
     }
 }

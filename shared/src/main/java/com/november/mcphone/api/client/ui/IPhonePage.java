@@ -94,6 +94,12 @@ public interface IPhonePage {
         return false;
     }
 
+    /** 鼠标拖选。坐标与点击相同，位移已按手机缩放换算。旧页面无需实现。 */
+    default boolean mouseDragged(double mouseX, double mouseY, int button, double deltaX, double deltaY) { return false; }
+
+    /** 松开按钮，供输入框结束拖选。 */
+    default boolean mouseReleased(double mouseX, double mouseY, int button) { return false; }
+
     /**
      * 按键。
      *

@@ -344,7 +344,30 @@ public class ScriptHostTest {
         return v instanceof Number n ? n.doubleValue() : Double.NaN;
     }
 
+    static void requestParametersReachRealEvaluator() throws Exception {
+        ScriptWorkers.start(); ExecutorService main = newMain();
+        try {
+            AppScope app = appWith("var actions={act:function(ctx){ctx.ok({text:ctx.params.text,n:ctx.params.n})}};");
+            StrikeTracker strikes = main.submit(() -> new StrikeTracker(System::currentTimeMillis)).get();
+            RhinoEvaluator evaluator = new RhinoEvaluator(Map.of("example:app", app), strikes,
+                    new CtxBuilder.Backends(null, null, null), main::execute);
+            AtomicInteger began = new AtomicInteger();
+            for (String json : List.of("{\"text\":\"中文😀\",\"n\":7}", "{\"text\":1,\"text\":2}")) {
+                CompletableFuture<ActionEvaluator.Outcome> done = new CompletableFuture<>();
+                main.submit(() -> evaluator.submit(new ActionEvaluator.Request("example:app", "act", json.getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                        snap(P1), "rev1", 1, began::incrementAndGet), done::complete)).get(20, TimeUnit.SECONDS);
+                var result = done.get(20, TimeUnit.SECONDS);
+                if (json.contains("中文")) {
+                    eq(result.code(), ScriptErrorCode.OK, "参数经实际 worker 到达 ctx.params");
+                    eq(new String(result.data(), java.nio.charset.StandardCharsets.UTF_8), json, "返回数据完整传回");
+                } else eq(result.code(), ScriptErrorCode.INVALID_ARGUMENT, "重复键在执行脚本前被拒");
+            }
+            eq(began.get(), 1, "非法参数不会进入 EFFECT_STARTED"); app.discard();
+        } finally { main.shutdownNow(); ScriptWorkers.stop(); }
+    }
+
     public static void main(String[] args) throws Exception {
+        requestParametersReachRealEvaluator();
         denyAllViews();
         endToEndReachesEvaluator();
         manyInFlightExactlyOnce();

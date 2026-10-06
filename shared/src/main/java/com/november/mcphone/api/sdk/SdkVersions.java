@@ -59,7 +59,7 @@ public final class SdkVersions {
         m.put("waypoints", 1);
         m.put("escrow", 1);
         m.put("stats", 1);
-        m.put("resources", 1);
+        m.put("resources", 2);
         V = Map.copyOf(m);
     }
 

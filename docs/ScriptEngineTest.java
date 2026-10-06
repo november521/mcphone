@@ -381,9 +381,9 @@ public class ScriptEngineTest {
      */
     static void ctxEnumeration() {
         eq(withCtx("Object.getOwnPropertyNames(ctx).sort().join(',')", FULL),
-                "cycle,fail,item,log,ok,player,shared,time", "ctx 顶层只有这些");
+                "cycle,fail,item,log,ok,params,player,shared,time", "ctx 顶层只有这些");
         eq(withCtx("var n=[];for(var k in ctx)n.push(k);n.sort().join(',')", FULL),
-                "cycle,fail,item,log,ok,player,shared,time", "for..in 也只有这些");
+                "cycle,fail,item,log,ok,params,player,shared,time", "for..in 也只有这些");
         eq(withCtx("String(Object.getPrototypeOf(ctx))", FULL), "null", "ctx 没有原型链");
 
         for (String child : new String[]{"player", "time", "cycle", "shared", "item"}) {
@@ -648,6 +648,17 @@ public class ScriptEngineTest {
         var b = new CtxBuilder.Backends(new SharedState(), fakeItems(),
                 new CtxBuilder.Cycle(ZoneId.of("Asia/Shanghai"), LocalTime.of(4, 0)), null, null, reg);
         String c = "'myserver:coin'", to = "'00000000-0000-0000-0000-000000000002'";
+
+        long initial=provider.balance(player().uuid());
+        eq(withCtx("ctx.currency.mint("+c+",5n,'reward')",b),"OK","获批的真实 mint 桥调用 provider");
+        eq(provider.balance(player().uuid()),initial+5,"mint 只给调用者增加余额");
+        eq(withCtx("ctx.currency.burn("+c+",5n,'consume')",b),"OK","获批的真实 burn 桥调用 provider");
+        eq(provider.balance(player().uuid()),initial,"burn 只销毁调用者余额");
+        var mintGateway=new com.november.mcphone.core.script.server.economy.CurrencyGateway(Runnable::run,()->true);mintGateway.open();
+        var guarded=new com.november.mcphone.core.script.server.economy.CurrencyRegistry(mintGateway);guarded.register(provider,true);
+        var refused=new CtxBuilder.Backends(null,null,null,null,null,guarded.forScript("t:app",op->com.november.mcphone.api.economy.TxnResult.NOT_AUTHORIZED));
+        eq(withCtx("try{ctx.currency.mint("+c+",5n,'reward')}catch(e){e.message}",refused),"NOT_AUTHORIZED: 货币操作授权已经改变","主线程的确定拒绝可捕获且不会误变 UNKNOWN");
+        eq(provider.balance(player().uuid()),initial,"确定拒绝后余额不变");mintGateway.close();
 
         eq(withCtx("try { ctx.currency.parse(" + c + ", '1.234') } catch (e) { e.message }", b),
                 "INVALID: mcphone.economy.invalid_amount", "小数位超了：parse 抛可捕获错误");
@@ -1068,7 +1079,7 @@ public class ScriptEngineTest {
                 new CtxBuilder.Cycle(ZoneId.of("Asia/Shanghai"), LocalTime.of(4, 0)),
                 null, null, null, true);
         eq(withCtx("Object.getOwnPropertyNames(ctx).sort().join(',')", actions),
-                "attr,cycle,effect,fail,give,item,log,loot,ok,player,shared,time",
+                "attr,cycle,effect,escrow,fail,give,giveTo,item,log,loot,message,notify,ok,params,player,shared,take,time",
                 "actionIntents=true 时顶层多出 give/loot/attr/effect");
         eq(withCtx("Object.getOwnPropertyNames(ctx.attr).sort().join(',')", actions),
                 "grant,revoke", "ctx.attr 只有 grant/revoke");
@@ -1225,7 +1236,18 @@ public class ScriptEngineTest {
                 (id, p) -> {
                     predicateCalls.add(id);
                     return Boolean.TRUE;
-                }, score);
+                }, score, (url, offset) -> { touched.add("fetch"); return "{\"status\":\"PENDING\"}"; }, new CtxBuilder.CommandView() {
+                    public boolean affectsOthers(String id) { return id.equals("others"); }
+                    public com.november.mcphone.core.script.server.CommandRunner.Result run(String id,String json,Runnable before) {
+                        touched.add("command.run"); before.run();
+                        return new com.november.mcphone.core.script.server.CommandRunner.Result(com.november.mcphone.core.script.net.ScriptErrorCode.OK,java.util.List.of(1));
+                    }
+                },new CtxBuilder.ResourceView(){
+                    public java.util.List<com.november.mcphone.api.sdk.resources.ResourceType> list(){touched.add("resource.list");return java.util.List.of(new com.november.mcphone.api.sdk.resources.ResourceType(net.minecraft.resources.ResourceLocation.parse("test:energy"),com.november.mcphone.api.sdk.resources.ResourceType.Kind.ENERGY,net.minecraft.network.chat.Component.literal("Energy"),"FE",0,null));}
+                    public com.november.mcphone.api.sdk.resources.ResourceType defaultType(String kind){return list().get(0);}
+                    public com.november.mcphone.api.sdk.resources.ResourceReading item(String type,int slot){touched.add("resource.item");return new com.november.mcphone.api.sdk.resources.ResourceReading(java.math.BigInteger.valueOf(Integer.MAX_VALUE).multiply(java.math.BigInteger.valueOf(20)),java.math.BigInteger.valueOf(Integer.MAX_VALUE).multiply(java.math.BigInteger.valueOf(20)),true,true);}
+                    public com.november.mcphone.api.sdk.resources.ResourceReading block(String type,int x,int y,int z,String side){touched.add("resource.block");return item(type,0);}
+                }).withReads((capability,offset)->{touched.add(capability);return java.util.Map.of("items",java.util.List.of(),"total",0);});
     }
 
     /**
@@ -1266,20 +1288,46 @@ public class ScriptEngineTest {
                 + "t('sealed.store',function(){ctx.sealed.get('k')});"
                 + "t('score.rw',function(){ctx.score.get('p')});"
                 + "t('predicate.test',function(){ctx.predicate.test('myserver:x')});"
+                + "t('net.fetch',function(){ctx.fetch('https://example.com/')});"
+                + "t('notify.self',function(){ctx.notify.self('news',{titleKey:'test.news'})});"
+                + "t('notify.subscribers',function(){ctx.notify.subscribers('news',{titleKey:'test.news'})});"
+                + "t('trade.escrow',function(){ctx.escrow.offer(0,1,'00000000-0000-0000-0000-000000000001')});"
+                + "t('item.take.self',function(){ctx.take(0,1)});"
+                + "t('currency.mint',function(){ctx.currency.mint('test:coin',1n,'gift')});"
+                + "t('currency.mint',function(){ctx.currency.burn('test:coin',1n,'consume')});"
+                + "t('resource.read.item',function(){ctx.resource.readItem('test:energy',0)});"
+                + "t('resource.read.block',function(){ctx.resource.readBlock('test:energy',{x:1,y:2,z:3})});"
+                + "t('command.template',function(){ctx.command.run('self',{})});"
                 + "t('read.self.gamemode',function(){String(ctx.player.gameMode)});"
+                + "t('read.self.position',function(){ctx.player.position});"
+                + "t('read.self.inventory',function(){ctx.player.inventory(0)});"
+                + "t('read.self.stats',function(){ctx.player.stats});"
+                + "t('read.world.time',function(){ctx.world.time});"
+                + "t('read.world.weather',function(){ctx.world.weather});"
+                + "t('read.players.online_count',function(){ctx.players.onlineCount});"
+                + "t('read.players.list',function(){ctx.players.list(0)});"
+                + "t('message.self',function(){ctx.message.self('hello')});"
+                + "t('item.give.other',function(){ctx.giveTo('00000000-0000-0000-0000-000000000002','minecraft:diamond',1)});"
                 + "t('item.give',function(){ctx.give('minecraft:diamond',1)});"
                 + "t('loot.roll',function(){ctx.loot.roll('myserver:gift')});"
                 + "t('attr.grant',function(){ctx.attr.grant('minecraft:generic.movement_speed',0.1)});"
                 + "t('attr.grant',function(){ctx.attr.revoke('minecraft:generic.movement_speed')});"
                 + "t('effect.give',function(){ctx.effect.give('minecraft:speed',1)});"
                 + "String(d) + '/' + String(Object.keys(ids).length)";
-        eq(withCtxGate(all, b, deny), "12/" + n, "12 个受门调用全被拒，覆盖全部 enforced 能力");
+        eq(withCtxGate(all, b, deny), "31/" + (n-1), "受门调用被拒；影响他人门在后面的专用探针验证");
+        eq(withCtx("var r=ctx.resource.readItem('test:energy',0);typeof r.stored+'/'+(r.stored+1n).toString()",gatedBackends(new java.util.ArrayList<>(),new java.util.ArrayList<>(),new SharedState())),"bigint/42949672941","20 个满储能读数进入脚本仍是精确 BigInt");
         check(touched.isEmpty(), "被拒的读/写一个都没碰后端：" + touched);
         check(predicateCalls.isEmpty(), "被拒的 predicate 没有调判定");
         check(shared.get("t:app", "k") == null, "被拒的 shared.set 没有写进去");
 
         CtxBuilder.Result denied = resultOfGate(all, b, deny);
         check(denied.intents.isEmpty(), "被拒的动作一条意图都没产");
+        CtxBuilder.CapabilityGate noOthers = id -> {
+            if(id.equals("command.affect_others")) throw com.november.mcphone.core.script.engine.HostError.denied(
+                    com.november.mcphone.core.script.net.ScriptErrorCode.NOT_AUTHORIZED,"mcphone.script.capability.not_approved","未审批影响他人");
+        };
+        eq(withCtxGate("try{ctx.command.run('others',{})}catch(e){'denied'}",b,noOthers),"denied","精确模板门放行后，影响他人门单独拒绝");
+        check(touched.isEmpty(),"影响他人未审批不执行后端");
     }
 
     /**
@@ -1291,11 +1339,13 @@ public class ScriptEngineTest {
         CtxBuilder.Backends b = gatedBackends(new java.util.ArrayList<>(),
                 new java.util.ArrayList<>(), new SharedState());
         eq(withCtx("Object.getOwnPropertyNames(ctx).sort().join(',')", b),
-                "attr,currency,cycle,effect,fail,give,item,log,loot,ok,player,predicate,score,sealed,shared,store,time",
+                "attr,command,currency,cycle,effect,escrow,fail,fetch,give,giveTo,item,log,loot,message,notify,ok,params,player,players,predicate,resource,score,sealed,shared,store,take,time,world",
                 "顶层成员集合（新增成员必须来这里签字）");
         eq(withCtx("Object.getOwnPropertyNames(ctx.attr).sort().join(',')", b), "grant,revoke", "ctx.attr");
+        eq(withCtx("Object.getOwnPropertyNames(ctx.command).sort().join(',')", b), "run", "ctx.command");
         eq(withCtx("Object.getOwnPropertyNames(ctx.loot).sort().join(',')", b), "roll", "ctx.loot");
         eq(withCtx("Object.getOwnPropertyNames(ctx.effect).sort().join(',')", b), "give", "ctx.effect");
+        eq(withCtx("Object.getOwnPropertyNames(ctx.escrow).sort().join(',')", b), "offer", "托管仅能提议，真实扣除必须原生确认");
         eq(withCtx("Object.getOwnPropertyNames(ctx.score).sort().join(',')", b), "add,get,set", "ctx.score");
         eq(withCtx("Object.getOwnPropertyNames(ctx.predicate).sort().join(',')", b), "test", "ctx.predicate");
         eq(withCtx("Object.getOwnPropertyNames(ctx.sealed).sort().join(',')", b), "get", "ctx.sealed");
@@ -1308,7 +1358,10 @@ public class ScriptEngineTest {
         eq(withCtx("Object.getOwnPropertyNames(ctx.item).sort().join(',')", b),
                 "displayName,isDamaged,matches", "ctx.item");
         eq(withCtx("Object.getOwnPropertyNames(ctx.player).sort().join(',')", b),
-                "dimension,gameMode,name,uuid", "ctx.player");
+                "dimension,gameMode,inventory,name,position,stats,uuid", "ctx.player");
+        eq(withCtx("Object.getOwnPropertyNames(ctx.world).sort().join(',')",b),"time,weather","ctx.world");
+        eq(withCtx("Object.getOwnPropertyNames(ctx.message).sort().join(',')",b),"self","ctx.message");
+        eq(withCtx("Object.getOwnPropertyNames(ctx.players).sort().join(',')",b),"list,onlineCount","ctx.players");
         eq(withCtx("Object.getOwnPropertyNames(ctx.time).sort().join(',')", b),
                 "epochMillis,monotonicNanos,seq", "ctx.time");
         eq(withCtx("Object.getOwnPropertyNames(ctx.cycle).sort().join(',')", b),

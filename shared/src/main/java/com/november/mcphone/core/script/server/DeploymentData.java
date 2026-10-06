@@ -116,6 +116,14 @@ public final class DeploymentData extends PhoneSavedData {
      */
     public Approval approve(Candidate c, List<String> approvedActions, List<String> approvedCapabilities,
                             UUID approver, long now) {
+        Approval prepared=preview(c,approvedActions,approvedCapabilities,approver,now);
+        Deployment d=prepared.deployment();
+        deployments.put(d.appId(),d.toTag());candidates.remove(c.packageDigest());setDirty();
+        return prepared;
+    }
+
+    /** 审批先校验线格式、能力轴和动作轴；版本见证持久化前不得改变部署。 */
+    Approval preview(Candidate c,List<String> approvedActions,List<String> approvedCapabilities,UUID approver,long now){
         List<String> actions = pick(approvedActions, c.declaredActions());
         List<String> caps = pickCapabilities(approvedCapabilities, c.declaredCapabilities());
         List<String> droppedActions = dropped(approvedActions, c.declaredActions());
@@ -132,9 +140,6 @@ public final class DeploymentData extends PhoneSavedData {
                     + ScriptProtocol.DATA_MAX + "（中文动作名按 3 字节/字符算）："
                     + "请减短动作名或减少动作数后再批准（否则客户端永远收不到这条部署）");
         }
-        deployments.put(d.appId(), d.toTag());
-        candidates.remove(c.packageDigest());
-        setDirty();
         return new Approval(d, droppedActions, droppedCaps, prev != null);
     }
 

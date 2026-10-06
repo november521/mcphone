@@ -73,16 +73,17 @@ public final class SfcCompiler {
 
     private static CompiledTemplate template(Map<String, Block> blocks) {
         Block scriptBlock = blocks.get("script");
-        Map<String, Object> state;
+        FrontendProgram program;
         try {
-            state = scriptBlock == null ? Map.of() : ScriptParser.parse(scriptBlock.content());
+            program = scriptBlock == null ? FrontendProgram.EMPTY
+                    : FrontendProgram.parse(scriptBlock.content(), scriptBlock.startLine());
         } catch (SfcError e) {
             throw e.shift(scriptBlock.startLine() - 1);
         }
 
         Block templateBlock = blocks.get("template");
         try {
-            return TemplateCompiler.compile(templateBlock.content(), state, templateBlock.startLine() - 1);
+            return TemplateCompiler.compile(templateBlock.content(), program.initialState(), templateBlock.startLine() - 1, program);
         } catch (SfcError e) {
             throw e.shift(templateBlock.startLine() - 1);
         }

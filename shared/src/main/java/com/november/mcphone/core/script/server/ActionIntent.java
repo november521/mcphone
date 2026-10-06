@@ -35,10 +35,15 @@ import java.util.Locale;
 public record ActionIntent(String kind, byte[] payload) {
 
     public static final String ITEM_GIVE = "item.give";
+    public static final String ITEM_REFS="item.give.refs";
+    public static final String ITEM_GIVE_OTHER="item.give.other";
+    public static final String MESSAGE_SELF="message.self";
     public static final String LOOT_ROLL = "loot.roll";
     public static final String ATTR_GRANT = "attr.grant";
     public static final String ATTR_REVOKE = "attr.revoke";
     public static final String EFFECT_GIVE = "effect.give";
+    public static final String NOTIFY_SELF = "notify.self", NOTIFY_SUBSCRIBERS = "notify.subscribers";
+    public static final String ESCROW_OFFER="trade.escrow",ITEM_TAKE="item.take.self";
 
     /** 一次意图最多带多少个物品（与 {@code ItemRef.MAX_BATCH} 同一量级）。 */
     public static final int MAX_GIVE = 27;
@@ -56,20 +61,37 @@ public record ActionIntent(String kind, byte[] payload) {
         if (kind == null || kind.isEmpty()) throw new IllegalArgumentException("ActionIntent.kind 不能为空");
         if (payload == null) payload = new byte[0];
         if (payload.length > 4096) throw new IllegalArgumentException("ActionIntent.payload 超过 4096 字节");
+        payload=payload.clone();
     }
+    @Override public byte[] payload(){return payload.clone();}
 
     /** 这条意图需要哪个能力。没登记的种类返回 null（落地时会拒）。 */
     public String capability() {
         return switch (kind) {
-            case ITEM_GIVE -> "item.give";
+            case ITEM_GIVE,ITEM_REFS -> "item.give";
+            case ITEM_GIVE_OTHER -> ITEM_GIVE_OTHER;
+            case MESSAGE_SELF -> MESSAGE_SELF;
             case LOOT_ROLL -> "loot.roll";
             case ATTR_GRANT, ATTR_REVOKE -> "attr.grant";
             case EFFECT_GIVE -> "effect.give";
+            case NOTIFY_SELF -> NOTIFY_SELF;
+            case NOTIFY_SUBSCRIBERS -> NOTIFY_SUBSCRIBERS;
+            case ESCROW_OFFER -> ESCROW_OFFER;
+            case ITEM_TAKE -> ITEM_TAKE;
             default -> null;
         };
     }
 
     // ---------------------------------------------------------------- 工厂
+    public static ActionIntent escrow(String app,int slot,int count,String recipient,boolean destroy){checkId(app,"托管 App");if(slot<0||slot>=36||count<1||count>64)throw new IllegalArgumentException("托管背包格或数量无效");if(!destroy)java.util.UUID.fromString(recipient);return new ActionIntent(destroy?ITEM_TAKE:ESCROW_OFFER,write(w->{w.writeUTF(app);w.writeInt(slot);w.writeInt(count);w.writeUTF(destroy?"":recipient);}));}
+    public record Escrow(String app,int slot,int count,String recipient){}
+    public Escrow asEscrow(){if(!kind.equals(ESCROW_OFFER)&&!kind.equals(ITEM_TAKE))throw new IllegalStateException("不是托管提议");return read(kind,r->new Escrow(r.readUTF(),r.readInt(),r.readInt(),r.readUTF()));}
+
+    public static ActionIntent notify(String app,NotificationMessage message,boolean subscribers) {
+        checkId(app,"通知 App");return new ActionIntent(subscribers?NOTIFY_SUBSCRIBERS:NOTIFY_SELF,write(w->{w.writeUTF(app);w.writeUTF(message.topic());w.writeUTF(message.json());}));
+    }
+    public record Notify(String app,NotificationMessage message) { }
+    public Notify asNotify(){return read(kind,r->new Notify(r.readUTF(),NotificationMessage.parse(r.readUTF(),r.readUTF())));}
 
     public static ActionIntent itemGive(String itemId, int count, String customName) {
         checkId(itemId, "item.give 的物品 id");
@@ -83,10 +105,28 @@ public record ActionIntent(String kind, byte[] payload) {
         }));
     }
 
+    public static ActionIntent itemGiveOther(String recipient,String itemId,int count){
+        java.util.UUID uuid=java.util.UUID.fromString(recipient);itemGive(itemId,count,"");
+        return new ActionIntent(ITEM_GIVE_OTHER,write(w->{w.writeUTF(uuid.toString());w.writeUTF(itemId);w.writeInt(count);}));
+    }
+    public record GiveOther(java.util.UUID recipient,String itemId,int count){}
+    public GiveOther asGiveOther(){return read(ITEM_GIVE_OTHER,r->new GiveOther(java.util.UUID.fromString(r.readUTF()),r.readUTF(),r.readInt()));}
+    public static ActionIntent messageSelf(String text){
+        if(text==null||text.isBlank()||text.codePointCount(0,text.length())>256||text.codePoints().anyMatch(Character::isISOControl))throw new IllegalArgumentException("本人消息须为 1–256 字可显示文本");
+        String clean=com.november.mcphone.core.script.engine.LogText.filter(text);
+        return new ActionIntent(MESSAGE_SELF,write(w->w.writeUTF(clean)));
+    }
+    public String asMessage(){return read(MESSAGE_SELF,r->r.readUTF());}
+
     public static ActionIntent lootRoll(String tableId) {
         checkId(tableId, "loot.roll 的表 id");
         return new ActionIntent(LOOT_ROLL, write(w -> w.writeUTF(tableId)));
     }
+    public static ActionIntent itemRefs(java.util.List<String> handles){
+        if(handles.isEmpty()||handles.size()>27||new java.util.HashSet<>(handles).size()!=handles.size()||handles.stream().anyMatch(h->!com.november.mcphone.api.sdk.item.Handles.isHandle(h)))throw new IllegalArgumentException("物品引用须为 1–27 个不同的宿主句柄");
+        return new ActionIntent(ITEM_REFS,write(w->{w.writeInt(handles.size());for(String handle:handles)w.writeUTF(handle);}));
+    }
+    public java.util.List<String> asRefs(){return read(ITEM_REFS,r->{int n=r.readInt();if(n<1||n>27)throw new IllegalArgumentException("引用批量无效");java.util.List<String> values=new java.util.ArrayList<>();for(int i=0;i<n;i++)values.add(r.readUTF());return java.util.List.copyOf(values);});}
 
     public static ActionIntent attrGrant(String attributeId, double amount, int operation, String modifierKey) {
         checkId(attributeId, "attr.grant 的属性 id");

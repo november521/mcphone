@@ -107,21 +107,30 @@ final class ExprParser {
         private final String name;
         private final T type;
         private final T elem;
+        private final java.util.Set<String> handlers;
 
-        private Scope(Map<String, Object> state, Scope parent, String name, T type, T elem) {
+        private Scope(Map<String, Object> state, Scope parent, String name, T type, T elem,
+                      java.util.Set<String> handlers) {
             this.state = state;
             this.parent = parent;
             this.name = name;
             this.type = type;
             this.elem = elem;
+            this.handlers = handlers;
         }
 
         static Scope of(Map<String, Object> state) {
-            return new Scope(state, null, null, null, null);
+            return of(state, java.util.Set.of());
         }
 
+        static Scope of(Map<String, Object> state, java.util.Set<String> handlers) {
+            return new Scope(state, null, null, null, null, handlers);
+        }
+
+        boolean isHandler(String name) { return handlers.contains(name); }
+
         Scope with(String name, T type, T elem) {
-            return new Scope(state, this, name, type, elem);
+            return new Scope(state, this, name, type, elem, handlers);
         }
 
         boolean isState(String n) {

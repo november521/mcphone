@@ -28,10 +28,48 @@ public final class GatedCurrencyProvider implements ICurrencyProvider {
 
     private final ICurrencyProvider inner;
     private final CurrencyGateway gateway;
+    private final String appId;
+    private final java.util.function.Function<String,TxnResult> authorization;
+    private ScriptCurrencyEscrows escrowBindings;
+    private ScriptCurrencyEscrows.Scope escrowScope;
+    private SettlementJournal settlements;
 
     public GatedCurrencyProvider(ICurrencyProvider inner, CurrencyGateway gateway) {
+        this(inner,gateway,null,operation->TxnResult.OK);
+    }
+
+    private GatedCurrencyProvider(ICurrencyProvider inner,CurrencyGateway gateway,String appId,
+                                  java.util.function.Function<String,TxnResult> authorization) {
         this.inner = inner;
         this.gateway = gateway;
+        this.appId=appId;this.authorization=authorization;
+    }
+
+    GatedCurrencyProvider forScript(String app,java.util.function.Function<String,TxnResult> gate) {
+        GatedCurrencyProvider bound=new GatedCurrencyProvider(inner,gateway,app,gate);bound.settlements=settlements;return bound;
+    }
+    GatedCurrencyProvider settlements(SettlementJournal journal){settlements=journal;return this;}
+    GatedCurrencyProvider forScript(ScriptCurrencyEscrows.Scope scope,ScriptCurrencyEscrows bindings,
+                                   java.util.function.Function<String,TxnResult> gate) {
+        GatedCurrencyProvider bound=forScript(scope.app(),gate);bound.escrowBindings=bindings;bound.escrowScope=scope;return bound;
+    }
+
+    /** 只有本桥能创建，明确表示尚未进入 provider。不能与 provider 自己抛出的异常混为 UNKNOWN。 */
+    public static final class AuthorizationRefused extends RuntimeException {
+        private final TxnResult result;
+        private AuthorizationRefused(TxnResult result){super("货币操作的当前授权被拒绝");this.result=result;}
+        public com.november.mcphone.core.script.engine.HostError error(){return result==TxnResult.UNAVAILABLE
+                ?com.november.mcphone.core.script.engine.HostError.denied(com.november.mcphone.core.script.net.ScriptErrorCode.UNAVAILABLE,"mcphone.script.capability.disabled","货币操作被服主关闭")
+                :com.november.mcphone.core.script.engine.HostError.denied(com.november.mcphone.core.script.net.ScriptErrorCode.NOT_AUTHORIZED,"mcphone.script.not_authorized","货币操作授权已经改变");}
+    }
+
+    private <T>T authorized(String operation,Supplier<T> effect) {
+        TxnResult verdict=authorization.apply(operation);
+        if(verdict!=TxnResult.OK)throw new AuthorizationRefused(verdict==TxnResult.NOT_AUTHORIZED?verdict:TxnResult.UNAVAILABLE);
+        String previous=CallingApp.current();if(appId!=null)CallingApp.enter(appId);
+        try{return effect.get();}
+        catch(AuthorizationRefused nested){throw new IllegalStateException("钱包内部的嵌套拒绝不能证明外层尚未修改余额",nested);}
+        finally{if(appId!=null)CallingApp.enter(previous);}
     }
 
     /** 注册表用：查重，以及拆掉别的网关的包装、换成自己的。 */
@@ -84,7 +122,7 @@ public final class GatedCurrencyProvider implements ICurrencyProvider {
     @Override
     public long balance(UUID player) {
         try {
-            long v = gateway.call(() -> inner.balance(player));
+            long v = gateway.call(() -> authorized("balance",()->inner.balance(player)));
             lastRefusal.remove();
             return v;
         } catch (CurrencyUnavailableException e) {
@@ -95,27 +133,28 @@ public final class GatedCurrencyProvider implements ICurrencyProvider {
 
     @Override
     public TxnResult transfer(UUID from, UUID to, long amount, TxnReason reason) {
-        return txn(() -> inner.transfer(from, to, amount, reason));
+        return txn("pay",() -> inner.transfer(from, to, amount, reason));
     }
 
     @Override
     public TxnResult mint(UUID to, long amount, TxnReason reason) {
-        return txn(() -> inner.mint(to, amount, reason));
+        return txn("mint",() -> inner.mint(to, amount, reason));
     }
 
     @Override
     public TxnResult burn(UUID from, long amount, TxnReason reason) {
-        return txn(() -> inner.burn(from, amount, reason));
+        return txn("burn",() -> inner.burn(from, amount, reason));
     }
 
     @Override
     public HoldResult hold(UUID from, UUID beneficiary, long amount, TxnReason reason) {
         java.util.concurrent.atomic.AtomicBoolean ran = new java.util.concurrent.atomic.AtomicBoolean();
         try {
-            HoldResult h = gateway.call(() -> {
+            HoldResult h = gateway.call(() -> authorized("hold",()->{
                 ran.set(true);
-                return inner.hold(from, beneficiary, amount, reason);
-            });
+                return escrowBindings==null?inner.hold(from,beneficiary,amount,reason):escrowBindings.hold(
+                        escrowScope,currency().id().toString(),from,beneficiary,amount,()->inner.hold(from,beneficiary,amount,reason));
+            }));
             lastRefusal.remove();
             return h;
         } catch (CurrencyUnavailableException e) {
@@ -127,21 +166,24 @@ public final class GatedCurrencyProvider implements ICurrencyProvider {
 
     @Override
     public TxnResult release(EscrowId id, TxnReason reason) {
-        return txn(() -> inner.release(id, reason));
+        return txn("release",() -> escrowBindings==null?settle("release",id,()->inner.release(id,reason)):escrowBindings.settle(
+                escrowScope,currency().id().toString(),id,()->settle("release",id,()->inner.release(id,reason))));
     }
 
     @Override
     public TxnResult refund(EscrowId id, TxnReason reason) {
-        return txn(() -> inner.refund(id, reason));
+        return txn("refund",() -> escrowBindings==null?settle("refund",id,()->inner.refund(id,reason)):escrowBindings.settle(
+                escrowScope,currency().id().toString(),id,()->settle("refund",id,()->inner.refund(id,reason))));
     }
+    private TxnResult settle(String operation,EscrowId id,Supplier<TxnResult> effect){return settlements==null?effect.get():settlements.settle(currency().id().toString(),operation,id,effect);}
 
-    private TxnResult txn(Supplier<TxnResult> op) {
+    private TxnResult txn(String operation,Supplier<TxnResult> op) {
         java.util.concurrent.atomic.AtomicBoolean ran = new java.util.concurrent.atomic.AtomicBoolean();
         try {
-            TxnResult r = gateway.call(() -> {
+            TxnResult r = gateway.call(() -> authorized(operation,()->{
                 ran.set(true);
                 return op.get();
-            });
+            }));
             lastRefusal.remove();
             return r;
         } catch (CurrencyUnavailableException e) {

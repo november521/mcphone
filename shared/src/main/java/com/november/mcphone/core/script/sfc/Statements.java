@@ -29,7 +29,7 @@ public final class Statements {
     private static final String SHAPES =
             "@click 只能写 x = 表达式、x++、x--、close()、back()、nav('页面')、call('动作')";
 
-    sealed interface Stmt permits Assign, Step, Close, Back, Nav, Call {
+    sealed interface Stmt permits Assign, Step, Close, Back, Nav, Call, Fetch, Sealed, Handler {
     }
 
     record Assign(String key, Expr.Compiled value) implements Stmt {
@@ -47,9 +47,12 @@ public final class Statements {
     record Nav(Expr.Compiled page) implements Stmt {
     }
 
-    /** 宿主转发的一条 RPC（§15.1）。参数与回调还写不了（P1 的 <script>），这里只点一下发空参数。 */
-    record Call(String actionId) implements Stmt {
+    /** 参数显式列出 state 键；取这条语句执行时的副本，不把整个页面状态隐式发给服务器。 */
+    record Call(String actionId, List<String> keys) implements Stmt {
     }
+    record Fetch(String url, String authorizationKey, String offsetKey) implements Stmt { }
+    record Sealed(boolean write,String key,String stateKey) implements Stmt { }
+    record Handler(String name, List<Expr.Compiled> arguments) implements Stmt { }
 
     /**
      * 一次点击的结果。applied 为 false 时 state 一个都没改，close / back / nav / call 也都不算数。
@@ -57,8 +60,28 @@ public final class Statements {
      * {@code calls} 是要宿主发出去的动作 id，按书写顺序。
      */
     public record Outcome(boolean applied, boolean close, boolean back, String nav,
-                          List<String> calls, List<String> warnings) {
+                          List<String> calls, List<String> warnings, List<CallRequest> requests, List<FetchRequest> networkRequests,List<SealedRequest> sealedRequests,
+                          List<HandlerRequest> handlers) {
+        public Outcome(boolean applied, boolean close, boolean back, String nav,
+                       List<String> calls, List<String> warnings, List<CallRequest> requests,
+                       List<FetchRequest> networkRequests, List<SealedRequest> sealedRequests) {
+            this(applied, close, back, nav, calls, warnings, requests, networkRequests, sealedRequests, List.of());
+        }
+        public Outcome(boolean applied, boolean close, boolean back, String nav,
+                       List<String> calls,List<String> warnings,List<CallRequest> requests,List<FetchRequest> networkRequests) {
+            this(applied,close,back,nav,calls,warnings,requests,networkRequests,List.of());
+        }
+        public Outcome(boolean applied, boolean close, boolean back, String nav,
+                       List<String> calls, List<String> warnings) {
+            this(applied, close, back, nav, calls, warnings,
+                    calls.stream().map(id -> new CallRequest(id, "")).toList(), List.of());
+        }
     }
+
+    public record CallRequest(String action, String paramsJson) { }
+    public record FetchRequest(String url, String authorization, int offset) { }
+    public record SealedRequest(boolean write,String key,String stateKey,String plaintext) { }
+    public record HandlerRequest(String name, List<Object> arguments) { }
 
     /** 实例化时绑好 v-for 变量的一条 @click，点击时执行。 */
     public record Bound(Statements statements, List<String> names, List<Object> values,
@@ -107,6 +130,18 @@ public final class Statements {
         String name = t.text();
 
         if (ExprParser.is(after, "(")) {
+            if (scope.isHandler(name)) {
+                p.next();
+                List<Expr.Compiled> args = new ArrayList<>();
+                if (!p.at(")")) do {
+                    if (args.size() == 8) throw ExprParser.syntax(p.peek(), "脚本函数最多 8 个参数");
+                    args.add(compiled(p.parse(scope), t, src));
+                    if (!p.at(",")) break;
+                    p.next();
+                } while (true);
+                p.expect(")");
+                return new Handler(name, List.copyOf(args));
+            }
             switch (name) {
                 case "close", "back" -> {
                     p.next();
@@ -118,6 +153,32 @@ public final class Statements {
                     Typed page = p.parse(scope);
                     p.expect(")");
                     return new Nav(compiled(page, t, src));
+                }
+                case "sealedGet", "sealedPut" -> {
+                    p.next();Tok key=p.next();
+                    if(key.kind()!='s'||!((String)key.value()).matches("[A-Za-z0-9_.-]{1,64}"))throw ExprParser.syntax(key,"保险箱键必须是 1–64 位固定标识");
+                    p.expect(",");Tok state=p.next();
+                    if(state.kind()!='s'||!scope.isState((String)state.value()))throw ExprParser.syntax(state,"保险箱必须绑定已声明的字符串 state");
+                    p.expect(")");return new Sealed(name.equals("sealedPut"),(String)key.value(),(String)state.value());
+                }
+                case "fetch" -> {
+                    p.next(); Tok url = p.next();
+                    if (url.kind() != 's') throw ExprParser.syntax(url, "fetch 的 URL 必须是字符串常量");
+                    String address = (String) url.value();
+                    try {
+                        var uri = java.net.URI.create(address);
+                        if (uri.getHost() == null) throw new IllegalArgumentException();
+                        com.november.mcphone.core.script.server.SafeFetch.validate(address, Set.of(uri.getHost().toLowerCase(java.util.Locale.ROOT)));
+                    } catch (RuntimeException invalid) { throw ExprParser.syntax(url, "fetch 只接受有效的 https:443 URL"); }
+                    List<String> keys = new ArrayList<>();
+                    while (p.at(",")) {
+                        p.next(); Tok key = p.next();
+                        if (keys.size() == 2 || key.kind() != 's'
+                                || (!((String) key.value()).isEmpty() && !scope.isState((String) key.value())))
+                            throw ExprParser.syntax(key, "fetch 只接受凭证、偏移两个 state 键；空串表示不传凭证");
+                        keys.add((String) key.value());
+                    }
+                    p.expect(")"); return new Fetch(address, keys.isEmpty() ? "" : keys.get(0), keys.size()<2 ? "" : keys.get(1));
                 }
                 case "call" -> {
                     p.next();
@@ -132,8 +193,19 @@ public final class Statements {
                             throw ExprParser.syntax(arg, "动作名里不能有控制字符");
                         }
                     }
+                    List<String> keys = new ArrayList<>();
+                    while (p.at(",")) {
+                        p.next();
+                        Tok key = p.next();
+                        if (key.kind() != 's' || !scope.isState((String) key.value()))
+                            throw ExprParser.syntax(key, "call 参数要已声明 state 键的字符串");
+                        String value = (String) key.value();
+                        if (keys.size() == 16 || keys.contains(value))
+                            throw ExprParser.syntax(key, "call 最多 16 个不同的 state 键");
+                        keys.add(value);
+                    }
                     p.expect(")");
-                    return new Call(action);
+                    return new Call(action, List.copyOf(keys));
                 }
                 default -> throw SfcError.at(Code.E_EXPR_NO_CALLS, t.line(), t.col());
             }
@@ -191,6 +263,8 @@ public final class Statements {
                 moved.add(new Assign(a.key(), shift(a.value(), lines)));
             } else if (s instanceof Nav n) {
                 moved.add(new Nav(shift(n.page(), lines)));
+            } else if (s instanceof Handler h) {
+                moved.add(new Handler(h.name(), h.arguments().stream().map(a -> shift(a, lines)).toList()));
             } else {
                 moved.add(s);
             }
@@ -216,6 +290,10 @@ public final class Statements {
         boolean back = false;
         String nav = null;
         List<String> calls = new ArrayList<>();
+        List<CallRequest> requests = new ArrayList<>();
+        List<FetchRequest> networkRequests = new ArrayList<>();
+        List<SealedRequest> sealedRequests=new ArrayList<>();
+        List<HandlerRequest> handlers = new ArrayList<>();
         Set<String> changed = new LinkedHashSet<>();
         for (Stmt s : list) {
             c.line = line;
@@ -236,8 +314,30 @@ public final class Statements {
                 Object v = nv.page().run(c);
                 if (!(v instanceof String page)) return failed(c, "nav(...) 要页面名字符串，得到的是 " + Values.kind(v));
                 nav = page;
+            } else if (s instanceof Fetch fetch) {
+                Object token = fetch.authorizationKey().isEmpty() ? "" : scratch.get(fetch.authorizationKey());
+                Object offset = fetch.offsetKey().isEmpty() ? 0 : scratch.get(fetch.offsetKey());
+                if (!(token instanceof String authorization) || authorization.length() > 2048
+                        || authorization.chars().anyMatch(ch -> ch < 32 || ch > 126)
+                        || !(offset instanceof Integer from) || from < 0 || from > 262144)
+                    return failed(c, "fetch 凭证必须是无控制字符的 ASCII 字符串，偏移必须是 0–262144 的 int");
+                networkRequests.add(new FetchRequest(fetch.url(), authorization, from));
+            } else if(s instanceof Sealed sealed) {
+                Object value=scratch.get(sealed.stateKey());
+                if(!(value instanceof String plaintext)||plaintext.getBytes(java.nio.charset.StandardCharsets.UTF_8).length>2048)return failed(c,"保险箱绑定必须是最多 2 KiB 的字符串");
+                sealedRequests.add(new SealedRequest(sealed.write(),sealed.key(),sealed.stateKey(),sealed.write()?plaintext:""));
             } else if (s instanceof Call call) {
                 calls.add(call.actionId());
+                Map<String, Object> params = new LinkedHashMap<>();
+                for (String key : call.keys()) params.put(key, scratch.get(key));
+                try {
+                    requests.add(new CallRequest(call.actionId(), call.keys().isEmpty() ? ""
+                            : com.november.mcphone.core.script.JsonValues.encode(params)));
+                } catch (IllegalArgumentException e) { return failed(c, e.getMessage()); }
+            } else if (s instanceof Handler handler) {
+                List<Object> args = new ArrayList<>();
+                for (Expr.Compiled value : handler.arguments()) args.add(value.run(c));
+                handlers.add(new HandlerRequest(handler.name(), java.util.Collections.unmodifiableList(args)));
             } else if (s instanceof Close) {
                 close = true;
             } else {
@@ -245,7 +345,7 @@ public final class Statements {
             }
         }
         for (String k : changed) state.set(k, scratch.get(k));
-        return new Outcome(true, close, back, nav, List.copyOf(calls), c.warnings());
+        return new Outcome(true, close, back, nav, List.copyOf(calls), c.warnings(), List.copyOf(requests), List.copyOf(networkRequests),List.copyOf(sealedRequests), List.copyOf(handlers));
     }
 
     private static Outcome failed(EvalContext c, String reason) {

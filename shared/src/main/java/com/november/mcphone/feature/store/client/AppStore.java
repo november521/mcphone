@@ -73,6 +73,9 @@ public final class AppStore {
      * 去哪个界面由那边决定。
      */
     private boolean companionRequest = false;
+    private boolean managementRequest=false;
+    private int managementX,managementY,managementW;
+    public boolean consumeManagementRequest(){boolean result=managementRequest;managementRequest=false;return result;}
 
     /** 有没有联动 App。没有就不画那个入口格子 */
     private boolean hasCompanion = false;
@@ -114,6 +117,7 @@ public final class AppStore {
         page = 0;
         openRequest = null;
         companionRequest = false;
+        managementRequest=false;
     }
 
     /** 取走"打开某个 App 详情"的请求，取走即清空 */
@@ -202,11 +206,19 @@ public final class AppStore {
 
         g.drawString(font, Component.translatable("mcphone.app.app_store").getString(),
                 x, y, FontPalette.title(), true);
+        String works="我的作品";managementW=font.width(works);managementX=x+w-managementW;managementY=y;
+        g.drawString(font,works,managementX,managementY,FontPalette.body(),false);
         y += font.lineHeight + 4;
 
         g.fill(x, y, x + w, y + 1, PhoneTheme.COLOR_DIVIDER);
         y += 4;
 
+        if(com.november.mcphone.core.script.client.ClientAdministration.offlineIdentity()){
+            for(String warning:List.of("离线身份：玩家身份不可信","请核对代理的正版验证设置")){
+                g.drawString(font,font.plainSubstrByWidth(warning,w),x,y,FontPalette.notice(),false);
+                y+=font.lineHeight+2;
+            }
+        }
         if (message != null) {
             String msg = message.getString();
             if (font.width(msg) > w - 4) msg = font.plainSubstrByWidth(msg, w - 8) + "…";
@@ -356,6 +368,7 @@ public final class AppStore {
     //  鼠标
 
     public boolean mouseClicked(double mx, double my, int button) {
+        if(button==0&&GuiUtil.hit(mx,my,managementX,managementY,managementW,11)){managementRequest=true;return true;}
         if (hoverPrev) {
             page--;
             clampPage();

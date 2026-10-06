@@ -933,7 +933,26 @@ public class EconomyDataTest {
         Path snap = eco.resolve("economy.dat");
         EconomySnapshot.write(snap, goodTag(UUID.randomUUID()));
         Path mcFile = dir.resolve("mcphone_economy.dat");                 // SavedData 不在
-        Files.setPosixFilePermissions(eco, java.util.EnumSet.noneOf(java.nio.file.attribute.PosixFilePermission.class));
+        AutoCloseable restore;
+        if(Files.getFileStore(eco).supportsFileAttributeView("posix")) {
+            var original=Files.getPosixFilePermissions(eco);
+            Files.setPosixFilePermissions(eco,java.util.EnumSet.noneOf(java.nio.file.attribute.PosixFilePermission.class));
+            restore=()->Files.setPosixFilePermissions(eco,original);
+        } else {
+            // Windows 上用本机 ACL 构造同一个「存在但不能确认存在」场景，保持全部失败关闭断言。
+            Path stale=EconomySnapshot.stalePath(snap);EconomySnapshot.write(stale,goodTag(UUID.randomUUID()));
+            var principal=eco.getFileSystem().getUserPrincipalLookupService().lookupPrincipalByName(System.getProperty("user.name"));
+            var denied=java.nio.file.attribute.AclEntry.newBuilder().setType(java.nio.file.attribute.AclEntryType.DENY).setPrincipal(principal)
+                    .setPermissions(java.nio.file.attribute.AclEntryPermission.READ_DATA,java.nio.file.attribute.AclEntryPermission.READ_ATTRIBUTES,
+                            java.nio.file.attribute.AclEntryPermission.READ_NAMED_ATTRS,java.nio.file.attribute.AclEntryPermission.EXECUTE).build();
+            java.util.Map<Path,List<java.nio.file.attribute.AclEntry>> originals=new java.util.LinkedHashMap<>();
+            for(Path target:List.of(snap,stale,eco)) {
+                var view=Files.getFileAttributeView(target,java.nio.file.attribute.AclFileAttributeView.class);
+                if(view==null)throw new IllegalStateException("文件系统既不支持 POSIX 权限也不支持 ACL，不能执行权限边界测试");
+                var original=view.getAcl();originals.put(target,original);var next=new ArrayList<java.nio.file.attribute.AclEntry>();next.add(denied);next.addAll(original);view.setAcl(next);
+            }
+            restore=()->{var paths=new ArrayList<>(originals.keySet());java.util.Collections.reverse(paths);for(Path target:paths)Files.getFileAttributeView(target,java.nio.file.attribute.AclFileAttributeView.class).setAcl(originals.get(target));};
+        }
         try {
             if (Files.exists(snap) || Files.notExists(snap)) {
                 System.out.println("（跳过 unreadableIsNotAbsent：这个进程没有权限限制，造不出「看不到」）");
@@ -943,7 +962,7 @@ public class EconomyDataTest {
             check(why != null && why.contains("看不到"), "快照看不到：锁住并说看不到，不当成新世界给空账 —— " + why);
             check(!why.contains("也读不出来") && !why.contains("上一份完整快照"), ".stale 也看不到：不暗示有一份 .stale —— " + why);
         } finally {
-            Files.setPosixFilePermissions(eco, java.nio.file.attribute.PosixFilePermissions.fromString("rwx------"));
+            restore.close();
         }
     }
 

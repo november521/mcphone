@@ -37,6 +37,7 @@ public final class PackageReader {
     public static final int MAX_COMPRESSED = 256 * 1024;
     /** 解压后总字节上限，挡解压炸弹。 */
     public static final int MAX_TOTAL_INFLATED = 1024 * 1024;
+    public static final int HARD_COMPRESSED=1024*1024,HARD_INFLATED=4*1024*1024;
     /** 单条目解压后上限。 */
     public static final int MAX_ENTRY_INFLATED = 256 * 1024;
     /** 条目数上限，目录条目也算在内。 */
@@ -97,8 +98,13 @@ public final class PackageReader {
 
     /** 主入口。校验不过一律抛 {@link PackageError}，不返回半个包。 */
     public static AppPackage read(byte[] zip) {
-        if (zip.length > MAX_COMPRESSED) {
-            throw PackageError.of(PackageError.Code.E_PKG_TOO_LARGE, zip.length, MAX_COMPRESSED);
+        return read(zip,MAX_COMPRESSED,MAX_TOTAL_INFLATED);
+    }
+    /** 配额只由宿主传入；绝不从 manifest 读取。单条目、压缩比与路径纪律仍固定。 */
+    public static AppPackage read(byte[] zip,int compressed,int expanded) {
+        if(compressed<65536||compressed>HARD_COMPRESSED||expanded<262144||expanded>HARD_INFLATED)throw new IllegalArgumentException("包配额超出宿主允许范围");
+        if (zip.length > compressed) {
+            throw PackageError.of(PackageError.Code.E_PKG_TOO_LARGE, zip.length, compressed);
         }
 
         int eocd = findEocd(zip);
@@ -108,7 +114,7 @@ public final class PackageReader {
 
         Map<String, byte[]> content = new LinkedHashMap<>();
         List<String> contentPaths = new ArrayList<>();
-        MetaFiles meta = walk(zip, records, cdOffset, content, contentPaths);
+        MetaFiles meta = walk(zip, records, cdOffset, content, contentPaths,expanded);
 
         // 撞车要整组一起看：逐条查的时候还不知道后面有没有一个只差大小写的。
         String[] collision = PackageError.PathRules.firstCollision(allPaths(records));
@@ -121,6 +127,7 @@ public final class PackageReader {
             throw PackageError.of(PackageError.Code.E_PKG_NO_MANIFEST);
         }
         Manifest manifest = Manifest.parse(new String(manifestBytes, StandardCharsets.UTF_8));
+        BackgroundDeclaration.parse(new String(manifestBytes,StandardCharsets.UTF_8));
         manifest.requireEntries(contentPaths);
 
         return new AppPackage(manifest, content, meta.signature(), meta.rotate());
@@ -255,7 +262,7 @@ public final class PackageReader {
     }
 
     private static MetaFiles walk(byte[] zip, List<Central> records, long cdOffset,
-                               Map<String, byte[]> content, List<String> contentPaths) {
+                               Map<String, byte[]> content, List<String> contentPaths,int expanded) {
         List<Central> ordered = new ArrayList<>(records);
         ordered.sort(Comparator.comparingLong(Central::localOffset));
 
@@ -270,7 +277,7 @@ public final class PackageReader {
                         "条目 '" + cd.name + "' 的本地头不接在上一条的末尾");
             }
             int data = dataOffset(zip, cd);
-            Extracted ex = extract(zip, cd, data, totalInflated);
+            Extracted ex = extract(zip, cd, data, totalInflated,expanded);
             totalInflated += ex.data.length;
             pos = data + ex.compressed;
             if ((cd.flags & FLAG_DESCRIPTOR) != 0) {
@@ -307,7 +314,7 @@ public final class PackageReader {
      * 取一条的内容。解压长度是数出来的，压缩长度取 {@link Inflater#getBytesRead()}，CRC 自己
      * 算一遍对上头里写的 —— 三个数互相钉住，单改 ZIP 头里哪一个都对不上。
      */
-    private static Extracted extract(byte[] zip, Central cd, int data, long alreadyInflated) {
+    private static Extracted extract(byte[] zip, Central cd, int data, long alreadyInflated,int expanded) {
         if ((cd.flags & FLAG_ENCRYPTED) != 0) {
             throw PackageError.of(PackageError.Code.E_PKG_BAD_ZIP, "条目 '" + cd.name + "' 是加密的");
         }
@@ -317,8 +324,8 @@ public final class PackageReader {
         }
 
         Extracted ex = cd.method == METHOD_STORED
-                ? stored(zip, cd, data, alreadyInflated)
-                : inflate(zip, cd, data, alreadyInflated);
+                ? stored(zip, cd, data, alreadyInflated,expanded)
+                : inflate(zip, cd, data, alreadyInflated,expanded);
 
         // 交叉相乘，不是相除：整数除法会把 100.9:1 算成 100 放行。
         if (ex.data.length > (long) MAX_RATIO * ex.compressed) {
@@ -342,7 +349,7 @@ public final class PackageReader {
         return ex;
     }
 
-    private static Extracted stored(byte[] zip, Central cd, int data, long alreadyInflated) {
+    private static Extracted stored(byte[] zip, Central cd, int data, long alreadyInflated,int expanded) {
         // STORED 的长度只能从头里取，那个头就必须自洽。描述符形态下本地头里写的是 0，
         // 无从交叉验证，直接拒。
         if ((cd.flags & FLAG_DESCRIPTOR) != 0) {
@@ -353,8 +360,8 @@ public final class PackageReader {
         if (len > MAX_ENTRY_INFLATED) {
             throw PackageError.of(PackageError.Code.E_PKG_ENTRY_TOO_LARGE, cd.name, MAX_ENTRY_INFLATED);
         }
-        if (alreadyInflated + len > MAX_TOTAL_INFLATED) {
-            throw PackageError.of(PackageError.Code.E_PKG_TOTAL_TOO_LARGE, MAX_TOTAL_INFLATED);
+        if (alreadyInflated + len > expanded) {
+            throw PackageError.of(PackageError.Code.E_PKG_TOTAL_TOO_LARGE, expanded);
         }
         if (data + len > zip.length) {
             throw PackageError.of(PackageError.Code.E_PKG_BAD_ZIP, "条目 '" + cd.name + "' 的数据越界");
@@ -364,7 +371,7 @@ public final class PackageReader {
         return new Extracted(out, len);
     }
 
-    private static Extracted inflate(byte[] zip, Central cd, int data, long alreadyInflated) {
+    private static Extracted inflate(byte[] zip, Central cd, int data, long alreadyInflated,int expanded) {
         Inflater inflater = new Inflater(true);
         try {
             inflater.setInput(zip, data, zip.length - data);
@@ -391,8 +398,8 @@ public final class PackageReader {
                 if (produced > MAX_ENTRY_INFLATED) {
                     throw PackageError.of(PackageError.Code.E_PKG_ENTRY_TOO_LARGE, cd.name, MAX_ENTRY_INFLATED);
                 }
-                if (alreadyInflated + produced > MAX_TOTAL_INFLATED) {
-                    throw PackageError.of(PackageError.Code.E_PKG_TOTAL_TOO_LARGE, MAX_TOTAL_INFLATED);
+                if (alreadyInflated + produced > expanded) {
+                    throw PackageError.of(PackageError.Code.E_PKG_TOTAL_TOO_LARGE, expanded);
                 }
                 out.write(buf, 0, n);
             }

@@ -38,4 +38,6 @@ public interface IntentApplier {
 
     /** 主线程调用。 */
     Landed apply(UUID player, List<ActionIntent> intents);
+    /** 原生确认需要绑定当次动作与部署轴；旧实现仍沿用两参数入口。 */
+    default Landed apply(UUID player,List<ActionIntent> intents,com.november.mcphone.core.script.net.ScriptRpc rpc){return apply(player,intents);}
 }

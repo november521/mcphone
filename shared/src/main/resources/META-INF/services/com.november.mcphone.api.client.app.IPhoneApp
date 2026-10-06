@@ -13,3 +13,9 @@ com.november.mcphone.feature.weather.client.WeatherApp
 com.november.mcphone.feature.reader.client.ReaderApp
 com.november.mcphone.feature.quests.client.QuestsApp
 com.november.mcphone.feature.terminal.client.TerminalApp
+com.november.mcphone.feature.mailbox.client.MailboxApp
+com.november.mcphone.feature.notifications.client.NotificationsApp
+com.november.mcphone.feature.gifts.client.GiftApp
+com.november.mcphone.feature.store.client.ServerManagementApp
+com.november.mcphone.feature.store.client.ServerAdminApp
+com.november.mcphone.feature.escrow.client.ItemEscrowApp

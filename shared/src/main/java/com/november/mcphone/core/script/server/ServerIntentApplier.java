@@ -59,13 +59,48 @@ public final class ServerIntentApplier implements IntentApplier {
 
     /** UUID → 在线玩家。离线返回 null（结果回 UNAVAILABLE，不静默吞）。 */
     private final Function<UUID, ServerPlayer> players;
+    private final ServerMailbox mailbox;
+    private ServerNotifications notifications;
+    private ServerItemEscrow escrow;
+    private ServerScriptItems itemHandles;
+    public void itemHandles(ServerScriptItems value){itemHandles=value;}
+    private final SelfMessageRate messageRate=new SelfMessageRate(System::currentTimeMillis);
+    public void escrow(ServerItemEscrow value){escrow=value;}
+    public void notifications(ServerNotifications value){notifications=value;}
+    private java.util.function.BooleanSupplier mailboxEnabled = () -> true;
+    public void mailboxEnabled(java.util.function.BooleanSupplier enabled) { mailboxEnabled = enabled; }
 
     public ServerIntentApplier(Function<UUID, ServerPlayer> players) {
+        this(players, null);
+    }
+    public ServerIntentApplier(Function<UUID, ServerPlayer> players, ServerMailbox mailbox) {
         this.players = players;
+        this.mailbox = mailbox;
     }
 
     @Override
+    public Landed apply(UUID playerId,List<ActionIntent> intents,com.november.mcphone.core.script.net.ScriptRpc rpc){
+        if(intents!=null&&intents.stream().anyMatch(i->i.kind().equals(ActionIntent.ITEM_GIVE_OTHER))){
+            // 他人物品单独成批，防止 A 已收到而 B 背包满时被误报为整批未执行。
+            if(intents.size()!=1||rpc==null||ScriptHost.current()==null)return fail(ScriptErrorCode.INVALID_ARGUMENT,"");
+            var give=intents.get(0).asGiveOther();var sender=players.apply(playerId);var recipient=players.apply(give.recipient());
+            ScriptHost host=ScriptHost.current();Deployment d=host.deployments().deployment(rpc.appId());
+            if(sender==null||recipient==null||d==null)return fail(ScriptErrorCode.UNAVAILABLE,"");
+            for(String cap:List.of("item.give","item.give.other"))if(host.capabilityPolicy().check(cap,java.util.Set.copyOf(d.approvedCapabilities()))!=CapabilityPolicy.Verdict.OK)return fail(ScriptErrorCode.NOT_AUTHORIZED,"");
+            if(!host.capabilities().boundary().crossDimensionTransfer()&&!sender.serverLevel().dimension().equals(recipient.serverLevel().dimension()))return fail(ScriptErrorCode.UNAVAILABLE,"");
+            return applyRecorded(give.recipient(),List.of(ActionIntent.itemGive(give.itemId(),give.count(),"")),rpc,playerId);
+        }
+        if(intents!=null&&intents.stream().anyMatch(i->i.kind().equals(ActionIntent.ESCROW_OFFER)||i.kind().equals(ActionIntent.ITEM_TAKE))){if(intents.size()!=1||escrow==null)return fail(ScriptErrorCode.INVALID_ARGUMENT,"");ActionIntent intent=intents.get(0);var e=intent.asEscrow();boolean destroy=intent.kind().equals(ActionIntent.ITEM_TAKE);if(!e.app().equals(rpc.appId()))return fail(ScriptErrorCode.INVALID_ARGUMENT,"");try{return escrow.propose(playerId,e.app(),rpc.actionId(),rpc.deployRev(),e.slot(),e.count(),destroy?playerId:UUID.fromString(e.recipient()),destroy)?Landed.ok():fail(ScriptErrorCode.EXHAUSTED,"");}catch(IllegalArgumentException bad){return fail(ScriptErrorCode.INVALID_ARGUMENT,"");}}
+        return applyRecorded(playerId,intents,rpc);
+    }
+    @Override
     public Landed apply(UUID playerId, List<ActionIntent> intents) {
+        return applyRecorded(playerId,intents,null);
+    }
+    private Landed applyRecorded(UUID playerId,List<ActionIntent> intents,com.november.mcphone.core.script.net.ScriptRpc rpc){
+        return applyRecorded(playerId,intents,rpc,playerId);
+    }
+    private Landed applyRecorded(UUID playerId,List<ActionIntent> intents,com.november.mcphone.core.script.net.ScriptRpc rpc,UUID actor){
         if (intents == null || intents.isEmpty()) return Landed.ok();
         ServerPlayer player = players == null ? null : players.apply(playerId);
         if (player == null) {
@@ -73,13 +108,29 @@ public final class ServerIntentApplier implements IntentApplier {
             return new Landed(ScriptErrorCode.UNAVAILABLE, "mcphone.script.intent_unavailable");
         }
         ServerLevel level = (ServerLevel) player.level();
+        // 托管与扣除先交给原生确认页面；不允许与发奖意图混在同一次请求里。
+        if(intents.stream().anyMatch(i->i.kind().equals(ActionIntent.ESCROW_OFFER)||i.kind().equals(ActionIntent.ITEM_TAKE)))return fail(ScriptErrorCode.UNAVAILABLE,"");
 
         // ---- 第一步：校验 + 物化（只读；掷表不把东西给谁）
         List<ItemStack> stacks = new ArrayList<>();
         List<ActionIntent> attrs = new ArrayList<>();
         List<ActionIntent> effects = new ArrayList<>();
+        List<ActionIntent> notices = new ArrayList<>();
+        List<String> messages=new ArrayList<>();
+        java.util.Set<String> consumedHandles=new java.util.HashSet<>();
         for (ActionIntent intent : intents) {
             switch (intent.kind()) {
+                case ActionIntent.ITEM_REFS -> {
+                    if(itemHandles==null||rpc==null)return fail(ScriptErrorCode.UNAVAILABLE,"");List<String> handles=intent.asRefs();
+                    for(String handle:handles)if(!consumedHandles.add(handle))return fail(ScriptErrorCode.INVALID_ARGUMENT,"");
+                    try{for(ItemStack stack:itemHandles.materialize(actor,rpc,handles)){if(!stack.is(GIFTABLE))return new Landed(ScriptErrorCode.INVALID_ARGUMENT,NOT_GIFTABLE);stacks.add(stack);}}
+                    catch(com.november.mcphone.core.script.engine.HostError bad){return fail(bad.resultCode(),bad.messageKey());}
+                }
+                case ActionIntent.MESSAGE_SELF -> {String text=intent.asMessage();if(text.length()>1536||text.codePoints().anyMatch(Character::isISOControl))return fail(ScriptErrorCode.INVALID_ARGUMENT,"");messages.add(text);}
+                case ActionIntent.NOTIFY_SELF,ActionIntent.NOTIFY_SUBSCRIBERS -> {
+                    if(notifications==null)return fail(ScriptErrorCode.UNAVAILABLE,"");
+                    var notice=intent.asNotify();notifications.validate(notice.app(),notice.message());notices.add(intent);
+                }
                 case ActionIntent.ITEM_GIVE -> {
                     ActionIntent.Give give = intent.asGive();
                     ItemStack stack = ItemRefs.resolve(give.itemId(), give.count());
@@ -125,9 +176,10 @@ public final class ServerIntentApplier implements IntentApplier {
         }
 
         // ---- 第二步：容量预检（只数空格子，保守）。放不下就一个都不放。
+        if(rpc!=null&&ScriptHost.current()!=null){ScriptHost host=ScriptHost.current();com.google.gson.JsonObject data=new com.google.gson.JsonObject();data.addProperty("version",Long.toString(host.version(host.deployments().deployment(rpc.appId()).packageDigest())));data.addProperty("request",Long.toString(rpc.requestId()));data.addProperty("action",rpc.actionId());data.addProperty("recipient",playerId.toString());com.google.gson.JsonArray output=new com.google.gson.JsonArray();for(ItemStack stack:stacks)output.add(com.november.mcphone.platform.StackCodecs.encode(stack,player.serverLevel().getServer().registryAccess()));data.add("items",output);data.add("intents",new com.google.gson.Gson().toJsonTree(intents));try{host.quotas().audit().append(actor,"script.land",rpc.appId(),null,data);}catch(java.io.IOException failure){return fail(ScriptErrorCode.UNAVAILABLE,"");}}
         var inventory = player.getInventory();
         int empty = 0;
-        for (int i = 0; i < inventory.getContainerSize(); i++) {
+        for (int i = 0; i < 36; i++) {
             if (inventory.getItem(i).isEmpty()) empty++;
         }
         List<Integer> counts = new ArrayList<>(stacks.size());
@@ -136,7 +188,9 @@ public final class ServerIntentApplier implements IntentApplier {
             counts.add(stack.getCount());
             maxes.add(stack.getMaxStackSize());
         }
-        if (!InventoryFit.fits(empty, counts, maxes)) {
+        boolean mailed = !InventoryFit.fits(empty, counts, maxes);
+        if(!messageRate.allow(playerId,messages.size()))return fail(ScriptErrorCode.RATE_LIMITED,"");
+        if (mailed && (mailbox == null || !mailboxEnabled.getAsBoolean() || !mailbox.deposit(playerId, stacks, "script reward"))) {
             return new Landed(ScriptErrorCode.INVENTORY_FULL,
                     ScriptErrorCode.INVENTORY_FULL.defaultMessageKey());
         }
@@ -161,12 +215,14 @@ public final class ServerIntentApplier implements IntentApplier {
                 return fail(ScriptErrorCode.UNKNOWN, "");
             }
         }
-        for (ItemStack stack : stacks) {
+        for (ItemStack stack : mailed ? List.<ItemStack>of() : stacks) {
             if (!inventory.add(stack)) {
                 MCphone.LOGGER.error("[MCphone] item.give 在容量预检之后仍然放不进去，结果不明：{}", stack);
                 return fail(ScriptErrorCode.UNKNOWN, "");
             }
         }
+        for(ActionIntent intent:notices){var n=intent.asNotify();notifications.post(playerId,n.app(),n.message(),intent.kind().equals(ActionIntent.NOTIFY_SUBSCRIBERS));}
+        for(String text:messages)player.sendSystemMessage(net.minecraft.network.chat.Component.literal(text));
         return Landed.ok();
     }
 

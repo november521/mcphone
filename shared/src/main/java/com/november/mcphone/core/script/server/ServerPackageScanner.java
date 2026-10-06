@@ -61,6 +61,16 @@ public final class ServerPackageScanner {
 
     /** 扫一趟 incoming。返回新增候选数 + 这一趟读到的包（供装配复用，别再解一遍）。 */
     public static Scan scan(MinecraftServer server, DeploymentData deployments) {
+        try {
+            ScriptHost host=ScriptHost.current();
+            VersionWitness witness=host==null?new VersionWitness(server.getWorldPath(LevelResource.ROOT).resolve("mcphone/version-witness.json")):host.witnesses();
+            witness.reload();
+            return scan(server,deployments,witness);
+        } catch(IOException bad){MCphone.LOGGER.error("[MCphone] 版本见证不可用，拒绝扫描",bad);return new Scan(0,Map.of());}
+        finally {ScriptHost host=ScriptHost.current();if(host!=null)host.publishRevocations();}
+    }
+
+    static Scan scan(MinecraftServer server,DeploymentData deployments,VersionWitness witness) {
         Path dir = server.getWorldPath(LevelResource.ROOT).resolve(DIR);
         try {
             Files.createDirectories(dir);
@@ -87,15 +97,17 @@ public final class ServerPackageScanner {
         }
         Map<String, AppPackage> packages = new LinkedHashMap<>();
         int changed = 0;
-        for (Path f : files) if (scanOne(f, deployments, trust, packages)) changed++;
+        QuotaConfig quota;try{quota=QuotaManager.read(server.getWorldPath(LevelResource.ROOT));}catch(IOException|RuntimeException bad){MCphone.LOGGER.error("[MCphone] 配额损坏，停止扫描新包",bad);return new Scan(0,Map.of());}
+        for (Path f : files) if (scanOne(f, deployments, trust, packages,quota,witness)) changed++;
         return new Scan(changed, packages);
     }
 
     private static boolean scanOne(Path file, DeploymentData deployments, TrustStore trust,
-                                   Map<String, AppPackage> packages) {
+                                   Map<String, AppPackage> packages,QuotaConfig quota,VersionWitness witness) {
         AppPackage pkg;
         try {
-            pkg = PackageReader.readFile(file);
+            if(Files.isSymbolicLink(file)||Files.size(file)>PackageReader.HARD_COMPRESSED)throw new IOException("路径或包大小无效");
+            pkg = PackageReader.read(Files.readAllBytes(file),PackageReader.HARD_COMPRESSED,PackageReader.HARD_INFLATED);
         } catch (PackageError e) {
             MCphone.LOGGER.warn("[MCphone] 待审包 {} 没过安全检查（{}），跳过", file.getFileName(), e.getMessage());
             return false;
@@ -125,7 +137,7 @@ public final class ServerPackageScanner {
         try {
             JsonObject root = JsonParser.parseString(new String(manifestJson, StandardCharsets.UTF_8)).getAsJsonObject();
             deploy = root.has("deploy") ? root.get("deploy").getAsString() : "";
-            actions = stringList(root, "actions");
+            actions = new ArrayList<>(ActionGuards.parse(new String(manifestJson, StandardCharsets.UTF_8)).keySet());
             capabilities = stringList(root, "capabilities");
         } catch (Throwable t) {
             MCphone.LOGGER.warn("[MCphone] 待审包 {} 的 manifest 扩展字段读不出来，拒", appId, t);
@@ -137,10 +149,16 @@ public final class ServerPackageScanner {
         }
 
         // 这一趟读到的包留给装配复用（别再解一遍）；已批准的包不再进候选，否则每次开服又重新排队
+        boolean accepted;
+        try{accepted=witness.observe(pkg,false);}catch(IOException|IllegalArgumentException bad){MCphone.LOGGER.error("[MCphone] 无法见证包 {}，拒绝装配",appId,bad);return false;}
         packages.put(pkg.digest(), pkg);
         for (Deployment d : deployments.deployments()) {
             if (d.packageDigest().equals(pkg.digest())) return false;
         }
+        if(!accepted){packages.remove(pkg.digest());MCphone.LOGGER.warn("[MCphone] {} 的版本回退或签名冲突，拒绝候选",appId);return false;}
+
+        long expanded=pkg.entries().values().stream().mapToLong(bytes->bytes.length).sum()+(pkg.signature()==null?0:pkg.signature().length)+(pkg.rotate()==null?0:pkg.rotate().length);
+        try{if(Files.size(file)>quota.get("package.compressed")||expanded>quota.get("package.expanded")){packages.remove(pkg.digest());MCphone.LOGGER.warn("[MCphone] 候选超出当前服主包配额 {}",appId);return false;}}catch(IOException bad){packages.remove(pkg.digest());return false;}
 
         try {
             DeploymentData.Candidate candidate = new DeploymentData.Candidate(appId, pkg.digest(),

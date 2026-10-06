@@ -25,6 +25,11 @@ public record SealedRecord(byte[] salt, byte[] nonce, byte[] cipher,
             throw new IllegalArgumentException("nonce 要 " + VaultCrypto.NONCE_BYTES + " 字节");
         }
         if (cipher == null || cipher.length == 0) throw new IllegalArgumentException("密文不能为空");
+        if (cipher.length > 4096 || schemaVersion != SCHEMA) throw new IllegalArgumentException("保险箱密文超额或格式不支持");
         if (recordVersion < 1) throw new IllegalArgumentException("recordVersion 从 1 起");
+        salt = salt.clone(); nonce = nonce.clone(); cipher = cipher.clone();
     }
+    @Override public byte[] salt() { return salt.clone(); }
+    @Override public byte[] nonce() { return nonce.clone(); }
+    @Override public byte[] cipher() { return cipher.clone(); }
 }

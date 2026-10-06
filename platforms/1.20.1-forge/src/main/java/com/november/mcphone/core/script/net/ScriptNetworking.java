@@ -31,6 +31,10 @@ public final class ScriptNetworking {
                 ScriptPush.class, ScriptPush::encode, ScriptPush::decode,
                 ScriptResultRouter::push);
 
+        MCphoneNetwork.registerToServer(StoreFileRequest.class,StoreFileRequest::encode,StoreFileRequest::decode,StoreFileChannel::handle);
+        MCphoneNetwork.registerToClient(StoreFileReply.class,StoreFileReply::encode,StoreFileReply::decode,StoreFileChannel::reply);
+        StoreFileChannel.install(MCphoneNetwork::sendToServer,MCphoneNetwork::sendToPlayer);
+
         ScriptRpcHandler.installSender(MCphoneNetwork::sendToPlayer);
         // S17 Stage 2：服务端主动推送（握手）
         ScriptPushHandler.installSender(MCphoneNetwork::sendToPlayer);

@@ -58,7 +58,7 @@ public final class CtxBuilder {
     }
 
     /** 能接上的后端。为 null 的那一项<b>整个不挂</b>。 */
-    public record Backends(SharedState shared, ItemView item, Cycle cycle,
+    public record Backends(SharedView shared, ItemView item, Cycle cycle,
                            KvBackend store, SealedBackend sealed, CurrencyRegistry currencies,
                            /** 要不要挂"产意图"的能力节点（{@code ctx.give} / {@code ctx.loot} / {@code ctx.attr} / {@code ctx.effect}）。
                             *  落地端由宿主注入；为 false 时整项不挂（E12：不挂空壳）。 */
@@ -66,7 +66,36 @@ public final class CtxBuilder {
                            /** 数据包谓词判定（S18 §18.3）。为 null 时整个 {@code ctx.predicate} 不挂。 */
                            PredicateView predicate,
                            /** 计分板读写（S18 §18.6）。为 null 时整个 {@code ctx.score} 不挂。 */
-                           ScoreView score) {
+                           ScoreView score, FetchView fetch, CommandView command, ResourceView resources,QuotaView quota,ReadView reads,MailboxView mailbox) {
+        public Backends(SharedView shared,ItemView item,Cycle cycle,KvBackend store,SealedBackend sealed,CurrencyRegistry currencies,
+                        boolean actionIntents,PredicateView predicate,ScoreView score,FetchView fetch,CommandView command,ResourceView resources,QuotaView quota,ReadView reads){
+            this(shared,item,cycle,store,sealed,currencies,actionIntents,predicate,score,fetch,command,resources,quota,reads,null);
+        }
+        public Backends(SharedView shared,ItemView item,Cycle cycle,KvBackend store,SealedBackend sealed,CurrencyRegistry currencies,
+                        boolean actionIntents,PredicateView predicate,ScoreView score,FetchView fetch,CommandView command,ResourceView resources,QuotaView quota){
+            this(shared,item,cycle,store,sealed,currencies,actionIntents,predicate,score,fetch,command,resources,quota,null);
+        }
+        public Backends withReads(ReadView value){return new Backends(shared,item,cycle,store,sealed,currencies,actionIntents,predicate,score,fetch,command,resources,quota,value,mailbox);}
+        public Backends withMailbox(MailboxView value){return new Backends(shared,item,cycle,store,sealed,currencies,actionIntents,predicate,score,fetch,command,resources,quota,reads,value);}
+        public Backends(SharedState shared,ItemView item,Cycle cycle,KvBackend store,SealedBackend sealed,CurrencyRegistry currencies,
+                        boolean actionIntents,PredicateView predicate,ScoreView score,FetchView fetch,CommandView command,ResourceView resources) {
+            this(shared,item,cycle,store,sealed,currencies,actionIntents,predicate,score,fetch,command,resources,null);
+        }
+        public Backends(SharedState shared,ItemView item,Cycle cycle,KvBackend store,SealedBackend sealed,CurrencyRegistry currencies,
+                        boolean actionIntents,PredicateView predicate,ScoreView score,FetchView fetch,CommandView command) {
+            this(shared,item,cycle,store,sealed,currencies,actionIntents,predicate,score,fetch,command,null);
+        }
+        public Backends(SharedState shared, ItemView item, Cycle cycle,
+                        KvBackend store, SealedBackend sealed, CurrencyRegistry currencies,
+                        boolean actionIntents, PredicateView predicate, ScoreView score, FetchView fetch) {
+            this(shared, item, cycle, store, sealed, currencies, actionIntents, predicate, score, fetch, null);
+        }
+
+        public Backends(SharedState shared, ItemView item, Cycle cycle,
+                        KvBackend store, SealedBackend sealed, CurrencyRegistry currencies,
+                        boolean actionIntents, PredicateView predicate, ScoreView score) {
+            this(shared, item, cycle, store, sealed, currencies, actionIntents, predicate, score, null);
+        }
 
         /** 不挂谓词/计分板的写法（S18 之前的路径与大多数断言）。 */
         public Backends(SharedState shared, ItemView item, Cycle cycle,
@@ -120,6 +149,29 @@ public final class CtxBuilder {
         Boolean test(String predicateId, PlayerSnapshot player);
     }
 
+    @FunctionalInterface public interface FetchView { String read(String url, int offset); }
+    @FunctionalInterface public interface QuotaView {java.util.Map<String,Object> get(String mechanism);}
+    @FunctionalInterface public interface ReadView {Object read(String capability,int offset);}
+    public interface MailboxView {
+        int count(java.util.UUID player);
+        com.november.mcphone.api.sdk.mailbox.DepositResult deposit(java.util.UUID player,List<String> handles,String reason,Runnable beforeEffects);
+    }
+    public interface SharedView {
+        String get(String app,String key);
+        void set(String app,String key,String value);
+        boolean compareAndSet(String app,String key,String expected,String next);
+    }
+    public interface ResourceView {
+        java.util.List<com.november.mcphone.api.sdk.resources.ResourceType> list();
+        com.november.mcphone.api.sdk.resources.ResourceType defaultType(String kind);
+        com.november.mcphone.api.sdk.resources.ResourceReading item(String type,int slot);
+        com.november.mcphone.api.sdk.resources.ResourceReading block(String type,int x,int y,int z,String side);
+    }
+    public interface CommandView {
+        boolean affectsOthers(String templateId);
+        com.november.mcphone.core.script.server.CommandRunner.Result run(String templateId, String paramsJson, Runnable beforeExecute);
+    }
+
     /**
      * 计分板读写（S18 §18.6）。<b>实现方负责线程</b>：生产实现经 {@code CurrencyGateway}
      * 回主线程执行（{@code Scoreboard} 不是线程安全的）。
@@ -138,6 +190,9 @@ public final class CtxBuilder {
 
     /** 脚本调 {@code ctx.ok} / {@code ctx.fail} 之后落在这里。 */
     public static final class Result {
+        public java.util.Map<String, Object> params = java.util.Map.of();
+        public ScriptErrorCode forcedCode;
+        public String forcedDataJson = "";
         public ScriptErrorCode code;
         public String messageKey = "";
         public List<String> messageArgs = List.of();
@@ -145,7 +200,10 @@ public final class CtxBuilder {
         public final java.util.List<String> logs = new java.util.ArrayList<>();
         /** worker 想对世界做的事（S18）。落地一律回主线程，落地前重查授权与能力。 */
         public final java.util.List<com.november.mcphone.core.script.server.ActionIntent> intents =
-                new java.util.ArrayList<>();
+                new java.util.ArrayList<>(){
+                    @Override public boolean add(com.november.mcphone.core.script.server.ActionIntent intent){if(size()>=32)throw HostError.quota("一次动作最多 32 条落地意图");return super.add(intent);}
+                };
+        private final java.util.Set<String> givenHandles=new java.util.HashSet<>();
         /**
          * 这次 build 里<b>挂上的</b>受门能力 id（挂载时登记，不靠调用）。S18-C0 之后它是
          * "目录 enforced == 真的挂了门"的权威证据：{@code ScriptEngineTest.gatedMountRegistry()}
@@ -168,9 +226,16 @@ public final class CtxBuilder {
      */
     private static void gated(ScriptableObject target, Scriptable scope, String name, int arity,
                               String capabilityId, Result result, CapabilityGate gate, HostFn.Body body) {
-        result.gatedMembers.add(capabilityId);
+        gated(target, scope, name, arity, java.util.Set.of(capabilityId), a -> List.of(capabilityId), result, gate, body);
+    }
+
+    /** 参数化命令也走同一个门；登记族名，调用时逐个检查精确模板 id 与影响他人能力。 */
+    private static void gated(ScriptableObject target, Scriptable scope, String name, int arity,
+                              java.util.Set<String> mounted, java.util.function.Function<Object[],List<String>> resolve,
+                              Result result, CapabilityGate gate, HostFn.Body body) {
+        result.gatedMembers.addAll(mounted);
         HostFn.put(target, scope, name, arity, (c, s, a) -> {
-            gate.require(capabilityId);
+            for (String capabilityId : resolve.apply(a)) gate.require(capabilityId);
             return body.call(c, s, a);
         });
     }
@@ -207,6 +272,35 @@ public final class CtxBuilder {
                                          PlayerSnapshot player, Backends backends, Result result,
                                          MoneyLedger ledger, CapabilityGate gate) {
         ScriptableObject ctx = HostFn.obj(cx, scope);
+        // 客户端参数只是数据，不是玩家身份或权限；递归密封，禁止 Java 包装对象与原型驻留。
+        ScriptableObject.putProperty(ctx, "params", paramValue(cx, scope, result.params));
+        if (backends.command() != null) {
+            ScriptableObject command = HostFn.obj(cx, scope);
+            gated(command, scope, "run", 2, java.util.Set.of("command.template", "command.affect_others"), a -> {
+                String id = HostFn.str(a, 0, "command.run");
+                if (!id.matches("[a-z0-9_.-]{1,64}")) throw HostError.invalid("命令模板 id 无效");
+                return backends.command().affectsOthers(id) ? List.of("command.template:"+id,"command.affect_others")
+                        : List.of("command.template:"+id);
+            }, result, gate, (c,s,a) -> {
+                ledger.rejectFurther("command.run");
+                String params = HostFn.present(a,1) ? json(c,s,a[1]) : "{}";
+                var run = backends.command().run(HostFn.str(a,0,"command.run"),params,ledger::movedMoney);
+                var view = new java.util.LinkedHashMap<String,Object>(); view.put("code",run.code().name()); view.put("results",run.results());
+                String data = com.november.mcphone.core.script.JsonValues.encode(view);
+                if (run.code() != ScriptErrorCode.OK) { result.forcedCode=run.code(); result.forcedDataJson=data; }
+                return paramValue(c,s,view);
+            });
+            command.sealObject(); ScriptableObject.putProperty(ctx,"command",command);
+        }
+        if (backends.fetch() != null) gated(ctx, scope, "fetch", 2, "net.fetch", result, gate, (c, s, a) -> {
+            long offset = HostFn.present(a, 1) ? HostFn.exactLong(a, 1, "fetch") : 0;
+            if (offset < 0 || offset > 262144) throw HostError.invalid("fetch 分片偏移无效");
+            String json;
+            try { json = backends.fetch().read(HostFn.str(a, 0, "fetch"), (int) offset); }
+            catch (IllegalArgumentException invalid) { throw HostError.denied(ScriptErrorCode.INVALID_ARGUMENT,
+                    ScriptErrorCode.INVALID_ARGUMENT.defaultMessageKey(), "网络请求参数无效"); }
+            return paramValue(c, s, com.november.mcphone.core.script.JsonValues.decode(json.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+        });
 
         // ---- ctx.player：四个字段（§32.7），都是 JS 字符串，不是 Java 对象
         ScriptableObject p = HostFn.obj(cx, scope);
@@ -217,6 +311,19 @@ public final class CtxBuilder {
         // 读它的 App 会拒，不读的 App 一点不受影响（对抗 S18-A2）。
         // uuid/name/dimension 没有对应的目录 id，保持无条件注入。
         gatedGetter(p, cx, "gameMode", "read.self.gamemode", result, gate, player::gameMode);
+        if(backends.reads()!=null){ReadView reads=backends.reads();
+            gatedGetter(p,cx,"position","read.self.position",result,gate,()->paramValue(cx,scope,reads.read("read.self.position",0)));
+            gatedGetter(p,cx,"stats","read.self.stats",result,gate,()->paramValue(cx,scope,reads.read("read.self.stats",0)));
+            gated(p,scope,"inventory",1,"read.self.inventory",result,gate,(c,s,a)->paramValue(c,s,reads.read("read.self.inventory",readOffset(a,"player.inventory"))));
+            ScriptableObject world=HostFn.obj(cx,scope);
+            gatedGetter(world,cx,"time","read.world.time",result,gate,()->paramValue(cx,scope,reads.read("read.world.time",0)));
+            gatedGetter(world,cx,"weather","read.world.weather",result,gate,()->paramValue(cx,scope,reads.read("read.world.weather",0)));
+            world.sealObject();ScriptableObject.putProperty(ctx,"world",world);
+            ScriptableObject players=HostFn.obj(cx,scope);
+            gatedGetter(players,cx,"onlineCount","read.players.online_count",result,gate,()->paramValue(cx,scope,reads.read("read.players.online_count",0)));
+            gated(players,scope,"list",1,"read.players.list",result,gate,(c,s,a)->paramValue(c,s,reads.read("read.players.list",readOffset(a,"players.list"))));
+            players.sealObject();ScriptableObject.putProperty(ctx,"players",players);
+        }
         p.sealObject();
         ScriptableObject.putProperty(ctx, "player", p);
 
@@ -249,7 +356,7 @@ public final class CtxBuilder {
 
         // ---- ctx.shared（§32.7 的 plain 档，限量竞争的唯一原语）
         if (backends.shared() != null) {
-            SharedState st = backends.shared();
+            SharedView st = backends.shared();
             ScriptableObject shared = HostFn.obj(cx, scope);
             gated(shared, scope, "get", 1, "storage.global.read", result, gate, (c, s, a) -> {
                 String v = st.get(appId, HostFn.str(a, 0, "shared.get"));
@@ -274,13 +381,35 @@ public final class CtxBuilder {
             ItemView iv = backends.item();
             ScriptableObject item = HostFn.obj(cx, scope);
             HostFn.put(item, scope, "matches", 2, (c, s, a) ->
-                    iv.matches(HostFn.str(a, 0, "item.matches"), HostFn.str(a, 1, "item.matches")));
+                    iv.matches(itemHandle(a,0,"item.matches"), HostFn.str(a, 1, "item.matches")));
             HostFn.put(item, scope, "displayName", 1, (c, s, a) ->
-                    iv.displayName(HostFn.str(a, 0, "item.displayName")));
+                    iv.displayName(itemHandle(a,0,"item.displayName")));
             HostFn.put(item, scope, "isDamaged", 1, (c, s, a) ->
-                    iv.isDamaged(HostFn.str(a, 0, "item.isDamaged")));
+                    iv.isDamaged(itemHandle(a,0,"item.isDamaged")));
             item.sealObject();
             ScriptableObject.putProperty(ctx, "item", item);
+        }
+
+        if(backends.resources()!=null) {
+            ResourceView view=backends.resources();ScriptableObject resource=HostFn.obj(cx,scope);
+            gated(resource,scope,"list",0,"resource.read.item",result,gate,(c,s,a)->{
+                return paramValue(c,s,view.list().stream().map(type->java.util.Map.<String,Object>of("id",type.id().toString(),"kind",type.kind().name(),"name",type.displayName().getString(),"unit",type.unit(),"decimals",type.decimals())).toList());
+            });
+            gated(resource,scope,"default",1,"resource.read.item",result,gate,(c,s,a)->{var type=view.defaultType(HostFn.str(a,0,"resource.default"));return type==null?null:type.id().toString();});
+            gated(resource,scope,"readItem",2,"resource.read.item",result,gate,(c,s,a)->resourceReading(c,s,view.item(HostFn.str(a,0,"resource.readItem"),scoreValue(HostFn.exactLong(a,1,"resource.readItem")))));
+            gated(resource,scope,"readBlock",3,"resource.read.block",result,gate,(c,s,a)->{
+                if(a.length<2)throw HostError.invalid("方块位置缺失");
+                java.util.Map<String,Object> pos;
+                try {pos=com.november.mcphone.core.script.JsonValues.object(json(c,s,a[1]).getBytes(java.nio.charset.StandardCharsets.UTF_8));}
+                catch(IllegalArgumentException bad){throw HostError.invalid("方块位置无效");}
+                if(!pos.keySet().equals(java.util.Set.of("x","y","z"))||!(pos.get("x") instanceof Integer x)||!(pos.get("y") instanceof Integer y)||!(pos.get("z") instanceof Integer z))throw HostError.invalid("方块位置需要三个 int 坐标");
+                return resourceReading(c,s,view.block(HostFn.str(a,0,"resource.readBlock"),x,y,z,HostFn.present(a,2)?HostFn.str(a,2,"resource.readBlock"):"north"));
+            });
+            gated(resource,scope,"format",2,"resource.read.item",result,gate,(c,s,a)->{
+                String id=HostFn.str(a,0,"resource.format");if(a.length<2||!(a[1] instanceof java.math.BigInteger amount)||amount.signum()<0||amount.toString().length()>128)throw HostError.invalid("资源数量需要非负 BigInt");
+                var type=view.list().stream().filter(t->t.id().toString().equals(id)).findFirst().orElseThrow(()->HostError.invalid("资源类型不存在"));
+                return new java.math.BigDecimal(amount,type.decimals()).toPlainString()+" "+type.unit();
+            });resource.sealObject();ScriptableObject.putProperty(ctx,"resource",resource);
         }
 
         // ---- ctx.store（§16.5、§17.3）：每玩家的 KV。档位由"跑在哪一侧"决定，不在方法名里
@@ -366,6 +495,8 @@ public final class CtxBuilder {
                 ICurrencyProvider prov = requireOrError(reg, strOrNull(a, 0, "currency.balance"));
                 try {
                     return Amounts.toScript(prov.balance(player.uuid()));
+                } catch (com.november.mcphone.core.script.server.economy.GatedCurrencyProvider.AuthorizationRefused e) {
+                    throw e.error();
                 } catch (com.november.mcphone.core.script.server.economy.CurrencyUnavailableException e) {
                     // 抛脚本接得住的 Error，App 在 catch 里 ctx.fail('UNAVAILABLE')。
                     // 不返回 0 或 null：比大小时 null 也当 0，App 会告诉玩家他没钱。
@@ -458,17 +589,46 @@ public final class CtxBuilder {
                         () -> prov.refund(new EscrowId(id), why)).name();
             });
 
-            // mint / burn 是 granted 档（§22.6）。本步没有能力表，一律 NOT_AUTHORIZED ——
-            // 【不静默降级】：没批就明说没批，别让 App 以为成功了
+            // 目录里的 currency.mint 覆盖凭空增减余额；收款/扣款恒为调用者，不提供第三方任意改余额的路径。
             for (String granted : new String[]{"mint", "burn"}) {
-                HostFn.put(cur, scope, granted, 3, (c, s, a) -> {
+                gated(cur, scope, granted, 3, "currency.mint", result, gate, (c, s, a) -> {
                     ledger.rejectFurther("currency." + granted);
-                    return TxnResult.NOT_AUTHORIZED.name();
+                    String cid=strOrNull(a,0,"currency."+granted);ICurrencyProvider provider=reg.get(cid);
+                    if(provider==null)return TxnResult.UNAVAILABLE.name();
+                    Long amount=amountOrNull(a,1,"currency."+granted);TxnReason reason=reasonOrNull(a,2,granted);
+                    if(amount==null||reason==null)return TxnResult.INVALID.name();
+                    return moneyCall(ledger,granted,appId,player.uuid(),cid,player.uuid(),amount,
+                            ()->granted.equals("mint")?provider.mint(player.uuid(),amount,reason):provider.burn(player.uuid(),amount,reason)).name();
                 });
             }
 
             cur.sealObject();
             ScriptableObject.putProperty(ctx, "currency", cur);
+        }
+
+        if(backends.mailbox()!=null){
+            ScriptableObject mailbox=HostFn.obj(cx,scope);
+            HostFn.put(mailbox,scope,"count",1,(c,s,a)->{
+                var recipient=uuidOrNull(HostFn.str(a,0,"mailbox.count"));if(recipient==null)throw HostError.invalid("收件箱玩家 UUID 无效");
+                return backends.mailbox().count(recipient);
+            });
+            HostFn.put(mailbox,scope,"deposit",3,(c,s,a)->{
+                ledger.rejectFurther("mailbox.deposit");
+                if(!result.intents.isEmpty())throw HostError.invalid("收件箱搬入须在其他落地意图之前执行");
+                var recipient=uuidOrNull(HostFn.str(a,0,"mailbox.deposit"));if(recipient==null)return "INVALID";
+                List<String> handles=itemHandles(a.length>1?a[1]:null);
+                if(handles.isEmpty())return "INVALID";
+                for(String handle:handles)if(result.givenHandles.contains(handle))throw HostError.invalid("物品引用已在本动作中消费");
+                String reason=HostFn.str(a,2,"mailbox.deposit");
+                if(reason.length()>128||reason.codePoints().anyMatch(Character::isISOControl))throw HostError.invalid("收件箱原因须在 128 字内且不能含控制字符");
+                try{
+                    var verdict=backends.mailbox().deposit(recipient,handles,reason,ledger::movedMoney);
+                    if(verdict==null)throw new IllegalStateException("收件箱未返回结果");
+                    if(verdict==com.november.mcphone.api.sdk.mailbox.DepositResult.OK)result.givenHandles.addAll(handles);
+                    return verdict.name();
+                }catch(RuntimeException uncertain){if(ledger.moved())throw new OutcomeUnknown("收件箱转移结果须核对",uncertain);throw uncertain;}
+            });
+            mailbox.sealObject();ScriptableObject.putProperty(ctx,"mailbox",mailbox);
         }
 
         // ---- ctx.predicate（S18 §18.3）：引用服主数据包里的谓词，不自造条件语言。
@@ -510,7 +670,37 @@ public final class CtxBuilder {
         // ---- ctx.give / ctx.loot / ctx.attr / ctx.effect（S18）：只产意图，不在这里碰世界。
         // 节点存在与否由宿主决定（落地端没接上就不挂 —— E12 不挂空壳）。
         if (backends.actionIntents()) {
+            ScriptableObject selfMessage=HostFn.obj(cx,scope);
+            gated(selfMessage,scope,"self",1,"message.self",result,gate,(c,s,a)->{
+                try{result.intents.add(com.november.mcphone.core.script.server.ActionIntent.messageSelf(HostFn.str(a,0,"message.self")));return null;}
+                catch(IllegalArgumentException bad){throw HostError.invalid(bad.getMessage());}
+            });selfMessage.sealObject();ScriptableObject.putProperty(ctx,"message",selfMessage);
+            gated(ctx,scope,"giveTo",3,java.util.Set.of("item.give","item.give.other"),a->List.of("item.give","item.give.other"),result,gate,(c,s,a)->{
+                try{result.intents.add(com.november.mcphone.core.script.server.ActionIntent.itemGiveOther(HostFn.str(a,0,"giveTo"),HostFn.str(a,1,"giveTo"),Math.toIntExact(HostFn.exactLong(a,2,"giveTo"))));return null;}
+                catch(IllegalArgumentException|ArithmeticException bad){throw HostError.invalid("发给他人的物品、数量或 UUID 无效");}
+            });
+            ScriptableObject escrow=HostFn.obj(cx,scope);
+            gated(escrow,scope,"offer",3,"trade.escrow",result,gate,(c,s,a)->{try{result.intents.add(com.november.mcphone.core.script.server.ActionIntent.escrow(appId,Math.toIntExact(HostFn.exactLong(a,0,"ctx.escrow.offer")),Math.toIntExact(HostFn.exactLong(a,1,"ctx.escrow.offer")),HostFn.str(a,2,"ctx.escrow.offer"),false));return null;}catch(IllegalArgumentException|ArithmeticException bad){throw HostError.invalid("托管提议参数无效");}});
+            escrow.sealObject();ScriptableObject.putProperty(ctx,"escrow",escrow);
+            gated(ctx,scope,"take",2,"item.take.self",result,gate,(c,s,a)->{try{result.intents.add(com.november.mcphone.core.script.server.ActionIntent.escrow(appId,Math.toIntExact(HostFn.exactLong(a,0,"ctx.take")),Math.toIntExact(HostFn.exactLong(a,1,"ctx.take")),"",true));return null;}catch(IllegalArgumentException|ArithmeticException bad){throw HostError.invalid("扣除提议参数无效");}});
+            ScriptableObject notify=HostFn.obj(cx,scope);
+            for(boolean subscribers:new boolean[]{false,true}){
+                String method=subscribers?"subscribers":"self",capability="notify."+method;
+                gated(notify,scope,method,2,capability,result,gate,(c,s,a)->{
+                    try {var message=com.november.mcphone.core.script.server.NotificationMessage.parse(HostFn.str(a,0,"ctx.notify."+method),json(c,s,a[1]));
+                        result.intents.add(com.november.mcphone.core.script.server.ActionIntent.notify(appId,message,subscribers));return null;
+                    }catch(IllegalArgumentException bad){throw HostError.invalid(bad.getMessage());}
+                });
+            }
+            notify.sealObject();ScriptableObject.putProperty(ctx,"notify",notify);
             gated(ctx, scope, "give", 2, "item.give", result, gate, (c, s, a) -> {
+                ledger.rejectFurther("ctx.give");
+                if(a.length>0&&!(a[0] instanceof CharSequence)){
+                    if(a.length!=1)throw HostError.invalid("give(ItemRef[]) 不接受第二个数量参数");
+                    List<String> handles=itemHandles(a[0]);if(handles.isEmpty())return null;
+                    for(String handle:handles)if(result.givenHandles.contains(handle))throw HostError.invalid("同一动作不能重复发放同一物品引用");
+                    result.intents.add(com.november.mcphone.core.script.server.ActionIntent.itemRefs(handles));result.givenHandles.addAll(handles);return null;
+                }
                 String itemId = HostFn.str(a, 0, "ctx.give");
                 long n = HostFn.exactLong(a, 1, "ctx.give");
                 if (n < 1 || n > com.november.mcphone.core.script.server.ActionIntent.MAX_GIVE) {
@@ -523,6 +713,7 @@ public final class CtxBuilder {
 
             ScriptableObject loot = HostFn.obj(cx, scope);
             gated(loot, scope, "roll", 1, "loot.roll", result, gate, (c, s, a) -> {
+                if(backends.item() instanceof ItemLootView actual)return paramValue(c,s,actual.roll(HostFn.str(a,0,"loot.roll")));
                 result.intents.add(com.november.mcphone.core.script.server.ActionIntent.lootRoll(
                         HostFn.str(a, 0, "ctx.loot.roll")));
                 return null;
@@ -566,6 +757,8 @@ public final class CtxBuilder {
             effect.sealObject();
             ScriptableObject.putProperty(ctx, "effect", effect);
         }
+
+        if(backends.quota()!=null){ScriptableObject quota=HostFn.obj(cx,scope);gated(quota,scope,"get",1,"storage.self",result,gate,(c,s,a)->paramValue(c,s,backends.quota().get(HostFn.str(a,0,"ctx.quota.get"))));quota.sealObject();ScriptableObject.putProperty(ctx,"quota",quota);}
 
         // ---- ctx.ok / ctx.fail / ctx.log
         HostFn.put(ctx, scope, "ok", 1, (c, s, a) -> {
@@ -637,6 +830,45 @@ public final class CtxBuilder {
     }
 
     /** 服务器上没有这种货币（多半是服主改了配置）：抛脚本接得住的 Error，不中断。 */
+    private static int readOffset(Object[] args,String name){long offset=HostFn.present(args,0)?HostFn.exactLong(args,0,name):0;if(offset<0||offset>10000)throw HostError.invalid("读取分页偏移必须为 0–10000");return (int)offset;}
+
+    private static String itemHandle(Object[] args,int index,String name){
+        if(index>=args.length)throw HostError.invalid("缺少物品引用");
+        if(args[index] instanceof CharSequence)return HostFn.str(args,index,name);
+        Object value=FrontendValues.read(args[index]);return handleOf(value);
+    }
+    private static String handleOf(Object value){
+        if(!(value instanceof java.util.Map<?,?> map)||!(map.get("opaque") instanceof String handle)||!com.november.mcphone.api.sdk.item.Handles.isHandle(handle))throw HostError.invalid("需要宿主签发的物品引用");
+        return handle;
+    }
+    private static List<String> itemHandles(Object value){
+        Object copied=FrontendValues.read(value);List<?> refs=copied instanceof List<?> list?list:List.of(copied);
+        if(refs.size()>27)throw HostError.invalid("一次最多发放 27 个物品引用");List<String> handles=refs.stream().map(CtxBuilder::handleOf).toList();
+        if(new java.util.HashSet<>(handles).size()!=handles.size())throw HostError.invalid("同一批不能重复物品句柄");return handles;
+    }
+
+    private static Object paramValue(Context cx, Scriptable scope, Object value) {
+        if (value instanceof java.util.Map<?, ?> map) {
+            ScriptableObject obj = HostFn.obj(cx, scope);
+            map.forEach((k, v) -> obj.defineProperty((String) k, paramValue(cx, scope, v),
+                    ScriptableObject.READONLY | ScriptableObject.PERMANENT));
+            obj.sealObject();
+            return obj;
+        }
+        if (value instanceof java.util.List<?> list) {
+            ScriptableObject array = (ScriptableObject) cx.newArray(scope,
+                    list.stream().map(v -> paramValue(cx, scope, v)).toArray());
+            array.setPrototype(null);
+            array.setParentScope(null);
+            for (int i = 0; i < list.size(); i++) array.setAttributes(i,
+                    ScriptableObject.READONLY | ScriptableObject.PERMANENT);
+            array.setAttributes("length", ScriptableObject.READONLY | ScriptableObject.PERMANENT | ScriptableObject.DONTENUM);
+            array.sealObject();
+            return array;
+        }
+        return value;
+    }
+
     private static ICurrencyProvider requireOrError(CurrencyRegistry reg, String id) {
         ICurrencyProvider p = reg.get(id);
         if (p == null) {
@@ -667,6 +899,8 @@ public final class CtxBuilder {
                 return r;
             }
             failure = null;
+        } catch (com.november.mcphone.core.script.server.economy.GatedCurrencyProvider.AuthorizationRefused e) {
+            throw e.error();
         } catch (ScriptAbort e) {
             // The provider was entered. Even if budget observation replaces this Error while unwinding,
             // RhinoEvaluator must still know that the final result is UNKNOWN.
@@ -775,6 +1009,9 @@ public final class CtxBuilder {
     }
 
     /** 走沙箱里那个已经带了尺寸闸的 JSON.stringify。 */
+    private static Object resourceReading(Context cx,Scriptable scope,com.november.mcphone.api.sdk.resources.ResourceReading reading) {
+        return reading==null?null:paramValue(cx,scope,java.util.Map.of("stored",reading.stored(),"capacity",reading.capacity(),"canExtract",reading.canExtract(),"canReceive",reading.canReceive()));
+    }
     private static String json(Context cx, Scriptable scope, Object value) {
         Object out = org.mozilla.javascript.NativeJSON.stringify(cx, scope, value, null, "");
         if (out instanceof CharSequence cs) {

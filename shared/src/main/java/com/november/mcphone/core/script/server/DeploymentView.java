@@ -25,4 +25,6 @@ public interface DeploymentView {
     default java.util.Set<String> approvedCapabilities(String appId) {
         return java.util.Set.of();
     }
+
+    default ActionGuards guards(String appId, String actionId) { return ActionGuards.NONE; }
 }

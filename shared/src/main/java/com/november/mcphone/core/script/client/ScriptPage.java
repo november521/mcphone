@@ -5,6 +5,7 @@ import com.november.mcphone.api.client.ui.IPhonePage;
 import com.november.mcphone.api.client.ui.PhoneCanvas;
 import com.november.mcphone.core.client.FontPalette;
 import com.november.mcphone.core.client.PhoneScreen;
+import com.november.mcphone.core.script.engine.FrontendRuntime;
 import com.november.mcphone.core.script.client.render.FontMeasure;
 import com.november.mcphone.core.script.client.render.Frame;
 import com.november.mcphone.core.script.client.render.HitTest;
@@ -16,6 +17,8 @@ import com.november.mcphone.core.script.layout.LayoutNode;
 import com.november.mcphone.core.script.layout.NodeType;
 import com.november.mcphone.core.script.layout.TextMeasure;
 import com.november.mcphone.core.script.layout.UiState;
+import com.november.mcphone.core.script.layout.TextInputBuffer;
+import org.lwjgl.glfw.GLFW;
 import com.november.mcphone.core.script.net.ScriptRpcResult;
 import com.november.mcphone.core.script.sfc.SfcCompiler;
 import com.november.mcphone.core.script.sfc.Statements;
@@ -59,6 +62,8 @@ public final class ScriptPage implements IPhonePage {
 
     private final ScriptApp app;
 
+    public String appId() { return app.id().toString(); }
+
     /** 当前在哪一页，空串是入口页。 */
     private String current = "";
     /** 返回栈，存页名。 */
@@ -66,6 +71,9 @@ public final class ScriptPage implements IPhonePage {
 
     /** 页名 → 那一页的 state。退回来时接着用，不是从初值重来。 */
     private final Map<String, UiState> states = new HashMap<>();
+    private final Map<String, FrontendRuntime> frontends = new HashMap<>();
+    private String frontendError = "";
+    private long frontendEpoch;
 
     private UiState state;
     private TemplateInstance instance;
@@ -85,6 +93,11 @@ public final class ScriptPage implements IPhonePage {
     private String lastLanguage = "";
     /** 上一次重排时的握手批次 revision：换服/重连之后 backend.available 会变，得重排一次 */
     private long lastHandshakeRevision = Long.MIN_VALUE;
+    private long lastGuardGeneration = Long.MIN_VALUE;
+    private long resultGeneration, lastResultGeneration = Long.MIN_VALUE, openGeneration;
+    private Map<String, Object> lastResult = Map.of("code", "", "data", Map.of());
+    private Map<String, Object> lastNetwork = Map.of("status", "", "text", "");
+    private Map<String,Object> lastVault=Map.of("unlocked",false,"message","");
 
     /** 最近一次脚本调用的结果提示（§15.1 的回调风格里那是 toast），到点自己消失。 */
     private String toast = "";
@@ -93,6 +106,8 @@ public final class ScriptPage implements IPhonePage {
 
     /** 这一页已经关了（{@link #onClose()} 调过）：结果回来时不再有可渲染的地方，只能记日志。 */
     private boolean closed;
+    private boolean switchingServerUpdate;
+    private final Deque<Runnable> policyResults=new ArrayDeque<>();
 
     /**
      * 画布的几何与字体，点击时要用。
@@ -105,6 +120,12 @@ public final class ScriptPage implements IPhonePage {
     private int cw;
     private int ch;
     private Font font;
+    private String focusedInput;
+    private TextInputBuffer input;
+    private int inputX, inputVisibleStart;
+    private boolean inputDragging;
+    private record InputGeometry(int x, int start) {}
+    private final Map<String, InputGeometry> inputGeometry = new java.util.LinkedHashMap<>();
 
     /**
      * 刚按下的那个按钮的 key，以及这个高亮什么时候过期。
@@ -125,8 +146,17 @@ public final class ScriptPage implements IPhonePage {
 
     @Override
     public void onOpen() {
+        openGeneration++;
+        lastResult = Map.of("code", "", "data", Map.of());
+        lastNetwork = Map.of("status", "", "text", "");
+        resultGeneration++;
         closed = false;
+        switchingServerUpdate=false;
+        frontendError = "";
+        frontendEpoch = ClientHandshake.connectionEpoch();
+        ClientRevocations.open(app);
         openPage("");
+        ClientGuardState.open(app.id().toString());
     }
 
     /**
@@ -137,11 +167,18 @@ public final class ScriptPage implements IPhonePage {
      */
     @Override
     public void onClose() {
+        ClientRevocations.close(app);
+        policyResults.clear();
+        openGeneration++;
+        blurInput();
+        ClientGuardState.close(app.id().toString());
         AppTextures.release(app.pkg());
         layout = null;
         tree = null;
         scroll.clear();
         states.clear();
+        frontends.values().forEach(FrontendRuntime::close);
+        frontends.clear();
         closed = true;
     }
 
@@ -153,9 +190,12 @@ public final class ScriptPage implements IPhonePage {
             return;
         }
         current = name;
+        blurInput();
         pressedKey = null;   // 上一页那个按钮的 key 在这一页可能指到另一个节点，跨页串色
         // 每一页各自的 state：从详情页退回来时，玩家在上一页勾的开关还在
         state = states.computeIfAbsent(name, k -> UiState.of(page.template().initialState()));
+        if (!page.template().program().handlers().isEmpty()) frontends.computeIfAbsent(name, k ->
+                new FrontendRuntime(page.template().program(), state, app.file() + (name.isEmpty() ? "" : "/pages/" + name + ".vue"), frontendBridge(name)));
         instance = new TemplateInstance(page.template(), app.id() + (name.isEmpty() ? "" : "/" + name));
         tree = null;
         layout = null;
@@ -169,18 +209,48 @@ public final class ScriptPage implements IPhonePage {
 
     @Override
     public void render(PhoneCanvas c) {
+        ClientGuardState.open(app.id().toString());
         cx = c.x();
         cy = c.y();
         cw = c.width();
         ch = c.height();
         font = c.font();
+        if(ClientServerUpdates.required(app)){
+            frontends.values().forEach(FrontendRuntime::discardCallbacks);blurInput();
+            c.graphics().drawString(font,Component.translatable("mcphone.server_update.required"),cx+3,cy+4,c.style().bodyColor(),false);
+            if(!switchingServerUpdate){switchingServerUpdate=true;Minecraft.getInstance().execute(()->{if(!closed&&Minecraft.getInstance().screen instanceof PhoneScreen phone)phone.openAddonPage(new ServerUpdatePage(app));});}
+            return;
+        }
+        if (frontendEpoch != ClientHandshake.connectionEpoch()) {
+            frontends.values().forEach(FrontendRuntime::discardCallbacks);
+            policyResults.clear();
+            frontendEpoch = ClientHandshake.connectionEpoch();
+        }
+        Component revoked=ClientRevocations.blocked(app);if(revoked!=null){policyResults.clear();frontends.values().forEach(FrontendRuntime::discardCallbacks);blurInput();c.graphics().fill(cx,cy,cx+cw,cy+ch,0xFF492929);int py=cy+4;for(var line:c.font().split(revoked,Math.max(1,cw-8))){if(py+font.lineHeight>=cy+ch-27)break;c.graphics().drawString(font,line,cx+4,py,0xFFFFCCCC,false);py+=font.lineHeight+2;}c.graphics().drawString(font,Component.translatable("mcphone.update.check_or_contact"),cx+3,cy+ch-19,0xFFFFFFFF,false);return;}
+        if(ClientRevocations.checking(app)){blurInput();c.graphics().drawString(font,Component.translatable("mcphone.update.policy_checking"),cx+3,cy+4,c.style().bodyColor(),false);return;}
+        while(!policyResults.isEmpty()&&!inputBlocked())policyResults.removeFirst().run();
+        if (!frontendError.isEmpty()) {
+            c.graphics().fill(cx, cy, cx + cw, cy + ch, 0xFF492929);
+            int py = cy + 4;
+            for (var line : font.split(Component.literal(frontendError), Math.max(1, cw - 8))) {
+                if (py + font.lineHeight >= cy + ch - 8) break;
+                c.graphics().drawString(font, line, cx + 4, py, 0xFFFFCCCC, false); py += font.lineHeight + 2;
+            }
+            return;
+        }
 
         TextMeasure tm = new FontMeasure(c.font());
         if (needsRelayout(c, tm)) relayout(c, tm);
         if (layout == null) return;
 
         Frame frame = new Frame(layout, c, state, app.pkg(), pressedNow());
+        frame.inputPainter = this::paintInput;
+        LayoutNode focused = byKey(layout, focusedInput);
+        if (focusedInput != null && (focused == null || focused.node.type() != NodeType.TEXT_INPUT
+                || !Renderer.isEnabled(focused, state))) blurInput();
+        inputGeometry.clear();
         Renderer.draw(layout, frame);
+        if(quotaHelp()){c.graphics().fill(cx,cy+ch-30,cx+cw,cy+ch-15,0xFF445566);c.graphics().drawString(c.font(),c.font().plainSubstrByWidth("查看存储、邮箱和托管",cw-8),cx+4,cy+ch-27,0xFFFFFFFF,false);}
         renderToast(c);
     }
 
@@ -205,6 +275,8 @@ public final class ScriptPage implements IPhonePage {
         if (tm.lineHeight() != lastLineHeight || tm.width(FONT_PROBE) != lastProbe) return true;
         if (AppTextures.epoch() != lastTextureEpoch) return true;
         if (ClientHandshake.revision() != lastHandshakeRevision) return true;
+        if (ClientGuardState.generation() != lastGuardGeneration) return true;
+        if (resultGeneration != lastResultGeneration) return true;
         return !language().equals(lastLanguage);
     }
 
@@ -213,7 +285,11 @@ public final class ScriptPage implements IPhonePage {
         if (page == null) return;
 
         keepScroll();
-        tree = instance.instantiate(state, ClientHandshake.backendContext(app.id().toString()));
+        var backend = new java.util.LinkedHashMap<String, Object>(ClientHandshake.backendValues(app.id().toString()));
+        backend.put("result", lastResult);
+        backend.put("network", lastNetwork);
+        backend.put("vault",lastVault);
+        tree = instance.instantiate(state, Map.of("backend", java.util.Collections.unmodifiableMap(backend)));
         for (String w : tree.warnings()) MCphone.LOGGER.warn("[MCphone] {}", w);
 
         layout = LayoutEngine.layout(tree.root(), page.stylesheet(), state, c.width(), c.height(), tm, images());
@@ -226,6 +302,8 @@ public final class ScriptPage implements IPhonePage {
         lastProbe = tm.width(FONT_PROBE);
         lastTextureEpoch = AppTextures.epoch();
         lastHandshakeRevision = ClientHandshake.revision();
+        lastGuardGeneration = ClientGuardState.generation();
+        lastResultGeneration = resultGeneration;
         lastLanguage = language();
     }
 
@@ -254,7 +332,7 @@ public final class ScriptPage implements IPhonePage {
 
     /** 按 key 在这一棵树里找回那个节点（§7.7 的 key 就是为"重排之后还认得出是同一个"留的）。 */
     private static LayoutNode byKey(LayoutNode n, String key) {
-        if (n == null) return null;
+        if (n == null || key == null) return null;
         if (key.equals(n.key)) return n;
         for (LayoutNode c : n.children) {
             LayoutNode hit = byKey(c, key);
@@ -291,11 +369,25 @@ public final class ScriptPage implements IPhonePage {
 
     @Override
     public boolean mouseClicked(double mx, double my, int button) {
+        if (inputBlocked()) { blurInput(); return true; }
+        if(button==0&&quotaHelp()&&mx>=cx&&mx<cx+cw&&my>=cy+ch-30&&my<cy+ch-15){if(Minecraft.getInstance().screen instanceof com.november.mcphone.core.client.PhoneScreen phone)phone.openAddonPage(new AppStoragePage(app.id().toString()));return true;}
         if (layout == null || tree == null || font == null) return false;
         LayoutNode hit = HitTest.pick(layout, cx, cy, cw, ch, mx, my, new FontMeasure(font));
-        if (hit == null) return false;
+        if (hit == null) { blurInput(); return false; }
 
         NodeType type = hit.node.type();
+        if (type == NodeType.TEXT_INPUT) {
+            if (!Renderer.isEnabled(hit, state)) { blurInput(); return true; }
+            if (!hit.key.equals(focusedInput)) {
+                focusedInput = hit.key;
+                input = new TextInputBuffer(state.getString(hit.node.str("bind", "")), hit.node.num("max-length", 256));
+            }
+            InputGeometry geometry = inputGeometry.get(hit.key);
+            if (geometry != null) { inputX = geometry.x(); inputVisibleStart = geometry.start(); }
+            positionInput(mx, net.minecraft.client.gui.screens.Screen.hasShiftDown()); inputDragging = button == 0;
+            return true;
+        }
+        blurInput();
         if (type == NodeType.BUTTON) {
             // 禁用的按钮吃掉这一下：落到宿主手里就成了"点手机里面 = 关机"（§5.3）
             if (!Renderer.isEnabled(hit, state)) return true;
@@ -338,7 +430,27 @@ public final class ScriptPage implements IPhonePage {
         for (String w : outcome.warnings()) MCphone.LOGGER.warn("[MCphone] {}", w);
         if (!outcome.applied()) return;
 
-        for (String action : outcome.calls()) callAction(action);
+        for (Statements.HandlerRequest handler : outcome.handlers()) {
+            FrontendRuntime runtime = frontends.get(current);
+            if (runtime != null) runtime.invoke(handler.name(), handler.arguments());
+            if (closed || !frontendError.isEmpty()) return;
+        }
+
+        for (Statements.CallRequest request : outcome.requests()) callAction(request);
+        for(Statements.SealedRequest request:outcome.sealedRequests()) {
+            long generation=openGeneration;UiState target=state;
+            java.util.function.Consumer<String> message=text->{if(generation!=openGeneration||closed)return;lastVault=Map.of("unlocked",ClientVault.unlocked(),"message",text);resultGeneration++;};
+            if(request.write())ClientVault.put(app.id().toString(),request.key(),request.plaintext(),message);
+            else ClientVault.get(app.id().toString(),request.key(),text->{if(generation!=openGeneration||closed)return;
+                String why=target.writeProblem(request.stateKey(),text);if(why!=null){message.accept("解密值不能放入声明的 state");return;}target.set(request.stateKey(),text);message.accept("密文已在本机解密");},message);
+        }
+        for (Statements.FetchRequest request : outcome.networkRequests()) {
+            long generation = openGeneration;
+            ClientNetwork.fetch(app, request.url(), request.authorization(), request.offset(), response -> {
+                if (generation != openGeneration || closed) return;
+                lastNetwork = response; resultGeneration++;
+            });
+        }
 
         if (outcome.close()) {
             close();
@@ -356,9 +468,22 @@ public final class ScriptPage implements IPhonePage {
      * <b>作者改不了</b> epoch/deployRev/摘要，这正是"请求不再停在 epoch 一档"的那一截。
      * 摘要读 {@link ScriptApp#frontendDigest()}（装载时算过一次），不在点击路径上重算。
      */
-    private void callAction(String action) {
-        ScriptCall.call(app.id().toString(), action, new byte[0], app.frontendDigest(),
-                this::onCallResult);
+    private void callAction(Statements.CallRequest request) {
+        callAction(request, null);
+    }
+
+    private void callAction(Statements.CallRequest request, java.util.function.Consumer<Map<String, Object>> callback) {
+        Component revoked=ClientRevocations.blocked(app);if(revoked!=null){toast=revoked.getString();toastUntilMs=System.currentTimeMillis()+TOAST_MS;return;}
+        long generation = openGeneration;
+        long epoch=ClientHandshake.connectionEpoch();java.util.UUID server=ClientHandshake.serverId();
+        ScriptCall.call(app.id().toString(), request.action(), request.paramsJson().getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                app.frontendDigest(),app.pkg()==null?"":app.pkg().digest(), result -> {
+                    if(generation!=openGeneration||epoch!=ClientHandshake.connectionEpoch()||!java.util.Objects.equals(server,ClientHandshake.serverId())||closed||!frontendError.isEmpty()||ClientRevocations.blocked(app)!=null||ClientServerUpdates.required(app))return;
+                    Runnable delivery=()->{if(generation==openGeneration&&!inputBlocked()){onCallResult(result);if(callback!=null)callback.accept(lastResult);}};
+                    // 短暂的原生策略核对不吞掉已经收到的钱包结果；最多四个在飞，最终撤销才丢弃。
+                    if(ClientRevocations.checking(app)){if(policyResults.size()<ScriptCall.MAX_IN_FLIGHT)policyResults.addLast(delivery);else{frontendError="等待策略核对的结果已满";frontends.values().forEach(FrontendRuntime::discardCallbacks);}}
+                    else delivery.run();
+                });
     }
 
     /** 结果回调：主线程，可以安全地改提示与重排判据。 */
@@ -372,12 +497,86 @@ public final class ScriptPage implements IPhonePage {
                     app.id(), result.code(), text);
             return;
         }
+        Object data;
+        try { data = com.november.mcphone.core.script.JsonValues.decode(result.data()); }
+        catch (IllegalArgumentException e) { data = Map.of(); }
+        var view = new java.util.LinkedHashMap<String, Object>();
+        view.put("code", result.code().name()); view.put("data", data);
+        view.put("ok", result.code() == com.november.mcphone.core.script.net.ScriptErrorCode.OK);
+        view.put("message", text);
+        view.put("requestId", Long.toString(result.requestId()));
+        view.put("retryAfterMs", Long.toString(result.retryAfterMs()));
+        view.put("stateRevision", Long.toString(result.stateRevision()));
+        lastResult = java.util.Collections.unmodifiableMap(view);
+        resultGeneration++;
         showToast(text);
     }
 
     private void showToast(String text) {
         toast = text == null ? "" : text;
         toastUntilMs = System.currentTimeMillis() + TOAST_MS;
+    }
+
+    private boolean inputBlocked() { return closed || !frontendError.isEmpty() || ClientRevocations.blocked(app) != null || ClientRevocations.checking(app) || ClientServerUpdates.required(app); }
+    private boolean quotaHelp(){Object code=lastResult.get("code");return "QUOTA".equals(code)||"INVENTORY_FULL".equals(code);}
+    private void deliverFrontend(long generation,Runnable result){
+        if(generation!=openGeneration||closed||!frontendError.isEmpty()||ClientRevocations.blocked(app)!=null||ClientServerUpdates.required(app))return;
+        Runnable delivery=()->{if(generation==openGeneration&&!inputBlocked())result.run();};
+        if(ClientRevocations.checking(app)){if(policyResults.size()<ScriptCall.MAX_IN_FLIGHT)policyResults.addLast(delivery);else{frontendError="等待策略核对的结果已满";frontends.values().forEach(FrontendRuntime::discardCallbacks);}}else delivery.run();
+    }
+
+    private Map<String, Object> frontendBackend() {
+        var backend = new java.util.LinkedHashMap<String, Object>(ClientHandshake.backendValues(app.id().toString()));
+        backend.put("result", lastResult); backend.put("network", lastNetwork); backend.put("vault", lastVault);
+        return java.util.Collections.unmodifiableMap(backend);
+    }
+
+    private FrontendRuntime.Bridge frontendBridge(String pageName) {
+        return new FrontendRuntime.Bridge() {
+            @Override public void call(String action, String params, java.util.function.Consumer<Map<String,Object>> callback) {
+                if (!inputBlocked()) callAction(new Statements.CallRequest(action, params), callback);
+            }
+            @Override public Map<String,Object> backend() { return frontendBackend(); }
+            @Override public int textInputLimit(String key) { return inputLimit(layout,key); }
+            @Override public boolean allowRetained(long bytes) {
+                long total = bytes;
+                for (var entry : frontends.entrySet()) if (!entry.getKey().equals(pageName)) total += entry.getValue().retainedBytes();
+                return total <= com.november.mcphone.core.script.engine.AppScope.MAX_RETAINED_CHARS;
+            }
+            @Override public void fetch(String url, String authorization, int offset, java.util.function.Consumer<Map<String,Object>> callback) {
+                long generation = openGeneration;
+                ClientNetwork.fetch(app, url, authorization, offset, response -> {
+                    if(!"PENDING".equals(response.get("status")))deliverFrontend(generation,()->{lastNetwork=response;resultGeneration++;callback.accept(response);});
+                });
+            }
+            @Override public void sealed(boolean write, String key, String text, java.util.function.Consumer<Map<String,Object>> callback) {
+                long generation = openGeneration;
+                java.util.function.BiConsumer<Boolean,String> message = (ok, value) -> {
+                    deliverFrontend(generation,()->callback.accept(Map.of("ok", ok, "message", value, "data", Map.of())));
+                };
+                if (write) ClientVault.put(app.id().toString(), key, text, message);
+                else ClientVault.get(app.id().toString(), key, value -> {
+                    deliverFrontend(generation,()->callback.accept(Map.of("ok", true, "message", "", "data", Map.of("text", value))));
+                }, value -> message.accept(false, value));
+            }
+            @Override public void image(String url, String authorization, java.util.function.Consumer<Map<String,Object>> callback) {
+                long generation = openGeneration;
+                if (inputBlocked()) return;
+                ClientNetwork.image(app, url, authorization, () -> generation == openGeneration && !closed && frontendError.isEmpty() && ClientRevocations.blocked(app)==null && !ClientServerUpdates.required(app), response -> {
+                    if(!"PENDING".equals(response.get("status")))deliverFrontend(generation,()->callback.accept(response));
+                });
+            }
+            @Override public void imageBytes(String base64, java.util.function.Consumer<Map<String,Object>> callback) {
+                if (!inputBlocked()) callback.accept(ClientNetwork.imageBytes(app, base64));
+            }
+            @Override public void toast(String text) { if (!inputBlocked()) showToast(text); }
+            @Override public void navigate(String page) { if (!inputBlocked()) navTo(page); }
+            @Override public void back() { if (!inputBlocked() && !popBack()) ScriptPage.this.close(); }
+            @Override public void closePage() { ScriptPage.this.close(); }
+            @Override public void failed(String text) {
+                if (frontendError.isEmpty()) { frontendError = text; blurInput(); MCphone.LOGGER.warn("[MCphone] 前端脚本停止：{}", text); }
+            }
+        };
     }
 
     /** 走到另一页，当前这页压进返回栈。 */
@@ -405,32 +604,122 @@ public final class ScriptPage implements IPhonePage {
 
     @Override
     public boolean mouseScrolled(double mx, double my, double amount) {
+        if (inputBlocked()) return true;
         if (layout == null || font == null) return false;
         LayoutNode scroller = HitTest.pickScroller(layout, cx, cy, cw, ch, mx, my, new FontMeasure(font));
         // 滚到头就不吃这一下，留给手机页面（§8.7）
         return scroller != null && HitTest.scroll(scroller, amount);
     }
 
-    /** P0 不处理键盘。 */
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        return false;
+        if (!capturesKeyboard()) return false;
+        boolean ctrl = net.minecraft.client.gui.screens.Screen.hasControlDown();
+        boolean shift = net.minecraft.client.gui.screens.Screen.hasShiftDown();
+        if (keyCode == GLFW.GLFW_KEY_TAB) { cycleInput(shift); return true; }
+        if (keyCode == GLFW.GLFW_KEY_ENTER || keyCode == GLFW.GLFW_KEY_KP_ENTER) {
+            blurInput(); return true;
+        }
+        if (ctrl && keyCode == GLFW.GLFW_KEY_A) input.selectAll();
+        else if (ctrl && (keyCode == GLFW.GLFW_KEY_C || keyCode == GLFW.GLFW_KEY_X)) {
+            Minecraft.getInstance().keyboardHandler.setClipboard(input.selected());
+            if (keyCode == GLFW.GLFW_KEY_X) input.replace("");
+        } else if (ctrl && keyCode == GLFW.GLFW_KEY_V) input.replace(Minecraft.getInstance().keyboardHandler.getClipboard());
+        else if (keyCode == GLFW.GLFW_KEY_LEFT) input.move(-1, shift);
+        else if (keyCode == GLFW.GLFW_KEY_RIGHT) input.move(1, shift);
+        else if (keyCode == GLFW.GLFW_KEY_HOME) input.moveTo(0, shift);
+        else if (keyCode == GLFW.GLFW_KEY_END) input.moveTo(input.text().length(), shift);
+        else if (keyCode == GLFW.GLFW_KEY_BACKSPACE) input.delete(true);
+        else if (keyCode == GLFW.GLFW_KEY_DELETE) input.delete(false);
+        syncInput();
+        return true;
     }
 
     @Override
     public boolean charTyped(char codePoint, int modifiers) {
-        return false;
+        if (!capturesKeyboard()) return false;
+        input.type(codePoint); syncInput(); return true;
     }
 
-    /** P0 必须 false：没有任何输入焦点，返回 true 会把背包键也吃掉，玩家关不掉手机（§8.7）。 */
     @Override
     public boolean capturesKeyboard() {
-        return false;
+        return !inputBlocked() && focusedInput != null && input != null;
+    }
+
+    private void blurInput() { focusedInput = null; input = null; inputVisibleStart = 0; inputDragging = false; }
+
+    private void cycleInput(boolean backwards) {
+        var keys = inputGeometry.keySet().stream().filter(key -> {
+            LayoutNode node = byKey(layout, key); return node != null && Renderer.isEnabled(node, state);
+        }).toList();
+        if (keys.isEmpty()) { blurInput(); return; }
+        int at = keys.indexOf(focusedInput), next = Math.floorMod(at + (backwards ? -1 : 1), keys.size());
+        focusedInput = keys.get(next); LayoutNode node = byKey(layout, focusedInput);
+        input = new TextInputBuffer(state.getString(node.node.str("bind", "")), node.node.num("max-length", 256));
+        InputGeometry geometry = inputGeometry.get(focusedInput); inputX = geometry.x(); inputVisibleStart = geometry.start(); inputDragging = false;
+    }
+
+    private void positionInput(double mx, boolean select) {
+        if (input == null || font == null) return;
+        String text = input.text(); int start = Math.min(inputVisibleStart, text.length()), at = start;
+        while (at < text.length()) {
+            int next = text.offsetByCodePoints(at, 1);
+            int before = font.width(text.substring(start, at)), after = font.width(text.substring(start, next));
+            if (mx - inputX < (before + after) / 2.0) break;
+            at = next;
+        }
+        input.moveTo(at, select);
+    }
+
+    @Override public boolean mouseDragged(double mx, double my, int button, double dx, double dy) {
+        if (!inputDragging || button != 0 || !capturesKeyboard()) return false;
+        positionInput(mx, true); return true;
+    }
+    @Override public boolean mouseReleased(double mx, double my, int button) {
+        boolean handled = inputDragging && button == 0; if (button == 0) inputDragging = false; return handled;
+    }
+
+    private void syncInput() {
+        LayoutNode node = byKey(layout, focusedInput);
+        if (node != null && node.node.type() == NodeType.TEXT_INPUT)
+            state.set(node.node.str("bind", ""), input.text());
+    }
+    private static int inputLimit(LayoutNode node,String key){if(node==null)return 0;int limit=node.node.type()==NodeType.TEXT_INPUT&&key.equals(node.node.str("bind",""))?node.node.num("max-length",256):0;for(LayoutNode child:node.children){int next=inputLimit(child,key);if(next>0)limit=limit==0?next:Math.min(limit,next);}return limit;}
+
+    /** 在 Renderer 的裁剪栈内部画；输入框在 scroll/list 内也不会越界。 */
+    private void paintInput(LayoutNode node, PhoneCanvas c, int x, int y, int color) {
+        boolean focused = node.key.equals(focusedInput);
+        String text = focused ? input.text() : state.getString(node.node.str("bind", ""));
+        int px = x + 3, py = y + 3, width = Math.max(0, node.w - 6);
+        c.graphics().fill(x, y, x + node.w, y + node.h, c.style().buttonColor());
+        int start = 0;
+        if (focused) {
+            while (start < input.cursor() && c.font().width(text.substring(start, input.cursor())) > width - 2)
+                start = text.offsetByCodePoints(start, 1);
+            inputX = px; inputVisibleStart = start;
+        }
+        int first = start;
+        if (y + node.h > cy && y < cy + ch && x + node.w > cx && x < cx + cw)
+            inputGeometry.put(node.key, new InputGeometry(px, start));
+        String shown = text.isEmpty() ? node.node.str("placeholder", "") : text.substring(start);
+        c.clipped(x, y, node.w, node.h, () -> {
+            if (focused && input.start() != input.end()) {
+                int sx = px + c.font().width(text.substring(first, Math.max(first, input.start())));
+                int ex = px + c.font().width(text.substring(first, Math.max(first, input.end())));
+                c.graphics().fill(sx, py, ex, py + c.font().lineHeight, 0x805080D0);
+            }
+            c.graphics().drawString(c.font(), shown, px, py, text.isEmpty() ? c.style().subtleColor() : color, false);
+            if (focused && (System.currentTimeMillis() / 500L) % 2 == 0) {
+                int cursorX = px + c.font().width(text.substring(first, input.cursor()));
+                c.graphics().fill(cursorX, py, cursorX + 1, py + c.font().lineHeight, color);
+            }
+        });
     }
 
     /** 返回栈里还有东西就退一层，没有就让宿主退回主屏。 */
     @Override
     public boolean onBack() {
+        if (capturesKeyboard()) { blurInput(); return true; }
         return popBack();
     }
 }

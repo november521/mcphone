@@ -130,13 +130,16 @@ public final class ScriptBudget extends ContextFactory {
      * <p><b>不许嵌套</b>：{@code Context} 是线程绑定的，内层会静默继承外层的预算与 shutter（实测）。
      */
     public void begin() {
+        begin(wallNanos);
+    }
+    public void begin(long maximumWallNanos) {
         // 判据是"这条线程上已经有一本账"，不是 Context.getCurrentContext() != null ——
         // 后者在 enterContext() 之后必然非空，那样每一次正常求值都会被自己拦下
         if (BUDGET.get() != null) {
             throw new IllegalStateException(
                     "脚本求值不许嵌套：Context 是线程绑定的，内层会静默继承外层的指令预算与 ClassShutter");
         }
-        BUDGET.set(new long[]{0, instructions, System.nanoTime() + wallNanos, 0, hostWaitNanos});
+        BUDGET.set(new long[]{0, instructions, System.nanoTime() + Math.min(wallNanos,maximumWallNanos), 0, hostWaitNanos});
     }
 
     /** 平账。{@code finally} 里调。 */

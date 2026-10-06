@@ -44,5 +44,7 @@ public final class ClientTicks {
 
         // 商店那边有没有哪个来源列到一半不吭声了（§14.1 的超时）
         AppSourceRegistry.tick();
+        com.november.mcphone.core.script.client.ClientNotifications.tick();
+        com.november.mcphone.core.script.client.ClientBackground.tick();
     }
 }

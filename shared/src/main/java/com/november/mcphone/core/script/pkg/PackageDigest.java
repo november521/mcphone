@@ -26,7 +26,21 @@ public final class PackageDigest {
 
     /** entries 的 key 是规范化路径，value 是文件内容。 */
     public static String of(Map<String, byte[]> entries) {
-        List<String> paths = new ArrayList<>(entries.keySet());
+        Map<String,byte[]> leaves = new java.util.LinkedHashMap<>();
+        entries.forEach((path,content) -> leaves.put(path,leaf(path,content)));
+        return ofLeaves(leaves);
+    }
+
+    /** 与包摘要原有字节格式完全一致；前端证明只搬运被剔除的后端叶子哈希。 */
+    public static byte[] leaf(String path,byte[] content) {
+        byte[] pb=path.getBytes(StandardCharsets.UTF_8);
+        if(pb.length>PackageError.PathRules.MAX_PATH_BYTES) throw PackageError.of(PackageError.Code.E_PKG_BAD_PATH,path,PackageError.PathRules.Reason.PATH_TOO_LONG.text());
+        MessageDigest inner=sha256(); inner.update(u16be(pb.length)); inner.update(pb); inner.update(u64be(content.length)); inner.update(content);
+        return inner.digest();
+    }
+
+    public static String ofLeaves(Map<String,byte[]> leaves) {
+        List<String> paths = new ArrayList<>(leaves.keySet());
         paths.sort(PackageDigest::compareUtf8Bytes);
 
         MessageDigest outer = sha256();
@@ -41,18 +55,12 @@ public final class PackageDigest {
                 throw PackageError.of(PackageError.Code.E_PKG_BAD_PATH, p,
                         PackageError.PathRules.Reason.PATH_TOO_LONG.text());
             }
-            byte[] content = entries.get(p);
-
-            MessageDigest inner = sha256();
-            inner.update(u16be(pb.length));
-            inner.update(pb);
-            inner.update(u64be(content.length));
-            inner.update(content);
-
+            byte[] leaf=leaves.get(p);
+            if(leaf==null || leaf.length!=32) throw new IllegalArgumentException("包摘要叶子必须是 SHA-256");
             // 长度前缀不是装饰：没有它，("ab","c") 与 ("a","bc") 算出同一个摘要。
             outer.update(u16be(pb.length));
             outer.update(pb);
-            outer.update(inner.digest());
+            outer.update(leaf);
         }
         return hex(outer.digest());
     }

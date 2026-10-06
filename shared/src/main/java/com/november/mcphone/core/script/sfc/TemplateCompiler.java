@@ -104,12 +104,16 @@ public final class TemplateCompiler {
      * lineOffset 加在运行期 warn 的行号上（块内行 → 原文件行，§9.8）。编译期抛的错仍是块内行号，由 {@link SfcCompiler} 统一加偏移。
      */
     public static CompiledTemplate compile(String content, Map<String, Object> state, int lineOffset) {
+        return compile(content, state, lineOffset, FrontendProgram.EMPTY);
+    }
+
+    static CompiledTemplate compile(String content, Map<String, Object> state, int lineOffset, FrontendProgram program) {
         Objects.requireNonNull(content, "content");
         TemplateCompiler c = new TemplateCompiler(content, lineOffset);
         RawElement root = c.document();
         Map<String, Object> declared = Collections.unmodifiableMap(new LinkedHashMap<>(state));
-        Element compiled = c.element(root, Scope.of(declared), 0, 1);
-        return new CompiledTemplate(compiled, declared);
+        Element compiled = c.element(root, Scope.of(declared, program.handlers()), 0, 1);
+        return new CompiledTemplate(compiled, declared, program);
     }
 
     private RawElement document() {
@@ -657,7 +661,11 @@ public final class TemplateCompiler {
             ExprParser.Tok at = new ExprParser.Tok('n', String.valueOf(a.value), null, a.valueLine, a.valueCol, 0);
             throw ExprParser.unknownIdent(at, stateNames(scope));
         }
-        String want = spec.kind() == PropRules.Kind.BIND_BOOL ? "bool" : "int";
+        String want = switch (spec.kind()) {
+            case BIND_BOOL -> "bool";
+            case BIND_STRING -> "string";
+            default -> "int";
+        };
         String actual = StateRules.kind(scope.initial(a.value));
         if (!want.equals(actual)) {
             throw SfcError.at(Code.E_TPL_BAD_VALUE, a.line, a.col, tag, a.name, a.value, spec.allowed() + "，'" + a.value + "' 是 " + actual);

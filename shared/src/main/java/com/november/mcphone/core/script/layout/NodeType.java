@@ -28,7 +28,8 @@ public enum NodeType {
     PROGRESS("progress", false, false, false, "value", "height"),
     BUTTON  ("button",   true,  true,  true,  "text", "i18n", "args", "enabled", "enabledIf", "onClick"),
     TOGGLE  ("toggle",   false, true,  false, "bind", "label", "i18n", "enabled"),
-    TAB_BAR ("tab-bar",  false, true,  false, "bind", "tabs");
+    TAB_BAR ("tab-bar",  false, true,  false, "bind", "tabs"),
+    TEXT_INPUT("text-input", false, true, false, "bind", "placeholder", "max-length", "enabled");
 
     public final String json;
     public final boolean container;

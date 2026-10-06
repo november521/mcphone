@@ -112,9 +112,12 @@ public final class AppManagerDetail {
 
     /** 上一帧量出来的滚动上限，正文有多高只有画完才知道 */
     private int maxScroll;
+    private boolean serverUpdateHovered, manualUpdateHovered, storageHovered;
 
     public void open(IPhoneApp target) {
         this.app = target;
+        if (target instanceof com.november.mcphone.core.script.client.ScriptAppAdapter script)
+            com.november.mcphone.core.script.client.ClientUpdates.check(script.script());
         this.uninstallArmed = false;
         this.btnHovered = false;
         this.backRequest = false;
@@ -189,6 +192,7 @@ public final class AppManagerDetail {
 
         // 越界的部分交给 scissor 裁，不再"放不下就不画"——那样卸载键上方会凭空少几行
         GuiUtil.enableScissor(g, x, bodyTop, x + w, bodyBottom);
+        serverUpdateHovered=false;manualUpdateHovered=false;storageHovered=false;
 
         String desc = safe(app::getDescription, "");
         if (desc.isBlank()) desc = Component.translatable("mcphone.store.no_description").getString();
@@ -200,6 +204,40 @@ public final class AppManagerDetail {
         y += 3;
         y = drawInfoLine(g, font, x, y, w,
                 Component.translatable("mcphone.gui.app_provider").getString(), providerName());
+
+        if (app instanceof com.november.mcphone.core.script.client.ScriptAppAdapter script) {
+            g.fill(x,y,x+w,y+18,PhoneTheme.COLOR_DIVIDER);g.drawString(font,"查看存储与清理普通 KV",x+3,y+4,FontPalette.body(),false);storageHovered=mouseX>=x&&mouseX<x+w&&mouseY>=Math.max(y,bodyTop)&&mouseY<Math.min(y+18,bodyBottom);y+=22;
+            if(com.november.mcphone.core.script.client.ClientHandshake.deployment(app.getId().toString())!=null||script.script().file().startsWith("server-store:")||script.script().file().endsWith(".front")){
+                String state=com.november.mcphone.core.script.client.ClientServerUpdates.status(app.getId().toString());if(!state.isEmpty())y=drawInfoLine(g,font,x,y,w,"",Component.translatable(state).getString());
+                g.fill(x,y,x+w,y+18,PhoneTheme.COLOR_DIVIDER);g.drawString(font,Component.translatable("mcphone.server_update.open"),x+3,y+4,FontPalette.body(),false);
+                serverUpdateHovered=mouseX>=x&&mouseX<x+w&&mouseY>=Math.max(y,bodyTop)&&mouseY<Math.min(y+18,bodyBottom);y+=22;
+            }
+            g.fill(x,y,x+w,y+18,PhoneTheme.COLOR_DIVIDER);g.drawString(font,"手动换作者或降级",x+3,y+4,FontPalette.body(),false);manualUpdateHovered=mouseX>=x&&mouseX<x+w&&mouseY>=Math.max(y,bodyTop)&&mouseY<Math.min(y+18,bodyBottom);y+=22;Component revoked=com.november.mcphone.core.script.client.ClientRevocations.blocked(script.script());
+            if(revoked!=null)for(var line:font.split(revoked,w)){g.fill(x,y-1,x+w,y+font.lineHeight,0xFF652A2A);g.drawString(font,line,x+1,y,0xFFFFCCCC,false);y+=font.lineHeight+2;}
+            String background=com.november.mcphone.core.script.client.ClientBackground.status(app.getId().toString());
+            if(!background.isEmpty())y=drawInfoLine(g,font,x,y,w,"",Component.translatable(background).getString());
+            var network = com.november.mcphone.core.script.client.ClientNetwork.disclosure(script.script());
+            if (!network.isEmpty()) {
+                for (String domainOrWhy : network) for (var line : font.split(Component.literal(domainOrWhy), w)) {
+                    g.drawString(font, line, x, y, FontPalette.subtle(), false); y += font.lineHeight + 1;
+                }
+                for (var line : font.split(Component.translatable("mcphone.network.privacy"), w)) {
+                    g.drawString(font, line, x, y, FontPalette.subtle(), false); y += font.lineHeight + 1;
+                }
+            }
+            String domain = com.november.mcphone.core.script.client.ClientUpdates.domain(script.script());
+            if (!domain.isEmpty()) {
+                // 域名必须完整显示，不能让右端被省略号藏掉。
+                for (var line : font.split(Component.translatable("mcphone.update.domain", domain), w)) {
+                    g.drawString(font, line, x, y, FontPalette.subtle(), false); y += font.lineHeight + 1;
+                }
+                for (var line : font.split(Component.translatable("mcphone.update.privacy"), w)) {
+                    g.drawString(font, line, x, y, FontPalette.subtle(), false); y += font.lineHeight + 1;
+                }
+                String update = com.november.mcphone.core.script.client.ClientUpdates.status(app.getId().toString());
+                if (!update.isEmpty()) y = drawInfoLine(g, font, x, y, w, "", Component.translatable(update).getString());
+            }
+        }
 
         for (RequiredMod required : PhoneScreenRegistry.requiredModsOf(app)) {
             y = drawModLine(g, font, x, y, w, "mcphone.gui.app_requires", required);
@@ -513,6 +551,8 @@ public final class AppManagerDetail {
 
     public boolean mouseClicked(double mx, double my, int button) {
         if (button != 0 || app == null) return true;
+        if(storageHovered&&app instanceof com.november.mcphone.core.script.client.ScriptAppAdapter){if(net.minecraft.client.Minecraft.getInstance().screen instanceof com.november.mcphone.core.client.PhoneScreen phone)phone.openAddonPage(new com.november.mcphone.core.script.client.AppStoragePage(app.getId().toString()));return true;}
+        if(manualUpdateHovered&&app instanceof com.november.mcphone.core.script.client.ScriptAppAdapter manual){if(net.minecraft.client.Minecraft.getInstance().screen instanceof com.november.mcphone.core.client.PhoneScreen phone)phone.openAddonPage(new com.november.mcphone.core.script.client.ManualInstallPage(manual.script()));return true;}if(serverUpdateHovered&&app instanceof com.november.mcphone.core.script.client.ScriptAppAdapter script){if(net.minecraft.client.Minecraft.getInstance().screen instanceof com.november.mcphone.core.client.PhoneScreen phone)phone.openAddonPage(new com.november.mcphone.core.script.client.ServerUpdatePage(script.script()));return true;}
 
         // 开关那几行：点一下就翻面，没有第二步——翻错了再点一次就回去了，
         // 与卸载那种"做了就回不来"的事不同

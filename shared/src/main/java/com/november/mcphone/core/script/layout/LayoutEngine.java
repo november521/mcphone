@@ -210,6 +210,10 @@ public final class LayoutEngine {
                 int size = n.node.num("size", 0);
                 if (size > 0) contentW = contentH = size;
             }
+            case TEXT_INPUT -> {
+                contentW = 80;
+                contentH = tm.lineHeight() + 6;
+            }
             case TOGGLE -> {
                 String label = n.node.str("label", n.node.str("i18n", null));
                 contentW = (label != null ? tm.width(label) + 4L : 0) + TOGGLE_W;

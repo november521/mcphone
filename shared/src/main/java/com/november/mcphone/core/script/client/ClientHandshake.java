@@ -79,6 +79,14 @@ public final class ClientHandshake {
     /** 收到一条推送。只认宿主发的握手 topic（{@link ScriptPush#isHost()}），别的忽略。 */
     static void onPush(ScriptPush push) {
         if (push == null || !push.isHost()) return;
+        ClientGuardState.onPush(push);
+        com.november.mcphone.feature.gifts.client.GiftCache.push(push);
+        ClientNetwork.policy(push);
+        ClientAdministration.push(push);
+        ClientNotifications.push(push);
+        ClientRevocations.push(push);
+        ClientItemEscrow.push(push);
+        ClientServerUpdates.push(push);
         try {
             switch (push.topic()) {
                 case ScriptProtocol.TOPIC_HANDSHAKE_BEGIN -> {
@@ -90,6 +98,13 @@ public final class ClientHandshake {
                             return;
                         }
                         lastBeginRevision = push.revision();
+                        if(!java.util.Objects.equals(serverId,begin.serverId())||epoch!=begin.epoch())ClientStore.clear();
+                        ClientNetwork.resetSession();
+                        ClientAdministration.clear();
+                        ClientServerUpdates.clear();
+                        ClientRevocations.resetPolicy();
+                        ClientItemEscrow.clear();
+                        ClientVault.lock();
                         // 握手线格式对不上：整批不应用（Fabric 上没有加载器级闸，这里是唯一识别点）。
                         // 与"坏数据"同一条路：清状态、留一个可查的标记，绝不让半批生效
                         scriptApiMismatch = begin.scriptApi() != ScriptProtocol.SCRIPT_API;
@@ -140,6 +155,7 @@ public final class ClientHandshake {
                         // epoch 对 + 条数收齐，这一批才可用；否则整批作废（内容清空，别让界面看见半批）
                         if (batchOpen && end.epoch() == epoch && receivedCount == expectedCount) {
                             complete = true;
+                            ClientRevocations.handshakeReady();
                         } else {
                             MCphone.LOGGER.warn("[MCphone] 握手批次作废：epoch {} vs {}，条数 {} vs {}",
                                     end.epoch(), epoch, receivedCount, expectedCount);
@@ -192,7 +208,8 @@ public final class ClientHandshake {
             return Map.of(
                     "available", e != null,
                     "serverName", complete ? serverName : "",
-                    "actions", e == null ? List.of() : e.actions());
+                    "actions", e == null ? List.of() : e.actions(),
+                    "guards", ClientGuardState.values(appId));
         }
     }
 
@@ -233,6 +250,8 @@ public final class ClientHandshake {
 
     /** 断线/换服/退出时清空——按 serverId 分桶的本地状态由各自的层负责。 */
     public static void clear() {
+        ClientStore.clear();
+        ClientServerUpdates.clear();
         synchronized (ClientHandshake.class) {
             serverId = null;
             serverName = "";
@@ -244,6 +263,14 @@ public final class ClientHandshake {
             expectedCount = 0;
             receivedCount = 0;
             deployments.clear();
+            ClientGuardState.clear();
+            ClientRevocations.clear();
+            ClientItemEscrow.clear();
+            ClientNetwork.resetSession();
+            ClientAdministration.clear();
+            ClientNotifications.clear();
+            ClientVault.lock();
+            com.november.mcphone.feature.gifts.client.GiftCache.clear();
         }
     }
 }

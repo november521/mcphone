@@ -384,6 +384,12 @@ public final class NodeParser {
                 out.put("bind", bind(obj, path, Integer.class, "int"));
                 out.put("tabs", tabs(obj, path));
             }
+            case TEXT_INPUT -> {
+                out.put("bind", bind(obj, path, String.class, "string"));
+                if (obj.has("placeholder")) out.put("placeholder", visibleText(obj, "placeholder", path, MAX_TEXT));
+                intProp(obj, out, "max-length", path, 1, 4096);
+                boolProp(obj, out, "enabled", path);
+            }
             default -> {
                 // box / column / row / stack / scroll 没有专有字段
             }

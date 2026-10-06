@@ -1,0 +1,7 @@
+{
+  "format": 1, "id": "completion:frontend", "version": "1.0.0", "versionCode": 1,
+  "name": "MCPhone 前端验收", "author": "MCPhone 本地验收夹具",
+  "description": "长文本、保险箱和私人图片。默认不访问外网，须分别给予原生许可。",
+  "icon": "icon.png", "engine": "declarative-1", "deploy": "frontend",
+  "net": {"hosts":["example.com"],"why":"仅访问 example.com，测试未许可、非 PNG 响应和权限撤回；不接收服主凭证。"}
+}

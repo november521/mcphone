@@ -1,0 +1,17 @@
+{
+  "format": 1,
+  "id": "completion:server",
+  "version": "1.0.0",
+  "versionCode": 1,
+  "name": "MCPhone 后端验收",
+  "author": "MCPhone 本地验收夹具",
+  "description": "仅供测试世界；包含真实物品与余额操作，逐项点击并核对服务端记录。",
+  "icon": "icon.png",
+  "engine": "declarative-1",
+  "deploy": "server",
+  "sdk": {"item":1,"player":1,"economy":1,"mailbox":1,"notify":1,"cycle":1,"resources":2},
+  "actions": ["read", "wallet", {"id":"claim","guards":[{"cooldown":"30s"},{"once":true,"label":"completion-once"}]}, "loot", "mail", "kv", "notify", "hold", "refund", "release", "mint", "burn", "offer", "resource", "fetch", "background"],
+  "capabilities": ["item.give", "loot.roll", "item.take.self", "currency.mint", "trade.escrow", "storage.self", "notify.self", "resource.read.item", "net.fetch"],
+  "net": {"hosts":["example.com"],"why":"访问服主设置的公开 HTTPS 测试服务，不提供服主或玩家凭证。"},
+  "background": [{"id":"heartbeat","action":"background","interval":"1m","requires":"app_installed","wifi":false}]
+}

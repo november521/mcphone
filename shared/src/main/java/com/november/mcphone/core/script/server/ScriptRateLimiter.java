@@ -133,6 +133,7 @@ public final class ScriptRateLimiter {
         Decision d = server.take(SERVER_RATE_PER_SEC, SERVER_BURST, now);
         if (!d.allowed()) return d;
 
+        if(!players.containsKey(player)&&players.size()>=MAX_PLAYERS)return Decision.retry(1000);
         PlayerState p = players.computeIfAbsent(player, k -> new PlayerState(now));
         p.lastSeen = now;
 
@@ -152,6 +153,9 @@ public final class ScriptRateLimiter {
     /** 上传字节配额，滚动一分钟窗口。超了就拒绝新的上传会话（§15.8）。 */
     public Decision allowUpload(UUID player, long bytes) {
         long now = clock.getAsLong();
+        if(bytes<0)return Decision.retry(60000);
+        reclaim(now);
+        if(!players.containsKey(player)&&players.size()>=MAX_PLAYERS)return Decision.retry(1000);
         PlayerState p = players.computeIfAbsent(player, k -> new PlayerState(now));
         p.lastSeen = now;
         if (now - p.uploadWindowStart >= 60_000L) {

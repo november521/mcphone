@@ -156,7 +156,9 @@ public class SfcCompilerTest {
         rejects("<progress value=\"count\"/>", "E_TPL_LIKELY_MISSING_COLON");
 
         // ---- P0 的 script 子集 ----
-        rejects("<script>\nfunction f(){}\n</script>" + MIN_TPL, "E_SCRIPT_P0_SUBSET");
+        accepts("<script>\nfunction f(){}\n</script>" + MIN_TPL);
+        rejects("<script>\nfunction f(){}\nwhile(true){}\n</script>" + MIN_TPL, "E_SCRIPT_P0_SUBSET");
+        rejects("<script>\nfunction phone(){}\n</script>" + MIN_TPL, "E_SCRIPT_SYNTAX");
         accepts("<script>\nstate = { a: 1 }\n</script>" + MIN_TPL);
 
         // ============ 以下是骨架之外补的 ============
@@ -1303,7 +1305,8 @@ public class SfcCompilerTest {
             "E_SFC_MANIFEST", "§9.11 没有 <manifest> 的码；包一层 PackageError，前面补 文件:行",
             "E_TPL_SYNTAX", "§9.11 没有模板语法错的码：多余的闭标签、多个根、属性写两次、v-for 写法不对",
             "E_TPL_BAD_VALUE", "§9.11 没有静态属性取值不合规的码；对应 §4.9 的 E_BAD_VALUE",
-            "E_SCRIPT_STATE", "§9.7 的键名、个数、长度、同构、层数没有对应的码");
+            "E_SCRIPT_STATE", "§9.7 的键名、个数、长度、同构、层数没有对应的码",
+            "E_SCRIPT_SYNTAX", "§15.1 前端真实函数的语法、保留名与静态预算错误需要独立错误码");
 
     static void errorTable() {
         Set<String> covered = new TreeSet<>();
