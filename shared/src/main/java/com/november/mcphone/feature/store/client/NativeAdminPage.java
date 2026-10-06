@@ -20,7 +20,7 @@ public final class NativeAdminPage implements IPhonePage {
     private int offset,next,total,diffNext,diffTotal,focus=-1,scroll,x,y,width,height;
     private boolean busy,closed,followAuthor=true;private long generation;
     @Override public void onOpen(){closed=false;generation++;}
-    @Override public void onClose(){closed=true;generation++;token="";}
+    @Override public void onClose(){closed=true;generation++;token="";focus=-1;}
     @Override public boolean capturesKeyboard(){return focus>=0;}
     private void rpc(String action,JsonObject args,Consumer<JsonObject> success){busy=true;long expected=generation,epoch=ClientHandshake.connectionEpoch();ClientStore.rpc(action,args,value->{if(closed||expected!=generation||epoch!=ClientHandshake.connectionEpoch())return;busy=false;success.accept(value);},error->{if(!closed&&expected==generation&&epoch==ClientHandshake.connectionEpoch()){busy=false;message=error;}});}
     private void load(String category,int start,String filter){generation++;kind=category;app=filter;selected=null;focus=-1;token="";offset=start;scroll=0;JsonObject args=ClientStore.args("kind",category);args.addProperty("offset",start);args.addProperty("app",filter);rpc("admin.list",args,data->{items=data.getAsJsonArray("items");next=data.get("next").getAsInt();total=data.get("total").getAsInt();message="";});}
@@ -39,8 +39,16 @@ public final class NativeAdminPage implements IPhonePage {
     private void select(JsonObject item){selected=item;scroll=0;focus=-1;if(kind.equals("deployments")){set(1,item.get("minimum").getAsString());set(2,"");set(3,"");set(4,item.get("reason").getAsString());followAuthor=item.get("followAuthor").getAsBoolean();updateMode=item.get("frontendUpdate").getAsString();}}
     private void set(int index,String value){fields[index].selectAll();fields[index].replace(value);}
     private void row(String text,Runnable action){rows.add(new Row(text,action));}
-    private void text(String value){String remaining=value;int limit=Math.max(12,width-6);while(!remaining.isEmpty()){String part=Minecraft.getInstance().font.plainSubstrByWidth(remaining,limit);if(part.isEmpty())part=remaining.substring(0,1);row(part,null);remaining=remaining.substring(part.length());}}
-    private void field(int index,String label){row(label+"：",()->{focus=index;fields[index].selectAll();});text(fields[index].text().isEmpty()?"（空）":fields[index].text());}
+    private void text(String value){text(value,null,s->Minecraft.getInstance().font.plainSubstrByWidth(s,Math.max(12,width-6)));}
+    private void text(String value,Runnable click,java.util.function.UnaryOperator<String> fit){String remaining=value;while(!remaining.isEmpty()){String part=fit.apply(remaining);if(part.isEmpty())part=remaining.substring(0,remaining.offsetByCodePoints(0,1));row(part,click);remaining=remaining.substring(part.length());}}
+    private void field(int index,String label){field(index,label,s->Minecraft.getInstance().font.plainSubstrByWidth(s,Math.max(12,width-6)));}
+    /** 标签及每一行内容都能聚焦；分行函数可在无窗口测试中替换，点击仍走真实页面。 */
+    private void field(int index,String label,java.util.function.UnaryOperator<String> fit){
+        Runnable edit=()->{focus=index;fields[index].selectAll();message="正在编辑："+label+"；Ctrl+V 粘贴，Enter 完成";};
+        row((focus==index?"▶ ":"")+label+(focus==index?"（输入中）":"（点击编辑）"),edit);
+        String value=fields[index].text();if(focus==index)value=value.substring(0,fields[index].cursor())+"▏"+value.substring(fields[index].cursor());
+        text(value.isEmpty()?"（空，点击输入）":value,edit,fit);
+    }
     private void build(){rows.clear();
         if(!token.isEmpty()){row("请逐项核对变更",null);for(String line:differences)text(line.replace("serverconfig/mcphone-capabilities.json/","能力 / ").replace("serverconfig/mcphone-script-runtime.json/","运行设置 / ").replace("serverconfig/mcphone-quotas.json/limits/","配额 / "));if(diffNext<diffTotal)row("继续查看差异 "+diffNext+" / "+diffTotal,this::moreDiff);else row("确认保存以上更改",this::commit);row("取消更改",()->{token="";differences.clear();scroll=0;});return;}
         if(kind.equals("root")){row("服务器管理",null);String[] categories={"settings","capabilities","boundaries","deployments","published","authors","economy","permissions","commands","pending"};String[] names={"预设与功能开关","应用能力","世界边界","部署与使用许可","上架应用的作者更新","作者禁用","经济状态与对账","权限名单（只读）","命令模板开关","不明结果人工核对"};for(int i=0;i<categories.length;i++){String category=categories[i];row(names[i],()->load(category,0,""));}row("配额与占用排行",()->open(new QuotaPage()));row("作品与审批队列",()->open(new ServerManagementPage()));row("审计导出",()->open(new AuditExportPage()));row("礼包与容器编辑",()->open(new com.november.mcphone.feature.gifts.client.GiftApp().openPage()));row("预览重载服务器配置",()->preview(operation("reload")));return;}
@@ -63,6 +71,6 @@ public final class NativeAdminPage implements IPhonePage {
     @Override public boolean mouseClicked(double mx,double my,int button){if(mx<x||mx>=x+width||my<y||my>=y+height)return false;if(button!=0||busy||!ClientAdministration.admin()||my<y+2||my>=y+height-24)return true;int index=scroll+(int)(my-y-2)/13;if(index>=0&&index<rows.size()&&rows.get(index).click()!=null)rows.get(index).click().run();return true;}
     @Override public boolean mouseScrolled(double mx,double my,double amount){scroll+=amount>0?-2:2;return true;}
     @Override public boolean charTyped(char c,int mods){if(focus<0)return false;fields[focus].type(c);return true;}
-    @Override public boolean keyPressed(int key,int scan,int mods){if(focus<0)return false;TextInputBuffer input=fields[focus];if(key==GLFW.GLFW_KEY_BACKSPACE)input.delete(true);else if(key==GLFW.GLFW_KEY_DELETE)input.delete(false);else if(key==GLFW.GLFW_KEY_ENTER)focus=-1;else if(key==GLFW.GLFW_KEY_A&&(mods&GLFW.GLFW_MOD_CONTROL)!=0)input.selectAll();else if(key==GLFW.GLFW_KEY_V&&(mods&GLFW.GLFW_MOD_CONTROL)!=0)input.replace(Minecraft.getInstance().keyboardHandler.getClipboard());else return false;return true;}
+    @Override public boolean keyPressed(int key,int scan,int mods){if(focus<0)return false;TextInputBuffer input=fields[focus];boolean ctrl=(mods&GLFW.GLFW_MOD_CONTROL)!=0,shift=(mods&GLFW.GLFW_MOD_SHIFT)!=0;if(key==GLFW.GLFW_KEY_BACKSPACE)input.delete(true);else if(key==GLFW.GLFW_KEY_DELETE)input.delete(false);else if(key==GLFW.GLFW_KEY_ENTER){focus=-1;message="输入完成，请预览并确认更改";}else if(ctrl&&key==GLFW.GLFW_KEY_A)input.selectAll();else if(ctrl&&key==GLFW.GLFW_KEY_V)input.replace(Minecraft.getInstance().keyboardHandler.getClipboard());else if(ctrl&&key==GLFW.GLFW_KEY_C)Minecraft.getInstance().keyboardHandler.setClipboard(input.selected());else if(key==GLFW.GLFW_KEY_LEFT)input.move(-1,shift);else if(key==GLFW.GLFW_KEY_RIGHT)input.move(1,shift);else if(key==GLFW.GLFW_KEY_HOME)input.moveTo(0,shift);else if(key==GLFW.GLFW_KEY_END)input.moveTo(input.text().length(),shift);else return false;return true;}
     @Override public boolean onBack(){if(!token.isEmpty()){generation++;busy=false;token="";differences.clear();return true;}if(selected!=null){generation++;busy=false;selected=null;focus=-1;return true;}if(!kind.equals("root")){generation++;kind="root";busy=false;scroll=0;return true;}return false;}
 }

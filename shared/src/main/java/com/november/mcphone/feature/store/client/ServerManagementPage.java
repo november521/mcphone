@@ -27,7 +27,8 @@ public final class ServerManagementPage implements IPhonePage {
     private final TextInputBuffer reason=new TextInputBuffer("人工审核",128),phrase=new TextInputBuffer("",128);
     @Override public void onOpen(){closed=false;generation++;works=ScriptAppFolder.scan().stream().filter(a->a.pkg()!=null&&a.pkg().signed()).toList();
         ClientStore.rpc("store.roles",new JsonObject(),data->{if(!closed)reviewer=data.get("reviewer").getAsBoolean();},this::error);}
-    @Override public void onClose(){closed=true;generation++;}
+    @Override public void onClose(){closed=true;generation++;focus=-1;}
+    @Override public boolean capturesKeyboard(){return focus>=0;}
     private void error(String text){if(!closed){busy=false;message=text;}}
     private void change(View next){view=next;scroll=0;focus=-1;horizontal=0;message="";}
     private String digest(){return selected.get("digest").getAsString();}
@@ -46,6 +47,12 @@ public final class ServerManagementPage implements IPhonePage {
         },this::error);
     }
     private void add(String text,Runnable run){rows.add(new Row(TextInputBuffer.clean(text,2048),0,run));}
+    private void field(int index,String label){
+        TextInputBuffer input=index==0?reason:phrase;Runnable edit=()->{focus=index;input.selectAll();message="正在编辑："+label+"；Ctrl+V 粘贴，Enter 完成";};
+        add((focus==index?"▶ ":"")+label+(focus==index?"（输入中）":"（点击编辑）"),edit);
+        String value=input.text();if(focus==index)value=value.substring(0,input.cursor())+"▏"+value.substring(input.cursor());
+        add(value.isEmpty()?"（空，点击输入）":value,edit);
+    }
     private void build(){rows.clear();switch(view){
         case WORKS -> {add("选择签名包提交上架",null);for(ScriptApp app:works){add(app.manifest().name()+" · "+app.manifest().version(),()->{busy=true;ClientStore.upload(Path.of(app.file()),result->{if(closed)return;busy=false;message="已提交，状态："+result.get("state").getAsString();},this::error);});}if(works.isEmpty())add("mcphone/apps 中没有签名包",null);}
         case QUEUE -> {for(var item:queue){JsonObject o=item.getAsJsonObject();add(o.get("name").getAsString()+" · "+o.get("state").getAsString(),()->detail(o));}}
@@ -73,7 +80,7 @@ public final class ServerManagementPage implements IPhonePage {
         case CAPS -> {if(manifest.has("capabilities"))for(var value:manifest.getAsJsonArray("capabilities")){String id=value.getAsString();var cap=CapabilityCatalog.of(id);int color=cap==null||cap.tier()!=CapabilityTier.PLAIN?0xFFFF7777:0;
                 rows.add(new Row((approvedCaps.contains(id)?"☑ ":"☐ ")+id,color,()->{if(!approvedCaps.remove(id))approvedCaps.add(id);}));}}
         case ACTIONS -> {if(manifest.has("actions"))for(var value:manifest.getAsJsonArray("actions")){String id=value.isJsonPrimitive()?value.getAsString():value.getAsJsonObject().get("id").getAsString();add((approvedActions.contains(id)?"☑ ":"☐ ")+id,()->{if(!approvedActions.remove(id))approvedActions.add(id);});}}
-        case CONFIRM -> {add(approve?"将按当前勾选内容批准":"将驳回当前摘要",null);add("理由（点击编辑）",()->focus=0);add(reason.text(),()->focus=0);add("密钥变更时输入新指纹",()->focus=1);add(phrase.text(),()->focus=1);
+        case CONFIRM -> {add(approve?"将按当前勾选内容批准":"将驳回当前摘要",null);field(0,"理由");field(1,"密钥变更时输入新指纹");
             add("确认提交审核结果",this::review);add("作者签名不代表内容无害",null);add("特权还需部署审批 UUID 许可",null);}
     }}
     private void review(){busy=true;JsonObject args=ClientStore.args("digest",digest());args.addProperty("approve",approve);args.addProperty("reason",reason.text());args.addProperty("visibility",visibility);args.addProperty("licenseAll",licenseAll);args.addProperty("phrase",phrase.text());
@@ -96,5 +103,5 @@ public final class ServerManagementPage implements IPhonePage {
     @Override public boolean keyPressed(int key,int scan,int mods){if(view==View.SOURCE&&(key==GLFW.GLFW_KEY_RIGHT||key==GLFW.GLFW_KEY_LEFT)){horizontal=Math.max(0,horizontal+(key==GLFW.GLFW_KEY_RIGHT?8:-8));return true;}
         if(focus<0)return false;TextInputBuffer input=focus==0?reason:phrase;boolean ctrl=(mods&GLFW.GLFW_MOD_CONTROL)!=0,shift=(mods&GLFW.GLFW_MOD_SHIFT)!=0;
         if(ctrl&&key==GLFW.GLFW_KEY_A)input.selectAll();else if(ctrl&&key==GLFW.GLFW_KEY_V)input.replace(Minecraft.getInstance().keyboardHandler.getClipboard());else if(ctrl&&key==GLFW.GLFW_KEY_C)Minecraft.getInstance().keyboardHandler.setClipboard(input.selected());
-        else if(key==GLFW.GLFW_KEY_BACKSPACE)input.delete(true);else if(key==GLFW.GLFW_KEY_DELETE)input.delete(false);else if(key==GLFW.GLFW_KEY_LEFT)input.move(-1,shift);else if(key==GLFW.GLFW_KEY_RIGHT)input.move(1,shift);else if(key==GLFW.GLFW_KEY_TAB)focus=1-focus;else if(key==GLFW.GLFW_KEY_ENTER)focus=-1;else return false;return true;}
+        else if(key==GLFW.GLFW_KEY_BACKSPACE)input.delete(true);else if(key==GLFW.GLFW_KEY_DELETE)input.delete(false);else if(key==GLFW.GLFW_KEY_LEFT)input.move(-1,shift);else if(key==GLFW.GLFW_KEY_RIGHT)input.move(1,shift);else if(key==GLFW.GLFW_KEY_HOME)input.moveTo(0,shift);else if(key==GLFW.GLFW_KEY_END)input.moveTo(input.text().length(),shift);else if(key==GLFW.GLFW_KEY_TAB)focus=1-focus;else if(key==GLFW.GLFW_KEY_ENTER){focus=-1;message="输入完成，请核对后确认提交";}else return false;return true;}
 }
