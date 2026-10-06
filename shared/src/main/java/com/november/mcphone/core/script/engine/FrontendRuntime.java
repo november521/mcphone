@@ -7,6 +7,7 @@ import org.mozilla.javascript.*;
 
 import java.util.*;
 import java.util.function.Consumer;
+import java.util.function.LongSupplier;
 
 /** 页面存活期间的前端引擎。所有入口和回调都过预算；宿主效果先暂存，求值与驻留检查成功后才发送。 */
 public final class FrontendRuntime implements AutoCloseable {
@@ -39,7 +40,8 @@ public final class FrontendRuntime implements AutoCloseable {
     private final UiState state;
     private final Bridge bridge;
     private final String file;
-    private final ScriptBudget budget = ScriptBudget.client();
+    private final ScriptBudget budget;
+    private final LongSupplier nanoTime;
     private final Map<Integer, Function> callbacks = new LinkedHashMap<>();
     private final ArrayDeque<Event> events = new ArrayDeque<>();
     private List<Runnable> effects;
@@ -56,7 +58,13 @@ public final class FrontendRuntime implements AutoCloseable {
     }
 
     public FrontendRuntime(FrontendProgram program, UiState state, String file, Bridge bridge) {
+        this(program,state,file,bridge,System::nanoTime);
+    }
+
+    /** 只供同包测试控制时间；页面和脚本没有调整生产预算的入口。 */
+    FrontendRuntime(FrontendProgram program,UiState state,String file,Bridge bridge,LongSupplier nanoTime) {
         this.program = program; this.state = state; this.file = file; this.bridge = bridge;
+        this.nanoTime=Objects.requireNonNull(nanoTime);this.budget=ScriptBudget.client(nanoTime);
     }
 
     public boolean failed() { return failed; }
@@ -195,18 +203,18 @@ public final class FrontendRuntime implements AutoCloseable {
         events.add(event);
         if (processing) return;
         processing = true;
-        long deadline = System.nanoTime() + ScriptBudget.CLIENT_WALL_NANOS;
+        long deadline = nanoTime.getAsLong() + ScriptBudget.CLIENT_WALL_NANOS;
         int count = 0;
         try {
             while (!events.isEmpty() && !closed && !failed) {
-                if (++count > 8 || System.nanoTime() >= deadline) { fail("连续前端回调超过预算"); break; }
+                if (++count > 8 || nanoTime.getAsLong() >= deadline) { fail("连续前端回调超过预算"); break; }
                 run(events.removeFirst(), deadline);
             }
         } finally { processing = false; }
     }
 
     private void run(Event event, long deadline) {
-        budget.begin(Math.max(1, deadline - System.nanoTime())); HostFn.resetDepth(); effects = new ArrayList<>();
+        budget.begin(Math.max(1, deadline - nanoTime.getAsLong())); HostFn.resetDepth(); effects = new ArrayList<>();
         List<Runnable> committed = List.of();
         try (Context cx = budget.enterContext()) {
             ScriptableObject jsState = (ScriptableObject) scope.get("state", scope);

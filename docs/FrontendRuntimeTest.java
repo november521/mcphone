@@ -15,6 +15,7 @@ public final class FrontendRuntimeTest {
         String error = "", nav = "";
         boolean synchronous;
         long memoryLimit=Long.MAX_VALUE;
+        Runnable beforeRetention=()->{};
         Map<String,Integer> inputLimits=Map.of();
         Map<String,Object> backend = Map.of("available", false, "serverName", "", "actions", List.of());
         @Override public void call(String action, String data, Consumer<Map<String,Object>> callback) {
@@ -25,7 +26,7 @@ public final class FrontendRuntimeTest {
         @Override public void fetch(String url,String authorization,int offset,Consumer<Map<String,Object>> callback){callback.accept(Map.of("status","PENDING"));pending.add(callback);}
         @Override public void image(String url,String authorization,Consumer<Map<String,Object>> callback){callback.accept(Map.of("status","PENDING"));pending.add(callback);}
         @Override public void imageBytes(String bytes,Consumer<Map<String,Object>> callback){callback.accept(Map.of("status","INVALID"));}
-        @Override public boolean allowRetained(long bytes) { return bytes<=memoryLimit; }
+        @Override public boolean allowRetained(long bytes) { beforeRetention.run();return bytes<=memoryLimit; }
         @Override public int textInputLimit(String key){return inputLimits.getOrDefault(key,0);}
         @Override public void toast(String text) { toast.add(text); }
         @Override public void navigate(String page) { nav = page; }
@@ -38,8 +39,11 @@ public final class FrontendRuntimeTest {
         return Map.of("ok", ok, "code", code, "message", code, "data", data);
     }
     private static Fixture fixture(String script) {
+        return fixture(script,()->0L);
+    }
+    private static Fixture fixture(String script,java.util.function.LongSupplier clock) {
         var program = FrontendProgram.parse(script, 7); var state = UiState.of(program.initialState()); var bridge = new Bridge();
-        return new Fixture(new FrontendRuntime(program, state, "app.vue", bridge), state, bridge);
+        return new Fixture(new FrontendRuntime(program, state, "app.vue", bridge,clock), state, bridge);
     }
     public static void main(String[] args) {
         Fixture daily = fixture("""
@@ -66,7 +70,7 @@ public final class FrontendRuntimeTest {
         var template=new TemplateInstance(page.template(),"entry.vue"); var ui=UiState.of(page.template().initialState()); var tree=template.instantiate(ui);
         var click=tree.click(tree.root(),ui,0);
         check(click.handlers().size()==1 && click.handlers().get(0).arguments().equals(List.of(1)), "模板绑定已声明函数和实参");
-        var bound=new FrontendRuntime(page.template().program(),ui,"entry.vue",new Bridge()); bound.invoke(click.handlers().get(0).name(),click.handlers().get(0).arguments());
+        var bound=new FrontendRuntime(page.template().program(),ui,"entry.vue",new Bridge(),()->0L); bound.invoke(click.handlers().get(0).name(),click.handlers().get(0).arguments());
         check(ui.getInt("count")==2, "实际点击进入真实函数");
         reject("function f(){} function f(){}", "重复声明");
         reject("function nav(){}", "不能覆盖宿主导航");
@@ -109,7 +113,7 @@ public final class FrontendRuntimeTest {
         check(lines.bridge.error.contains("app.vue:9"),"错误行号映射到原文件："+lines.bridge.error);
         var shared=FrontendProgram.parse("state={x:0}; function go(){state.x++;}",1);
         var one=UiState.of(shared.initialState());var two=UiState.of(shared.initialState());
-        var first=new FrontendRuntime(shared,one,"one.vue",new Bridge());var second=new FrontendRuntime(shared,two,"two.vue",new Bridge());
+        var first=new FrontendRuntime(shared,one,"one.vue",new Bridge(),()->0L);var second=new FrontendRuntime(shared,two,"two.vue",new Bridge(),()->0L);
         first.invoke("go",List.of());second.invoke("go",List.of());second.invoke("go",List.of());
         check(one.getInt("x")==1&&two.getInt("x")==2,"同一编译产物的两个运行实例作用域隔离");
         var combined=fixture("state={x:0}; function go(){phone.call('a',{},function(){});}");combined.bridge.memoryLimit=0;combined.runtime.invoke("go",List.of());
@@ -126,6 +130,23 @@ public final class FrontendRuntimeTest {
         var input=fixture("state={draft:''}; function go(){phone.call('a',{},function(r){state.draft=r.data.text;});}");input.bridge.inputLimits=Map.of("draft",4096);input.runtime.invoke("go",List.of());input.bridge.pending.get(0).accept(result(true,"OK",Map.of("text","😀汉".repeat(1000))));check(!input.runtime.failed()&&input.state.getString("draft").codePointCount(0,input.state.getString("draft").length())==2000,"前端回调能向声明的长输入框写入完整文本");
         var bounded=fixture("state={draft:''}; function go(){phone.call('a',{},function(r){state.draft=r.data.text;});}");bounded.bridge.inputLimits=Map.of("draft",128);bounded.runtime.invoke("go",List.of());bounded.bridge.pending.get(0).accept(result(true,"OK",Map.of("text","x".repeat(129))));check(bounded.runtime.failed()&&bounded.state.getString("draft").isEmpty(),"回调不能超过输入框自己的上限");
         check(UiState.of(Map.of("x","")).writeProblem("x","x".repeat(65))!=null,"旧式 state 写入仍保留原契约");
+        check(ScriptBudget.CLIENT_WALL_NANOS==50_000_000L&&ScriptBudget.CLIENT_INSTRUCTIONS==2_000_000L,"生产预算仍为 50 ms / 两百万指令");
+        long[] clock={0};
+        var expired=fixture("state={x:0}; function go(){state.x=1;phone.call('a',{},function(){});}",()->clock[0]);
+        expired.bridge.beforeRetention=()->clock[0]=ScriptBudget.CLIENT_WALL_NANOS+1;
+        expired.runtime.invoke("go",List.of());
+        check(expired.runtime.failed()&&expired.bridge.error.contains("WALL_CLOCK")&&expired.state.getInt("x")==0
+                &&expired.bridge.actions.isEmpty()&&expired.runtime.pending()==0,"墙钟到期回滚状态、释放闭包、不派发暂存请求");
+        check(ScriptBudget.wallLeftNanos()==Long.MAX_VALUE,"超时后线程预算清理");
+        var instructions=fixture("state={x:0}; function go(){while(true){}}");instructions.runtime.invoke("go",List.of());
+        check(instructions.runtime.failed()&&instructions.bridge.error.contains("INSTRUCTIONS"),"语义测试的固定钟不放宽指令硬闸");
+        clock[0]=0;var wallBudget=ScriptBudget.client(()->clock[0]);boolean observerAborted=false;
+        try(var cx=wallBudget.enterContext()){
+            var sandbox=ScriptSandbox.harden(cx);wallBudget.begin();clock[0]=ScriptBudget.CLIENT_WALL_NANOS+1;
+            try{cx.evaluateString(sandbox,"var x=0;while(x<100000){x++;}","wall.vue",1,null);}
+            catch(ScriptAbort stop){observerAborted=stop.reason()==ScriptAbort.Reason.WALL_CLOCK;}
+        }finally{wallBudget.end();}
+        check(observerAborted,"Rhino 指令观察器使用同一单调钟检查超时");
         System.out.println("FrontendRuntimeTest: "+checks+" passed");
     }
     private static void reject(String src,String why) {try{FrontendProgram.parse(src,1);throw new AssertionError(why);}catch(SfcError expected){checks++;}}
