@@ -82,7 +82,12 @@ public final class ClientGuardState {
         }
         if (el.isJsonPrimitive()) {
             JsonPrimitive p = el.getAsJsonPrimitive(); if (p.isBoolean()) return p.getAsBoolean();
-            return p.isNumber() ? p.getAsDouble() : p.getAsString();
+            if (p.isNumber()) {
+                // 前端值域只接受 int；时间戳、epoch 等大数须保留原始十进制精度。
+                try { return p.getAsBigDecimal().intValueExact(); }
+                catch (ArithmeticException largeOrFractional) { return p.getAsString(); }
+            }
+            return p.getAsString();
         }
         if (el.isJsonArray()) { List<Object> out = new ArrayList<>(); el.getAsJsonArray().forEach(e -> out.add(value(e))); return Collections.unmodifiableList(out); }
         return null;

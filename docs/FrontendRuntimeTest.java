@@ -46,6 +46,29 @@ public final class FrontendRuntimeTest {
         return new Fixture(new FrontendRuntime(program, state, "app.vue", bridge,clock), state, bridge);
     }
     public static void main(String[] args) {
+        // 真实守卫 JSON 的宿主转换必须可注入前端；不能用手写 Integer 掩盖 Double 回归。
+        Map<String,Object> guards;
+        try {
+            var convert = com.november.mcphone.core.script.client.ClientGuardState.class
+                    .getDeclaredMethod("value", com.google.gson.JsonElement.class);
+            convert.setAccessible(true);
+            @SuppressWarnings("unchecked") var converted = (Map<String,Object>) convert.invoke(null,
+                    com.google.gson.JsonParser.parseString("""
+                    {"revision":1,"epoch":9007199254740993,"serverNow":1791302400000,
+                     "actions":{"read":{"remaining":2,"ready":true,"nextAt":1791302400001}},"fraction":0.25}
+                    """));
+            guards = converted;
+        } catch (ReflectiveOperationException error) { throw new AssertionError(error); }
+        check(guards.get("revision").equals(1), "守卫小整数保留 int");
+        check(guards.get("epoch").equals("9007199254740993"), "守卫 epoch 超过 JS 精确整数范围仍无损");
+        check(guards.get("serverNow").equals("1791302400000") && guards.get("fraction").equals("0.25"), "时间戳与小数使用字符串");
+        var guarded = fixture("state={output:''}; function go(){phone.call('read',{},function(r){state.output=JSON.stringify(r);});}");
+        guarded.bridge.inputLimits = Map.of("output",4096);
+        guarded.bridge.backend = Map.of("available",true,"actions",List.of("read"),"guards",guards);
+        guarded.runtime.invoke("go",List.of());
+        check(!guarded.runtime.failed() && guarded.bridge.pending.size()==1, "实际守卫快照不使后端页面停机："+guarded.bridge.error);
+        guarded.bridge.pending.remove(0).accept(result(true,"OK",Map.of("uuid","test-player","time","24000","cycle","daily")));
+        check(!guarded.runtime.failed() && guarded.state.getString("output").contains("test-player"), "带守卫快照时完整返回结果仍可写入输入框："+guarded.bridge.error);
         Fixture daily = fixture("""
                 state = {ready:true,nextAt:'0',count:0};
                 function claim() {
