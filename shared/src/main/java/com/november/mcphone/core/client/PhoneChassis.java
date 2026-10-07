@@ -169,10 +169,11 @@ public final class PhoneChassis {
     /** 时间略小于应用正文，避免压过右侧的小电池图标。 */
     private static final float STATUS_TIME_SCALE = 0.75F;
     /** 24×24 像素图按一半绘制，图案中的 2px 线条正好落到 1px；透明边不占状态栏内容。 */
-    private static final int BATTERY_SIZE = 12;
+    private static final int STATUS_ICON_SIZE = 12;
+    private static final int STATUS_ICON_GAP = 2;
 
     /**
-     * 画顶部状态栏：左侧时钟、右侧满电电池。背景和电池图标可换肤。
+     * 画顶部状态栏：左侧时钟、右侧满格信号与满电电池。背景和状态图标可换肤。
      *
      * 高度不随设备变（{@link PhoneTheme#STATUS_BAR_HEIGHT}）：这一条的高矮由字号定，
      * 屏幕宽一倍不该让它跟着变粗。变的只有宽度与电池靠的那条右边界。
@@ -192,15 +193,27 @@ public final class PhoneChassis {
         g.drawString(font, time, 0, 0, PhoneTheme.FONT_COLOR_STATUS, true);
         g.pose().popPose();
 
-        int bx = phoneLeft + metrics.screenW() - STATUS_INSET - BATTERY_SIZE;
-        int by = phoneTop + (PhoneTheme.STATUS_BAR_HEIGHT - BATTERY_SIZE) / 2;
+        int bx = phoneLeft + metrics.screenW() - STATUS_INSET - STATUS_ICON_SIZE;
+        int sx = bx - STATUS_ICON_GAP - STATUS_ICON_SIZE;
+        int by = phoneTop + (PhoneTheme.STATUS_BAR_HEIGHT - STATUS_ICON_SIZE) / 2;
         // 保留原图的透明留白并等比缩放。裁剪限制在状态栏内，资源包覆盖也不侵入页面。
         GuiUtil.clipped(g, phoneLeft, phoneTop,
                 phoneLeft + metrics.screenW(), phoneTop + PhoneTheme.STATUS_BAR_HEIGHT, () -> {
-                    if (!PhoneSkin.draw(g, PhoneSkin.Element.BATTERY_FULL, bx, by, BATTERY_SIZE, BATTERY_SIZE)) {
+                    if (!PhoneSkin.draw(g, PhoneSkin.Element.SIGNAL_FULL, sx, by, STATUS_ICON_SIZE, STATUS_ICON_SIZE)) {
+                        drawFullSignalFallback(g, sx, by);
+                    }
+                    if (!PhoneSkin.draw(g, PhoneSkin.Element.BATTERY_FULL, bx, by, STATUS_ICON_SIZE, STATUS_ICON_SIZE)) {
                         drawFullBatteryFallback(g, bx, by);
                     }
                 });
+    }
+
+    /** 缺图时用三根递增的白色信号柱兜底，始终显示满格。 */
+    private static void drawFullSignalFallback(GuiGraphics g, int x, int y) {
+        for (int bar = 0; bar < 3; bar++) {
+            int left = x + 1 + bar * 3;
+            g.fill(left, y + 8 - bar * 3, left + 2, y + 10, PhoneTheme.FONT_COLOR_STATUS);
+        }
     }
 
     /** 缺图时画同样的白色满电轮廓与三格电量；手机无需充电，始终使用这一种状态。 */

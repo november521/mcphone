@@ -56,7 +56,7 @@ public final class PhoneTheme {
     // 以下 FONT_COLOR_* 画在手机自带构件（导航栏、通知、气泡等）的实心底上，
     // 底不变字也不能变——钉死，不随设置走；随「字体颜色」设置变的在 FontPalette。
 
-    /** 状态栏时间与电池兜底图案。底是 COLOR_SCRIM 压暗层 */
+    /** 状态栏时间与信号、电池兜底图案。底是 COLOR_SCRIM 压暗层 */
     public static final int FONT_COLOR_STATUS = 0xFFFFFFFF;
 
     /** 导航栏 ◀ ● ■ 三个符号。底是 COLOR_NAV_BAR */

@@ -72,17 +72,19 @@ The library is bundled unmodified and used only through its public API.
 
 
 ================================================================
-Pixelarticons - battery-full
+Pixelarticons - battery-full / cellular-signal-3
 ================================================================
 
-用途     状态栏固定满电图标（纯白透明 PNG）
-Used for the fixed full-battery icon in the status bar (white transparent PNG).
+用途     状态栏固定满电电池与满格信号图标（纯白透明 PNG）
+Used for the fixed full-battery and full-signal icons in the status bar (white transparent PNGs).
 
 主页     https://github.com/halfmage/pixelarticons
 原图     https://pixelarticons.com/svg/battery-full.svg
+         https://pixelarticons.com/svg/cellular-signal-3.svg
 位置     assets/mcphone/textures/phone/battery_full.png
-转换     用户提供的 24x24 PNG；原 SVG 的 currentColor 已替换为纯白，保留原坐标和透明背景。
-         User-provided 24x24 PNG of the original SVG, rendered white with transparent background.
+         assets/mcphone/textures/phone/signal_full.png
+转换     用户提供的 24x24 纯白透明 PNG，在本模组中原样打包。
+         User-provided 24x24 white transparent PNGs, bundled without further changes.
 
 MIT License
 
