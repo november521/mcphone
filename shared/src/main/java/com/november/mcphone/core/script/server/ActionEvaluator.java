@@ -43,7 +43,13 @@ public interface ActionEvaluator {
      * @param seq 这一次求值的序号，只用于日志与排查。<b>不是幂等键</b>
      */
     record Request(String appId, String actionId, byte[] params,
-                   PlayerSnapshot player, String deployRev, long seq) {
+                   PlayerSnapshot player, String deployRev, long seq, Runnable beginEffects,boolean background,long connectionEpoch,long requestId) {
+        public Request(String appId,String actionId,byte[] params,PlayerSnapshot player,String deployRev,long seq,Runnable beginEffects,boolean background,long connectionEpoch){this(appId,actionId,params,player,deployRev,seq,beginEffects,background,connectionEpoch,seq);}
+        public Request(String appId,String actionId,byte[] params,PlayerSnapshot player,String deployRev,long seq,Runnable beginEffects,boolean background){this(appId,actionId,params,player,deployRev,seq,beginEffects,background,0);}
+        public Request(String appId,String actionId,byte[] params,PlayerSnapshot player,String deployRev,long seq,Runnable beginEffects){this(appId,actionId,params,player,deployRev,seq,beginEffects,false);}
+        public Request(String appId, String actionId, byte[] params, PlayerSnapshot player, String deployRev, long seq) {
+            this(appId, actionId, params, player, deployRev, seq, () -> { });
+        }
     }
 
     /**

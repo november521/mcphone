@@ -1,2 +1,3 @@
 com.november.mcphone.feature.store.client.LocalAppSource
 com.november.mcphone.core.script.client.LocalScriptSource
+com.november.mcphone.core.script.client.ServerStoreSource

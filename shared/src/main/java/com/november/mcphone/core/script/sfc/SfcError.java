@@ -48,7 +48,8 @@ public final class SfcError extends RuntimeException {
         E_EXPR_TOO_LONG("%s:%d 表达式超过 256 字符"),
 
         E_SCRIPT_P0_SUBSET("%s:%d P0 的 <script> 只能写 state = { ... }，方法与逻辑在 P1 开放"),
-        E_SCRIPT_STATE("%s:%d state 的 '%s' 不合法：%s");
+        E_SCRIPT_STATE("%s:%d state 的 '%s' 不合法：%s"),
+        E_SCRIPT_SYNTAX("%s:%d 前端脚本错误：%s");
 
         private final String text;
         private final int argc;

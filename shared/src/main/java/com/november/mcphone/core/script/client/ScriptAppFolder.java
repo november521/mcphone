@@ -49,6 +49,9 @@ public final class ScriptAppFolder {
     private ScriptAppFolder() {
     }
 
+    /** 原子更新后必须作废时间戳缓存，同毫秒、同长度的更新也要重新编译。 */
+    static void invalidate(Path path) { CACHE.remove(path); }
+
     /** 目录的绝对路径。取不到游戏目录（没有客户端）时返回 null。 */
     public static Path dir() {
         Minecraft mc = Minecraft.getInstance();
@@ -150,6 +153,9 @@ public final class ScriptAppFolder {
     /** zip：清单独立成文件，入口是 manifest 指的那个（不写 ui 就是 app.vue），pages/*.vue 是别的页。 */
     private static ScriptApp packaged(String name, byte[] zip) {
         AppPackage pkg = PackageReader.read(zip);
+        return fromPackage(name,pkg);
+    }
+    public static ScriptApp fromPackage(String name,AppPackage pkg) {
         Manifest manifest = pkg.manifest();
 
         String entryPath = manifest.uiTree();

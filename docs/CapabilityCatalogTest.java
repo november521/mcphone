@@ -28,15 +28,16 @@ public class CapabilityCatalogTest {
     }
 
     static void catalogSize() {
-        eq(CapabilityCatalog.all().size(), 33, "目录共 33 条（§18.8 展开 + predicate.test）");
-        eq(CapabilityCatalog.open().size(), 23, "首版开放 23 条（ctx 上会出现的就是这组）");
-        eq(CapabilityCatalog.openIds().size(), 23, "openIds 与 open() 同数");
+        eq(CapabilityCatalog.all().size(), 39, "目录追加通知与资源能力");
+        eq(CapabilityCatalog.open().size(), 30, "通知与资源读取有实际的生产调用路径");
+        eq(CapabilityCatalog.openIds().size(), 30, "openIds 与 open() 同数");
         for (CapabilityCatalog.Entry e : CapabilityCatalog.open()) {
             check(e.open(), e.id() + " 在 open() 里必须标 open");
-            check(e.tier() != CapabilityTier.RESTRICTED, e.id() + " 开放项不许是 restricted（首版全不开放）");
+            check(e.tier() != CapabilityTier.RESTRICTED || java.util.Set.of("command.template","command.affect_others").contains(e.id()),
+                    e.id() + " restricted 只开放逐模板审批的命令族");
         }
         for (CapabilityCatalog.Entry e : CapabilityCatalog.all()) {
-            if (e.tier() == CapabilityTier.RESTRICTED) {
+            if (e.tier() == CapabilityTier.RESTRICTED && !java.util.Set.of("command.template","command.affect_others").contains(e.id())) {
                 check(!e.open(), "restricted 一档全部不开放：" + e.id());
             }
         }
@@ -57,9 +58,9 @@ public class CapabilityCatalogTest {
 
         check(CapabilityCatalog.of("item.give").open(), "item.give 首版开放");
         check(!CapabilityCatalog.of("container.read").open(), "container.read 本步不做 ctx 路径（不开放）");
-        check(!CapabilityCatalog.of("net.fetch").open(), "net.fetch 本步不做（不开放）");
+        check(CapabilityCatalog.of("net.fetch").open(), "net.fetch 已有真实执行路径");
         check(!CapabilityCatalog.of("container.write").open(), "container.write 首版不开放");
-        check(!CapabilityCatalog.of("command.template").open(), "command.template 首版不开放");
+        check(CapabilityCatalog.of("command.template").open(), "command.template 有真实受控执行路径，运行期默认禁用");
         eq(CapabilityCatalog.of("item.give").note().isEmpty(), false, "每条都写清了档位理由");
     }
 
@@ -90,12 +91,7 @@ public class CapabilityCatalogTest {
      * 用记录门探针钉住（间接写法也看得见）；这里只管"开放项分类不超过这两类"。
      */
     static void enforced() {
-        java.util.Set<String> notYet = java.util.Set.of(
-                "read.self.position", "read.self.inventory", "read.self.stats",
-                "read.world.time", "read.world.weather",
-                "read.players.online_count", "read.players.list",
-                "item.take.self", "trade.escrow", "message.self",
-                "currency.mint", "item.give.other");
+        java.util.Set<String> notYet = java.util.Set.of();
         for (String id : CapabilityCatalog.enforcedIds()) {
             check(CapabilityCatalog.openIds().contains(id), "enforced 的必须是开放项：" + id);
         }
@@ -105,7 +101,7 @@ public class CapabilityCatalogTest {
         }
         eq(CapabilityCatalog.enforcedIds().size() + notYet.size(), CapabilityCatalog.openIds().size(),
                 "两类加起来正好是全部开放项（不多不少）");
-        check(!CapabilityCatalog.enforced("net.fetch"), "不开放的项谈不上 enforced");
+        check(CapabilityCatalog.enforced("net.fetch"), "net.fetch 在调用前受能力门约束");
         check(!CapabilityCatalog.enforced("container.read"), "container.read 本步不开放也不设门");
     }
 
@@ -143,7 +139,7 @@ public class CapabilityCatalogTest {
      * 这档漏一个比 plain 漏一个严重得多，所以单独签字，不混在通用 notYet 里。
      */
     static void grantedEnforcement() {
-        java.util.Set<String> grantedNotYet = java.util.Set.of("currency.mint", "item.give.other");
+        java.util.Set<String> grantedNotYet = java.util.Set.of();
         for (CapabilityCatalog.Entry e : CapabilityCatalog.open()) {
             if (e.tier() != CapabilityTier.GRANTED) continue;
             check(CapabilityCatalog.enforced(e.id()) || grantedNotYet.contains(e.id()),

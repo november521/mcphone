@@ -82,6 +82,8 @@ public final class EconomyRuntime {
     private int lastFailed;
     /** 退款时 provider 抛过异常的托管：钱退没退出去不知道，这次运行里不再自动退（见 {@link #sweepEscrow}） */
     private final Set<EscrowId> suspect = new HashSet<>();
+    private SettlementJournal settlements;
+    public SettlementJournal settlements(){return settlements;}
 
     /** 断言测试用：直接喂一个 provider 查找函数（{@link #registry()} 为 null）。 */
     EconomyRuntime(EconomyData data, TxnLog log, CurrencyGateway gateway,
@@ -169,7 +171,10 @@ public final class EconomyRuntime {
 
     static EconomyRuntime wire(EconomyData data, TxnLog log, CurrencyGateway gateway, long now,
                                List<CurrencySpec> specs, Supplier<MinecraftServer> server) {
-        CurrencyRegistry registry = new CurrencyRegistry(gateway);
+        MinecraftServer actualServer=server==null?null:server.get();
+        SettlementJournal settlements=new SettlementJournal(actualServer==null?null:actualServer.getWorldPath(LevelResource.ROOT).resolve("mcphone/economy/settlements.json"),data.escrow(),System::currentTimeMillis);
+        if(!settlements.problem().isEmpty())MCphone.LOGGER.error("[MCphone] {}；保留原文件，放款/退款暂停",settlements.problem());
+        CurrencyRegistry registry = new CurrencyRegistry(gateway,settlements);
         List<String> notes;
         if (specs == null) {
             registerAvailable(registry, data, log);   // 旧兜底：没有配置时的行为，一个字节不变
@@ -177,7 +182,7 @@ public final class EconomyRuntime {
         } else {
             notes = registerConfigured(registry, data, log, specs, server);
         }
-        return new EconomyRuntime(data, log, gateway, registry, notes, now);
+        EconomyRuntime runtime=new EconomyRuntime(data,log,gateway,registry,notes,now);runtime.settlements=settlements;return runtime;
     }
 
     /**
@@ -354,6 +359,7 @@ public final class EconomyRuntime {
     public EconomyData data() {
         return data;
     }
+    public String auditText(String id){ICurrencyProvider provider=registry==null?null:registry.get(id);while(provider instanceof GatedCurrencyProvider gated)provider=gated.inner();if(provider==null)return "货币未注册";if(!(provider instanceof BuiltinProvider))return "外部钱包余额不在世界账本，无法核对总额";if(data.wholeLock()!=null||data.lockedCurrencies().contains(id))return "账本已锁住，请先核对服务器日志";return EconomyAudit.run(id,data).describe();}
 
     public TxnLog log() {
         return log;
@@ -421,8 +427,7 @@ public final class EconomyRuntime {
                     suspected++;
                     EscrowLedger.Entry v = e.getValue();
                     MCphone.LOGGER.error("[MCphone] ⚠ 超时托管 {}（{} 最小单位的 {}，原主 {}）退款时 provider 没给结果（返回了 null），钱退没退出去不知道。"
-                            + "这次运行里不再自动退。核对原主在那种货币里的余额：没到账就重启，开服时会再试一次；已经到账的话重启会再退一次，"
-                            + "目前只能手改存档（SavedData 与快照一起）把这笔标成已结清", e.getKey().value(), v.amount(), v.currencyId(), v.owner());
+                            + "生产注册表已保存不明结算，重启也不会重试；请在原生服务器管理页核对原主余额与流水，再明确确认已发生或未发生。", e.getKey().value(), v.amount(), v.currencyId(), v.owner());
                 }
             } catch (VirtualMachineError fatal) {
                 throw fatal;
@@ -434,8 +439,7 @@ public final class EconomyRuntime {
                 ProviderFailure f = ProviderFailure.of(ex);
                 // 堆栈每种货币每趟只打一次：provider 整个坏掉时每笔都是同一个堆栈
                 MCphone.LOGGER.error("[MCphone] ⚠ 超时托管 {}（{} 最小单位的 {}，原主 {}）退款时 provider 抛了异常（{}），钱退没退出去不知道。"
-                        + "这次运行里不再自动退。核对原主在那种货币里的余额：没到账就重启，开服时会再试一次；已经到账的话重启会再退一次，"
-                        + "目前只能手改存档（SavedData 与快照一起）把这笔标成已结清", e.getKey().value(), v.amount(), v.currencyId(), v.owner(),
+                        + "生产注册表已保存不明结算，重启也不会重试；请在原生服务器管理页核对原主余额与流水，再明确确认已发生或未发生。", e.getKey().value(), v.amount(), v.currencyId(), v.owner(),
                         f.getMessage(), stacked.add(v.currencyId()) ? f : null);
             }
         }

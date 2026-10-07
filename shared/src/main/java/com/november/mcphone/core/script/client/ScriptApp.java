@@ -3,6 +3,8 @@ package com.november.mcphone.core.script.client;
 import com.november.mcphone.core.script.pkg.AppPackage;
 import com.november.mcphone.core.script.pkg.FrontendDigest;
 import com.november.mcphone.core.script.pkg.Manifest;
+import com.november.mcphone.core.script.pkg.SigManifest;
+import com.november.mcphone.core.script.server.RevocationPolicy;
 import com.november.mcphone.core.script.sfc.SfcCompiler;
 import net.minecraft.resources.ResourceLocation;
 
@@ -38,7 +40,23 @@ public record ScriptApp(
         /** 从哪个文件读来的，只用于日志与重装。 */
         String file,
         /** 前端摘要（服务端谓词的那一份，见 {@link FrontendDigest}）；单文件形态为 null。 */
-        String frontendDigest) {
+        String frontendDigest,
+        /** 装载时读一次，撤销提示的每帧检查不再解析清单与完整公钥。 */
+        long versionCode,
+        byte[] authorKey) {
+
+    public ScriptApp {
+        authorKey = authorKey == null ? new byte[0] : authorKey.clone();
+    }
+
+    @Override public byte[] authorKey() { return authorKey.clone(); }
+
+    public ScriptApp(ResourceLocation id, Manifest manifest, AppPackage pkg, SfcCompiler.Page entry,
+                     Map<String, SfcCompiler.Page> pages, byte[] icon, String file, String frontendDigest) {
+        this(id, manifest, pkg, entry, pages, icon, file, frontendDigest,
+                pkg == null ? 0 : RevocationPolicy.versionOf(pkg),
+                pkg == null || !pkg.signed() ? new byte[0] : SigManifest.parse(pkg.signature()).pubkey());
+    }
 
     /** 装载时把摘要算好，别让渲染路径自己去算。 */
     public static ScriptApp of(ResourceLocation id, Manifest manifest, AppPackage pkg,

@@ -37,8 +37,16 @@ public final class VaultPage {
     private static final int ROW = 12;
 
     /** 两个输入框，各自的字符缓冲。 */
-    private final List<Character> first = new ArrayList<>();
-    private final List<Character> second = new ArrayList<>();
+    private static final class PasswordBuffer {
+        private final char[] chars=new char[128];private int length;
+        int size(){return length;}boolean isEmpty(){return length==0;}char get(int i){return chars[i];}
+        void add(char value){chars[length++]=value;}void remove(int i){if(i!=length-1)throw new IllegalArgumentException();chars[--length]='\0';}
+        void clear(){Arrays.fill(chars,'\0');length=0;}
+    }
+    private final PasswordBuffer first = new PasswordBuffer();
+    private final PasswordBuffer second = new PasswordBuffer();
+    private String message="";private boolean busy,closed;
+    private int submitY;private long generation;
 
     /** 光标在哪个框里。 */
     private boolean onSecond;
@@ -58,6 +66,7 @@ public final class VaultPage {
     private int maxScroll;
 
     public void open() {
+        closed=false;generation++;busy=false;message=ClientVault.unlocked()?"保险箱已经解锁":"";
         clear();
         onSecond = false;
         backRequested = false;
@@ -66,6 +75,7 @@ public final class VaultPage {
 
     /** 关页就抹掉。<b>这是口令在内存里存在的全部时间。</b> */
     public void close() {
+        closed=true;generation++;
         clear();
     }
 
@@ -79,7 +89,7 @@ public final class VaultPage {
         return toChars(first);
     }
 
-    private static char[] toChars(List<Character> src) {
+    private static char[] toChars(PasswordBuffer src) {
         char[] out = new char[src.size()];
         for (int i = 0; i < out.length; i++) out[i] = src.get(i);
         return out;
@@ -124,6 +134,10 @@ public final class VaultPage {
         g.drawString(font, Component.translatable("mcphone.vault.title").getString(),
                 x, y, PhoneTheme.FONT_COLOR_STATUS, false);
         y += ROW + 2;
+
+        submitY=y;g.fill(x,y,x+w,y+ROW,acceptable()&&!busy?PhoneTheme.COLOR_BUTTON_HOVER:PhoneTheme.COLOR_BUTTON);
+        g.drawString(font,busy?"正在本机解密…":"解锁保险箱",x+2,y+2,PhoneTheme.FONT_COLOR_BUTTON,false);y+=ROW+4;
+        for(var line:font.split(Component.literal(message),w)){g.drawString(font,line,x,y,PhoneTheme.FONT_COLOR_NAV,false);y+=font.lineHeight;}
 
         clipTop = y;
         clipBottom = phoneTop + screenH - navH;
@@ -173,7 +187,7 @@ public final class VaultPage {
 
     /** 一个输入框。<b>只画星号</b>，不画明文 —— 旁边站着人也看不到。 */
     private int field(GuiGraphics g, Font font, int x, int y, int w, String label,
-                      List<Character> buf, boolean focused) {
+                      PasswordBuffer buf, boolean focused) {
         g.drawString(font, label, x, y, PhoneTheme.FONT_COLOR_NAV, false);
         y += ROW;
         g.fill(x, y, x + w, y + ROW, focused ? PhoneTheme.COLOR_BUTTON_HOVER : PhoneTheme.COLOR_BUTTON);
@@ -187,6 +201,7 @@ public final class VaultPage {
      */
     public boolean mouseClicked(double mx, double my, int button) {
         if (mx < boxX || mx > boxX + boxW) return false;
+        if(my>=submitY&&my<submitY+ROW){submit();return true;}
         if (my < clipTop || my > clipBottom) return false;
         if (my >= firstBoxY && my <= firstBoxY + ROW) {
             onSecond = false;
@@ -208,7 +223,8 @@ public final class VaultPage {
     }
 
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        List<Character> buf = onSecond ? second : first;
+        PasswordBuffer buf = onSecond ? second : first;
+        if(keyCode==257){submit();return true;}
         if (keyCode == 259 && !buf.isEmpty()) {          // backspace
             buf.remove(buf.size() - 1);
             return true;
@@ -226,7 +242,7 @@ public final class VaultPage {
 
     public boolean charTyped(char c, int modifiers) {
         if (c < ' ') return false;
-        List<Character> buf = onSecond ? second : first;
+        PasswordBuffer buf = onSecond ? second : first;
         if (buf.size() >= 128) return true;               // 够长了，再长只是负担
         buf.add(c);
         return true;
@@ -237,4 +253,6 @@ public final class VaultPage {
         backRequested = false;
         return r;
     }
+    private void submit(){if(busy||!acceptable())return;busy=true;long expected=generation;char[] value=passphrase();clear();
+        ClientVault.unlock(value,text->{if(closed||expected!=generation)return;busy=false;message=text;});}
 }

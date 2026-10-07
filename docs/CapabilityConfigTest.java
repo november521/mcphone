@@ -138,11 +138,11 @@ public class CapabilityConfigTest {
     }
 
     /**
-     * S18-B1：{@code boundary} 六个开关本步没有执行面消费者（所以 preset 现在没有运行期差别）。
+     * boundary 消费点必须逐一登记；物品发放给他人新增跨维度边界，不能把执行点偷偷藏到白名单外。
      * 白名单就是**接线签字处**：哪张卡把某个开关接进执行面，就把方法名加进来 —— 否则这里当场红。
      */
     static void boundaryConsumers() throws Exception {
-        java.util.Set<String> wired = java.util.Set.of();
+        java.util.Set<String> wired = java.util.Set.of("ServerItemEscrow.java","ResourceRegistry.java","ServerIntentApplier.java","NativeAdminControls.java");
         java.util.Set<String> observed = new java.util.TreeSet<>();
         Path root = Path.of("..", "..").toAbsolutePath().normalize();
         try (var stream = Files.walk(root)) {
@@ -161,7 +161,7 @@ public class CapabilityConfigTest {
             }
         }
         eq(observed, new java.util.TreeSet<>(wired),
-                "boundary 开关的消费者集合 = 接线白名单（本步为空；接了线就来这里签字）");
+                "boundary 开关的消费者集合 = 接线白名单（新增实际消费点须登记）");
     }
 
     /**

@@ -119,6 +119,10 @@ public final class PhoneScreenRegistry {
             MCphone.LOGGER.warn("[MCphone] 安装失败: 目录中没有 App '{}'", id);
             return false;
         }
+        if(!app.isVisible())return false;
+        if(!app.isSystemApp()&&!INSTALLED.contains(id)&&INSTALLED.stream().map(CATALOG::get).filter(java.util.Objects::nonNull).filter(a->!a.isSystemApp()).count()>=com.november.mcphone.core.script.client.ClientAdministration.appLimit()){
+            var player=Minecraft.getInstance().player;if(player!=null)player.displayClientMessage(net.minecraft.network.chat.Component.translatable("mcphone.quota.apps_full",com.november.mcphone.core.script.client.ClientAdministration.appLimit()),false);return false;
+        }
         if (!INSTALLED.add(id)) return false;
 
         saveState();
@@ -154,7 +158,7 @@ public final class PhoneScreenRegistry {
         List<IPhoneApp> out = new ArrayList<>(INSTALLED.size());
         for (ResourceLocation id : INSTALLED) {
             IPhoneApp app = CATALOG.get(id);
-            if (app != null) out.add(app);
+            if (app != null&&app.isVisible()) out.add(app);
         }
         // unmodifiableList 而不是 List.copyOf：省一次拷贝，主屏每帧都走这条路
         return Collections.unmodifiableList(out);
@@ -164,13 +168,12 @@ public final class PhoneScreenRegistry {
     public static boolean moveApp(int from, int to) {
         ensureLoaded();
 
-        List<ResourceLocation> order = new ArrayList<>(INSTALLED);
+        List<ResourceLocation> order = getApps().stream().map(IPhoneApp::getId).collect(java.util.stream.Collectors.toCollection(ArrayList::new));
         // 与界面预览共用 HomeLayout.reorder，预览与落定才一致
         if (!HomeLayout.reorder(order, from, to)) return false;
 
         // LinkedHashSet 没有就地重排，清空再灌回去
-        INSTALLED.clear();
-        INSTALLED.addAll(order);
+        List<ResourceLocation> merged=new ArrayList<>();int visible=0;for(ResourceLocation id:INSTALLED){IPhoneApp app=CATALOG.get(id);merged.add(app!=null&&app.isVisible()?order.get(visible++):id);}INSTALLED.clear();INSTALLED.addAll(merged);
 
         saveState();
         return true;
@@ -181,7 +184,7 @@ public final class PhoneScreenRegistry {
         ensureLoaded();
         List<IPhoneApp> out = new ArrayList<>();
         for (Map.Entry<ResourceLocation, IPhoneApp> e : CATALOG.entrySet()) {
-            if (!INSTALLED.contains(e.getKey())) out.add(e.getValue());
+            if (!INSTALLED.contains(e.getKey())&&e.getValue().isVisible()) out.add(e.getValue());
         }
         return List.copyOf(out);
     }
@@ -255,7 +258,7 @@ public final class PhoneScreenRegistry {
     /** 按 id 查找目录中的 App（不论是否已安装） */
     public static IPhoneApp getApp(ResourceLocation id) {
         ensureLoaded();
-        return CATALOG.get(id);
+        IPhoneApp app=CATALOG.get(id);return app!=null&&app.isVisible()?app:null;
     }
 
     /** 按主屏下标查找已安装 App */
@@ -266,7 +269,7 @@ public final class PhoneScreenRegistry {
         int i = 0;
         for (ResourceLocation id : INSTALLED) {
             IPhoneApp app = CATALOG.get(id);
-            if (app == null) continue;      // 与 getApps 同一条跳过规则，下标才对得上
+            if (app == null||!app.isVisible()) continue;      // 与 getApps 同一条跳过规则，下标才对得上
             if (i++ == index) return app;
         }
         return null;
@@ -277,7 +280,7 @@ public final class PhoneScreenRegistry {
         ensureLoaded();
         int n = 0;
         for (ResourceLocation id : INSTALLED) {
-            if (CATALOG.containsKey(id)) n++;
+            IPhoneApp app=CATALOG.get(id);if (app!=null&&app.isVisible()) n++;
         }
         return n;
     }

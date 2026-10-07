@@ -223,7 +223,7 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 
 <!-- 下面这段由 ./gradlew updateSeamsDoc 生成，别手改：1.21.1-neoforge -->
 
-#### 共用代码引用了的（37）
+#### 共用代码引用了的（38）
 
 **新平台必须提供同名类型**，否则 shared/ 与共享层编不过。全限定名是硬约束；方法体是抄现成的一份还是自己写，看那个文件。
 
@@ -253,6 +253,7 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 - `platform.ModPresence`　—— 加载器导入
 - `platform.PlayerAbilities`
 - `platform.PlayerEffects`
+- `platform.ResourcePlatform`　—— 加载器导入、注入的方法
 - `platform.Slots`
 - `platform.StackCodecs`
 - `platform.client.CameraGui`
@@ -265,7 +266,7 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 - `platform.client.SystemFiles`
 - `platform.client.VanillaAudio`
 
-#### 平台内部的（15）
+#### 平台内部的（16）
 
 只在这个平台自己的代码里用到。新平台不必提供同名类型。
 
@@ -282,6 +283,7 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 - `feature.terminal.integration.ae2.Ae2wtlibSupport`
 - `feature.terminal.integration.ae2.TerminalSlotLocator`
 - `feature.terminal.net.TerminalNetworking`　—— 加载器导入
+- `platform.PlayerSaves`
 - `platform.Predicates`
 - `platform.client.ClientTicks`　—— 加载器导入
 
@@ -296,7 +298,7 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 
 <!-- 下面这段由 ./gradlew updateSeamsDoc 生成，别手改：1.20.1-forge -->
 
-#### 共用代码引用了的（77）
+#### 共用代码引用了的（78）
 
 **新平台必须提供同名类型**，否则 shared/ 与共享层编不过。全限定名是硬约束；方法体是抄现成的一份还是自己写，看那个文件。
 
@@ -366,6 +368,7 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 - `platform.ModPresence`　—— 加载器导入
 - `platform.PlayerAbilities`　—— 加载器导入
 - `platform.PlayerEffects`　—— 加载器导入
+- `platform.ResourcePlatform`　—— 加载器导入、注入的方法
 - `platform.Slots`
 - `platform.StackCodecs`
 - `platform.client.CameraGui`
@@ -378,7 +381,7 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 - `platform.client.SystemFiles`
 - `platform.client.VanillaAudio`
 
-#### 平台内部的（34）
+#### 平台内部的（35）
 
 只在这个平台自己的代码里用到。新平台不必提供同名类型。
 
@@ -414,6 +417,7 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 - `feature.terminal.integration.ae2.TerminalSlotLocator`
 - `feature.terminal.net.SyncTerminalSlotPacket`
 - `feature.terminal.net.TerminalNetworking`
+- `platform.PlayerSaves`
 - `platform.Predicates`
 - `platform.client.ClientTicks`　—— 加载器导入
 
@@ -421,7 +425,7 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 
 <!-- 下面这段由 ./gradlew updateSeamsDoc 生成，别手改：1.21.1-fabric -->
 
-#### 共用代码引用了的（39）
+#### 共用代码引用了的（40）
 
 **新平台必须提供同名类型**，否则 shared/ 与共享层编不过。全限定名是硬约束；方法体是抄现成的一份还是自己写，看那个文件。
 
@@ -453,6 +457,7 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 - `platform.ModPresence`　—— 加载器导入
 - `platform.PlayerAbilities`
 - `platform.PlayerEffects`
+- `platform.ResourcePlatform`　—— 加载器导入
 - `platform.Slots`
 - `platform.StackCodecs`
 - `platform.client.CameraGui`
@@ -465,7 +470,7 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 - `platform.client.SystemFiles`
 - `platform.client.VanillaAudio`
 
-#### 平台内部的（29）
+#### 平台内部的（30）
 
 只在这个平台自己的代码里用到。新平台不必提供同名类型。
 
@@ -496,6 +501,7 @@ Minecraft 1.20.1，在其之前，那一侧只能使用能力。`getCapability(.
 - `mixin.client.MouseHandlerMixin`
 - `mixin.client.SoundEngineMixin`
 - `platform.Holder`
+- `platform.PlayerSaves`
 - `platform.Predicates`
 - `platform.client.ClientTicks`　—— 加载器导入
 

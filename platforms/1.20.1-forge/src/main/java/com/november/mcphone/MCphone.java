@@ -165,6 +165,9 @@ public final class MCphone {
             if (e.phase == net.minecraftforge.event.TickEvent.Phase.END) com.november.mcphone.core.script.server.economy.EconomyRuntime.tick();
         });
         MinecraftForge.EVENT_BUS.addListener((net.minecraftforge.event.TickEvent.ServerTickEvent e) -> {
+            if (e.phase == net.minecraftforge.event.TickEvent.Phase.END) com.november.mcphone.core.script.server.ScriptHost.tick();
+        });
+        MinecraftForge.EVENT_BUS.addListener((net.minecraftforge.event.TickEvent.ServerTickEvent e) -> {
             if (e.phase == net.minecraftforge.event.TickEvent.Phase.END) {
                 tickDiscLoop(e.getServer().getPlayerList().getPlayers());
             }

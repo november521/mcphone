@@ -117,11 +117,27 @@ public class WindowFixturesTest {
         check(Files.isRegularFile(v120.resolve("data/myserver/predicates/is_vip.json")),
                 "1.20.1 用 predicates/");
         check(Files.isRegularFile(v121.resolve("data/mcphone/tags/item/giftable.json")), "1.21.1 giftable 标签");
-        check(Files.isRegularFile(v120.resolve("data/mcphone/tags/item/giftable.json")), "1.20.1 giftable 标签");
-        check(Files.readString(v121.resolve("pack.mcmeta"), StandardCharsets.UTF_8).contains("48"),
-                "1.21.1 pack_format = 48");
-        check(Files.readString(v120.resolve("pack.mcmeta"), StandardCharsets.UTF_8).contains("15"),
-                "1.20.1 pack_format = 15");
+        check(Files.isRegularFile(v120.resolve("data/mcphone/tags/items/giftable.json")), "1.20.1 giftable 标签用 tags/items");
+        eq(com.google.gson.JsonParser.parseString(Files.readString(v121.resolve("pack.mcmeta")))
+                .getAsJsonObject().getAsJsonObject("pack").get("pack_format").getAsInt(),48,"1.21.1 pack_format");
+        eq(com.google.gson.JsonParser.parseString(Files.readString(v120.resolve("pack.mcmeta")))
+                .getAsJsonObject().getAsJsonObject("pack").get("pack_format").getAsInt(),15,"1.20.1 pack_format");
+        datapackNames(root,v120,true);
+        datapackNames(root,v121,false);
+    }
+
+    /** 夹具也遵守仓库的版本改名表，不能只检查存在一个看似正确的 JSON。 */
+    static void datapackNames(Path root,Path pack,boolean legacy) throws Exception {
+        var renames=com.google.gson.JsonParser.parseString(Files.readString(root.resolve("versions/datapack-renames.json")))
+                .getAsJsonObject().getAsJsonObject("renames");
+        try(var namespaces=Files.list(pack.resolve("data"))){
+            for(Path namespace:namespaces.filter(Files::isDirectory).toList()){
+                for(var rename:renames.entrySet()){
+                    String wrong=legacy?rename.getValue().getAsString():rename.getKey();
+                    check(!Files.exists(namespace.resolve(wrong)),pack.getFileName()+" 不得包含错版目录 "+namespace.getFileName()+"/"+wrong);
+                }
+            }
+        }
     }
 
     public static void main(String[] args) throws Exception {

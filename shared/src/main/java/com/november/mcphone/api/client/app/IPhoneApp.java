@@ -92,6 +92,9 @@ public interface IPhoneApp {
     /** 系统 App 不可被玩家卸载（如"设置"）。默认 false。 */
     default boolean isSystemApp() { return false; }
 
+    /** 动态显示条件。每帧只能读缓存；服务器管理入口通过握手角色快照控制。 */
+    default boolean isVisible() { return true; }
+
     /**
      * 这个 App 的硬前置模组——缺了就整个 App 不可用。声明后 {@link #isAvailable()}、商店的「联动 App」页、
      * 「设置 → 关于」的联动模组列表都自动生效。

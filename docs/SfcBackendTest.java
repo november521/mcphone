@@ -140,7 +140,36 @@ public class SfcBackendTest {
                 "别的函数名还是「不支持调用」");
     }
 
+    static void callCarriesOnlySelectedState() {
+        Built b = build("<button @click=\"count++; call('save','count','text'); count++\">保存</button>",
+                "count: 0, text: '你好', privateValue: 'secret'", Map.of());
+        Statements.Outcome out = b.tree().click(b.tree().root(), b.state(), 0);
+        eq(out.requests().get(0).paramsJson(), "{\"count\":1,\"text\":\"你好\"}", "参数取调用当时的副本且不泄露未列出的状态");
+        eq(b.state().getInt("count"), 2, "调用后继续赋值");
+        check(errorOf("<button @click=\"call('a','absent')\">x</button>", "count: 0") != null, "未声明参数拒绝");
+        check(errorOf("<button @click=\"call('a','count','count')\">x</button>", "count: 0") != null, "重复参数拒绝");
+        Built large = build("<button @click=\"count++; call('save','text')\">保存</button>", "count: 0, text: ''", Map.of());
+        large.state().set("text", "中".repeat(2000));
+        var failed = large.tree().click(large.tree().root(), large.state(), 0);
+        check(!failed.applied() && failed.requests().isEmpty(), "超出字节上限不发送");
+        eq(large.state().getInt("count"), 0, "超限回滚整组赋值");
+    }
+
     public static void main(String[] args) {
+        Built vault=build("<button @click=\"sealedPut('token','token'); sealedGet('token','token')\">保险箱</button>","token: 'secret'",Map.of());
+        var secret=vault.tree().click(vault.tree().root(),vault.state(),0);
+        eq(secret.sealedRequests().get(0).plaintext(),"secret","明文只交给本机保险箱出口");
+        check(secret.requests().isEmpty()&&secret.calls().isEmpty(),"保险箱语句不会产生明文脚本 RPC");
+        check(secret.sealedRequests().get(1).plaintext().isEmpty(),"读取语句不复制绑定的明文");
+        Built badVault=build("<button @click=\"count++; sealedPut('token','count')\">x</button>","count: 0",Map.of());
+        var badSecret=badVault.tree().click(badVault.tree().root(),badVault.state(),0);check(!badSecret.applied()&&badVault.state().getInt("count")==0,"保险箱绑定类型不对回滚整组操作");
+        Built fetch = build("<button @click=\"fetch('https://api.example.com/','token','offset')\">读取</button>",
+                "token: 'Bearer abc', offset: 0", Map.of());
+        var local = fetch.tree().click(fetch.tree().root(),fetch.state(),0);
+        eq(local.networkRequests().get(0).authorization(),"Bearer abc","凭证只交给本地出口");
+        check(local.requests().isEmpty() && local.calls().isEmpty(),"fetch 不生成服务器 RPC");
+        check(errorOf("<button @click=\"fetch('http://localhost:25565/')\">x</button>","x: 0")!=null,"编译期拒绝明文与非常规端口");
+        callCarriesOnlySelectedState();
         backendDrivesAuthorBranch();
         backendIsReadOnly();
         callStatementProducesAction();

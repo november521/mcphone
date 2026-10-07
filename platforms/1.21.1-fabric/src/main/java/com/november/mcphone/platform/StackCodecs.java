@@ -25,6 +25,20 @@ import net.minecraft.world.item.ItemStack;
 public final class StackCodecs {
 
     private StackCodecs() {}
+    /** 默认托管只接受无额外状态的白名单材料，避免冻结模组的时间性组件。 */
+    public static boolean plain(ItemStack stack){return ItemStack.isSameItemSameComponents(stack,new ItemStack(stack.getItem()));}
+
+    /** 收件箱保存原始附加数据；脚本只能拿句柄，不能提交这个 JSON。 */
+    public static com.google.gson.JsonElement encode(ItemStack stack, net.minecraft.core.RegistryAccess registries) {
+        return ItemStack.CODEC.encodeStart(net.minecraft.resources.RegistryOps.create(
+                com.mojang.serialization.JsonOps.INSTANCE, registries), stack).result()
+                .orElseThrow(() -> new IllegalArgumentException("物品无法保存"));
+    }
+    public static ItemStack decode(com.google.gson.JsonElement json, net.minecraft.core.RegistryAccess registries) {
+        return ItemStack.CODEC.parse(net.minecraft.resources.RegistryOps.create(
+                com.mojang.serialization.JsonOps.INSTANCE, registries), json).result()
+                .orElseThrow(() -> new IllegalArgumentException("物品存档损坏"));
+    }
 
     /**
      * 一个<b>可以为空</b>的物品堆字段。空栈按这一支的惯例表达，读回来仍是空栈。

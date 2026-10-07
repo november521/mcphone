@@ -88,7 +88,10 @@ public class InventoryFitTest {
                 check(false, "读意图常量失败：" + f.getName() + " —— " + e);
             }
         }
-        eq(kinds, 5, "意图种类常量 = 5 个（新增种类请同步这条数）");
+        eq(kinds, 12, "意图种类常量 = 12 个（追加有界物品引用；每种须映射受门能力）");
+        var target=java.util.UUID.randomUUID();var other=ActionIntent.itemGiveOther(target.toString(),"minecraft:diamond",2).asGiveOther();eq(other.recipient(),target,"他人物品固定 UUID 往返");eq(other.count(),2,"他人物品数量往返");
+        eq(ActionIntent.messageSelf("到账了").asMessage(),"到账了","本人普通文本消息往返");
+        var escrow=ActionIntent.escrow("t:app",2,16,java.util.UUID.randomUUID().toString(),false).asEscrow();eq(escrow.slot(),2,"托管槽位往返");eq(escrow.count(),16,"托管数量往返");
 
         ActionIntent.Effect effect = ActionIntent.effectGive("minecraft:speed", 600, 2).asEffect();
         eq(effect.effectId(), "minecraft:speed", "effect.give 往返：效果 id");

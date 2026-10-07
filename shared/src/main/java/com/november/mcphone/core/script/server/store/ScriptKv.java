@@ -78,11 +78,16 @@ public record ScriptKv(Map<String, String> values) {
 
     /** 写一个值。<b>超配额抛 {@link StoreQuota.QuotaExceeded}，不静默截断。</b> */
     public ScriptKv with(String namespace, String key, String value) {
+        return with(namespace,key,value,StoreQuota.SHARED_PER_PLAYER_APP,StoreQuota.SHARED_KEYS);
+    }
+    public ScriptKv with(String namespace,String key,String value,long maximumBytes,int maximumKeys) {
         String full = fullKey(namespace, key);
         StoreQuota.checkValue(value, StoreQuota.SHARED_PER_VALUE, "shared");
-        StoreQuota.checkAdd(keyCount(namespace), bytes(namespace), !values.containsKey(full),
-                full.length() + value.getBytes(java.nio.charset.StandardCharsets.UTF_8).length,
-                StoreQuota.SHARED_KEYS, StoreQuota.SHARED_PER_PLAYER_APP, "shared");
+        long previous = values.containsKey(full) ? full.length()
+                + values.get(full).getBytes(java.nio.charset.StandardCharsets.UTF_8).length : 0;
+        long before=bytes(namespace),after=before-previous+full.length()+value.getBytes(java.nio.charset.StandardCharsets.UTF_8).length;
+        if(!values.containsKey(full)&&keyCount(namespace)>=maximumKeys||after>maximumBytes&&after>before)
+            throw new StoreQuota.QuotaExceeded("此 App 的存储配额已满，先移除一些键");
         Map<String, String> next = new HashMap<>(values);
         next.put(full, value);
         return new ScriptKv(next);

@@ -45,6 +45,8 @@ public final class AppTextures {
     public static final int MAX_BYTES = 64 * 1024;
     /** 边长上限，宽高各自算（§5.2）。 */
     public static final int MAX_SIDE = 128;
+    /** 远程 PNG 的独立尺寸上限；包内素材仍保持原有 128 上限。 */
+    public static final int MAX_REMOTE_SIDE = 512;
     /**
      * 每个 App 同时能有多少张贴图在显存里（§28.2 #13）。满了淘汰最久没画的那张。
      *
@@ -96,6 +98,7 @@ public final class AppTextures {
         Result result;
         int width;
         int height;
+        byte[] remotePng;
         /** 画过才有。测试里的假上传口给的 location 是 null。 */
         ImageCodec.Texture texture;
         /** 最后一次被画是哪一帧。淘汰不许动这一帧已经画过的图，见 {@link #hasRoom}。 */
@@ -186,7 +189,8 @@ public final class AppTextures {
         }
         if (!hasRoom(app)) return null;     // 这一帧的图已经把显存占满了，多出来的画占位图
         // 先传，传成了才真的去还别人的：顺序反过来的话，一张坏图会白白顶掉一张好图
-        ImageCodec.Texture tex = uploader.upload(pkg.entry(src));
+        ImageCodec.Texture tex = uploader.upload(e.remotePng == null ? pkg.entry(src) : e.remotePng,
+                e.remotePng == null ? MAX_SIDE : MAX_REMOTE_SIDE);
         if (tex == null) {
             // 头过了像素没过：判定就地改成 BROKEN，否则每一帧都要重解一遍这张坏图。
             // epoch 跟着前进：measure 是按头里那个宽高留的位置，现在这张图没了，得按占位尺寸重排一次。
@@ -282,6 +286,44 @@ public final class AppTextures {
             e.texture = null;
         }
         app.live.clear();
+    }
+
+    /** 先检查字节数和 IHDR，再交给按需解码。返回的路径只属于当前包，不含 URL 或凭证。 */
+    public static Map<String, Object> remotePng(AppPackage pkg, byte[] bytes) {
+        if (pkg == null || bytes == null || bytes.length > MAX_BYTES) return Map.of("status", "INVALID");
+        int[] size = PngHeader.size(bytes);
+        if (size == null || size[0] > MAX_REMOTE_SIDE || size[1] > MAX_REMOTE_SIDE
+                || (long) size[0] * size[1] > 262144) return Map.of("status", "INVALID");
+        App app = APPS.computeIfAbsent(pkg.digest(), key -> new App());
+        int count = 0;
+        for (var entry : app.entries.entrySet()) if (entry.getValue().remotePng != null) {
+            count++;
+            if (java.util.Arrays.equals(entry.getValue().remotePng, bytes))
+                return remoteResult(entry.getKey(), entry.getValue());
+        }
+        if (count >= MAX_PER_APP) return Map.of("status", "QUOTA_EXCEEDED");
+        String src = "private/" + java.util.UUID.randomUUID().toString().replace("-", "") + ".png";
+        Entry entry = new Entry(); entry.result = Result.OK; entry.width = size[0]; entry.height = size[1];
+        entry.remotePng = bytes.clone(); app.entries.put(src, entry); epoch++;
+        return remoteResult(src, entry);
+    }
+
+    private static Map<String, Object> remoteResult(String src, Entry entry) {
+        return entry.result == Result.OK ? Map.of("status", "READY", "src", src, "width", entry.width, "height", entry.height)
+                : Map.of("status", "INVALID");
+    }
+
+    /** 玩家撤回许可或换服时立即清除远程原始字节和纹理；包内素材继续由原有生命周期管理。 */
+    public static void clearRemote() {
+        for (App app : APPS.values()) {
+            var iterator = app.entries.entrySet().iterator();
+            while (iterator.hasNext()) {
+                var entry = iterator.next(); Entry value = entry.getValue();
+                if (value.remotePng == null) continue;
+                app.live.remove(entry.getKey()); uploader.release(value.texture); value.texture = null; iterator.remove();
+            }
+        }
+        epoch++;
     }
 
     /**
@@ -428,6 +470,7 @@ public final class AppTextures {
     interface Uploader {
         /** 上传一张已经过判定的 PNG，传不上返回 null。 */
         ImageCodec.Texture upload(byte[] png);
+        default ImageCodec.Texture upload(byte[] png, int maxSide) { return upload(png); }
 
         /** 还回去。传 null 是合法的（这张图还没画过）。 */
         void release(ImageCodec.Texture texture);
@@ -444,8 +487,13 @@ public final class AppTextures {
     private static final class GameUploader implements Uploader {
         @Override
         public ImageCodec.Texture upload(byte[] png) {
+            return upload(png, MAX_SIDE);
+        }
+
+        @Override
+        public ImageCodec.Texture upload(byte[] png, int maxSide) {
             // MAX_SIDE 在这儿是"不缩放"的保证：判定已经挡掉了更大的，缩放路径走不到
-            NativeImage image = ImageCodec.decodeAndScale(png, MAX_SIDE);
+            NativeImage image = ImageCodec.decodeAndScale(png, maxSide);
             return image == null ? null : ImageCodec.upload(image, "script_app_");
         }
 

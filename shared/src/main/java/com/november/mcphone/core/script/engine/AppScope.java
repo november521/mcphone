@@ -88,6 +88,9 @@ public final class AppScope {
     public synchronized ScriptableObject scope(Context cx) {
         if (scope == null) {
             ScriptableObject s = ScriptSandbox.harden(cx, target -> installRequire(cx, target));
+            // 入口可直接注册 actions.read；也兼容自行声明 var actions = {...} 的旧脚本。
+            // 普通 JS 对象只保存本 App 的函数，不赋予任何服务端能力或部署许可。
+            ScriptableObject.putProperty(s, "actions", HostFn.obj(cx, s));
             String entry = modules.source(ENTRY);
             if (entry != null) {
                 cx.evaluateString(s, entry, ENTRY, 1, null);

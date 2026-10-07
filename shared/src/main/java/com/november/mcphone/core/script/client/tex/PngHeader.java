@@ -24,7 +24,7 @@ final class PngHeader {
             if (png[i] != MAGIC[i]) return null;
         }
         // 第一个块必须是 IHDR。签名之后不查这个的话，畸形文件里读出来的是两个天文数字
-        if (png[12] != 'I' || png[13] != 'H' || png[14] != 'D' || png[15] != 'R') return null;
+        if (int32(png, 8) != 13 || png[12] != 'I' || png[13] != 'H' || png[14] != 'D' || png[15] != 'R') return null;
 
         int w = int32(png, 16);
         int h = int32(png, 20);

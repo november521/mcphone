@@ -22,6 +22,12 @@ public final class ScriptAppAdapter implements IPhoneApp {
 
     public ScriptAppAdapter(ScriptApp app) {
         this.app = app;
+        ClientPackageVersions.observe(app);
+        ClientRevocations.register(app);
+        ClientUpdates.register(app);
+        ClientNetwork.register(app);
+        ClientNotifications.register(app);
+        ClientBackground.register(app);
     }
 
     /** 这个适配器背后的那个包，覆盖安装与卸载要用。 */
@@ -52,6 +58,7 @@ public final class ScriptAppAdapter implements IPhoneApp {
 
     @Override
     public IPhonePage openPage() {
+        if(ClientServerUpdates.required(app))return new ServerUpdatePage(app);
         return new ScriptPage(app);
     }
 
@@ -64,6 +71,7 @@ public final class ScriptAppAdapter implements IPhoneApp {
     public String getVersion() {
         return app.manifest().version();
     }
+    @Override public int getBadgeCount(){return ClientNotifications.badge(app.id().toString());}
 
     @Override
     public String getAuthor() {

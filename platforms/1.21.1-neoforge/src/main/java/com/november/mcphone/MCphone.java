@@ -88,6 +88,8 @@ public class MCphone {
         net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener(
                 (net.neoforged.neoforge.event.tick.ServerTickEvent.Post e) -> com.november.mcphone.core.script.server.economy.EconomyRuntime.tick());
         net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener(
+                (net.neoforged.neoforge.event.tick.ServerTickEvent.Post e) -> com.november.mcphone.core.script.server.ScriptHost.tick());
+        net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener(
                 (net.neoforged.neoforge.event.tick.ServerTickEvent.Post e) ->
                         tickDiscLoop(e.getServer().getPlayerList().getPlayers()));
         net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener(

@@ -90,6 +90,7 @@ public final class AuthorityData extends PhoneSavedData {
         Set<UUID> set = players.get(appId);
         return set == null ? 0 : set.size();
     }
+    public java.util.List<UUID> licensedPlayers(String appId){return java.util.List.copyOf(players.getOrDefault(appId,Set.of()));}
 
     /** 这个人有没有这个 App 的许可。 */
     public boolean isLicensed(String appId, UUID player) {

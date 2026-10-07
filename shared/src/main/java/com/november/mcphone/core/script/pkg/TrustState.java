@@ -107,6 +107,10 @@ public final class TrustState {
         }
 
         String fp = sig.fingerprint();
+        // 简短指纹只给人看。已记录身份必须逐字节匹配完整公钥，不能用 64 位前缀放行另一把密钥。
+        TrustStore.Author recorded=trust.get(fp);
+        if(recorded!=null&&!recorded.pubkeyBase64().equals(java.util.Base64.getEncoder().encodeToString(sig.pubkey())))
+            return new Verdict(State.INVALID,fp,trust.fingerprintFor(appId),sig.author());
 
         // 作者被封了：这一条压在所有"验签通过"的判定之前（§12.7）
         if (trust.blocked(fp)) {

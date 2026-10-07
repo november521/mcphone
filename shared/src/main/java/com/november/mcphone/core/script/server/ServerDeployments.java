@@ -16,9 +16,19 @@ package com.november.mcphone.core.script.server;
 public final class ServerDeployments implements DeploymentView {
 
     private final DeploymentData data;
+    private final java.util.Map<String, java.util.Map<String, ActionGuards>> guards;
 
     public ServerDeployments(DeploymentData data) {
+        this(data, java.util.Map.of());
+    }
+
+    public ServerDeployments(DeploymentData data, java.util.Map<String, java.util.Map<String, ActionGuards>> guards) {
         this.data = data;
+        this.guards = guards;
+    }
+
+    @Override public ActionGuards guards(String appId, String actionId) {
+        return guards.getOrDefault(appId, java.util.Map.of()).getOrDefault(actionId, ActionGuards.NONE);
     }
 
     @Override

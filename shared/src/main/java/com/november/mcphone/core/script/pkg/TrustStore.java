@@ -78,6 +78,7 @@ public final class TrustStore {
     /** 首次见到就记一条（§12.3 的 TOFU）。已经有了就只更新显示名与时间。 */
     public void record(String fingerprint, String displayName, byte[] pubkeyX509, long now) {
         Author old = byFingerprint.get(fingerprint);
+        if(old!=null&&!old.pubkeyBase64().equals(java.util.Base64.getEncoder().encodeToString(pubkeyX509)))throw new IllegalArgumentException("简短作者指纹对应另一把完整公钥，拒绝覆盖信任记录");
         if (old == null) {
             byFingerprint.put(fingerprint, new Author(fingerprint, displayName, now,
                     List.of(), false, false, java.util.Base64.getEncoder().encodeToString(pubkeyX509)));

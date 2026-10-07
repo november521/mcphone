@@ -63,7 +63,35 @@ public final class ScriptPipeline {
     /** 玩家 → 这一次连接的 epoch。登录时写，登出时删。 */
     private final Map<UUID, Long> epochs = new HashMap<>();
 
-    private long seq;
+    private java.util.function.BiFunction<ScriptRpc, PlayerSnapshot, ScriptRpcResult> hostControls;
+    private java.util.function.BooleanSupplier executionEnabled=()->true;
+    public void executionEnabled(java.util.function.BooleanSupplier enabled){executionEnabled=enabled;}
+    private java.util.function.BiPredicate<String,String> backgroundAllowed=(app,action)->false;
+    private final BackgroundGate backgroundGate=new BackgroundGate(()->System.nanoTime()/1_000_000);
+    public void installBackground(java.util.function.BiPredicate<String,String> declarations){backgroundAllowed=declarations;}
+    private java.util.function.Function<String, RevocationPolicy.Rule> revoked = app -> null;
+    public void installRevocations(java.util.function.Function<String, RevocationPolicy.Rule> policy) { revoked = policy; }
+    private GuardController guards;
+    private GuardSubscriptions subscriptions;
+    private java.util.function.BiFunction<UUID, String, byte[]> guardSnapshot;
+    private java.util.function.Consumer<Runnable> journalThread = Runnable::run;
+    public void installHostControls(java.util.function.BiFunction<ScriptRpc, PlayerSnapshot, ScriptRpcResult> controls) {
+        hostControls = controls;
+    }
+
+    public void installGuards(GuardController guards, java.util.function.Consumer<Runnable> journalThread) {
+        this.guards = java.util.Objects.requireNonNull(guards);
+        this.journalThread = java.util.Objects.requireNonNull(journalThread);
+    }
+    public void installSubscriptions(GuardSubscriptions subscriptions, java.util.function.BiFunction<UUID, String, byte[]> snapshot) {
+        this.subscriptions = subscriptions; this.guardSnapshot = snapshot;
+    }
+
+    /** 回滚/提交与账本变更由同一次持久化写出。 */
+    private void settle(UUID player, byte[] key, ScriptErrorCode code, byte[] data, long retry, long revision) {
+        if (guards != null) guards.finish(IdempotencyKey.hex(key), code);
+        ledger.settle(player, key, code, data, retry, revision);
+    }
 
     public ScriptPipeline(UUID serverId, IdempotencyLedger ledger, ScriptRateLimiter limiter,
                           DeploymentView deployments, AuthorityView authority, ActionEvaluator evaluator) {
@@ -93,10 +121,13 @@ public final class ScriptPipeline {
         epochs.put(player, e);
         return e;
     }
+    public long epochOf(UUID player) { return epochs.getOrDefault(player, 0L); }
+    public ScriptRateLimiter.Decision allowUpload(UUID player,long bytes) {return limiter.allowUpload(player,bytes);}
 
     /** 玩家登出。<b>只删 epoch，不清账本</b> —— 账本保留 24 小时，跨重连命中正是它存在的理由。 */
     public void forget(UUID player) {
         epochs.remove(player);
+        if (subscriptions != null) subscriptions.forget(player);
     }
 
     /**
@@ -121,9 +152,47 @@ public final class ScriptPipeline {
             return;
         }
 
+        if (hostControls != null && rpc.appId().equals(ScriptProtocol.HOST_APP_ID)) {
+            if(rpc.actionId().equals("background.run")){if(!executionEnabled.getAsBoolean())send.accept(ScriptRpcResult.fail(rpc.requestId(),ScriptErrorCode.UNAVAILABLE));else acceptBackground(rpc,player,send);return;}
+            // 宿主操作先由固定动作白名单验证；不能用随机 actionId 撑大限流桶。
+            if (!HostControls.ACTIONS.contains(rpc.actionId())) { send.accept(ScriptRpcResult.fail(rpc.requestId(), ScriptErrorCode.INVALID_ARGUMENT)); return; }
+            var controlRate = limiter.allow(id, rpc.appId() + "/" + rpc.actionId());
+            if (!controlRate.allowed()) { send.accept(new ScriptRpcResult(rpc.requestId(), ScriptErrorCode.RATE_LIMITED,
+                    new byte[0], ScriptErrorCode.RATE_LIMITED.defaultMessageKey(), List.of(), controlRate.retryAfterMs(), 0)); return; }
+            try { send.accept(hostControls.apply(rpc, player)); }
+            catch(com.november.mcphone.core.script.server.store.StoreQuota.QuotaExceeded full){send.accept(ScriptRpcResult.fail(rpc.requestId(),ScriptErrorCode.QUOTA));}
+            catch (IllegalArgumentException invalid) { send.accept(ScriptRpcResult.fail(rpc.requestId(), ScriptErrorCode.INVALID_ARGUMENT)); }
+            catch (RuntimeException unavailable) { send.accept(ScriptRpcResult.fail(rpc.requestId(), ScriptErrorCode.UNAVAILABLE)); }
+            return;
+        }
+        if(!executionEnabled.getAsBoolean()){send.accept(ScriptRpcResult.fail(rpc.requestId(),ScriptErrorCode.UNAVAILABLE));return;}
         if (!deployments.deployed(rpc.appId())) {
             send.accept(ScriptRpcResult.fail(rpc.requestId(), ScriptErrorCode.NOT_DEPLOYED));
             return;
+        }
+        RevocationPolicy.Rule revocation = revoked.apply(rpc.appId());
+        if (revocation != null) { send.accept(revokedResult(rpc, revocation)); return; }
+        if (subscriptions != null && (rpc.actionId().equals(GuardSubscriptions.WATCH)
+                || rpc.actionId().equals(GuardSubscriptions.UNWATCH) || rpc.actionId().equals(GuardSubscriptions.SNAPSHOT))) {
+            String revision = deployments.deployRev(rpc.appId());
+            if (revision != null && !revision.equals(rpc.deployRev())) {
+                send.accept(ScriptRpcResult.fail(rpc.requestId(), ScriptErrorCode.VERSION_MISMATCH)); return;
+            }
+            // 关闭订阅也不能依赖已撤销的授权；只减少状态的操作始终允许。
+            if (rpc.actionId().equals(GuardSubscriptions.UNWATCH)) {
+                subscriptions.unwatch(id, rpc.appId());
+                send.accept(new ScriptRpcResult(rpc.requestId(), ScriptErrorCode.OK, new byte[0], "", List.of(), 0, 0)); return;
+            }
+            ScriptRateLimiter.Decision controlRate = limiter.allow(id, rpc.actionId());
+            if (!controlRate.allowed()) { send.accept(ScriptRpcResult.rateLimited(rpc.requestId(), controlRate.retryAfterMs(), "")); return; }
+            byte[] data = guardSnapshot.apply(id, rpc.appId());
+            if (data == null || data.length > ScriptProtocol.DATA_MAX) {
+                send.accept(ScriptRpcResult.fail(rpc.requestId(), ScriptErrorCode.NOT_AUTHORIZED)); return;
+            }
+            if (rpc.actionId().equals(GuardSubscriptions.WATCH) && !subscriptions.watch(id, rpc.appId(), guards.revision())) {
+                send.accept(ScriptRpcResult.fail(rpc.requestId(), ScriptErrorCode.RATE_LIMITED)); return;
+            }
+            send.accept(new ScriptRpcResult(rpc.requestId(), ScriptErrorCode.OK, data, "", List.of(), 0, guards.revision())); return;
         }
         if (!deployments.hasAction(rpc.appId(), rpc.actionId())) {
             // 部署在、但这个动作没在包里声明：还是 NOT_DEPLOYED（两轴都不在），但给一条自己的文案键，
@@ -135,7 +204,8 @@ public final class ScriptPipeline {
 
         String serverRev = deployments.deployRev(rpc.appId());
         if (serverRev != null && !serverRev.equals(rpc.deployRev())) {
-            send.accept(ScriptRpcResult.fail(rpc.requestId(), ScriptErrorCode.VERSION_MISMATCH));
+            com.google.gson.JsonObject version=new com.google.gson.JsonObject();version.addProperty("deployRev",serverRev);
+            send.accept(new ScriptRpcResult(rpc.requestId(),ScriptErrorCode.VERSION_MISMATCH,version.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8),ScriptErrorCode.VERSION_MISMATCH.defaultMessageKey(),List.of(),0,0));
             return;
         }
 
@@ -168,18 +238,68 @@ public final class ScriptPipeline {
             return;
         }
 
-        ledger.reserve(id, key, digest);
+        if (guards != null) {
+            if (!authority.allows(id, rpc.appId(), rpc.actionId())) {
+                send.accept(ScriptRpcResult.fail(rpc.requestId(), ScriptErrorCode.NOT_AUTHORIZED));
+                return;
+            }
+            GuardController.Decision guard;
+            try {
+                guard = guards.reserve(IdempotencyKey.hex(key), id, rpc.appId(), rpc.actionId(),
+                        deployments.guards(rpc.appId(), rpc.actionId()));
+            } catch (RuntimeException unavailable) {
+                send.accept(ScriptRpcResult.fail(rpc.requestId(), ScriptErrorCode.UNAVAILABLE));
+                return;
+            }
+            if (!guard.allowed()) {
+                String json = "{\"startAt\":" + guard.at() + ",\"nextAt\":" + guard.at()
+                        + ",\"serverNow\":" + guard.serverNow() + "}";
+                send.accept(new ScriptRpcResult(rpc.requestId(), guard.code(),
+                        json.getBytes(java.nio.charset.StandardCharsets.UTF_8), guard.code().defaultMessageKey(),
+                        List.of(), 0, guards.revision()));
+                return;
+            }
+        }
+        try { ledger.reserve(id, key, digest); }
+        catch (RuntimeException unavailable) {
+            MCphone.LOGGER.error("[MCphone] 请求未执行：账本持久化失败", unavailable);
+            send.accept(ScriptRpcResult.fail(rpc.requestId(), ScriptErrorCode.UNAVAILABLE));
+            return;
+        }
+        java.util.concurrent.atomic.AtomicBoolean completed=new java.util.concurrent.atomic.AtomicBoolean();
         ActionEvaluator.Request req = new ActionEvaluator.Request(
-                rpc.appId(), rpc.actionId(), rpc.params(), player, rpc.deployRev(), ++seq);
+                rpc.appId(), rpc.actionId(), rpc.params(), player, rpc.deployRev(), Seq.next(),
+                () -> journalThread.accept(() -> {
+                    if(completed.get())throw new IllegalStateException("已结束的请求不能开始副作用");
+                    if(!java.util.Objects.equals(epochs.get(id),rpc.connectionEpoch())||!authority.allows(id,rpc.appId(),rpc.actionId()))
+                        throw com.november.mcphone.core.script.engine.HostError.denied(ScriptErrorCode.NOT_AUTHORIZED,"mcphone.script.not_authorized","执行前连接或授权已失效");
+                    ledger.effectStarted(id, key);
+                }),false,rpc.connectionEpoch(),rpc.requestId());
 
-        boolean taken = evaluator.submit(req, outcome -> {
-            ScriptRpcResult result = land(rpc, id, key, outcome);
+        boolean taken;
+        try {taken = evaluator.submit(req, outcome -> {
+            if(!completed.compareAndSet(false,true))return;
+            ScriptRpcResult result;
+            try { result = land(rpc, id, key, outcome); }
+            catch (RuntimeException persistenceFailure) {
+                MCphone.LOGGER.error("[MCphone] 结果无法持久化，返回 UNKNOWN，禁止重试", persistenceFailure);
+                result = ScriptRpcResult.fail(rpc.requestId(), ScriptErrorCode.UNKNOWN);
+            }
             send.accept(result);
-        });
+        });} catch(RuntimeException submissionFailure) {
+            MCphone.LOGGER.error("[MCphone] 求值提交异常（结果只回一次）",submissionFailure);
+            if(completed.compareAndSet(false,true)) {
+                IdempotencyLedger.Entry entry=ledger.snapshot().getOrDefault(id,java.util.Map.of()).get(IdempotencyKey.hex(key));
+                ScriptErrorCode code=entry!=null&&entry.state()==IdempotencyLedger.State.RESERVED?ScriptErrorCode.INTERNAL:ScriptErrorCode.UNKNOWN;
+                try {settle(id,key,code,new byte[0],0,0);}catch(RuntimeException journalFailure){code=ScriptErrorCode.UNKNOWN;}
+                send.accept(ScriptRpcResult.fail(rpc.requestId(),code));
+            }
+            return;
+        }
 
-        if (!taken) {
+        if (!taken && completed.compareAndSet(false,true)) {
             // 队列满。把刚写的 RESERVED 结掉，否则这个键会一直卡在 IN_PROGRESS 上
-            ledger.settle(id, key, ScriptErrorCode.RATE_LIMITED, new byte[0], BUSY_RETRY_AFTER_MS, 0);
+            settle(id, key, ScriptErrorCode.RATE_LIMITED, new byte[0], BUSY_RETRY_AFTER_MS, 0);
             send.accept(ScriptRpcResult.rateLimited(rpc.requestId(), BUSY_RETRY_AFTER_MS, KEY_SERVER_BUSY));
         }
     }
@@ -192,18 +312,33 @@ public final class ScriptPipeline {
      */
     public ScriptRpcResult land(ScriptRpc rpc, UUID player, byte[] key, ActionEvaluator.Outcome outcome) {
         try {
+            if(!executionEnabled.getAsBoolean()){
+                ScriptErrorCode code=outcome.moneyMoved()?ScriptErrorCode.UNKNOWN:ScriptErrorCode.UNAVAILABLE;
+                settle(player,key,code,new byte[0],0,0);return fail(rpc,code,"");
+            }
+            if(!java.util.Objects.equals(epochs.get(player),rpc.connectionEpoch())){
+                ScriptErrorCode code=outcome.moneyMoved()?ScriptErrorCode.UNKNOWN:ScriptErrorCode.NOT_AUTHORIZED;
+                settle(player,key,code,new byte[0],0,0);return fail(rpc,code,"");
+            }
+            RevocationPolicy.Rule rule = revoked.apply(rpc.appId());
+            if (rule != null) {
+                ScriptErrorCode code = outcome.moneyMoved() ? ScriptErrorCode.UNKNOWN : ScriptErrorCode.REVOKED;
+                settle(player, key, code, new byte[0], 0, 0);
+                return code == ScriptErrorCode.UNKNOWN ? fail(rpc, code, "") : revokedResult(rpc, rule);
+            }
             // S18：落地前重查部署版本（stage1 模型遗留的 extra 2）。排队期间换了包、或撤了重批，
             // 这次结果就是按旧包算的 —— 不能落地，也不能让账本带着旧结果结清。
             String liveRev = deployments.deployRev(rpc.appId());
             if (liveRev != null && !liveRev.equals(rpc.deployRev())) {
-                ledger.settle(player, key, ScriptErrorCode.VERSION_MISMATCH, new byte[0], 0, 0);
-                return fail(rpc, ScriptErrorCode.VERSION_MISMATCH, "");
+                ScriptErrorCode code = outcome.moneyMoved() ? ScriptErrorCode.UNKNOWN : ScriptErrorCode.VERSION_MISMATCH;
+                settle(player, key, code, new byte[0], 0, 0);
+                return fail(rpc, code, "");
             }
             if (!authority.allows(player, rpc.appId(), rpc.actionId())) {
                 // 重查没过：意图一条都不落地。但【钱已经动过】时不能回 NOT_AUTHORIZED ——
                 // 那会让玩家以为"没动、重试一下"，而钱可能已经付了（E35③）。回 UNKNOWN，客户端绝不自动重试。
                 ScriptErrorCode code = outcome.moneyMoved() ? ScriptErrorCode.UNKNOWN : ScriptErrorCode.NOT_AUTHORIZED;
-                ledger.settle(player, key, code, new byte[0], 0, 0);
+                settle(player, key, code, new byte[0], 0, 0);
                 if (code == ScriptErrorCode.UNKNOWN) {
                     MCphone.LOGGER.warn("[MCphone] 落地前重查授权没过，但本次求值里钱已动过 app={} action={}，回 UNKNOWN 不回 NOT_AUTHORIZED",
                             rpc.appId(), rpc.actionId());
@@ -211,11 +346,11 @@ public final class ScriptPipeline {
                 return fail(rpc, code, "");
             }
             // S18：意图落地。能力逐条重查 → 主线程执行；失败不谎报成功（见 applyIntents）。
-            if (!outcome.intents().isEmpty()) {
+            if (outcome.code() == ScriptErrorCode.OK && !outcome.intents().isEmpty()) {
                 ScriptRpcResult denied = applyIntents(rpc, player, key, outcome);
                 if (denied != null) return denied;
             }
-            ledger.settle(player, key, outcome.code(), outcome.data(), outcome.retryAfterMs(), outcome.stateRevision());
+            settle(player, key, outcome.code(), outcome.data(), outcome.retryAfterMs(), outcome.stateRevision());
             return new ScriptRpcResult(rpc.requestId(), outcome.code(), outcome.data(),
                     outcome.messageKey(), outcome.messageArgs(), outcome.retryAfterMs(), outcome.stateRevision());
         } catch (Throwable failure) {
@@ -224,7 +359,7 @@ public final class ScriptPipeline {
             MCphone.LOGGER.error("[MCphone] script landing failed app={} action={} request={}",
                     rpc.appId(), rpc.actionId(), rpc.requestId(), failure);
             ScriptErrorCode code = outcome.moneyMoved() ? ScriptErrorCode.UNKNOWN : ScriptErrorCode.INTERNAL;
-            ledger.settle(player, key, code, new byte[0], 0, 0);
+            settle(player, key, code, new byte[0], 0, 0);
             return fail(rpc, code, "");
         }
     }
@@ -238,39 +373,90 @@ public final class ScriptPipeline {
     private ScriptRpcResult applyIntents(ScriptRpc rpc, UUID player, byte[] key, ActionEvaluator.Outcome outcome) {
         Set<String> approved = deployments.approvedCapabilities(rpc.appId());
         for (ActionIntent intent : outcome.intents()) {
+            if(intent.kind().equals(ActionIntent.ITEM_GIVE_OTHER)&&capabilities!=null){
+                CapabilityPolicy.Verdict give=capabilities.check("item.give",deployments.approvedCapabilities(rpc.appId()));
+                if(give!=CapabilityPolicy.Verdict.OK){ScriptErrorCode code=outcome.moneyMoved()?ScriptErrorCode.UNKNOWN:give==CapabilityPolicy.Verdict.NOT_APPROVED?ScriptErrorCode.NOT_AUTHORIZED:ScriptErrorCode.UNAVAILABLE;settle(player,key,code,new byte[0],0,0);return fail(rpc,code,CapabilityPolicy.messageKey(give));}
+            }
             String cap = intent.capability();
             if (cap == null) {
-                ledger.settle(player, key, ScriptErrorCode.INVALID_ARGUMENT, new byte[0], 0, 0);
+                settle(player, key, ScriptErrorCode.INVALID_ARGUMENT, new byte[0], 0, 0);
                 return fail(rpc, ScriptErrorCode.INVALID_ARGUMENT, "");
             }
             if (capabilities == null) {
-                ledger.settle(player, key, ScriptErrorCode.UNAVAILABLE, new byte[0], 0, 0);
+                settle(player, key, ScriptErrorCode.UNAVAILABLE, new byte[0], 0, 0);
                 return fail(rpc, ScriptErrorCode.UNAVAILABLE, "mcphone.script.intent_unavailable");
             }
             CapabilityPolicy.Verdict verdict = capabilities.check(cap, approved);
             if (verdict != CapabilityPolicy.Verdict.OK) {
                 ScriptErrorCode code = verdict == CapabilityPolicy.Verdict.NOT_APPROVED
                         ? ScriptErrorCode.NOT_AUTHORIZED : ScriptErrorCode.UNAVAILABLE;
-                ledger.settle(player, key, code, new byte[0], 0, 0);
+                settle(player, key, code, new byte[0], 0, 0);
                 return fail(rpc, code, CapabilityPolicy.messageKey(verdict));
             }
         }
-        IntentApplier.Landed landed = intentApplier.apply(player, outcome.intents());
+        IntentApplier.Landed landed;
+        try { landed = intentApplier.apply(player, outcome.intents(),rpc); }
+        catch (RuntimeException failure) {
+            // 执行端可能已经给了部分物品或把一批物品存入收件箱，不能退回配额并鼓励重试。
+            MCphone.LOGGER.error("[MCphone] 意图执行结果待核对 app={} request={}", rpc.appId(), rpc.requestId(), failure);
+            landed = new IntentApplier.Landed(ScriptErrorCode.UNKNOWN, ScriptErrorCode.UNKNOWN.defaultMessageKey());
+        }
         if (!landed.succeeded()) {
             // 落地失败：账本按失败码结清（钱动过时优先 UNKNOWN —— 不谎报"没动"）
             ScriptErrorCode code = landed.code();
             if (outcome.moneyMoved() && code != ScriptErrorCode.UNKNOWN) {
                 code = ScriptErrorCode.UNKNOWN;
             }
-            ledger.settle(player, key, code, new byte[0], 0, 0);
+            settle(player, key, code, new byte[0], 0, 0);
             return fail(rpc, code, landed.messageKey());
         }
         return null;
     }
 
     /** 一条失败结果，带本地化键；键为空时用码的默认键。 */
+    private record BackgroundItem(String app,String action,String revision) { }
+    private ScriptErrorCode backgroundVerdict(UUID player,BackgroundItem item){
+        if(!backgroundAllowed.test(item.app(),item.action())||!deployments.deployed(item.app())||!deployments.hasAction(item.app(),item.action()))return ScriptErrorCode.NOT_DEPLOYED;
+        if(!item.revision().equals(deployments.deployRev(item.app())))return ScriptErrorCode.VERSION_MISMATCH;
+        if(revoked.apply(item.app())!=null)return ScriptErrorCode.REVOKED;
+        if(!authority.allows(player,item.app(),item.action()))return ScriptErrorCode.NOT_AUTHORIZED;
+        return ScriptErrorCode.OK;
+    }
+    /** 后台是只读查询，不预占发奖守卫，也不占持久化幂等账本。每条完成仍重查最新授权。 */
+    private void acceptBackground(ScriptRpc rpc,PlayerSnapshot player,Consumer<ScriptRpcResult> send){
+        List<BackgroundItem> items=new java.util.ArrayList<>();
+        try {com.november.mcphone.core.script.JsonValues.object(rpc.params());var args=com.google.gson.JsonParser.parseString(new String(rpc.params(),java.nio.charset.StandardCharsets.UTF_8)).getAsJsonObject();
+            if(!args.keySet().equals(Set.of("items")))throw new IllegalArgumentException("后台字段无效");var rows=args.getAsJsonArray("items");if(rows.size()<1||rows.size()>8)throw new IllegalArgumentException("后台批次最多八条");Set<String> seen=new java.util.HashSet<>();
+            for(var e:rows){var o=e.getAsJsonObject();if(!o.keySet().equals(Set.of("app","action","revision")))throw new IllegalArgumentException("后台条目字段无效");BackgroundItem item=new BackgroundItem(o.get("app").getAsString(),o.get("action").getAsString(),o.get("revision").getAsString());if(!seen.add(item.app()+"/"+item.action())||item.app().length()>64||item.action().length()>64||!item.revision().matches("[0-9a-f]{64}"))throw new IllegalArgumentException("后台条目无效");items.add(item);}
+        }catch(RuntimeException bad){send.accept(ScriptRpcResult.fail(rpc.requestId(),ScriptErrorCode.INVALID_ARGUMENT));return;}
+        if(!backgroundGate.allow(player.uuid())){send.accept(ScriptRpcResult.rateLimited(rpc.requestId(),10_000,""));return;}
+        com.google.gson.JsonObject[] rows=new com.google.gson.JsonObject[items.size()];int[] remaining={items.size()};
+        for(int i=0;i<items.size();i++){final int index=i;BackgroundItem item=items.get(i);java.util.concurrent.atomic.AtomicBoolean completed=new java.util.concurrent.atomic.AtomicBoolean();
+            Consumer<ActionEvaluator.Outcome> done=outcome->{if(!completed.compareAndSet(false,true))return;ScriptErrorCode code=outcome.code();
+                if(!java.util.Objects.equals(epochs.get(player.uuid()),rpc.connectionEpoch()))code=ScriptErrorCode.INVALID_ARGUMENT;
+                else if(code==ScriptErrorCode.OK)code=backgroundVerdict(player.uuid(),item);
+                if(code==ScriptErrorCode.OK&&outcome.moneyMoved())code=ScriptErrorCode.UNKNOWN;
+                if(code==ScriptErrorCode.OK)try{for(ActionIntent intent:outcome.intents())if(!intent.kind().equals(ActionIntent.NOTIFY_SELF)||!intent.asNotify().app().equals(item.app())||capabilities==null||capabilities.check("notify.self",deployments.approvedCapabilities(item.app()))!=CapabilityPolicy.Verdict.OK){code=ScriptErrorCode.NOT_AUTHORIZED;break;}}catch(RuntimeException bad){code=ScriptErrorCode.INVALID_ARGUMENT;}
+                if(code==ScriptErrorCode.OK&&!outcome.intents().isEmpty())try{code=intentApplier.apply(player.uuid(),outcome.intents()).code();}catch(RuntimeException bad){code=ScriptErrorCode.INTERNAL;}
+                com.google.gson.JsonObject row=new com.google.gson.JsonObject();row.addProperty("app",item.app());row.addProperty("action",item.action());row.addProperty("code",code.name());
+                if(code==ScriptErrorCode.OK&&outcome.data().length<=128)try{row.add("data",com.google.gson.JsonParser.parseString(new String(outcome.data(),java.nio.charset.StandardCharsets.UTF_8)));}catch(RuntimeException ignored){ }
+                rows[index]=row;if(--remaining[0]==0){com.google.gson.JsonObject result=new com.google.gson.JsonObject();com.google.gson.JsonArray all=new com.google.gson.JsonArray();for(var value:rows)all.add(value);result.add("items",all);send.accept(ScriptRpcResult.ok(rpc.requestId(),result.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8),0));}
+            };
+            ScriptErrorCode verdict=backgroundVerdict(player.uuid(),item);if(verdict!=ScriptErrorCode.OK){done.accept(ActionEvaluator.Outcome.fail(verdict));continue;}
+            try{boolean accepted=evaluator.submit(new ActionEvaluator.Request(item.app(),item.action(),"{}".getBytes(java.nio.charset.StandardCharsets.UTF_8),player,item.revision(),Seq.next(),()->{},true,rpc.connectionEpoch()),done);if(!accepted)done.accept(ActionEvaluator.Outcome.fail(ScriptErrorCode.RATE_LIMITED));}
+            catch(RuntimeException bad){done.accept(ActionEvaluator.Outcome.fail(ScriptErrorCode.INTERNAL));}
+        }
+    }
+
     private static ScriptRpcResult fail(ScriptRpc rpc, ScriptErrorCode code, String messageKey) {
         String key = messageKey == null || messageKey.isEmpty() ? code.defaultMessageKey() : messageKey;
         return new ScriptRpcResult(rpc.requestId(), code, new byte[0], key, List.of(), 0, 0);
+    }
+    private static ScriptRpcResult revokedResult(ScriptRpc rpc, RevocationPolicy.Rule rule) {
+        com.google.gson.JsonObject data = new com.google.gson.JsonObject();
+        data.addProperty("minVersion", rule.minVersion()); data.addProperty("reason", rule.reason());
+        return new ScriptRpcResult(rpc.requestId(), ScriptErrorCode.REVOKED,
+                data.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                ScriptErrorCode.REVOKED.defaultMessageKey(), List.of(), 0, 0);
     }
 }

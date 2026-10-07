@@ -118,6 +118,10 @@ public final class ScriptCall {
      */
     public static long call(String appId, String actionId, byte[] params, String localFrontendDigest,
                             Consumer<ScriptRpcResult> callback) {
+        return call(appId,actionId,params,localFrontendDigest,null,callback);
+    }
+    /** 原生脚本页传入实际包版本；forced 用包轴协商，不能拿前端内容摘要作为授权依据。 */
+    public static long call(String appId,String actionId,byte[] params,String localFrontendDigest,String localPackageRevision,Consumer<ScriptRpcResult> callback) {
         long id = REQUEST_ID.getAndIncrement();
         Sender s = sender;
         if (s == null) {
@@ -133,6 +137,7 @@ public final class ScriptCall {
 
         ClientHandshake.Entry entry = ClientHandshake.deployment(appId);
         String deployRev = entry == null ? "" : entry.deployRev();
+        if(ClientServerUpdates.forced(appId)&&localPackageRevision!=null)deployRev=localPackageRevision;
         String digest = localFrontendDigest != null
                 ? localFrontendDigest
                 : (entry == null ? "" : entry.frontendDigest());

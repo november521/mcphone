@@ -47,11 +47,15 @@ public final class Predicates {
      * 是配置错、不是判否）；求值出错返回 {@code false}（保守：守卫判否），异常不抛进脚本。
      */
     public static Boolean test(ServerPlayer player, ResourceLocation id) {
+        return testAt(player,id,player.position());
+    }
+    /** 资源读取用目标位置作 ORIGIN，领地谓词核对的是被查询的方块。 */
+    public static Boolean testAt(ServerPlayer player,ResourceLocation id,net.minecraft.world.phys.Vec3 origin) {
         LootItemCondition condition = condition(player, id);
         if (condition == null) return null;
         try {
             LootParams params = new LootParams.Builder((ServerLevel) player.level())
-                    .withParameter(LootContextParams.ORIGIN, player.position())
+                    .withParameter(LootContextParams.ORIGIN, origin)
                     .withParameter(LootContextParams.THIS_ENTITY, player)
                     .create(LootContextParamSets.GIFT);
             LootContext context = new LootContext.Builder(params)

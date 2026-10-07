@@ -21,13 +21,13 @@ import java.util.concurrent.ConcurrentHashMap;
  * <p>落盘仍然在主线程：{@code land()} 把脏键连同幂等账本写进同一个 SavedData、一次 setDirty。
  * 崩在中间时两者一起回滚，仍然一致。
  */
-public final class SharedState {
+public final class SharedState implements CtxBuilder.SharedView {
 
     /** 一个 App 最多留几个键。 */
     public static final int MAX_KEYS_PER_APP = 4096;
 
     /** 一个值最多多长。与 {@link SizeGate#MAX_STRING} 同源。 */
-    public static final int MAX_VALUE = SizeGate.MAX_STRING;
+    public static final int MAX_VALUE = com.november.mcphone.core.script.server.store.StoreQuota.SHARED_PER_VALUE;
 
     private final Map<String, Map<String, String>> byApp = new ConcurrentHashMap<>();
 
@@ -36,6 +36,30 @@ public final class SharedState {
 
     /** Serializes dirty-set mutation with snapshot-and-clear; value reads/writes stay lock-free. */
     private final Object dirtyLock = new Object();
+    private Runnable changed = () -> {};
+    private java.util.function.Consumer<String> writeGate = app -> {};
+    private final Map<String,Long> appUsage = new java.util.HashMap<>();
+    private long totalUsage;
+    private static final com.google.gson.Gson JSON = new com.google.gson.Gson();
+    private java.util.function.Supplier<com.november.mcphone.core.script.server.QuotaConfig> quotas=()->com.november.mcphone.core.script.server.QuotaConfig.DEFAULT;
+    private com.november.mcphone.core.script.server.StorageBudget budget;
+    private boolean restoring;
+    public void quotas(java.util.function.Supplier<com.november.mcphone.core.script.server.QuotaConfig> values,com.november.mcphone.core.script.server.StorageBudget budget){this.quotas=values;this.budget=budget;byApp.keySet().forEach(app->budget.restore("global:"+app,Map.of(app,bytes(app))));}
+    public void onWrite(java.util.function.Consumer<String> gate) { writeGate=java.util.Objects.requireNonNull(gate); }
+    public void onChanged(Runnable callback) { changed = java.util.Objects.requireNonNull(callback); }
+    public Map<String, Map<String, String>> snapshot() {
+        Map<String, Map<String, String>> copy = new java.util.LinkedHashMap<>();
+        byApp.forEach((app, values) -> copy.put(app, Map.copyOf(values))); return Map.copyOf(copy);
+    }
+    public void restore(Map<String, Map<String, String>> values) {
+        clear();
+        restoring=true;
+        try {values.forEach((app, entries) -> {
+            for (var e : entries.entrySet()) set(app, e.getKey(), e.getValue());
+        });}finally{restoring=false;}
+        drainDirty();
+        if(budget!=null)byApp.keySet().forEach(app->budget.restore("global:"+app,Map.of(app,bytes(app))));
+    }
 
     public String get(String appId, String key) {
         Map<String, String> m = byApp.get(appId);
@@ -43,9 +67,14 @@ public final class SharedState {
     }
 
     public void set(String appId, String key, String value) {
-        check(appId, key, value);
-        byApp.computeIfAbsent(appId, a -> new ConcurrentHashMap<>()).put(key, value);
-        markDirty(appId, key);
+        writeGate.accept(appId);
+        synchronized (dirtyLock) {
+            check(appId, key, value);
+            String old=get(appId,key);long next=appUsage.getOrDefault(appId,0L)+bytes(key,value)-bytes(key,old);
+            Runnable write=()->{byApp.computeIfAbsent(appId,a->new ConcurrentHashMap<>()).put(key,value);account(appId,key,old,value);markDirty(appId,key);};
+            if(budget==null||restoring)write.run();else budget.replace("global:"+appId,Map.of(appId,next),write);
+        }
+        changed.run();
     }
 
     /**
@@ -54,15 +83,15 @@ public final class SharedState {
      * <p>{@code expected} 为 null 表示"这个键现在不存在"。限量竞争的唯一原语（§32.7）。
      */
     public boolean compareAndSet(String appId, String key, String expected, String next) {
-        check(appId, key, next);
-        Map<String, String> m = byApp.computeIfAbsent(appId, a -> new ConcurrentHashMap<>());
+        writeGate.accept(appId);
         boolean ok;
-        if (expected == null) {
-            ok = m.putIfAbsent(key, next) == null;
-        } else {
-            ok = m.replace(key, expected, next);
+        synchronized (dirtyLock) {
+            check(appId, key, next);
+            Map<String, String> m = byApp.computeIfAbsent(appId, a -> new ConcurrentHashMap<>());
+            String current=m.get(key);ok=java.util.Objects.equals(current,expected);
+            if(ok){long usage=appUsage.getOrDefault(appId,0L)+bytes(key,next)-bytes(key,current);Runnable write=()->{m.put(key,next);account(appId,key,current,next);markDirty(appId,key);};if(budget==null)write.run();else budget.replace("global:"+appId,Map.of(appId,usage),write);}
         }
-        if (ok) markDirty(appId, key);
+        if (ok) changed.run();
         return ok;
     }
 
@@ -78,8 +107,9 @@ public final class SharedState {
 
     /** 服务器停止时清掉 —— 静态表会把上一个世界钉住。 */
     public void clear() {
-        byApp.clear();
         synchronized (dirtyLock) {
+            if(budget!=null)byApp.keySet().forEach(app->budget.restore("global:"+app,Map.of()));
+            byApp.clear(); appUsage.clear(); totalUsage=0;
             dirty.clear();
         }
     }
@@ -91,13 +121,27 @@ public final class SharedState {
     }
 
     private void check(String appId, String key, String value) {
-        if (key == null || key.isEmpty()) throw HostError.invalid("shared 的键不能为空");
-        if (value != null && value.length() > MAX_VALUE) {
-            throw HostError.quota("shared 的值 " + value.length() + " 字符，上限 " + MAX_VALUE);
+        if (key == null || !key.matches("[A-Za-z0-9_.-]{1,64}")) throw HostError.invalid("shared 的键必须在 1–64 个字母、数字、点或横线内");
+        if (value == null) throw HostError.invalid("shared 的值不能为 null");
+        if (value.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > MAX_VALUE) {
+            throw HostError.quota("shared 的单值超过 " + MAX_VALUE + " 字节");
         }
         Map<String, String> m = byApp.get(appId);
         if (m != null && m.size() >= MAX_KEYS_PER_APP && !m.containsKey(key)) {
             throw HostError.quota(appId + " 的 shared 键数超过 " + MAX_KEYS_PER_APP);
         }
+        long old = m != null ? bytes(key,m.get(key)) : 0;
+        long delta = bytes(key,value) - old;
+        long appMax=restoring?32L*1024*1024:quotas.get().get("kv.per_app"),serverMax=restoring?64L*1024*1024:quotas.get().get("data.server");
+        if (delta>0&&(appUsage.getOrDefault(appId,0L)+delta>appMax||totalUsage+delta>serverMax))
+            throw HostError.quota("shared 达到 App 或全服总配额");
     }
+    private static long bytes(String key,String value) {
+        return value==null ? 0 : (JSON.toJson(key)+":"+JSON.toJson(value)+",").getBytes(java.nio.charset.StandardCharsets.UTF_8).length;
+    }
+    private void account(String app,String key,String old,String next) {
+        long delta=bytes(key,next)-bytes(key,old); totalUsage+=delta; appUsage.merge(app,delta,Long::sum);
+    }
+    public long bytes(String app) { synchronized(dirtyLock) { return appUsage.getOrDefault(app,0L); } }
+    public long totalBytes() { synchronized(dirtyLock) { return totalUsage; } }
 }

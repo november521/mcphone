@@ -111,11 +111,22 @@ public final class EconomyData extends PhoneSavedData implements BalanceStore, T
 
     /** 在、不在、看不到（没权限之类）：看不到的一律按"在"办 —— 当成不在就可能拿空账盖掉它，或者该挪开的旧快照没挪开还不报。 */
     private static boolean present(Path p) {
-        return !Files.notExists(p);
+        return pathState(p) != 0;
     }
 
     private static String state(Path p, String ifThere) {
-        return Files.exists(p) ? ifThere : Files.notExists(p) ? " 不在" : " 看不到（权限或路径不对？）";
+        return switch (pathState(p)) {case 1 -> ifThere; case 0 -> " 不在"; default -> " 看不到（权限或路径不对？）";};
+    }
+
+    /** Windows 会把 ENOTDIR 折成 notExists=true；只有父路径能穿过时才可判为空账。 */
+    private static int pathState(Path p) {
+        if (Files.exists(p)) return 1;
+        if (!Files.notExists(p)) return 2;
+        for (Path parent = p.toAbsolutePath().getParent(); parent != null; parent = parent.getParent()) {
+            if (Files.exists(parent)) return Files.isDirectory(parent) ? 0 : 2;
+            if (!Files.notExists(parent)) return 2;
+        }
+        return 0;
     }
 
     /** 必须挂在主世界的 DataStorage：它按维度分，挂错了玩家去下界钱就「没了」且不报错。 */
@@ -174,7 +185,7 @@ public final class EconomyData extends PhoneSavedData implements BalanceStore, T
     static EconomyData loadPreferring(CompoundTag saved, Path snapshot, LongSupplier clock) {
         CompoundTag snap = readSnapshot(snapshot);
         if (snap == null) {
-            if (Files.notExists(snapshot)) MCphone.LOGGER.info("[MCphone] 还没有货币的原子快照，用 SavedData 那份");
+            if (pathState(snapshot) == 0) MCphone.LOGGER.info("[MCphone] 还没有货币的原子快照，用 SavedData 那份");
             // 说出快照的状态：否则服主只挪走 SavedData，开服就静默按新世界开了
             return load(saved, clock, SAVED_DATA + "（原子快照 " + snapshot + state(snapshot, " 读不出来") + "）");
         }
@@ -198,7 +209,7 @@ public final class EconomyData extends PhoneSavedData implements BalanceStore, T
 
     /** 没有返回 null；有但读不出来记一条并返回 null。 */
     private static CompoundTag readSnapshot(Path snapshot) {
-        if (Files.notExists(snapshot)) return null;
+        if (pathState(snapshot) == 0) return null;
         try {
             return EconomySnapshot.read(snapshot);
         } catch (java.io.IOException e) {

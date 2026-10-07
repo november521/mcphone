@@ -55,12 +55,13 @@ public final class HandshakeService {
             List<String> appIds = new ArrayList<>();
             List<byte[]> payloads = new ArrayList<>();
             for (Deployment d : host.deployments().deployments()) {
+                int visibility=host.storeVisibility(d.appId(),player.getUUID());if(visibility<0)continue;
                 List<String> actions = new ArrayList<>();
                 for (String action : d.approvedActions()) {
                     if (host.allows(player.getUUID(), d.appId(), action)) actions.add(action);
                 }
                 byte[] data = Handshake.encodeDeployment(new Handshake.Deployment(d.appId(), d.revision(),
-                        d.frontendDigest(), 0, d.approvalRevision(), d.approvedAt(), actions));
+                        d.frontendDigest(), visibility, d.approvalRevision(), d.approvedAt(), actions));
                 if (data.length > ScriptProtocol.DATA_MAX) {
                     MCphone.LOGGER.warn("[MCphone] 部署 {} 的握手数据 {} 字节，超过单包上限 {}，本次不推（不静默截断动作）",
                             d.appId(), data.length, ScriptProtocol.DATA_MAX);
@@ -78,13 +79,15 @@ public final class HandshakeService {
             ScriptPushHandler.push(player, Handshake.push(ScriptProtocol.TOPIC_HANDSHAKE_BEGIN,
                     Handshake.encodeBegin(new Handshake.Begin(host.serverId(), serverName,
                             ScriptProtocol.SCRIPT_API, epoch, payloads.size(),
-                            new Handshake.Features(false, false, true))), rev));
+                            new Handshake.Features(host.runtime().net().enabled(),true,host.runtime().serverScripts()))), rev));
             for (int i = 0; i < payloads.size(); i++) {
                 ScriptPushHandler.push(player, Handshake.push(ScriptProtocol.TOPIC_HANDSHAKE_DEPLOYMENT,
                         payloads.get(i), SEQ.incrementAndGet()));
             }
             ScriptPushHandler.push(player, Handshake.push(ScriptProtocol.TOPIC_HANDSHAKE_END,
                     Handshake.encodeEnd(new Handshake.End(epoch)), SEQ.incrementAndGet()));
+            if (host.gifts() != null) host.gifts().pushTo(player);
+            host.pushNetworkPolicy(player);
             MCphone.LOGGER.info("[MCphone] 握手已下发：{} 个部署，epoch={}", payloads.size(), epoch);
         } catch (VirtualMachineError fatal) {
             throw fatal;

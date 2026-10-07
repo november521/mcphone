@@ -34,6 +34,8 @@ public final class CapabilityPolicy {
     }
 
     private volatile CapabilityConfig config;
+    private volatile java.util.function.Predicate<String> commandEnabled = id -> false;
+    public void commandTemplates(java.util.function.Predicate<String> enabled) { commandEnabled = enabled; }
 
     public CapabilityPolicy(CapabilityConfig config) {
         this.config = config;
@@ -54,10 +56,14 @@ public final class CapabilityPolicy {
     public Verdict check(String capabilityId, Set<String> approved) {
         if (!CapabilityCatalog.knownDeclared(capabilityId)) return Verdict.UNKNOWN;
         CapabilityCatalog.Entry entry = CapabilityCatalog.of(capabilityId);
-        // command.template:<id> 这类参数化族：目录里有登记，但首版不开放
-        if (entry == null) return Verdict.NOT_OPEN;
         CapabilityConfig cfg = config;
         if (cfg != null && cfg.isDisabled(capabilityId)) return Verdict.DISABLED;
+        boolean template = capabilityId.startsWith(CapabilityCatalog.COMMAND_TEMPLATE_PREFIX);
+        if (template || capabilityId.equals("command.affect_others")) {
+            if (!commandEnabled.test(capabilityId)) return Verdict.NOT_OPEN;
+            return approved != null && approved.contains(capabilityId) ? Verdict.OK : Verdict.NOT_APPROVED;
+        }
+        if (entry == null) return Verdict.NOT_OPEN;
         if (!entry.open() || entry.tier() == CapabilityTier.RESTRICTED) return Verdict.NOT_OPEN;
         if (entry.tier() == CapabilityTier.PLAIN) return Verdict.OK;
         return approved != null && approved.contains(capabilityId) ? Verdict.OK : Verdict.NOT_APPROVED;

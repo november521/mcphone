@@ -39,8 +39,8 @@ public class CapabilityPolicyTest {
                 "restricted 即使批了也不开放");
         eq(p.check("container.write", Set.of("container.write")), CapabilityPolicy.Verdict.NOT_OPEN,
                 "container.write 首版不开放");
-        eq(p.check("net.fetch", Set.of("net.fetch")), CapabilityPolicy.Verdict.NOT_OPEN,
-                "本版没有路径的能力不开放");
+        eq(p.check("net.fetch", Set.of("net.fetch")), CapabilityPolicy.Verdict.OK,
+                "net.fetch 已接真实后端，出口另有默认关闭的网络配置");
         eq(p.check("command.template:daily", Set.of()), CapabilityPolicy.Verdict.NOT_OPEN,
                 "参数化模板族在目录里但不开放");
         eq(p.check("economy.pay", Set.of()), CapabilityPolicy.Verdict.UNKNOWN, "目录外 → UNKNOWN");

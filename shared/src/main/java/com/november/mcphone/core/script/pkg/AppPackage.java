@@ -23,6 +23,10 @@ public final class AppPackage {
     private final String digest;
 
     AppPackage(Manifest manifest, Map<String, byte[]> entries, byte[] signature, byte[] rotate) {
+        this(manifest,entries,signature,rotate,Map.of());
+    }
+    /** 仅前端分发使用：补入后端叶子哈希后重建作者签过的原包摘要，不下发后端源码。 */
+    AppPackage(Manifest manifest, Map<String, byte[]> entries, byte[] signature, byte[] rotate, Map<String,byte[]> proof) {
         // 连内容一起拷：只拷 map 的话，造包的人手里还攥着同一批数组，改一个字节就能让
         // entry() 与 digest() 对不上。
         Map<String, byte[]> copy = new LinkedHashMap<>();
@@ -31,7 +35,13 @@ public final class AppPackage {
         this.entries = Collections.unmodifiableMap(copy);
         this.signature = signature == null ? null : signature.clone();
         this.rotate = rotate == null ? null : rotate.clone();
-        this.digest = PackageDigest.of(this.entries);
+        var leaves = new LinkedHashMap<String,byte[]>();
+        this.entries.forEach((path,body)->leaves.put(path,PackageDigest.leaf(path,body)));
+        for(var leaf:proof.entrySet()) {
+            if(!FrontendDigest.isServerSide(leaf.getKey()) || leaves.putIfAbsent(leaf.getKey(),leaf.getValue().clone())!=null)
+                throw new IllegalArgumentException("前端证明不能省略客户端内容或覆盖已有路径");
+        }
+        this.digest = PackageDigest.ofLeaves(leaves);
     }
 
     public Manifest manifest() {

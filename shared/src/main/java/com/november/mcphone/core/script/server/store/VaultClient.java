@@ -101,10 +101,10 @@ public final class VaultClient {
 
     /** 用口令开箱。口令用完当场抹掉。 */
     public void unlock(char[] passphrase, byte[] salt) {
-        if (!VaultCrypto.passphraseLongEnough(passphrase)) {
-            throw new VaultException(KEY_TOO_SHORT, "口令至少 " + VaultCrypto.MIN_PASSPHRASE + " 个字符");
-        }
         try {
+            if (!VaultCrypto.passphraseLongEnough(passphrase)) {
+                throw new VaultException(KEY_TOO_SHORT, "口令至少 " + VaultCrypto.MIN_PASSPHRASE + " 个字符");
+            }
             sessionKey = VaultCrypto.derive(passphrase, salt);
         } finally {
             VaultCrypto.wipe(passphrase);
@@ -124,7 +124,7 @@ public final class VaultClient {
     public SealedRecord put(String appId, String key, String plaintext, byte[] salt) {
         requireUnlocked();
         String slot = slot(appId, key);
-        long next = known.getOrDefault(slot, 0L) + 1;
+        long next = Math.addExact(known.getOrDefault(slot, 0L),1);
         byte[] aad = VaultCrypto.aad(serverId, playerUuid, appId, key, SealedRecord.SCHEMA, next);
         VaultCrypto.Sealed sealed = VaultCrypto.seal(sessionKey, aad, plaintext.getBytes(StandardCharsets.UTF_8));
         known.put(slot, next);

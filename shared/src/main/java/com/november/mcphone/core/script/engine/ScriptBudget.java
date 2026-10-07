@@ -2,6 +2,8 @@ package com.november.mcphone.core.script.engine;
 
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.ContextFactory;
+import java.util.Objects;
+import java.util.function.LongSupplier;
 
 /**
  * 指令预算与墙钟（施工方案 §16.4）。<b>每个 App 一个实例，不共用全局 ContextFactory。</b>
@@ -72,20 +74,28 @@ public final class ScriptBudget extends ContextFactory {
 
     /** 这一次调用的账。每次求值前 {@link #begin} 一次。 */
     private static final ThreadLocal<long[]> BUDGET = new ThreadLocal<>();
+    private static final ThreadLocal<LongSupplier> BUDGET_CLOCK = new ThreadLocal<>();
     // [0]=已用指令 [1]=指令上限 [2]=截止纳秒 [3]=已等宿主纳秒 [4]=等宿主上限
 
     private final long instructions;
     private final long wallNanos;
     private final long hostWaitNanos;
+    private final LongSupplier nanoTime;
 
     public ScriptBudget(long instructions, long wallNanos) {
         this(instructions, wallNanos, 0);
     }
 
     public ScriptBudget(long instructions, long wallNanos, long hostWaitNanos) {
+        this(instructions,wallNanos,hostWaitNanos,System::nanoTime);
+    }
+
+    /** 测试接点：语义断言不用依赖 CI 的 CPU 调度；生产构造器始终使用真实单调钟。 */
+    ScriptBudget(long instructions,long wallNanos,long hostWaitNanos,LongSupplier nanoTime) {
         this.instructions = instructions;
         this.wallNanos = wallNanos;
         this.hostWaitNanos = hostWaitNanos;
+        this.nanoTime = Objects.requireNonNull(nanoTime);
     }
 
     /** 服务端档。 */
@@ -96,6 +106,10 @@ public final class ScriptBudget extends ContextFactory {
     /** 客户端档。客户端没有要回主线程等的宿主调用，等宿主的上限是 0。 */
     public static ScriptBudget client() {
         return new ScriptBudget(CLIENT_INSTRUCTIONS, CLIENT_WALL_NANOS);
+    }
+
+    static ScriptBudget client(LongSupplier nanoTime) {
+        return new ScriptBudget(CLIENT_INSTRUCTIONS,CLIENT_WALL_NANOS,0,nanoTime);
     }
 
     @Override
@@ -119,8 +133,9 @@ public final class ScriptBudget extends ContextFactory {
         if (b[0] > b[1]) {
             throw new ScriptAbort(ScriptAbort.Reason.INSTRUCTIONS, b[0] + " / " + b[1] + " 指令单位");
         }
-        if (System.nanoTime() > b[2]) {
-            throw new ScriptAbort(ScriptAbort.Reason.WALL_CLOCK, (b[2] - System.nanoTime()) / -1_000_000 + " 毫秒");
+        long now=BUDGET_CLOCK.get().getAsLong();
+        if (now > b[2]) {
+            throw new ScriptAbort(ScriptAbort.Reason.WALL_CLOCK, (b[2] - now) / -1_000_000 + " 毫秒");
         }
     }
 
@@ -130,18 +145,24 @@ public final class ScriptBudget extends ContextFactory {
      * <p><b>不许嵌套</b>：{@code Context} 是线程绑定的，内层会静默继承外层的预算与 shutter（实测）。
      */
     public void begin() {
+        begin(wallNanos);
+    }
+    public void begin(long maximumWallNanos) {
         // 判据是"这条线程上已经有一本账"，不是 Context.getCurrentContext() != null ——
         // 后者在 enterContext() 之后必然非空，那样每一次正常求值都会被自己拦下
         if (BUDGET.get() != null) {
             throw new IllegalStateException(
                     "脚本求值不许嵌套：Context 是线程绑定的，内层会静默继承外层的指令预算与 ClassShutter");
         }
-        BUDGET.set(new long[]{0, instructions, System.nanoTime() + wallNanos, 0, hostWaitNanos});
+        long deadline=nanoTime.getAsLong()+Math.min(wallNanos,maximumWallNanos);
+        BUDGET.set(new long[]{0, instructions, deadline, 0, hostWaitNanos});
+        BUDGET_CLOCK.set(nanoTime);
     }
 
     /** 平账。{@code finally} 里调。 */
     public void end() {
         BUDGET.remove();
+        BUDGET_CLOCK.remove();
     }
 
     /** 这一次求值还能等宿主多久（纳秒）。不在求值里（主线程直调、测试）就是不限。 */
@@ -161,7 +182,7 @@ public final class ScriptBudget extends ContextFactory {
     /** 这一次求值离墙钟截止还有多久（纳秒）。只给测试用。 */
     public static long wallLeftNanos() {
         long[] b = BUDGET.get();
-        return b == null ? Long.MAX_VALUE : b[2] - System.nanoTime();
+        return b == null ? Long.MAX_VALUE : b[2] - BUDGET_CLOCK.get().getAsLong();
     }
 
     /** 这一次用了多少指令单位。只给审计与测试用。 */

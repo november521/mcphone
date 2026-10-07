@@ -22,7 +22,7 @@
 
 1. **数据包**：整个目录拷进 `<世界目录>/datapacks/s15win/`（1.21.1 用
    `datapack-1.21.1`，1.20.1 用 `datapack-1.20.1`；两版的目录名差异已经在各自包里：
-   1.21.1 是 `loot_table/`+`predicate/`，1.20.1 是 `loot_tables/`+`predicates/`），
+   1.21.1 是 `loot_table/`+`predicate/`+`tags/item/`，1.20.1 是 `loot_tables/`+`predicates/`+`tags/items/`），
    进服 `/reload`。默认 `#mcphone:giftable` **不含钻石**是本步的预期，本包把它加上
    （改标签不改 App 的 digest、不用重新审批）。
 2. **货币配置**：服务器 A/B 各拷一份到 `<世界目录>/serverconfig/mcphone-economy.json`

@@ -486,7 +486,7 @@ public final class PhoneScreen extends PhoneScreenBase {
         }
     }
 
-    private void openAddonPage(IPhonePage page) {
+    public void openAddonPage(IPhonePage page) {
         closeAddonPage();
         addonPage = page;
         try {
@@ -510,6 +510,14 @@ public final class PhoneScreen extends PhoneScreenBase {
                     page.getClass().getName(), t);
         }
     }
+
+    /** 换包前关闭旧脚本页，撤销输入焦点、订阅与结果回调。 */
+    public void closeScriptApp(String appId) {
+        if (addonPage instanceof com.november.mcphone.core.script.client.ScriptPage script && script.appId().equals(appId)) {
+            closeAddonPage(); navigateTo(Mode.MAIN);
+        }
+    }
+    public boolean isScriptAppOpen(String appId){return addonPage instanceof com.november.mcphone.core.script.client.ScriptPage script&&script.appId().equals(appId);}
 
     /** 调一次页面回调；抛异常就当场关掉退回主屏，留着会每帧再抛。出异常时算没处理 */
     private boolean callPage(java.util.function.Predicate<IPhonePage> call) {
@@ -933,8 +941,9 @@ public final class PhoneScreen extends PhoneScreenBase {
                     mouseX, mouseY, font);
             case NOTES             -> notesList.render(g, phoneLeft, phoneTop,
                     sw, sh, statusH, navH, mouseX, mouseY, font);
-            case CLOCK             -> ClockPage.render(g, phoneLeft, phoneTop,
+            case CLOCK             -> {ClockPage.render(g, phoneLeft, phoneTop,
                     sw, sh, statusH, navH, font);
+                    com.november.mcphone.core.script.client.ClientNotifications.renderLockScreen(g,font,phoneLeft,phoneTop+statusH,sw,sh-statusH-navH);}
             case WEATHER           -> WeatherPage.render(g, phoneLeft, phoneTop,
                     sw, sh, statusH, navH, font);
             case READER            -> bookList.render(g, phoneLeft, phoneTop,
@@ -1249,6 +1258,7 @@ public final class PhoneScreen extends PhoneScreenBase {
                     navigateTo(Mode.APP_DETAIL);
                 }
                 if (appStore.consumeCompanionRequest()) navigateTo(Mode.COMPANION_APPS);
+                if (appStore.consumeManagementRequest()) openAddonPage(new com.november.mcphone.feature.store.client.ServerManagementPage());
                 yield true;
             }
             case COMPANION_APPS -> {
@@ -1375,6 +1385,8 @@ public final class PhoneScreen extends PhoneScreenBase {
         final double ldx = dx / scale;
         final double ldy = dy / scale;
 
+        if (mode == Mode.ADDON_PAGE && callPage(page -> page.mouseDragged(mx, my, button, ldx, ldy))) return true;
+
         if (mode == Mode.MAIN && button == 0 && homeGrid.mouseDragged(mx, my)) {
             return true;
         }
@@ -1393,6 +1405,7 @@ public final class PhoneScreen extends PhoneScreenBase {
     /** 松手才定性：主屏上这一下算"点开"还是"挪位置" */
     @Override
     public boolean mouseReleased(double rawX, double rawY, int button) {
+        if (mode == Mode.ADDON_PAGE && callPage(page -> page.mouseReleased(unscaledX(rawX), unscaledY(rawY), button))) return true;
         if (hudDragging) {
             hudDragging = false;
             dragHudTo(rawX, rawY, true);
@@ -1593,6 +1606,7 @@ public final class PhoneScreen extends PhoneScreenBase {
 
         // 口令输入也在"关机必抹"之列：HUD 那副面孔不经过 navigateTo，不在这里关就还留在内存里
         vaultPage.close();
+        com.november.mcphone.core.script.client.ClientVault.lock();
 
         // 关手机、被顶掉、退出世界都不经过 navigateTo，IPhonePage.onClose() "一定会被调用"靠这一行兑现
         closeAddonPage();

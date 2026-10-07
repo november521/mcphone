@@ -69,7 +69,7 @@ public final class Renderer {
         return switch (n.node.type()) {
             case BUTTON -> n.node.props().get("enabledIf") instanceof Node.ShowIf condition
                     ? state.test(condition) : n.node.flag("enabled", true);
-            case TOGGLE -> n.node.flag("enabled", true);
+            case TOGGLE, TEXT_INPUT -> n.node.flag("enabled", true);
             default -> true;
         };
     }
@@ -206,6 +206,9 @@ public final class Renderer {
             case DIVIDER -> g.fill(x, y, x + n.w, y + n.h, s.color() != null ? fg : p.subtleColor());
             case TOGGLE -> drawToggle(g, font, p, n, f.state, enabled, px, py, innerW, innerH, fg);
             case TAB_BAR -> drawTabs(g, font, p, n, f.state, x, y);
+            case TEXT_INPUT -> {
+                if (f.inputPainter != null) f.inputPainter.draw(n, c, x, y, fg);
+            }
             default -> {
                 // 容器与 spacer 只有底色和边框
             }

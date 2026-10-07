@@ -24,6 +24,11 @@ public final class Frame {
     final AppPackage pkg;
     final LayoutNode pressed;
     private final Set<LayoutNode> hovered;
+    public InputPainter inputPainter;
+    @FunctionalInterface
+    public interface InputPainter {
+        void draw(LayoutNode node, PhoneCanvas canvas, int x, int y, int color);
+    }
 
     /**
      * @param pkg     image 取贴图用，可为 null
