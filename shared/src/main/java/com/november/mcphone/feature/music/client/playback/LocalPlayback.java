@@ -1,6 +1,5 @@
 package com.november.mcphone.feature.music.client.playback;
 
-import com.mojang.blaze3d.audio.Channel;
 import com.mojang.blaze3d.audio.Library;
 import com.november.mcphone.MCphone;
 import net.minecraft.client.Minecraft;
@@ -42,7 +41,7 @@ public final class LocalPlayback {
     }
 
     private static Library library;
-    private static Channel channel;
+    private static LocalStreamChannel channel;
     private static TrackedStream stream;
 
     /** 我们自己那个上下文的句柄。0 ＝ 还没开起来 */
@@ -86,21 +85,10 @@ public final class LocalPlayback {
             return false;
         }
 
+        // 预填就会读取音频，必须先包好；内部通道不经过其他模组注入的原版 Channel。
+        TrackedStream tracked = new TrackedStream(stream);
         try (Scope scope = new Scope()) {
-            Channel ch = library.acquireChannel(Library.Pool.STREAMING);
-            if (ch == null) {
-                MCphone.LOGGER.warn("[MCphone] 没有空闲的音频通道，这一首放不了: {}", id);
-                closeQuietly(stream);
-                return false;
-            }
-
-            // 「耳机」：不随位置衰减。不设的话声音会挂在世界原点，一走远就听不见
-            ch.setRelative(true);
-            ch.disableAttenuation();
-
-            // 必须在 attachBufferStream 之前包好：那一句就已经开始泵流了
-            TrackedStream tracked = new TrackedStream(stream);
-
+            LocalStreamChannel ch = LocalStreamChannel.open(tracked);
             channel = ch;
             LocalPlayback.stream = tracked;
             currentId = id;
@@ -110,8 +98,12 @@ public final class LocalPlayback {
                     ? known.durationMs() : KnownDuration.UNKNOWN;
 
             applyVolume();
-            ch.attachBufferStream(tracked);
             ch.play();
+        } catch (IOException | RuntimeException failure) {
+            stop();
+            closeQuietly(tracked);
+            MCphone.LOGGER.warn("[MCphone] 本地音频启动失败: {}", id, failure);
+            return false;
         }
 
         state = State.PLAYING;
@@ -125,6 +117,9 @@ public final class LocalPlayback {
 
         try (Scope scope = new Scope()) {
             channel.pause();
+        } catch (RuntimeException failure) {
+            playbackFailed(failure);
+            return;
         }
         elapsedMs += System.currentTimeMillis() - lastResumeAt;
         state = State.PAUSED;
@@ -135,6 +130,9 @@ public final class LocalPlayback {
 
         try (Scope scope = new Scope()) {
             channel.unpause();
+        } catch (RuntimeException failure) {
+            playbackFailed(failure);
+            return;
         }
         lastResumeAt = System.currentTimeMillis();
         state = State.PLAYING;
@@ -142,14 +140,12 @@ public final class LocalPlayback {
 
     /**
      * 停止并释放通道，没在放时什么都不做。
-     * 流被故意关两次：releaseChannel 的 destroy 会关挂上的流，但 attach 之前炸掉时没挂上，
-     * closeQuietly 就是唯一的一次；close 幂等，关两次没有代价。
+     * 内部通道回收声源和全部缓冲，TrackedStream 的关闭幂等，失败兜底也不会重复关闭原始流。
      */
     public static void stop() {
         if (channel != null) {
             try (Scope scope = new Scope()) {
-                channel.stop();
-                library.releaseChannel(channel);
+                channel.close();
             }
             channel = null;
         }
@@ -219,6 +215,10 @@ public final class LocalPlayback {
 
             // 必须先问停法再 stop() —— stop() 会把流丢掉
             ending = stream.ending();
+        } catch (RuntimeException failure) {
+            playbackFailed(failure);
+            endListener.accept(Ending.STARVED);
+            return;
         }
 
         String who = currentId;
@@ -231,6 +231,12 @@ public final class LocalPlayback {
                     + "或者游戏刚卡了一下超过 4 秒）", who);
         }
         endListener.accept(ending);
+    }
+
+    /** 设备/通道故障先释放资源，不把原生异常传到客户端事件处理器。 */
+    private static void playbackFailed(RuntimeException failure) {
+        MCphone.LOGGER.warn("[MCphone] 本地音频通道不可用: {}", currentId, failure);
+        stop();
     }
 
     /** 退出世界或关游戏时释放设备：OpenAL 设备是操作系统资源，不放每次进出世界都漏一个 */
@@ -332,7 +338,7 @@ public final class LocalPlayback {
         channel.setVolume(volume * master * records);
     }
 
-    /** 包在真正的流外面，记「出过声没有 / 读到尾没有」；只看不动，交给 Channel 的还是原 buffer */
+    /** 包在真正的流外面，记「出过声没有 / 读到尾没有」；向内部通道转交原始 buffer。 */
     private static final class TrackedStream implements AudioStream {
 
         private final AudioStream inner;
@@ -342,6 +348,8 @@ public final class LocalPlayback {
 
         /** read 交回空 buffer ＝ 读到尾了 */
         private boolean exhausted;
+
+        private boolean closed;
 
         TrackedStream(AudioStream inner) {
             this.inner = inner;
@@ -365,6 +373,8 @@ public final class LocalPlayback {
 
         @Override
         public void close() throws IOException {
+            if (closed) return;
+            closed = true;
             inner.close();
         }
 
@@ -378,7 +388,7 @@ public final class LocalPlayback {
         if (s == null) return;
         try {
             s.close();
-        } catch (IOException e) {
+        } catch (IOException | RuntimeException e) {
             MCphone.LOGGER.warn("[MCphone] 关闭音频流失败: {}", e.toString());
         }
     }
