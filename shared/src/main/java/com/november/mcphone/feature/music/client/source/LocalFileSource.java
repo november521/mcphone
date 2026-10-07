@@ -41,6 +41,18 @@ public final class LocalFileSource implements MusicSource {
 
     private List<Track> cached = List.of();
 
+    /** 音乐目录的统一入口；打开文件夹前也要补建，目录可能在进入 App 后被删除。 */
+    public static Path directory() {
+        if (!Files.isDirectory(MUSIC_DIR)) {
+            try {
+                Files.createDirectories(MUSIC_DIR);
+            } catch (IOException e) {
+                MCphone.LOGGER.warn("[MCphone] 建不出音乐目录 {}: {}", MUSIC_DIR, e.toString());
+            }
+        }
+        return MUSIC_DIR;
+    }
+
     @Override
     public String id() {
         return ID;
@@ -56,11 +68,7 @@ public final class LocalFileSource implements MusicSource {
         if (!Files.isDirectory(MUSIC_DIR)) {
             // 目录不在就建一个：玩家照着提示去放歌时，那个文件夹得已经存在，
             // 否则他还得自己一层层建出来
-            try {
-                Files.createDirectories(MUSIC_DIR);
-            } catch (IOException e) {
-                MCphone.LOGGER.warn("[MCphone] 建不出音乐目录 {}: {}", MUSIC_DIR, e.toString());
-            }
+            directory();
             cached = List.of();
             return;
         }
