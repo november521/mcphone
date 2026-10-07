@@ -166,6 +166,8 @@ public final class PhoneChassis {
     private static final int COLOR_STATUS_BAR_FALLBACK = PhoneTheme.COLOR_SCRIM;
 
     private static final int STATUS_INSET = 4;
+    /** 时间略小于应用正文，避免压过右侧的小电池图标。 */
+    private static final float STATUS_TIME_SCALE = 0.75F;
     /** 24×24 像素图按一半绘制，图案中的 2px 线条正好落到 1px；透明边不占状态栏内容。 */
     private static final int BATTERY_SIZE = 12;
 
@@ -183,8 +185,12 @@ public final class PhoneChassis {
                 COLOR_STATUS_BAR_FALLBACK);
 
         String time = LocalTime.now().format(TIME_FORMATTER);
-        g.drawString(font, time, phoneLeft + STATUS_INSET, phoneTop + 1,
-                PhoneTheme.FONT_COLOR_STATUS, true);
+        int timeY = phoneTop + Math.round((PhoneTheme.STATUS_BAR_HEIGHT - font.lineHeight * STATUS_TIME_SCALE) / 2);
+        g.pose().pushPose();
+        g.pose().translate(phoneLeft + STATUS_INSET, timeY, 0);
+        g.pose().scale(STATUS_TIME_SCALE, STATUS_TIME_SCALE, 1.0F);
+        g.drawString(font, time, 0, 0, PhoneTheme.FONT_COLOR_STATUS, true);
+        g.pose().popPose();
 
         int bx = phoneLeft + metrics.screenW() - STATUS_INSET - BATTERY_SIZE;
         int by = phoneTop + (PhoneTheme.STATUS_BAR_HEIGHT - BATTERY_SIZE) / 2;
