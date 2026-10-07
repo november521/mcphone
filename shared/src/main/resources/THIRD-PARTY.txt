@@ -1,6 +1,6 @@
-MCphone 打包了以下第三方库。它们各自的许可证如下。
+MCphone 打包了以下第三方库和图标资源。它们各自的许可证如下。
 
-Third-party libraries bundled in MCphone, with their licenses.
+Third-party libraries and icon assets bundled in MCphone, with their licenses.
 
 ================================================================
 JavaMP3
@@ -69,3 +69,39 @@ limitations under the License.
 本模组未修改 FlatLaf 的任何代码，只以未修改的二进制形式打包并调用它的公开 API
 （{@code UIManager.setLookAndFeel(new FlatLightLaf())}）。
 The library is bundled unmodified and used only through its public API.
+
+
+================================================================
+Pixelarticons - battery-full
+================================================================
+
+用途     状态栏固定满电图标（纯白透明 PNG）
+Used for the fixed full-battery icon in the status bar (white transparent PNG).
+
+主页     https://github.com/halfmage/pixelarticons
+原图     https://pixelarticons.com/svg/battery-full.svg
+位置     assets/mcphone/textures/phone/battery_full.png
+转换     用户提供的 24x24 PNG；原 SVG 的 currentColor 已替换为纯白，保留原坐标和透明背景。
+         User-provided 24x24 PNG of the original SVG, rendered white with transparent background.
+
+MIT License
+
+Copyright (c) 2019 Gerrit Halfmann
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

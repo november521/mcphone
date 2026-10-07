@@ -55,6 +55,9 @@ public final class PhoneSkin {
         /** 顶部状态栏背景。建议 120×10 */
         STATUS_BAR("phone/status_bar", "status_bar"),
 
+        /** 状态栏右侧的满电图标。建议 24×24 透明贴图，半尺寸绘制；电池固定满电。 */
+        BATTERY_FULL("phone/battery_full"),
+
         /**
          * 导航栏背景。建议 120×14。
          *

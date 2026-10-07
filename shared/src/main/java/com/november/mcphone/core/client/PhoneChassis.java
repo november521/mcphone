@@ -165,11 +165,15 @@ public final class PhoneChassis {
     /** 状态栏没有贴图时的兜底底色（半透明黑，压在壁纸上仍看得清） */
     private static final int COLOR_STATUS_BAR_FALLBACK = PhoneTheme.COLOR_SCRIM;
 
+    private static final int STATUS_INSET = 4;
+    /** 24×24 像素图按一半绘制，图案中的 2px 线条正好落到 1px；透明边不占状态栏内容。 */
+    private static final int BATTERY_SIZE = 12;
+
     /**
-     * 画顶部状态栏：左侧信号、右侧时钟。背景可换肤。
+     * 画顶部状态栏：左侧时钟、右侧满电电池。背景和电池图标可换肤。
      *
      * 高度不随设备变（{@link PhoneTheme#STATUS_BAR_HEIGHT}）：这一条的高矮由字号定，
-     * 屏幕宽一倍不该让它跟着变粗。变的只有宽度与时钟靠的那条右边界。
+     * 屏幕宽一倍不该让它跟着变粗。变的只有宽度与电池靠的那条右边界。
      */
     public static void drawStatusBar(GuiGraphics g, Font font, int phoneLeft, int phoneTop,
                                      DeviceMetrics metrics) {
@@ -179,9 +183,31 @@ public final class PhoneChassis {
                 COLOR_STATUS_BAR_FALLBACK);
 
         String time = LocalTime.now().format(TIME_FORMATTER);
-        int tx = phoneLeft + metrics.screenW() - 6 - font.width(time);
-        g.drawString(font, time, tx, phoneTop + 1, PhoneTheme.FONT_COLOR_STATUS, true);
-        g.drawString(font, "●●●●", phoneLeft + 4, phoneTop + 1, PhoneTheme.FONT_COLOR_STATUS, true);
+        g.drawString(font, time, phoneLeft + STATUS_INSET, phoneTop + 1,
+                PhoneTheme.FONT_COLOR_STATUS, true);
+
+        int bx = phoneLeft + metrics.screenW() - STATUS_INSET - BATTERY_SIZE;
+        int by = phoneTop + (PhoneTheme.STATUS_BAR_HEIGHT - BATTERY_SIZE) / 2;
+        // 保留原图的透明留白并等比缩放。裁剪限制在状态栏内，资源包覆盖也不侵入页面。
+        GuiUtil.clipped(g, phoneLeft, phoneTop,
+                phoneLeft + metrics.screenW(), phoneTop + PhoneTheme.STATUS_BAR_HEIGHT, () -> {
+                    if (!PhoneSkin.draw(g, PhoneSkin.Element.BATTERY_FULL, bx, by, BATTERY_SIZE, BATTERY_SIZE)) {
+                        drawFullBatteryFallback(g, bx, by);
+                    }
+                });
+    }
+
+    /** 缺图时画同样的白色满电轮廓与三格电量；手机无需充电，始终使用这一种状态。 */
+    private static void drawFullBatteryFallback(GuiGraphics g, int x, int y) {
+        int white = PhoneTheme.FONT_COLOR_STATUS;
+        g.fill(x + 1, y + 3, x + 10, y + 4, white);
+        g.fill(x + 1, y + 9, x + 10, y + 10, white);
+        g.fill(x + 1, y + 4, x + 2, y + 9, white);
+        g.fill(x + 9, y + 4, x + 10, y + 9, white);
+        g.fill(x + 10, y + 5, x + 11, y + 8, white);
+        for (int cell = 0; cell < 3; cell++) {
+            g.fill(x + 3 + cell * 2, y + 5, x + 4 + cell * 2, y + 8, white);
+        }
     }
 
     //  导航栏
