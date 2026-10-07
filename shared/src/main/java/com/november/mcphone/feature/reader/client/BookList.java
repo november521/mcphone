@@ -273,6 +273,7 @@ public final class BookList {
         }
 
         renderTabs(g, font, x, tabY, w, mouseX, mouseY);
+        GuiUtil.drawFolderTooltip(g, font, folderHovered, x, phoneTop + statusH + 4, w);
     }
 
     /**
@@ -293,10 +294,8 @@ public final class BookList {
         // 「文件夹」只在本地书源真的可用时才出现：书源不可用的目标上点它，
         // 只会建出一个那个目标读不了的目录（directory() 会顺手建）
         boolean folderSlot = tab == Tab.SHELF && BookSources.available(TxtBookSource.SOURCE_ID);
-        String count = folderSlot
-                ? Component.translatable("mcphone.reader.txt.folder").getString()
-                : countText(total, matched);
-        int countW = font.width(count);
+        String count = folderSlot ? "" : countText(total, matched);
+        int countW = folderSlot ? GuiUtil.FOLDER_BUTTON_SIZE : font.width(count);
         int barW = Math.max(SEARCH_H, w - countW - 4);
 
         PhoneSkin.drawOrFill(g, PhoneSkin.Element.READER_SEARCH_BAR,
@@ -330,14 +329,12 @@ public final class BookList {
                 : null);
         search.render(g, mouseX, mouseY, partialTick);
 
-        folderHovered = folderSlot
-                && GuiUtil.hit(mouseX, mouseY, x + w - countW - HIT_PAD, y,
-                        countW + HIT_PAD * 2, SEARCH_H);
-
-        int countColor = folderSlot
-                ? (folderHovered ? FontPalette.title() : FontPalette.link())
-                : FontPalette.subtle();
-        g.drawString(font, count, x + w - countW, textY, countColor, false);
+        folderHovered = false;
+        if (folderSlot) {
+            folderHovered = GuiUtil.drawFolderButton(g, x + w - countW, y, SEARCH_H, mouseX, mouseY);
+        } else {
+            g.drawString(font, count, x + w - countW, textY, FontPalette.subtle(), false);
+        }
 
         y += SEARCH_H + 3;
         g.fill(x, y, x + w, y + 1, PhoneTheme.COLOR_DIVIDER);

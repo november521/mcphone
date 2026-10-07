@@ -5,6 +5,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.resources.model.BakedModel;
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
 import org.joml.Matrix4f;
@@ -51,6 +52,44 @@ import java.time.format.DateTimeFormatter;
 public final class GuiUtil {
 
     private GuiUtil() {}
+
+    /** 标题栏共用的文件夹按钮；贴图大小与点击区域分开，保持小屏幕的内容密度。 */
+    public static final int FOLDER_BUTTON_SIZE = 16;
+
+    /** y 是标题行顶端，rowHeight 用于让图标与文字垂直居中。 */
+    public static boolean drawFolderButton(GuiGraphics g, int x, int y, int rowHeight,
+                                           int mouseX, int mouseY) {
+        int top = y + (rowHeight - FOLDER_BUTTON_SIZE) / 2;
+        // 使用半开区域：按钮下沿恰好挨着下一行时，不抢下一行的点击。
+        boolean hovered = mouseX >= x && mouseX < x + FOLDER_BUTTON_SIZE
+                && mouseY >= top && mouseY < top + FOLDER_BUTTON_SIZE;
+        if (hovered) {
+            g.fill(x, top, x + FOLDER_BUTTON_SIZE, top + FOLDER_BUTTON_SIZE,
+                    PhoneTheme.COLOR_HOVER_STRONG);
+        }
+        if (!PhoneSkin.draw(g, PhoneSkin.Element.OPEN_FOLDER, x + 2, top + 2, 12, 12)) {
+            // 资源包缺图或损坏时仍给出文件夹形状，不留一个看不见但可点击的入口。
+            g.fill(x + 2, top + 4, x + 7, top + 6, 0xFFD69A24);
+            g.fill(x + 2, top + 6, x + 14, top + 12, 0xFFFFCC45);
+        }
+        return hovered;
+    }
+
+    /** 页面内容画完后调用。提示对齐内容右缘，跟随手机缩放，不越过小屏幕边界。 */
+    public static void drawFolderTooltip(GuiGraphics g, Font font, boolean hovered,
+                                         int contentX, int headerY, int contentW) {
+        if (!hovered) return;
+        String label = truncate(font, Component.translatable("mcphone.gui.open_folder").getString(),
+                contentW - 6);
+        int width = font.width(label) + 6;
+        int x = contentX + contentW - width;
+        int y = headerY + font.lineHeight + 4;
+        g.pose().pushPose();
+        g.pose().translate(0, 0, 200);
+        g.fill(x, y, x + width, y + font.lineHeight + 4, 0xEE202020);
+        g.drawString(font, label, x + 3, y + 2, 0xFFFFFFFF, false);
+        g.pose().popPose();
+    }
 
     //  贴图
 

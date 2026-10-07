@@ -150,16 +150,12 @@ public final class Gallery {
         int w = screenW - PAD * 2;
 
         // ---- 标题：左边标题，右上角「打开文件夹」，还装得下就再塞一个总数 ----
-        String title = Component.translatable("mcphone.app.gallery").getString();
+        int openX = x + w - GuiUtil.FOLDER_BUTTON_SIZE;
+        String title = GuiUtil.truncate(font, Component.translatable("mcphone.app.gallery").getString(),
+                openX - x - HEADER_GAP);
         g.drawString(font, title, x, y, FontPalette.title(), true);
 
-        String open = Component.translatable("mcphone.gui.open_folder").getString();
-        int openW = font.width(open);
-        int openX = x + w - openW;
-        openFolderHovered = GuiUtil.hit(mouseX, mouseY,
-                openX - HIT_PAD, y - HIT_PAD, openW + HIT_PAD * 2, font.lineHeight + HIT_PAD * 2);
-        g.drawString(font, open, openX, y,
-                openFolderHovered ? FontPalette.title() : FontPalette.link(), false);
+        openFolderHovered = GuiUtil.drawFolderButton(g, openX, y, font.lineHeight, mouseX, mouseY);
 
         // 总数往左让一格。让不下就不画：屏幕只有 120 宽，而一个读数不值得把那个键挤掉，
         // 也不值得压在标题上。中英文的字宽差着一倍，所以是量出来的，不是写死的
@@ -183,6 +179,7 @@ public final class Gallery {
                     x, y + font.lineHeight + 2, colorHint(), false);
             hoveredIdx = -1;
             hoveredPager = 0;
+            GuiUtil.drawFolderTooltip(g, font, openFolderHovered, x, phoneTop + statusH + 4, w);
             return;
         }
 
@@ -225,6 +222,7 @@ public final class Gallery {
 
         hoveredPager = PhotoGridPainter.pager(g, font, x, gridBottom + 2, w, pagerH,
                 page, pageCount, mouseX, mouseY);
+        GuiUtil.drawFolderTooltip(g, font, openFolderHovered, x, phoneTop + statusH + 4, w);
     }
 
     //  单张查看
