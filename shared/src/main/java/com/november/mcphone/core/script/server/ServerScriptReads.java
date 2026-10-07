@@ -18,8 +18,9 @@ public final class ServerScriptReads implements CtxBuilder.ReadView {
         return gateway.call(()->{
             var player=ScriptHost.requireAccess(server,request,capability);var level=player.serverLevel();
             return switch(capability){
-                case "read.self.position"->Map.of("x",player.getX(),"y",player.getY(),"z",player.getZ(),"yaw",player.getYRot(),"pitch",player.getXRot(),"dimension",level.dimension().location().toString());
-                case "read.self.stats"->Map.of("health",player.getHealth(),"maxHealth",player.getMaxHealth(),"food",player.getFoodData().getFoodLevel(),"saturation",player.getFoodData().getSaturationLevel(),"level",player.experienceLevel,"xpProgress",player.experienceProgress,"totalExperience",player.totalExperience,"air",player.getAirSupply());
+                // RPC 值域只接受整数；坐标、旋转及属性的小数必须以十进制字符串返回。
+                case "read.self.position"->Map.of("x",Double.toString(player.getX()),"y",Double.toString(player.getY()),"z",Double.toString(player.getZ()),"yaw",Float.toString(player.getYRot()),"pitch",Float.toString(player.getXRot()),"dimension",level.dimension().location().toString());
+                case "read.self.stats"->Map.of("health",Float.toString(player.getHealth()),"maxHealth",Float.toString(player.getMaxHealth()),"food",player.getFoodData().getFoodLevel(),"saturation",Float.toString(player.getFoodData().getSaturationLevel()),"level",player.experienceLevel,"xpProgress",Float.toString(player.experienceProgress),"totalExperience",player.totalExperience,"air",player.getAirSupply());
                 case "read.self.inventory"->{List<Map<String,Object>> items=new ArrayList<>();var inventory=player.getInventory();int total=inventory.getContainerSize();
                     for(int slot=offset;slot<Math.min(total,offset+16);slot++){var stack=inventory.getItem(slot);items.add(itemHandles.inventory(request,slot,stack));}
                     yield Map.of("items",items,"total",total);
