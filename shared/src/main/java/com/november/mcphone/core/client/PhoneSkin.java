@@ -58,7 +58,7 @@ public final class PhoneSkin {
         /** 状态栏右侧的满电图标。建议 24×24 透明贴图，半尺寸绘制；电池固定满电。 */
         BATTERY_FULL("phone/battery_full"),
 
-        /** 电池左侧的满格信号图标。建议 24×24 透明贴图，半尺寸绘制；信号固定满格。 */
+        /** 电池左侧的满格信号图标。建议 24×24 透明贴图，绘制为 10×10；信号固定满格。 */
         SIGNAL_FULL("phone/signal_full"),
 
         /**

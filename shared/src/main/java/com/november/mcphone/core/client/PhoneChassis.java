@@ -168,8 +168,10 @@ public final class PhoneChassis {
     private static final int STATUS_INSET = 4;
     /** 时间略小于应用正文，避免压过右侧的小电池图标。 */
     private static final float STATUS_TIME_SCALE = 0.75F;
-    /** 24×24 像素图按一半绘制，图案中的 2px 线条正好落到 1px；透明边不占状态栏内容。 */
-    private static final int STATUS_ICON_SIZE = 12;
+    /** 电池按原图的一半绘制，2px 线条对应界面的 1px。 */
+    private static final int BATTERY_SIZE = 12;
+    /** 信号原图的可见部分更高，单独缩小，使两个图案的视觉高度接近。 */
+    private static final int SIGNAL_SIZE = 10;
     private static final int STATUS_ICON_GAP = 2;
 
     /**
@@ -193,16 +195,17 @@ public final class PhoneChassis {
         g.drawString(font, time, 0, 0, PhoneTheme.FONT_COLOR_STATUS, true);
         g.pose().popPose();
 
-        int bx = phoneLeft + metrics.screenW() - STATUS_INSET - STATUS_ICON_SIZE;
-        int sx = bx - STATUS_ICON_GAP - STATUS_ICON_SIZE;
-        int by = phoneTop + (PhoneTheme.STATUS_BAR_HEIGHT - STATUS_ICON_SIZE) / 2;
+        int bx = phoneLeft + metrics.screenW() - STATUS_INSET - BATTERY_SIZE;
+        int sx = bx - STATUS_ICON_GAP - SIGNAL_SIZE;
+        int by = phoneTop + (PhoneTheme.STATUS_BAR_HEIGHT - BATTERY_SIZE) / 2;
+        int sy = phoneTop + (PhoneTheme.STATUS_BAR_HEIGHT - SIGNAL_SIZE) / 2;
         // 保留原图的透明留白并等比缩放。裁剪限制在状态栏内，资源包覆盖也不侵入页面。
         GuiUtil.clipped(g, phoneLeft, phoneTop,
                 phoneLeft + metrics.screenW(), phoneTop + PhoneTheme.STATUS_BAR_HEIGHT, () -> {
-                    if (!PhoneSkin.draw(g, PhoneSkin.Element.SIGNAL_FULL, sx, by, STATUS_ICON_SIZE, STATUS_ICON_SIZE)) {
-                        drawFullSignalFallback(g, sx, by);
+                    if (!PhoneSkin.draw(g, PhoneSkin.Element.SIGNAL_FULL, sx, sy, SIGNAL_SIZE, SIGNAL_SIZE)) {
+                        drawFullSignalFallback(g, sx, sy);
                     }
-                    if (!PhoneSkin.draw(g, PhoneSkin.Element.BATTERY_FULL, bx, by, STATUS_ICON_SIZE, STATUS_ICON_SIZE)) {
+                    if (!PhoneSkin.draw(g, PhoneSkin.Element.BATTERY_FULL, bx, by, BATTERY_SIZE, BATTERY_SIZE)) {
                         drawFullBatteryFallback(g, bx, by);
                     }
                 });
@@ -210,10 +213,16 @@ public final class PhoneChassis {
 
     /** 缺图时用三根递增的白色信号柱兜底，始终显示满格。 */
     private static void drawFullSignalFallback(GuiGraphics g, int x, int y) {
+        // 兜底图形按 12px 设计，与贴图一样缩到当前信号尺寸。
+        float scale = SIGNAL_SIZE / 12.0F;
+        g.pose().pushPose();
+        g.pose().translate(x, y, 0);
+        g.pose().scale(scale, scale, 1.0F);
         for (int bar = 0; bar < 3; bar++) {
-            int left = x + 1 + bar * 3;
-            g.fill(left, y + 8 - bar * 3, left + 2, y + 10, PhoneTheme.FONT_COLOR_STATUS);
+            int left = 1 + bar * 3;
+            g.fill(left, 8 - bar * 3, left + 2, 10, PhoneTheme.FONT_COLOR_STATUS);
         }
+        g.pose().popPose();
     }
 
     /** 缺图时画同样的白色满电轮廓与三格电量；手机无需充电，始终使用这一种状态。 */
