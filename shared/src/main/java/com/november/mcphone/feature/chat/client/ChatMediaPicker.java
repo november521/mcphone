@@ -35,9 +35,6 @@ public final class ChatMediaPicker {
 
     private static final int PAD = 6;
 
-    /** 文字键的命中区四边各放宽多少，与别处的文字键同一个数 */
-    private static final int HIT_PAD = 2;
-
     private final ImageFolder folder;
     private final String titleKey;
     private final String emptyKey;
@@ -113,6 +110,7 @@ public final class ChatMediaPicker {
                 g.drawString(font, line, x, y, FontPalette.subtle(), false);
                 y += font.lineHeight;
             }
+            GuiUtil.drawFolderTooltip(g, font, openFolderHovered, x, phoneTop + statusH + 4, w);
             return;
         }
 
@@ -148,23 +146,21 @@ public final class ChatMediaPicker {
 
         hoveredPager = PhotoGridPainter.pager(g, font, x, gridBottom + 2, w, pagerH,
                 page, pageCount, mouseX, mouseY);
+        GuiUtil.drawFolderTooltip(g, font, openFolderHovered, x, phoneTop + statusH + 4, w);
     }
 
     /** 标题一行：左边标题，右边是总数，或者表情那一页的「打开文件夹」 */
     private int renderHeader(GuiGraphics g, Font font, int total,
                              int x, int y, int w, int mouseX, int mouseY) {
 
-        g.drawString(font, Component.translatable(titleKey).getString(),
+        String title = GuiUtil.truncate(font, Component.translatable(titleKey).getString(),
+                w - (openFolderButton ? GuiUtil.FOLDER_BUTTON_SIZE + 4 : 0));
+        g.drawString(font, title,
                 x, y, FontPalette.title(), true);
 
         if (openFolderButton) {
-            String open = Component.translatable("mcphone.gui.open_folder").getString();
-            int openW = font.width(open);
-            int openX = x + w - openW;
-            openFolderHovered = GuiUtil.hit(mouseX, mouseY,
-                    openX - HIT_PAD, y - HIT_PAD, openW + HIT_PAD * 2, font.lineHeight + HIT_PAD * 2);
-            g.drawString(font, open, openX, y,
-                    openFolderHovered ? FontPalette.title() : FontPalette.link(), false);
+            openFolderHovered = GuiUtil.drawFolderButton(g, x + w - GuiUtil.FOLDER_BUTTON_SIZE,
+                    y, font.lineHeight, mouseX, mouseY);
         } else {
             openFolderHovered = false;
             if (total > 0) {

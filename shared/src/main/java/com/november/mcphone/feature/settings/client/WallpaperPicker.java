@@ -45,9 +45,6 @@ public final class WallpaperPicker {
     /** 标题与右上角那个键之间至少留的空隙 */
     private static final int HEADER_GAP = 4;
 
-    /** 右上角那个键的点击判定往外放宽一点，字太小不好点 */
-    private static final int HIT_PAD = 2;
-
     private int hoveredIdx = -1;     // -4 = "选择图片", -3 = "打开文件夹", -2 = "恢复默认", -1 = 无hover, 0..N = 壁纸索引
 
     /**
@@ -117,17 +114,11 @@ public final class WallpaperPicker {
         // 壁纸从四张掉到两张。1.9.1 给网格补上滚轮之后这不再是"看不见"，但每滚一下
         // 只换两张仍然难挑——为了一个快捷键把主功能的密度砍掉一半，不划算。
         //
-        // 挤不下时截的是标题：玩家正是点着「更换壁纸」那一行进来的，标题只是复述一遍；
-        // 而这个键是这一页唯一的新功能。中文两样都放得下，英文的标题会被截一截。
-        String open = Component.translatable("mcphone.gui.open_folder").getString();
-        int openW = font.width(open);
-        int openX = contentX + contentW - openW;
-        if (GuiUtil.hit(mouseX, mouseY, openX - HIT_PAD, contentY - HIT_PAD,
-                openW + HIT_PAD * 2, font.lineHeight + HIT_PAD * 2)) {
+        // 图标固定占一小块，长标题在它之前截断，中英文使用同一套布局。
+        int openX = contentX + contentW - GuiUtil.FOLDER_BUTTON_SIZE;
+        if (GuiUtil.drawFolderButton(g, openX, contentY, font.lineHeight, mouseX, mouseY)) {
             hovered = -3;
         }
-        g.drawString(font, open, openX, contentY,
-                hovered == -3 ? FontPalette.title() : FontPalette.link(), false);
 
         String title = GuiUtil.truncate(font,
                 Component.translatable("mcphone.gui.wallpaper_title").getString(),
@@ -184,6 +175,8 @@ public final class WallpaperPicker {
             // 不成立 —— 而"目录是空的"恰恰是玩家最想点它们的时刻：他就是来放第一张图的。
             // 症状是点了毫无反应、日志里一行都没有，2026-09-08 实机就是这么报的。
             this.hoveredIdx = hovered;
+            GuiUtil.drawFolderTooltip(g, font, hovered == -3, contentX,
+                    phoneTop + statusH + PAD_Y, contentW);
             return;
         }
 
@@ -238,6 +231,8 @@ public final class WallpaperPicker {
         }
 
         this.hoveredIdx = hovered;
+        GuiUtil.drawFolderTooltip(g, font, hovered == -3, contentX,
+                phoneTop + statusH + PAD_Y, contentW);
     }
 
     //  缩略图：按比例缩放居中绘制到预览框内
