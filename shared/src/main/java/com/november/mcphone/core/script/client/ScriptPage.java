@@ -58,6 +58,13 @@ public final class ScriptPage implements IPhonePage {
     private static final String FONT_PROBE = "MCphone 字体";
 
     private final ScriptApp app;
+    /** 页面（包括副手 HUD）占用旧包时，自动更新延后，避免释放仍在使用的贴图。 */
+    private static final Map<net.minecraft.resources.ResourceLocation, Integer> OPEN = new HashMap<>();
+    private boolean opened;
+
+    static boolean isOpen(net.minecraft.resources.ResourceLocation id) {
+        return OPEN.containsKey(id);
+    }
 
     /** 当前在哪一页，空串是入口页。 */
     private String current = "";
@@ -125,6 +132,10 @@ public final class ScriptPage implements IPhonePage {
 
     @Override
     public void onOpen() {
+        if (!opened) {
+            OPEN.merge(app.id(), 1, Integer::sum);
+            opened = true;
+        }
         closed = false;
         openPage("");
     }
@@ -137,6 +148,10 @@ public final class ScriptPage implements IPhonePage {
      */
     @Override
     public void onClose() {
+        if (opened) {
+            OPEN.computeIfPresent(app.id(), (id, count) -> count <= 1 ? null : count - 1);
+            opened = false;
+        }
         AppTextures.release(app.pkg());
         layout = null;
         tree = null;

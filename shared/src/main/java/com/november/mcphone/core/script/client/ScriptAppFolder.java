@@ -12,11 +12,14 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.HexFormat;
 import java.util.stream.Stream;
 
 /**
@@ -25,14 +28,9 @@ import java.util.stream.Stream;
  * <p>扫到什么就读什么：{@code .vue} 是单文件形态，{@code .zip} 是完整包（§11.2）。
  * <b>坏包一律跳过并记一条日志</b> —— 一个包坏了不许影响商店打开，更不许影响别的包。
  *
- * <p><b>编译一次常驻</b>（§9.9）：按文件路径缓存，文件的大小与修改时间都没变就不再读、不再编。
- * 玩家在游戏里换掉一个包时，下次扫描会看见时间变了，重新编。
- *
- * <p>修改时间在有些文件系统上是秒级：同一秒里改两次、而且字节数正好没变的那一次看不出来。
- * 代价是作者那一下改动要到下次改动才生效；换成内容摘要的话，每次开商店都要把目录里每个包整份读一遍。
- *
- * <p>全在客户端主线程：读盘量很小（整包 ≤ 256 KiB，至多几十个），而回调契约要求在主线程，
- * 换到后台线程再弹回来只会多一层。
+ * <p>编译结果按完整文件 SHA-256 缓存：同尺寸、同修改时间的替换也能检测；签名文件也参与检测。
+ * 定时扫描在后台进行，商店扫描与它共用锁，避免两条路径写坏缓存。
+ * 这里只读取和编译，不上传纹理、不安装 App、不修改信任库。
  */
 public final class ScriptAppFolder {
 
@@ -40,11 +38,13 @@ public final class ScriptAppFolder {
     public static final String DIR = "mcphone/apps";
 
     /** 一个文件读出来的东西，外加它的时间戳。 */
-    private record Loaded(ScriptApp app, long size, long modified) {
+    private record Loaded(ScriptApp app, String digest) {
     }
 
     /** 路径 → 上次读出来的东西。读不出来的不进表，下次还会再试（玩家可能正在往里拷文件）。 */
     private static final Map<Path, Loaded> CACHE = new LinkedHashMap<>();
+    /** 同一份坏内容只告警一次；内容变了继续尝试，不把拷贝中的半包当永久失败。 */
+    private static final Map<Path, String> FAILED = new LinkedHashMap<>();
 
     private ScriptAppFolder() {
     }
@@ -64,6 +64,11 @@ public final class ScriptAppFolder {
     public static List<ScriptApp> scan() {
         Path dir = dir();
         if (dir == null) return List.of();
+        return scan(dir);
+    }
+
+    /** 不访问 Minecraft，允许后台扫描和无窗口真实文件测试。 */
+    static synchronized List<ScriptApp> scan(Path dir) {
 
         List<Path> files = new ArrayList<>();
         try {
@@ -80,6 +85,7 @@ public final class ScriptAppFolder {
         }
 
         CACHE.keySet().retainAll(files);   // 文件删了，缓存跟着走
+        FAILED.keySet().retainAll(files);
 
         Map<ResourceLocation, ScriptApp> byId = new LinkedHashMap<>();
         for (Path file : files) {
@@ -94,38 +100,56 @@ public final class ScriptAppFolder {
         return List.copyOf(byId.values());
     }
 
-    /** 读一个文件，读不出来返回 null 并记日志。时间戳没变就走缓存。 */
+    /** 读取有界字节后比较内容摘要，避免先 readAllBytes 再拒绝超大文件。 */
     private static ScriptApp load(Path file) {
         String name = file.getFileName().toString();
         boolean vue = name.endsWith(".vue");
         boolean zip = name.endsWith(".zip");
         if (!vue && !zip) return null;
 
-        long size;
-        long modified;
+        byte[] content;
         try {
-            size = Files.size(file);
-            modified = Files.getLastModifiedTime(file).toMillis();
+            if (Files.size(file) > PackageReader.MAX_COMPRESSED) {
+                if (!"oversize".equals(FAILED.put(file, "oversize"))) {
+                    MCphone.LOGGER.warn("[MCphone] {} 超过本地 App 文件上限，保留已启用版本", name);
+                }
+                return null;
+            }
+            try (var in = Files.newInputStream(file)) {
+                content = in.readNBytes(PackageReader.MAX_COMPRESSED + 1);
+            }
+            if (content.length > PackageReader.MAX_COMPRESSED) return null;
         } catch (IOException e) {
             MCphone.LOGGER.warn("[MCphone] 读不到 {} 的属性，跳过: {}", name, e.toString());
             return null;
         }
 
         Loaded known = CACHE.get(file);
-        if (known != null && known.size() == size && known.modified() == modified) return known.app();
+        String digest = digest(content);
+        if (known != null && known.digest().equals(digest)) return known.app();
+        if (digest.equals(FAILED.get(file))) return null;
 
         ScriptApp app;
         try {
-            app = read(name, Files.readAllBytes(file));
-        } catch (IOException | RuntimeException e) {
+            app = read(name, content);
+        } catch (RuntimeException e) {
             // 坏 ZIP / 坏清单 / 坏模板：跳过这一个，别的照常（§14.1）
             MCphone.LOGGER.warn("[MCphone] 脚本 App {} 读不了，已跳过: {}", name, e.getMessage());
-            CACHE.remove(file);
+            FAILED.put(file, digest);
             return null;
         }
-        CACHE.put(file, new Loaded(app, size, modified));
+        FAILED.remove(file);
+        CACHE.put(file, new Loaded(app, digest));
         MCphone.LOGGER.info("[MCphone] 脚本 App 已编译: {} v{}（{}）", app.id(), app.manifest().version(), name);
         return app;
+    }
+
+    private static String digest(byte[] content) {
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(content));
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("JDK 缺少 SHA-256", e);
+        }
     }
 
     /**
