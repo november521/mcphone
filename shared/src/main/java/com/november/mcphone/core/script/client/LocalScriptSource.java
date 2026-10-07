@@ -15,7 +15,6 @@ import net.minecraft.resources.ResourceLocation;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -25,14 +24,10 @@ import java.util.function.Consumer;
 /**
  * 本地脚本来源（施工方案 §14.1）：玩家放进 {@code mcphone/apps/} 的 {@code .vue} 与 zip。
  *
- * <p>两个方法都同步回调 —— 读的是本机磁盘，没有等的必要，而回调契约只要求在客户端主线程。
+ * <p>商店入口同步回调；定时刷新另由后台扫描产出候选，在客户端主线程提交。
  *
- * <p><b>只列不在目录里的</b>：脚本 App 装过一次就进了 {@code CATALOG}，此后卸载再装走的是既有的
- * {@code LocalAppSource}（它列的正是"目录里未安装的"）。这里不再列一遍，否则商店里会出现两条一模一样的。
- *
- * <p><b>只认 {@code deploy: "client"}</b>（§14.2）：P0 的清单里根本没有 {@code deploy} 与
- * {@code capabilities} 字段，也没有后端通道 —— 包里就算带了 {@code server.js} 也只是一个不会被执行的文件。
- * 判据因此天然成立，不需要额外的检查。
+ * <p>脚本首次安装与卸载后重装始终走这个来源。Java App 来源排除脚本适配器，避免重装漏掉签名与 SDK 检查。
+ * 定时刷新只启用纯前端包；带后端包的客户端界面保留商店扫描入口，服务端部署仍是独立流程。
  */
 public final class LocalScriptSource implements IAppSource {
 
@@ -40,10 +35,13 @@ public final class LocalScriptSource implements IAppSource {
             ResourceLocation.fromNamespaceAndPath(MCphone.MODID, "local_script");
 
     /** id → 适配器。同一个包只有一个实例：注册表里那个与商店里那个必须是同一个。 */
-    private static final Map<ResourceLocation, ScriptAppAdapter> ADAPTERS = new HashMap<>();
+    private static final LocalScriptCatalog CATALOG = new LocalScriptCatalog(
+            PhoneScreenRegistry::getApp, PhoneScreenRegistry::replace, ScriptAppAdapter::onUninstall);
 
     /** 这一局登记过（或试过）的 id。进世界每次都会扫一遍目录，这张表挡住重复登记的告警。 */
     private static final Set<ResourceLocation> TRIED = new HashSet<>();
+    /** 同一份被拒候选只告警一次；每轮仍重查信任和 SDK，不缓存授权结论。 */
+    private static final Map<ResourceLocation, ScriptApp> REPORTED = new java.util.HashMap<>();
 
     @Override
     public ResourceLocation getId() {
@@ -62,16 +60,20 @@ public final class LocalScriptSource implements IAppSource {
     @Override
     public void listAvailable(Consumer<List<AppInfo>> callback) {
         List<AppInfo> out = new ArrayList<>();
-        for (ScriptApp app : ScriptAppFolder.scan()) {
-            // 先过一遍 adapter()：玩家把文件换成新版本之后，那一步把注册表里的旧实例换掉。
-            // 放在下面那个 continue 之后就永远走不到 —— 换过的包恰好是"已经在目录里"的那些
-            ScriptAppAdapter adapter = adapter(app);
-            if (PhoneScreenRegistry.getApp(app.id()) != null) continue;   // 已经在目录里，交给 LocalAppSource
-            out.add(AppInfo.builder(adapter.getId(), adapter.getDisplayName(), ID)
-                    .icon(adapter.getIconTexture())
-                    .version(adapter.getVersion())
-                    .author(adapter.getAuthor())
-                    .description(adapter.getDescription())
+        List<ScriptApp> candidates = ScriptAppFolder.scan();
+        refresh(candidates, false);
+        for (ScriptApp app : candidates) {
+            ScriptAppAdapter adapter = CATALOG.get(app.id());
+            if (adapter == null || PhoneScreenRegistry.isInstalled(app.id())) continue;
+            if (PhoneScreenRegistry.getApp(app.id()) != null
+                    && PhoneScreenRegistry.getApp(app.id()) != adapter) continue;
+            // 未安装时展示磁盘候选，允许玩家显式接受新作者；不能拿已接受旧版冒充候选。
+            ScriptAppAdapter display = new ScriptAppAdapter(app);
+            out.add(AppInfo.builder(display.getId(), display.getDisplayName(), ID)
+                    .icon(display.getIconTexture())
+                    .version(display.getVersion())
+                    .author(display.getAuthor())
+                    .description(display.getDescription())
                     .blocked(blockedReason(app))
                     .signature(signatureOf(app))
                     .build());
@@ -81,19 +83,23 @@ public final class LocalScriptSource implements IAppSource {
 
     @Override
     public void install(AppInfo info, Consumer<IPhoneApp> onSuccess, Consumer<Component> onError) {
-        ScriptAppAdapter adapter = null;
+        if (PhoneScreenRegistry.isInstalled(info.id())) {
+            onError.accept(Component.translatable("mcphone.store.error.install_failed", info.id().toString()));
+            return;
+        }
+        ScriptApp candidate = null;
         for (ScriptApp app : ScriptAppFolder.scan()) {
             if (app.id().equals(info.id())) {
-                adapter = adapter(app);
+                candidate = app;
                 break;
             }
         }
-        if (adapter == null) {
+        if (candidate == null) {
             // 玩家在商店开着的时候把文件删了
             onError.accept(Component.translatable("mcphone.store.error.not_found", info.id().toString()));
             return;
         }
-        Component blocked = blockedReason(adapter.script());
+        Component blocked = blockedReason(candidate);
         if (blocked != null) {
             // 界面已经把按钮画灰了，这一道是给"不走界面的调用方"的：门控写在两处，
             // 少了哪一处都能让一个用不了的 App 装进主屏
@@ -104,14 +110,22 @@ public final class LocalScriptSource implements IAppSource {
         // §12.4 的二次确认与确认短语。【判据在这儿，不在按钮的 enabled 上】——
         // IAppSource 是对外接口，任何拿到 AppInfo 的调用方都能直接调 install()，
         // 只把闸写在 AppDetail 里等于没有闸
-        TrustState.Verdict v = trustOf(adapter.script());
+        TrustState.Verdict v = trustOf(candidate);
         if (v.state() != TrustState.State.TRUSTED
-                && !CONFIRMED.contains(confirmKey(info.id().toString(), v.fingerprint()))) {
+                && CONFIRMED.get(confirmKey(info.id().toString(), v.fingerprint())) != candidate) {
             onError.accept(Component.translatable(SigCopy.keyFor(v.state())));
             return;
         }
 
-        if (!PhoneScreenRegistry.install(adapter)) {
+        ScriptAppAdapter adapter = CATALOG.observe(candidate, (old, fresh) -> true, ScriptPage::isOpen);
+        if (adapter == null || adapter.script() != candidate) {
+            onError.accept(Component.translatable("mcphone.store.error.install_failed", info.id().toString()));
+            return;
+        }
+
+        boolean installed = PhoneScreenRegistry.getApp(info.id()) == adapter
+                ? PhoneScreenRegistry.install(info.id()) : PhoneScreenRegistry.install(adapter);
+        if (!installed) {
             onError.accept(Component.translatable("mcphone.store.error.install_failed", info.id().toString()));
             return;
         }
@@ -162,7 +176,7 @@ public final class LocalScriptSource implements IAppSource {
      * <p><b>放行的判据在这儿，不在按钮的 enabled 上。</b>界面那一层只负责把玩家输入的东西
      * 交给 {@link #confirm}；忘了交的调用方装不上 —— 失败的方向是"装不了"，不是"随便装"。
      */
-    private static final Set<String> CONFIRMED = new HashSet<>();
+    private static final Map<String, ScriptApp> CONFIRMED = new java.util.HashMap<>();
 
     private static String confirmKey(String appId, String fingerprint) {
         return appId + " " + fingerprint;
@@ -187,7 +201,8 @@ public final class LocalScriptSource implements IAppSource {
         if (app == null) return false;
         TrustState.Verdict v = trustOf(app);
         if (!SigCopy.canProceed(v, typedPhrase)) return false;
-        CONFIRMED.add(confirmKey(appId.toString(), v.fingerprint()));
+        // 确认绑定本次编译对象；确认后文件换了，即使 id/指纹相同也要重新确认。
+        CONFIRMED.put(confirmKey(appId.toString(), v.fingerprint()), app);
         return true;
     }
 
@@ -229,17 +244,21 @@ public final class LocalScriptSource implements IAppSource {
     }
 
     private static Component blockedReason(ScriptApp app) {
+        return blockedReason(app, true);
+    }
+
+    private static Component blockedReason(ScriptApp app, boolean report) {
         // 硬拒绝有两档（§12.4）：「签名无效」与「签名被摘掉了」，都不给"仍然继续"。
         // 其余几档要走确认路径，那一道在 install() 里
         TrustState.Verdict v = trustOf(app);
         if (!v.state().installable) {
-            MCphone.LOGGER.warn("[MCphone] 拒绝安装 {}：签名无效（指纹 {}）", app.id(), v.fingerprint());
+            if (report) MCphone.LOGGER.warn("[MCphone] 拒绝安装 {}：签名无效（指纹 {}）", app.id(), v.fingerprint());
             return Component.translatable(v.state().messageKey);
         }
 
         Map<String, Integer> missing = SdkGate.unsatisfied(app.manifest().sdk());
         if (missing.isEmpty()) return null;
-        MCphone.LOGGER.info("[MCphone] 脚本 App {} 要的 SDK 本机给不了: {}（本机 {}）",
+        if (report) MCphone.LOGGER.info("[MCphone] 脚本 App {} 要的 SDK 本机给不了: {}（本机 {}）",
                 app.id(), app.manifest().sdk(), missing);
         return Component.translatable("mcphone.store.needs_update");
     }
@@ -251,9 +270,7 @@ public final class LocalScriptSource implements IAppSource {
      * 末尾又按当前集合覆写存档。不先登记的话，重启之后已安装的脚本 App 会从主屏消失，
      * 而且那一次覆写会把它从存档里也抹掉 —— 玩家再也装不回原来的位置。
      *
-     * <p><b>只恢复装过的，不是把目录里的全登记一遍</b>：全登记的话它们就都成了"目录里未安装的"，
-     * 于是改由既有的 LocalAppSource 列出来 —— 玩家会看到同一个没装的 App 重连一次就从
-     * 「本机脚本」跳到「本机」那一组，而这个来源的 install 从此再也走不到。
+     * <p>只恢复装过的，不给未安装候选提前注册；重装仍由本来源负责，不转到 Java App 来源。
      *
      * @return 这一次新登记了几个
      */
@@ -266,13 +283,14 @@ public final class LocalScriptSource implements IAppSource {
         int n = 0;
         for (ScriptApp app : ScriptAppFolder.scan()) {
             // 换过的包在这一步被换进注册表，所以每次进世界都跟得上磁盘上的版本
-            ScriptAppAdapter adapter = adapter(app);
+            ScriptAppAdapter adapter = CATALOG.observe(app, LocalScriptSource::canReplace, ScriptPage::isOpen);
+            if (adapter == null) continue;
             if (!installed.contains(app.id())) continue;
             if (!TRIED.add(app.id())) continue;   // 这一局试过了，别让每次进世界都重报一次 id 冲突
             // 【装过一次不等于以后都算数】：判的是磁盘上现在这一份。少了这一道，
             // 把 mcphone/apps/ 里的包换成同 id 的另一份，下次进世界就直接跑起来了
             TrustState.Verdict v = trustOf(app);
-            if (!v.state().installable || v.state().needsPhrase()) {
+            if (blockedReason(adapter.script()) != null || v.state().needsPhrase()) {
                 MCphone.LOGGER.warn("[MCphone] 不恢复 {}：磁盘上这一份是「{}」，要去商店重新确认",
                         app.id(), v.state());
                 continue;
@@ -282,40 +300,52 @@ public final class LocalScriptSource implements IAppSource {
         return n;
     }
 
-    /**
-     * 同一个 id 只造一个适配器；玩家把文件换成新版本之后（重新编过），换上新的那个。
-     *
-     * <p>换的时候是原子的：先把旧实例从目录里换下来，成了才撤它的贴图。反过来的话，
-     * 换失败时那个 App 会留在目录里而贴图已经没了 —— 主屏上一个点开是白图的 App。
-     */
-    private static ScriptAppAdapter adapter(ScriptApp app) {
-        ScriptAppAdapter known = ADAPTERS.get(app.id());
-        if (known != null && known.script() == app) return known;
-
-        ScriptAppAdapter fresh = new ScriptAppAdapter(app);
-        ADAPTERS.put(app.id(), fresh);
-        if (known == null) return fresh;
-
-        // 热替换走的是同一条判据：商店开一次就会把注册表里那份换成磁盘上现在这份，
-        // 不判的话「换包」这条路绕开了 registerAll 那一道
-        TrustState.Verdict v = trustOf(app);
-        if (!v.state().installable || v.state().needsPhrase()) {
-            MCphone.LOGGER.warn("[MCphone] 不换 {}：磁盘上这一份是「{}」，留着原来那份",
-                    app.id(), v.state());
-            ADAPTERS.put(app.id(), known);
-            return known;
+    /** 显式刷新已接受目录；列元数据不再自己实现替换协议。 */
+    static void refresh(List<ScriptApp> candidates, boolean frontendOnly) {
+        for (ScriptApp app : candidates) {
+            if (frontendOnly && (!LocalScriptCatalog.isFrontend(app)
+                    || !PhoneScreenRegistry.isInstalled(app.id()))) continue;
+            ScriptAppAdapter old = CATALOG.get(app.id());
+            ScriptAppAdapter accepted = CATALOG.observe(app, LocalScriptSource::canReplace, ScriptPage::isOpen);
+            if (old != null && accepted != null && old != accepted
+                    && PhoneScreenRegistry.getApp(app.id()) == accepted) {
+                MCphone.LOGGER.info("[MCphone] 本地 App {} 已启用 v{}", app.id(), app.manifest().version());
+            }
         }
+    }
 
-        if (PhoneScreenRegistry.replace(known, fresh)) {
-            known.onUninstall();   // 旧那份的图标与包内贴图，这时候才还
-            MCphone.LOGGER.info("[MCphone] 脚本 App {} 换成了 {}（{}）",
-                    app.id(), app.manifest().version(), app.file());
-        } else if (PhoneScreenRegistry.getApp(app.id()) != null) {
-            // 目录里那个 id 是别人的（第一次登记时就撞车了）。按设计不抢，但得说一声，
-            // 否则玩家改完文件看不到任何变化，也不知道为什么
-            MCphone.LOGGER.warn("[MCphone] {} 改过了，但目录里的 '{}' 是别人登记的，这个包不生效",
-                    app.file(), app.id());
+    private static boolean canReplace(ScriptApp old, ScriptApp candidate) {
+        TrustState.Verdict before = trustOf(old);
+        TrustState.Verdict after = trustOf(candidate);
+        Component blocked = blockedReason(candidate, false);
+        boolean allowed = canReplace(old, candidate, before, after, blocked != null);
+        if (allowed) {
+            REPORTED.remove(candidate.id());
+        } else if (REPORTED.put(candidate.id(), candidate) != candidate) {
+            String reason = blocked != null ? blocked.getString()
+                    : LocalScriptCatalog.isFrontend(old) && !LocalScriptCatalog.isFrontend(candidate)
+                    ? "纯前端更新不能引入后端文件"
+                    : LocalScriptCatalog.isFrontend(old) && !LocalScriptCatalog.newer(old, candidate)
+                    ? "版本号未递增" : "作者身份未确认或发生变化";
+            MCphone.LOGGER.warn("[MCphone] {} v{} 未启用，保留旧版：{}", candidate.id(),
+                    candidate.manifest().version(), reason);
         }
-        return fresh;
+        return allowed;
+    }
+
+    /** 纯判据供真实更新链与无窗口回归共用，不碰磁盘、注册表或纹理。 */
+    static boolean canReplace(ScriptApp old, ScriptApp candidate, TrustState.Verdict before,
+                              TrustState.Verdict after, boolean blocked) {
+        if (blocked) return false;
+        // 未签名本地 App 沿用玩家首次接受的选择；首次出现的签名作者不能静默获得信任。
+        boolean identity = after.state() == TrustState.State.TRUSTED
+                && java.util.Objects.equals(before.fingerprint(), after.fingerprint())
+                || before.state() == TrustState.State.UNSIGNED && after.state() == TrustState.State.UNSIGNED;
+        if (!identity) return false;
+        if (LocalScriptCatalog.isFrontend(old)) {
+            return LocalScriptCatalog.isFrontend(candidate) && LocalScriptCatalog.newer(old, candidate);
+        }
+        // 本卡不改变带后端 App 的版本同步协议，保留商店显式扫描的替换路径。
+        return true;
     }
 }

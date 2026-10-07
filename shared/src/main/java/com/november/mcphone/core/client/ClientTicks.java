@@ -1,6 +1,7 @@
 package com.november.mcphone.core.client;
 
 import com.november.mcphone.feature.store.client.AppSourceRegistry;
+import com.november.mcphone.core.script.client.LocalScriptUpdates;
 
 /**
  * 共用代码里"每客户端 tick 要做一次"的那些事，<b>汇到这一个入口</b>。
@@ -44,5 +45,6 @@ public final class ClientTicks {
 
         // 商店那边有没有哪个来源列到一半不吭声了（§14.1 的超时）
         AppSourceRegistry.tick();
+        LocalScriptUpdates.tick();
     }
 }
