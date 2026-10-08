@@ -15,6 +15,7 @@ import com.november.mcphone.feature.chat.net.SendChatMessagePacket;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.screens.Screen;
 
 import java.util.List;
 import java.util.UUID;
@@ -90,16 +91,35 @@ public final class ChatConversation {
         if (peer == null) return false;
         if (viewer.mouseClicked(button)) return true;
         if (button == 0 && backHovered) { pendingBack = true; return true; }
-        if (composer.mouseClicked(button)) return true;
+        if (composer.mouseClicked(button)) { messages.clearSelection(); return true; }
         UUID image = button == 0 ? messages.imageAt(mx, my) : null;
-        if (image != null) { viewer.open(image); return true; }
+        if (image != null) {
+            messages.clearSelection();
+            composer.blur();
+            viewer.open(image);
+            return true;
+        }
+        if (button == 0 && messages.mouseClicked(mx, my)) { composer.blur(); return true; }
         composer.focusInput(mx, my, button);
         return false;
     }
 
+    public boolean mouseDragged(double mx, double my, int button) {
+        return peer != null && (viewer.isOpen() || messages.mouseDragged(mx, my, button));
+    }
+    public boolean mouseReleased(double mx, double my, int button) {
+        return peer != null && (viewer.isOpen() || messages.mouseReleased(mx, my, button));
+    }
+
     /** 查看器是模态层；隐藏的输入框不能继续打字或按 Enter 发出草稿。 */
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        return peer != null && (viewer.isOpen() || composer.keyPressed(keyCode, scanCode, modifiers));
+        if (peer == null) return false;
+        if (viewer.isOpen()) return true;
+        if (Screen.isCopy(keyCode) && !messages.selectedText().isEmpty()) {
+            Minecraft.getInstance().keyboardHandler.setClipboard(messages.selectedText());
+            return true;
+        }
+        return composer.keyPressed(keyCode, scanCode, modifiers);
     }
     public boolean charTyped(char c, int modifiers) {
         return peer != null && (viewer.isOpen() || composer.charTyped(c, modifiers));

@@ -1390,6 +1390,8 @@ public final class PhoneScreen extends PhoneScreenBase {
         // 书架页靠拖动排书
         if (mode == Mode.READER && bookList.mouseDragged(mx, my)) return true;
 
+        if (mode == Mode.CHAT_CONVERSATION && chatConversation.mouseDragged(mx, my, button)) return true;
+
         // 多行输入框靠拖动选中文本，不转发的话选不了
         if (mode == Mode.NOTE_EDIT && noteEditor.mouseDragged(mx, my, button, ldx, ldy)) return true;
         return super.mouseDragged(rawX, rawY, button, dx, dy);
@@ -1403,6 +1405,9 @@ public final class PhoneScreen extends PhoneScreenBase {
             dragHudTo(rawX, rawY, true);
             return true;
         }
+
+        if (mode == Mode.CHAT_CONVERSATION
+                && chatConversation.mouseReleased(unscaledX(rawX), unscaledY(rawY), button)) return true;
 
         if (mode == Mode.UI_SCALE) uiScalePage.mouseReleased();
         if (mode == Mode.HUD) hudPage.mouseReleased();

@@ -42,6 +42,10 @@ final class ChatMessagePane {
     private final ChatScrollState scroll = new ChatScrollState();
     private final List<ImageHit> imageHits = new ArrayList<>();
     private int messageTop, messageBottom;
+    private final ChatTextSelection selection = new ChatTextSelection();
+    private final List<TextHit> textHits = new ArrayList<>();
+    private double dragX, dragY;
+    private record TextHit(Block block, int x, int y, int lineStep) {}
     private record ImageHit(UUID image, int x, int y, int w, int h) {}
 
     void reset() {
@@ -51,12 +55,58 @@ final class ChatMessagePane {
         laidOutWidth = -1;
         blocks = List.of();
         imageHits.clear();
+        textHits.clear();
+        selection.clear();
         messageTop = messageBottom = 0;
         scroll.reset();
     }
 
     void latest() { scroll.latest(); }
     boolean mouseScrolled(double amount) { return scroll.scroll(amount); }
+    void clearSelection() { selection.clear(); }
+    String selectedText() { return selection.selectedText(); }
+
+    boolean mouseClicked(double mx, double my) {
+        selection.clear();
+        if (my < messageTop || my >= messageBottom) return false;
+        for (TextHit hit : textHits) {
+            Block b = hit.block();
+            if (b.text().selectable() && GuiUtil.hit(mx, my, hit.x(), hit.y(), b.w(), b.h())) {
+                selection.begin(b.message(), b.text(), indexAt(hit, mx, my));
+                dragX = mx; dragY = my;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    boolean mouseDragged(double mx, double my, int button) {
+        if (button != 0 || !selection.dragging()) return false;
+        dragX = mx; dragY = my;
+        updateDrag();
+        return true;
+    }
+
+    boolean mouseReleased(double mx, double my, int button) {
+        if (button != 0 || !selection.dragging()) return false;
+        mouseDragged(mx, my, button);
+        return selection.release();
+    }
+
+    private void updateDrag() {
+        for (TextHit hit : textHits) {
+            if (selection.owns(hit.block().message())) {
+                selection.extend(indexAt(hit, dragX, dragY));
+                return;
+            }
+        }
+    }
+
+    private static int indexAt(TextHit hit, double mx, double my) {
+        var origin = hit.block().textOrigin();
+        return hit.block().text().indexAt((mx - hit.x() - origin.x()) / ChatLayout.TEXT_SCALE,
+                my - hit.y() - origin.y(), hit.lineStep());
+    }
 
     UUID imageAt(double mx, double my) {
         if (my < messageTop || my >= messageBottom) return null;
@@ -70,6 +120,7 @@ final class ChatMessagePane {
         List<ChatMessage> src = ChatClientCache.getMessages();
         if (src == laidOutFrom && width == laidOutWidth && font == laidOutFont
                 && Objects.equals(selfId, laidOutSelf)) return;
+        selection.reconcile(src);
         blocks = ChatMessageLayout.build(font, src, width, selfId);
         int total = 0;
         for (Block b : blocks) total += b.rowHeight() + BLOCK_GAP;
@@ -86,6 +137,7 @@ final class ChatMessagePane {
         relayout(font, w);
         // 每帧重建：滚一下、来一条新消息，位置就全变了
         imageHits.clear();
+        textHits.clear();
         messageTop = top;
         messageBottom = bottom;
 
@@ -109,6 +161,17 @@ final class ChatMessagePane {
         // 走 GuiUtil 那一层：原版的 enableScissor 收窗口坐标、不跟随 pose，而整个手机是
         // 套在一层缩放里画的（界面大小 × 开机动画）。直接交本地坐标，界面大小一改字就被切
         GuiUtil.enableScissor(g, x, top, x + w, bottom);
+        // 完整几何先算一遍，拖出可见区仍归原消息；滚动/新消息后不使用上一帧的命中区。
+        int rowY = y;
+        for (Block b : blocks) {
+            if (b.type() == BlockType.TEXT) {
+                int bx = bubbleX(b, x, w);
+                textHits.add(new TextHit(b, bx, rowY + b.placement().contentY(),
+                        ChatUi.lineHeight(font, ChatLayout.TEXT_SCALE)));
+            }
+            rowY += b.rowHeight() + BLOCK_GAP;
+        }
+        if (selection.dragging()) updateDrag();
         for (Block b : blocks) {
             if (y + b.rowHeight() > top && y < bottom) renderBlock(g, font, b, x, y, w);
             y += b.rowHeight() + BLOCK_GAP;
@@ -129,8 +192,7 @@ final class ChatMessagePane {
         // placement 在上方保留昵称行，未来群聊可在这里放发送者名；当前不伪造群聊功能。
         if (avatar != null) PlayerAvatar.draw(g, avatar,
                 b.self() ? x + w - AVATAR_SIZE : x, avatarY, AVATAR_SIZE);
-        int bx = b.self() ? x + w - AVATAR_SIZE - AVATAR_GAP - b.w()
-                          : x + AVATAR_SIZE + AVATAR_GAP;
+        int bx = bubbleX(b, x, w);
 
         // 图片不套气泡：真实的聊天软件里图片就是图片本身，没有底色也没有一圈留白，
         // 谁发的靠左右对齐看得出来。套一层气泡等于在图周围多画一圈没有意义的色块，
@@ -145,6 +207,7 @@ final class ChatMessagePane {
                 bx, contentY, b.w(), b.h(),
                 b.self() ? COLOR_BUBBLE_SELF : COLOR_BUBBLE_PEER);
 
+        renderSelection(g, font, b, bx, contentY);
         var origin = b.textOrigin();
         float ty = contentY + origin.y();
         for (var line : b.lines()) {
@@ -152,6 +215,29 @@ final class ChatMessagePane {
                     b.self() ? COLOR_TEXT_SELF : COLOR_TEXT_PEER);
             ty += ChatUi.lineHeight(font, ChatLayout.TEXT_SCALE);
         }
+    }
+
+    private static int bubbleX(Block b, int x, int w) {
+        return b.self() ? x + w - AVATAR_SIZE - AVATAR_GAP - b.w() : x + AVATAR_SIZE + AVATAR_GAP;
+    }
+
+    private void renderSelection(GuiGraphics g, Font font, Block b, int bx, int y) {
+        if (!selection.owns(b.message()) || selection.start() == selection.end()) return;
+        var origin = b.textOrigin();
+        int step = ChatUi.lineHeight(font, ChatLayout.TEXT_SCALE);
+        g.pose().pushPose();
+        try {
+            // 子像素矩形与正文共用原点，不在手机逻辑像素层提前取整。
+            g.pose().translate(bx + origin.x(), y + origin.y(), 0);
+            g.pose().scale(ChatLayout.TEXT_SCALE / 16f, ChatLayout.TEXT_SCALE / 16f, 1);
+            for (int line = 0; line < b.text().lines().size(); line++) {
+                for (var span : b.text().lines().get(line).spans(selection.start(), selection.end())) {
+                    int top = Math.round(line * step / ChatLayout.TEXT_SCALE * 16f);
+                    g.fill(Math.round(span.left() * 16f), top,
+                            Math.round(span.right() * 16f), top + font.lineHeight * 16, 0x668D4169);
+                }
+            }
+        } finally { g.pose().popPose(); }
     }
 
     private void renderImageBlock(GuiGraphics g, Font font, Block b, int bx, int y) {

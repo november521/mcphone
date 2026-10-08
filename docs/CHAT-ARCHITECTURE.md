@@ -17,6 +17,7 @@
 | `shared/src/main/java/.../feature/chat/client/ChatList.java`、`ChatAddContact.java`、`ChatConversation.java` | 会话列表、好友操作页、聊天页；读快照、绘制、发操作请求 |
 | 同目录 `ChatLayout.java`、`ChatUi.java`、`ChatGlass.java` | 纯布局计算、字体/图标绘制、透明面板形状与调色板；点击和绘制共用几何 |
 | 同目录 `ChatMessageLayout.java`、`ChatMessagePane.java`、`ChatScrollState.java` | 快照排版、消息绘制/可见图片命中、纯滚动状态；页面不再承担这些细节 |
+| 同目录 `ChatTextLayout.java`、`ChatTextSelection.java` | 原文/视觉行与字素命中映射、单条消息拖选状态；细节与实测清单见 [CHAT-TEXT-SELECTION.md](CHAT-TEXT-SELECTION.md) |
 | 同目录 `ChatComposer.java`、`ChatAttachment.java` | EditBox、发送按钮和附件菜单；以发送回调和附件语义交给页面，不依赖会话协调者 |
 | 同目录 `ChatImageViewer.java` | 图片放大、动图取帧及保存；打开期间由页面阻断下层输入 |
 | 同目录 `ChatImageCache.java`、`ChatImageRequests.java` | 缓存像素与贴图；独立纯调度器按当前帧/对端的可见集合批量取图 |
