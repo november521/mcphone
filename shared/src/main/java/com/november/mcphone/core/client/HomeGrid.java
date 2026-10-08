@@ -289,17 +289,11 @@ public final class HomeGrid {
         if (count <= 0) return;
 
         String label = count > 99 ? "99+" : String.valueOf(count);
-        int textW = font.width(label);
-        int w = Math.max(font.lineHeight + 1, textW + 4);
-        int h = font.lineHeight + 1;
+        int w = UnreadBadge.width(font, label);
         int x = ix + is - w + 2;
         int y = iy - 2;
 
-        // 与会话列表、通知共用一张贴图，换肤时三处一致
-        PhoneSkin.drawOrFill(g, PhoneSkin.Element.UNREAD_BADGE, x, y, w, h,
-                PhoneTheme.COLOR_UNREAD_BADGE);
-        g.drawString(font, label, x + (w - textW) / 2, y + 1,
-                PhoneTheme.FONT_COLOR_BADGE, false);
+        UnreadBadge.draw(g, font, label, x, y);
     }
 
     /** 读一个 App 的角标数，读不出来当没有。兜 Throwable：附属 App 可能引用没装的模组类 */

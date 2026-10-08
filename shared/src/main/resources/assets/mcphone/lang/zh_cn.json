@@ -1,4 +1,12 @@
 {
+  "mcphone.chat.layout.search": "搜索（暂未开放）",
+  "mcphone.chat.layout.chats": "聊天",
+  "mcphone.chat.layout.contacts": "联系人",
+  "mcphone.chat.layout.discover": "发现",
+  "mcphone.chat.layout.profile": "我",
+  "mcphone.chat.layout.voice": "语音（暂未开放）",
+  "mcphone.chat.layout.file": "文件（暂未开放）",
+  "mcphone.chat.layout.location": "位置（暂未开放）",
   "itemGroup.mcphone": "MCphone",
   "key.categories.mcphone": "MCphone",
   "key.mcphone.camera_shutter": "拍照",

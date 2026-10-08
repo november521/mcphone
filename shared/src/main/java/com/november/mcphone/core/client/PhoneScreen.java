@@ -11,6 +11,7 @@ import com.november.mcphone.core.PhoneLocation;
 import com.november.mcphone.platform.client.Draw;
 import com.november.mcphone.feature.chat.client.ChatAddContact;
 import com.november.mcphone.feature.chat.client.ChatConversation;
+import com.november.mcphone.feature.chat.client.ChatAttachment;
 import com.november.mcphone.core.ServerConfig;
 import com.november.mcphone.feature.chat.client.ChatImageCache;
 import com.november.mcphone.feature.chat.client.ChatImageSender;
@@ -1319,8 +1320,12 @@ public final class PhoneScreen extends PhoneScreenBase {
             }
             case CHAT_CONVERSATION -> {
                 chatConversation.mouseClicked(mx, my, button);
+                if (chatConversation.consumeBackRequest()) {
+                    navigateTo(Mode.CHAT);
+                    yield true;
+                }
 
-                ChatConversation.Attach attach = chatConversation.consumeAttachRequest();
+                ChatAttachment attach = chatConversation.consumeAttachRequest();
                 if (attach != null) {
                     // 先记下是谁：进挑东西那一页会 close 掉会话，对端就没了
                     pendingConversationPeer = chatConversation.peer();

@@ -1,8 +1,7 @@
 package com.november.mcphone.feature.chat.net;
 
 import com.november.mcphone.feature.chat.ChatMessage;
-import com.november.mcphone.feature.chat.net.ConversationSummary;
-import com.november.mcphone.feature.chat.net.OnlinePlayer;
+import com.november.mcphone.feature.chat.ChatData;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -91,6 +90,8 @@ public final class ChatClientCache {
 
         List<ChatMessage> next = new ArrayList<>(messages);
         next.add(message);
+        int excess = next.size() - ChatData.MAX_MESSAGES_PER_CONVERSATION;
+        if (excess > 0) next.subList(0, excess).clear();
         messages = List.copyOf(next);
     }
 

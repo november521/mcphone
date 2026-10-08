@@ -1,4 +1,12 @@
 {
+  "mcphone.chat.layout.search": "Search (soon)",
+  "mcphone.chat.layout.chats": "Chats",
+  "mcphone.chat.layout.contacts": "Contacts",
+  "mcphone.chat.layout.discover": "Discover",
+  "mcphone.chat.layout.profile": "Me",
+  "mcphone.chat.layout.voice": "Voice (soon)",
+  "mcphone.chat.layout.file": "Files (soon)",
+  "mcphone.chat.layout.location": "Location (soon)",
   "itemGroup.mcphone": "MCphone",
   "key.categories.mcphone": "MCphone",
   "key.mcphone.camera_shutter": "Take Photo",

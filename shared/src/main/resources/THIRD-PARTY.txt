@@ -72,17 +72,19 @@ The library is bundled unmodified and used only through its public API.
 
 
 ================================================================
-Pixelarticons - battery-full / cellular-signal-3
+Pixelarticons - battery-full / cellular-signal-3 / chat UI
 ================================================================
 
-用途     状态栏固定满电电池与满格信号图标（纯白透明 PNG）
-Used for the fixed full-battery and full-signal icons in the status bar (white transparent PNGs).
+用途     状态栏固定满电电池、满格信号，以及聊天、联系人、发现、个人页、搜索图标（纯白透明 PNG）
+Used for the status bar and chat UI icons (white transparent PNGs).
 
 主页     https://github.com/halfmage/pixelarticons
 原图     https://pixelarticons.com/svg/battery-full.svg
          https://pixelarticons.com/svg/cellular-signal-3.svg
 位置     assets/mcphone/textures/phone/battery_full.png
          assets/mcphone/textures/phone/signal_full.png
+         assets/mcphone/textures/chat/ui/{message,contact,compass,user,search}.png
+原稿     聊天图标原始 SVG 位于 docs/assets/chat-ui/，来源为 Pixelarticons 同名图标。
 转换     用户提供的 24x24 纯白透明 PNG，在本模组中原样打包。
          User-provided 24x24 white transparent PNGs, bundled without further changes.
 
@@ -107,3 +109,17 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+
+================================================================
+Material Symbols / Iconoir - 聊天操作图标
+================================================================
+用途     返回、更多、圆圈加号、笑脸（Material Symbols），圆圈声波（Iconoir）。
+位置     assets/mcphone/textures/chat/ui/{back,more,smile,voice}.png
+         assets/mcphone/textures/chat/attach.png
+来源     https://github.com/google/material-design-icons
+         https://github.com/iconoir-icons/iconoir
+原稿     docs/assets/chat-ui/material-96px/，具体图标来源见 sources.txt。
+转换     用户提供的 96x96 纯白透明 PNG 原样打包；SVG 仅改颜色及输出尺寸，路径未改。
+授权     Material Symbols: Apache-2.0，完整许可见 licenses/material-symbols-Apache-2.0.txt。
+         Iconoir: MIT，完整许可见 licenses/iconoir-MIT.txt。

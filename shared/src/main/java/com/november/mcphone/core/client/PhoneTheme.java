@@ -74,7 +74,7 @@ public final class PhoneTheme {
     /** 通知里的发信人名字与右上角条数。底是 COLOR_TOAST_BG */
     public static final int FONT_COLOR_TOAST_TITLE = 0xFFFFFFFF;
 
-    /** 会话列表未读角标里的数字。底是 COLOR_UNREAD_BADGE 那块红 */
+    /** 会话列表未读角标里的数字。底是 COLOR_UNREAD_BADGE 的玫瑰粉色。 */
     public static final int FONT_COLOR_BADGE = 0xFFFFFFFF;
 
     /** 自己发的气泡里的字。底是 COLOR_CHAT_BUBBLE_SELF */
@@ -162,7 +162,7 @@ public final class PhoneTheme {
     public static final int COLOR_CHAT_INPUT_BG = 0xFF26263A;
 
     /** 未读条数角标的底。兜底色，见 PhoneSkin.Element.UNREAD_BADGE */
-    public static final int COLOR_UNREAD_BADGE = 0xFFDD3333;
+    public static final int COLOR_UNREAD_BADGE = 0xFFAC477B;
 
     /** 进度条已播过的那一段 */
     public static final int COLOR_MUSIC_PROGRESS = 0xFF55DD88;

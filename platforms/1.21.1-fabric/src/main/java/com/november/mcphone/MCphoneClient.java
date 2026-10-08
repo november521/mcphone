@@ -18,7 +18,7 @@ import com.november.mcphone.feature.camera.client.CameraHandler;
 import com.november.mcphone.feature.camera.client.CameraMode;
 import com.november.mcphone.feature.chat.client.ChatImageCache;
 import com.november.mcphone.feature.chat.client.ChatImageSender;
-import com.november.mcphone.feature.chat.client.ChatNotifier;
+import com.november.mcphone.feature.chat.client.ChatClientEvents;
 import com.november.mcphone.feature.chat.net.ChatClientCache;
 import com.november.mcphone.feature.music.client.DiscBayScreen;
 import com.november.mcphone.feature.music.client.DiscClientCache;
@@ -81,6 +81,7 @@ public class MCphoneClient implements ClientModInitializer {
         ClientTicks.onEndTick(com.november.mcphone.feature.reader.client.ReaderKeyHandler::tick);
         ClientTicks.onEndTick(LocalPlayback::tick);
         ClientTicks.onEndTick(ChatImageSender::tick);
+        ClientTicks.onEndTick(com.november.mcphone.platform.client.PlayerSkins::tick);
         // 快门与退出键由 CameraHandler 在 tick 末尾消费。只注册下面的 HUD 回调会让
         // 按键设置里看得到 V / X，却没有任何代码读取按下次数，两个键因而完全失效。
         ClientTicks.onEndTick(CameraHandler::onClientTick);
@@ -188,7 +189,7 @@ public class MCphoneClient implements ClientModInitializer {
 
         // 这两处走监听器而不是让网络层直接调：网络层在专用服务器上也会加载，碰不得客户端的类
         StoreClientCache.setSyncListener(PhoneScreenRegistry::enforcePurchases);
-        ChatClientCache.setMessageListener(ChatNotifier::onMessage);
+        ChatClientCache.setMessageListener(ChatClientEvents::onMessage);
         ChatClientCache.setImageListener(ChatImageCache::accept);
 
         MCphone.LOGGER.info("MCphone 客户端加载完成");

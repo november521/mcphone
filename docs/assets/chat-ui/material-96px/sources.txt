@@ -1,0 +1,28 @@
+Original paths retained. Only currentColor and output dimensions changed. Material Symbols: Apache-2.0; Iconoir: MIT. PNG 96x96, transparent, antialiased.
+
+返回: material-symbols:arrow-back-ios-new-rounded
+https://icon-sets.iconify.design/material-symbols/arrow-back-ios-new-rounded/
+
+更多: material-symbols:more-horiz
+https://icon-sets.iconify.design/material-symbols/more-horiz/
+
+圆框语音: iconoir:voice-circle
+https://icon-sets.iconify.design/iconoir/voice-circle/
+
+常规笑脸: material-symbols:mood-outline
+https://icon-sets.iconify.design/material-symbols/mood-outline/
+
+添加: material-symbols:add-circle-outline
+https://icon-sets.iconify.design/material-symbols/add-circle-outline/
+
+Material 声波: material-symbols:graphic-eq
+https://icon-sets.iconify.design/material-symbols/graphic-eq/
+
+Material 录音: material-symbols:mic-outline
+https://icon-sets.iconify.design/material-symbols/mic-outline/
+
+大笑: material-symbols:sentiment-very-satisfied-outline
+https://icon-sets.iconify.design/material-symbols/sentiment-very-satisfied-outline/
+
+微笑: material-symbols:sentiment-satisfied-outline
+https://icon-sets.iconify.design/material-symbols/sentiment-satisfied-outline/
