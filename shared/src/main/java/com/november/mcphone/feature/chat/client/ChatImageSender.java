@@ -427,7 +427,7 @@ public final class ChatImageSender {
      * 回声里只有图片 id（见 ImageBody），不这么做的话，发件人会看着自己刚发出去的图
      * 转一圈"加载中"，再从服务器把自己上传的东西下回来。
      *
-     * 由 {@link ChatNotifier#onMessage} 转调——那里本来就是"每条新消息都会经过"的地方。
+     * 由 {@link ChatClientEvents#onMessage} 转调，上传状态不依赖通知是否显示。
      */
     public static void onNewMessage(ChatMessage message) {
         if (pendingPng == null) return;

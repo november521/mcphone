@@ -116,6 +116,20 @@ public final class ChatLayout {
 
     public record MessageRow(int avatarY, int contentY, int height) {}
 
+    /**
+     * 多行正文整体居中，各行仍左对齐。原版字宽包含行尾间距，中文字形又比旧的
+     * 七像素估计高；统一去掉行尾间距并补偿半像素上方笔画偏移，避免正文偏左、偏下。
+     * 这是默认字体的光学校准，资源包自定义字体仍需实测。
+     */
+    public static TextOrigin bubbleText(int width, int height, int maxAdvance, int fontHeight, int lines) {
+        float inkWidth = Math.max(0, maxAdvance - 1) * TEXT_SCALE;
+        int lineStep = scaledWidth(fontHeight, TEXT_SCALE);
+        float inkHeight = Math.max(0, lines - 1) * lineStep + Math.max(1, fontHeight - 1) * TEXT_SCALE;
+        return new TextOrigin((width - inkWidth) / 2f, (height - inkHeight) / 2f - TEXT_SCALE / 2f);
+    }
+
+    public record TextOrigin(float x, float y) {}
+
     /** 右边和下边不包含在命中区内，贴近的两个控件不能同时接到边界上的点击。 */
     public static boolean hit(double mx, double my, int x, int y, int width, int height) {
         return mx >= x && mx < x + width && my >= y && my < y + height;

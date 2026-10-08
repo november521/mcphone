@@ -18,7 +18,7 @@ import com.november.mcphone.feature.camera.client.CameraFlash;
 import com.november.mcphone.feature.camera.client.CameraHandler;
 import com.november.mcphone.feature.chat.client.ChatImageCache;
 import com.november.mcphone.feature.chat.client.ChatImageSender;
-import com.november.mcphone.feature.chat.client.ChatNotifier;
+import com.november.mcphone.feature.chat.client.ChatClientEvents;
 import com.november.mcphone.feature.chat.net.ChatClientCache;
 import com.november.mcphone.feature.clock.client.PlayTime;
 import com.november.mcphone.feature.music.client.DiscBayScreen;
@@ -198,7 +198,7 @@ public final class MCphoneClient {
         // 走监听器而不是让网络层直接调：网络层在专用服务器上也会加载，碰不得客户端的类
         StoreClientCache.setSyncListener(PhoneScreenRegistry::enforcePurchases);
 
-        ChatClientCache.setMessageListener(ChatNotifier::onMessage);
+        ChatClientCache.setMessageListener(ChatClientEvents::onMessage);
         ChatClientCache.setImageListener(ChatImageCache::accept);
     }
 

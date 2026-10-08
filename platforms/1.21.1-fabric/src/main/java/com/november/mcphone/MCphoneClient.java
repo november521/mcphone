@@ -18,7 +18,7 @@ import com.november.mcphone.feature.camera.client.CameraHandler;
 import com.november.mcphone.feature.camera.client.CameraMode;
 import com.november.mcphone.feature.chat.client.ChatImageCache;
 import com.november.mcphone.feature.chat.client.ChatImageSender;
-import com.november.mcphone.feature.chat.client.ChatNotifier;
+import com.november.mcphone.feature.chat.client.ChatClientEvents;
 import com.november.mcphone.feature.chat.net.ChatClientCache;
 import com.november.mcphone.feature.music.client.DiscBayScreen;
 import com.november.mcphone.feature.music.client.DiscClientCache;
@@ -189,7 +189,7 @@ public class MCphoneClient implements ClientModInitializer {
 
         // 这两处走监听器而不是让网络层直接调：网络层在专用服务器上也会加载，碰不得客户端的类
         StoreClientCache.setSyncListener(PhoneScreenRegistry::enforcePurchases);
-        ChatClientCache.setMessageListener(ChatNotifier::onMessage);
+        ChatClientCache.setMessageListener(ChatClientEvents::onMessage);
         ChatClientCache.setImageListener(ChatImageCache::accept);
 
         MCphone.LOGGER.info("MCphone 客户端加载完成");
