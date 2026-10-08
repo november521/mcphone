@@ -5,7 +5,6 @@ import com.november.mcphone.feature.chat.ImageBody;
 import com.november.mcphone.feature.chat.TextBody;
 
 import net.minecraft.client.gui.Font;
-import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.Style;
 import net.minecraft.util.FormattedCharSequence;
 
@@ -54,7 +53,7 @@ final class ChatMessageLayout {
      */
     record Block(BlockType type, boolean self, List<FormattedCharSequence> lines,
                          UUID image, int w, int h, int frames, int frameMs, ChatLayout.MessageRow placement,
-                         ChatLayout.TextOrigin textOrigin) {
+                         ChatLayout.TextOrigin textOrigin, ChatMessage message, ChatTextLayout text) {
         int rowHeight() { return placement.height(); }
     }
 
@@ -75,19 +74,20 @@ final class ChatMessageLayout {
                 int stampH = nameLineHeight + STAMP_PAD_Y * 2;
                 out.add(new Block(BlockType.STAMP, false, List.of(stamp), null,
                         ChatLayout.scaledWidth(font.width(stamp), ChatLayout.META_SCALE),
-                        stampH, 1, 0, new ChatLayout.MessageRow(0, 0, stampH), null));
+                        stampH, 1, 0, new ChatLayout.MessageRow(0, 0, stampH), null, null, null));
             }
             prevTime = m.time();
 
             boolean self = selfId != null && selfId.equals(m.sender());
 
             if (m.body() instanceof ImageBody image) {
-                out.add(imageBlock(image, self, bubbleMaxW, nameLineHeight));
+                out.add(imageBlock(m, image, self, bubbleMaxW, nameLineHeight));
                 continue;
             }
 
             String text = m.body() instanceof TextBody t ? t.text() : m.body().preview().getString();
-            List<FormattedCharSequence> lines = font.split(Component.literal(text), textMaxW);
+            ChatTextLayout selectable = ChatTextLayout.build(font, text, textMaxW);
+            List<FormattedCharSequence> lines = selectable.visualLines();
             int textW = 0;
             for (var line : lines) textW = Math.max(textW, font.width(line));
 
@@ -95,13 +95,13 @@ final class ChatMessageLayout {
             int bubbleW = ChatLayout.scaledWidth(textW, ChatLayout.TEXT_SCALE) + BUBBLE_PAD_X * 2;
             out.add(new Block(BlockType.TEXT, self, lines, null,
                     bubbleW, bubbleH, 1, 0, ChatLayout.messageRow(bubbleH, nameLineHeight),
-                    ChatLayout.bubbleText(bubbleW, bubbleH, textW, font.lineHeight, lines.size())));
+                    ChatLayout.bubbleText(bubbleW, bubbleH, textW, font.lineHeight, lines.size()), m, selectable));
         }
 
         return List.copyOf(out);
     }
 
-    private static Block imageBlock(ImageBody image, boolean self, int bubbleMaxW, int nameLineHeight) {
+    private static Block imageBlock(ChatMessage message, ImageBody image, boolean self, int bubbleMaxW, int nameLineHeight) {
         float scale = Math.min((float) bubbleMaxW / image.width(),
                                (float) IMAGE_MAX_H / image.height());
         // 比屏幕还小的图不放大：放大只会糊，而手机上的图本来就该小
@@ -111,7 +111,7 @@ final class ChatMessageLayout {
         int h = Math.max(1, Math.round(image.height() * scale));
 
         return new Block(BlockType.IMAGE, self, List.of(), image.image(), w, h,
-                image.frames(), image.frameMs(), ChatLayout.messageRow(h, nameLineHeight), null);
+                image.frames(), image.frameMs(), ChatLayout.messageRow(h, nameLineHeight), null, message, null);
     }
 
     private static String formatStamp(long time) {

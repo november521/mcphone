@@ -32,6 +32,7 @@ final class ChatComposer {
     private final Consumer<String> onSend;
     private EditBox box;
     private boolean sendHovered, attachBtnHovered, stickerHovered, attachMenuOpen;
+    private boolean inputFocused = true;
     private ChatAttachment attachHovered, pendingAttach;
     private int inputOriginX, contentLeft, contentWidth;
     private float inputOriginY;
@@ -40,6 +41,7 @@ final class ChatComposer {
     ChatComposer(Consumer<String> onSend) { this.onSend = onSend; }
 
     void reset(boolean focused) {
+        inputFocused = focused;
         sendHovered = attachBtnHovered = stickerHovered = attachMenuOpen = false;
         attachHovered = pendingAttach = null;
         inputBounds = new ChatLayout.Rect(0, 0, 0, 0);
@@ -73,16 +75,23 @@ final class ChatComposer {
     void focusInput(double mx, double my, int button) {
         if (box == null) return;
         boolean inInput = inputBounds.contains(mx, my);
-        box.setFocused(inInput);
+        setFocused(inInput);
         if (inInput) box.mouseClicked((mx - inputOriginX) / ChatLayout.TEXT_SCALE,
                 Mth.clamp((my - inputOriginY) / ChatLayout.TEXT_SCALE, 0, box.getHeight() - 1), button);
     }
 
+    void blur() { setFocused(false); }
+    private void setFocused(boolean focused) {
+        inputFocused = focused;
+        if (box != null) box.setFocused(focused);
+    }
+
     boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (!inputFocused) return false;
         if (keyCode == 257 || keyCode == 335) { send(); return true; }
         return box != null && box.keyPressed(keyCode, scanCode, modifiers);
     }
-    boolean charTyped(char c, int modifiers) { return box != null && box.charTyped(c, modifiers); }
+    boolean charTyped(char c, int modifiers) { return inputFocused && box != null && box.charTyped(c, modifiers); }
     private void send() {
         if (box == null || !ChatLayout.hasText(box.getValue())) return;
         onSend.accept(box.getValue());
@@ -127,7 +136,7 @@ final class ChatComposer {
                     Component.translatable("mcphone.app.chat"));
             box.setMaxLength(TextBody.MAX_LENGTH);
             box.setBordered(false);
-            box.setFocused(true);
+            box.setFocused(inputFocused);
         } else if (box.getWidth() != textW) {
             box.setWidth(textW);
             // 发送按钮出现时输入框会收窄，重新保证光标可见；不移动光标，也不清除选区。

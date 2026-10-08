@@ -3,10 +3,10 @@ package com.november.mcphone.feature.chat.client;
 import com.november.mcphone.feature.chat.ChatMessage;
 import com.november.mcphone.feature.chat.ImageBody;
 import net.minecraft.client.gui.Font;
+import net.minecraft.client.StringSplitter;
 import net.minecraft.network.chat.FormattedText;
 import net.minecraft.network.chat.Style;
 import net.minecraft.util.FormattedCharSequence;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -25,17 +25,12 @@ public final class ChatMessageLayoutTest {
             text.accept((index, style, codePoint) -> { width[0] += 6; return true; });
             return width[0];
         }
+        @Override public StringSplitter getSplitter() { return new StringSplitter((cp, style) -> 6); }
         @Override public List<FormattedCharSequence> split(FormattedText text, int width) {
-            var result = new ArrayList<FormattedCharSequence>();
-            int chars = Math.max(1, width / 6);
-            for (String line : text.getString().split("\n", -1)) {
-                if (line.isEmpty()) result.add(FormattedCharSequence.EMPTY);
-                for (int i = 0; i < line.length(); i += chars) {
-                    result.add(FormattedCharSequence.forward(line.substring(i, Math.min(line.length(), i + chars)), Style.EMPTY));
-                }
-            }
-            return List.copyOf(result);
+            return getSplitter().splitLines(text, width, Style.EMPTY).stream()
+                    .map(line -> FormattedCharSequence.forward(line.getString(), Style.EMPTY)).toList();
         }
+
     }
 
     public static void main(String[] args) {
