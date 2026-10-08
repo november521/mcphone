@@ -165,11 +165,20 @@ public final class PhoneChassis {
     /** 状态栏没有贴图时的兜底底色（半透明黑，压在壁纸上仍看得清） */
     private static final int COLOR_STATUS_BAR_FALLBACK = PhoneTheme.COLOR_SCRIM;
 
+    private static final int STATUS_INSET = 4;
+    /** 时间略小于应用正文，避免压过右侧的小电池图标。 */
+    private static final float STATUS_TIME_SCALE = 0.75F;
+    /** 电池按原图的一半绘制，2px 线条对应界面的 1px。 */
+    private static final int BATTERY_SIZE = 12;
+    /** 信号原图的可见部分更高，单独缩小，使两个图案的视觉高度接近。 */
+    private static final int SIGNAL_SIZE = 10;
+    private static final int STATUS_ICON_GAP = 2;
+
     /**
-     * 画顶部状态栏：左侧信号、右侧时钟。背景可换肤。
+     * 画顶部状态栏：左侧时钟、右侧满格信号与满电电池。背景和状态图标可换肤。
      *
      * 高度不随设备变（{@link PhoneTheme#STATUS_BAR_HEIGHT}）：这一条的高矮由字号定，
-     * 屏幕宽一倍不该让它跟着变粗。变的只有宽度与时钟靠的那条右边界。
+     * 屏幕宽一倍不该让它跟着变粗。变的只有宽度与电池靠的那条右边界。
      */
     public static void drawStatusBar(GuiGraphics g, Font font, int phoneLeft, int phoneTop,
                                      DeviceMetrics metrics) {
@@ -179,9 +188,54 @@ public final class PhoneChassis {
                 COLOR_STATUS_BAR_FALLBACK);
 
         String time = LocalTime.now().format(TIME_FORMATTER);
-        int tx = phoneLeft + metrics.screenW() - 6 - font.width(time);
-        g.drawString(font, time, tx, phoneTop + 1, PhoneTheme.FONT_COLOR_STATUS, true);
-        g.drawString(font, "●●●●", phoneLeft + 4, phoneTop + 1, PhoneTheme.FONT_COLOR_STATUS, true);
+        int timeY = phoneTop + Math.round((PhoneTheme.STATUS_BAR_HEIGHT - font.lineHeight * STATUS_TIME_SCALE) / 2);
+        g.pose().pushPose();
+        g.pose().translate(phoneLeft + STATUS_INSET, timeY, 0);
+        g.pose().scale(STATUS_TIME_SCALE, STATUS_TIME_SCALE, 1.0F);
+        g.drawString(font, time, 0, 0, PhoneTheme.FONT_COLOR_STATUS, true);
+        g.pose().popPose();
+
+        int bx = phoneLeft + metrics.screenW() - STATUS_INSET - BATTERY_SIZE;
+        int sx = bx - STATUS_ICON_GAP - SIGNAL_SIZE;
+        int by = phoneTop + (PhoneTheme.STATUS_BAR_HEIGHT - BATTERY_SIZE) / 2;
+        int sy = phoneTop + (PhoneTheme.STATUS_BAR_HEIGHT - SIGNAL_SIZE) / 2;
+        // 保留原图的透明留白并等比缩放。裁剪限制在状态栏内，资源包覆盖也不侵入页面。
+        GuiUtil.clipped(g, phoneLeft, phoneTop,
+                phoneLeft + metrics.screenW(), phoneTop + PhoneTheme.STATUS_BAR_HEIGHT, () -> {
+                    if (!PhoneSkin.draw(g, PhoneSkin.Element.SIGNAL_FULL, sx, sy, SIGNAL_SIZE, SIGNAL_SIZE)) {
+                        drawFullSignalFallback(g, sx, sy);
+                    }
+                    if (!PhoneSkin.draw(g, PhoneSkin.Element.BATTERY_FULL, bx, by, BATTERY_SIZE, BATTERY_SIZE)) {
+                        drawFullBatteryFallback(g, bx, by);
+                    }
+                });
+    }
+
+    /** 缺图时用三根递增的白色信号柱兜底，始终显示满格。 */
+    private static void drawFullSignalFallback(GuiGraphics g, int x, int y) {
+        // 兜底图形按 12px 设计，与贴图一样缩到当前信号尺寸。
+        float scale = SIGNAL_SIZE / 12.0F;
+        g.pose().pushPose();
+        g.pose().translate(x, y, 0);
+        g.pose().scale(scale, scale, 1.0F);
+        for (int bar = 0; bar < 3; bar++) {
+            int left = 1 + bar * 3;
+            g.fill(left, 8 - bar * 3, left + 2, 10, PhoneTheme.FONT_COLOR_STATUS);
+        }
+        g.pose().popPose();
+    }
+
+    /** 缺图时画同样的白色满电轮廓与三格电量；手机无需充电，始终使用这一种状态。 */
+    private static void drawFullBatteryFallback(GuiGraphics g, int x, int y) {
+        int white = PhoneTheme.FONT_COLOR_STATUS;
+        g.fill(x + 1, y + 3, x + 10, y + 4, white);
+        g.fill(x + 1, y + 9, x + 10, y + 10, white);
+        g.fill(x + 1, y + 4, x + 2, y + 9, white);
+        g.fill(x + 9, y + 4, x + 10, y + 9, white);
+        g.fill(x + 10, y + 5, x + 11, y + 8, white);
+        for (int cell = 0; cell < 3; cell++) {
+            g.fill(x + 3 + cell * 2, y + 5, x + 4 + cell * 2, y + 8, white);
+        }
     }
 
     //  导航栏
