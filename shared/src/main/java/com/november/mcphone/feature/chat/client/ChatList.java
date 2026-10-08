@@ -5,6 +5,7 @@ import com.november.mcphone.core.client.FontPalette;
 import com.november.mcphone.core.client.PhoneSkin;
 import com.november.mcphone.core.client.PhoneTheme;
 import com.november.mcphone.core.client.PlayerAvatar;
+import com.november.mcphone.core.client.UnreadBadge;
 import com.november.mcphone.core.net.MCphoneNetwork;
 import com.november.mcphone.feature.chat.net.ChatClientCache;
 import com.november.mcphone.feature.chat.net.ConversationSummary;
@@ -30,17 +31,11 @@ public final class ChatList {
 
     private static final long REFRESH_INTERVAL_MS = 3000L;
 
-    /** 须是皮肤头部 8×8 的整数倍，否则放大后边缘毛糙 */
-    private static final int AVATAR_SIZE = 16;
-
-    private static final int AVATAR_GAP = 3;
+    /** 三个聊天页面共用头像尺寸，给姓名与消息留出更多空间。 */
+    private static final int AVATAR_SIZE = ChatLayout.AVATAR_SIZE;
 
     /** 改这个数要连贴图一起改：不做平滑缩放，尺寸对不上会抽像素 */
-    private static final int TP_ICON_SIZE = 7;
-
-    private static final int TP_GAP = 3;
-
-    private static final int TP_HIT_PAD = 3;
+    private static final int TP_ICON_SIZE = ChatLayout.TELEPORT_ICON_SIZE;
     private static final String[] TAB_KEYS = {"chats", "contacts", "discover", "profile"};
     private static final ChatUi.Icon[] TAB_ICONS = {
             ChatUi.Icon.CHAT, ChatUi.Icon.CONTACTS, ChatUi.Icon.DISCOVER, ChatUi.Icon.PROFILE};
@@ -48,8 +43,6 @@ public final class ChatList {
     private static int colorName() { return FontPalette.title(); }
     private static int colorPreview() { return FontPalette.preview(); }
     private static int colorTime() { return FontPalette.timestamp(); }
-    private static final int COLOR_UNREAD_BG = PhoneTheme.COLOR_UNREAD_BADGE;
-    private static final int COLOR_ROW_HOVER = PhoneTheme.COLOR_ROW_HOVER;
 
     private long lastRequestMs;
     private int scrollOffset;
@@ -112,11 +105,12 @@ public final class ChatList {
 
         final int x = phoneLeft + PAD;
         final int w = screenW - PAD * 2;
-        final int bottom = phoneTop + screenH - navH - ChatLayout.TAB_HEIGHT;
-        int y = phoneTop + statusH + 4;
+        final int tabsY = phoneTop + screenH - navH - ChatLayout.TAB_HEIGHT;
+        final int bottom = tabsY - ChatLayout.SECTION_GAP;
+        int y = phoneTop + statusH + ChatLayout.TOP_GAP;
 
         y = renderHeader(g, font, x, y, w, mouseX, mouseY);
-        renderTabs(g, font, x, bottom, w, mouseX, mouseY);
+        renderTabs(g, font, x, tabsY, w, mouseX, mouseY);
 
         List<ConversationSummary> list = ChatClientCache.getConversations();
         if (list.isEmpty()) {
@@ -134,40 +128,53 @@ public final class ChatList {
                              int mouseX, int mouseY) {
         String title = Component.translatable("mcphone.app.chat").getString();
         title = ChatUi.truncate(font, title, w - 28, ChatLayout.TEXT_SCALE);
-        ChatUi.text(g, font, title, x + (w - ChatUi.width(font, title, ChatLayout.TEXT_SCALE)) / 2,
-                y + 2, ChatLayout.TEXT_SCALE, FontPalette.title());
+        int headerTextY = y + (ChatLayout.HEADER_HEIGHT - ChatUi.lineHeight(font, ChatLayout.TEXT_SCALE)) / 2;
+        ChatUi.centeredText(g, font, title, x + w / 2f,
+                headerTextY, ChatLayout.TEXT_SCALE, FontPalette.title());
         int plusX = x + w - 10;
-        addContactHovered = GuiUtil.hit(mouseX, mouseY, plusX - 2, y, 13, 13);
-        ChatUi.icon(g, ChatUi.Icon.PLUS, plusX, y + 1,
+        addContactHovered = ChatLayout.hit(mouseX, mouseY, plusX - 2, y,
+                12, ChatLayout.HEADER_HEIGHT);
+        // 恢复原来的透明图标入口，不给加号额外套框。
+        ChatUi.icon(g, ChatUi.Icon.PLUS, plusX,
+                y + (ChatLayout.HEADER_HEIGHT - ChatLayout.ICON_SIZE) / 2,
                 addContactHovered ? FontPalette.title() : FontPalette.link());
-        y += 16;
+        y += ChatLayout.HEADER_HEIGHT + ChatLayout.SECTION_GAP;
         // 搜索仅预留外观位置，不接受输入，不过滤会话。
-        g.fill(x, y, x + w, y + 14, PhoneTheme.COLOR_CHAT_INPUT_BG);
-        String search = Component.translatable("mcphone.chat.layout.search").getString();
-        int searchW = ChatUi.width(font, search, ChatLayout.TEXT_SCALE);
-        int searchX = x + (w - searchW - 13) / 2;
-        ChatUi.icon(g, ChatUi.Icon.SEARCH, searchX, y + 2, FontPalette.dim());
-        ChatUi.text(g, font, search, searchX + 13, y + 3, ChatLayout.TEXT_SCALE, FontPalette.dim());
-        y += 18;
-        g.fill(x, y, x + w, y + 1, PhoneTheme.COLOR_DIVIDER);
-        return y + 4;
+        ChatUi.glass(g, ChatGlass.Surface.SEARCH, x, y, w, ChatLayout.SEARCH_HEIGHT, false);
+        String search = ChatUi.truncate(font, Component.translatable("mcphone.chat.layout.search").getString(),
+                w - ChatLayout.SEARCH_TEXT_X - ChatLayout.SEARCH_PAD_X, ChatLayout.META_SCALE);
+        ChatUi.sizedIcon(g, ChatUi.Icon.SEARCH, x + ChatLayout.SEARCH_PAD_X,
+                y + (ChatLayout.SEARCH_HEIGHT - ChatLayout.SEARCH_ICON_SIZE) / 2,
+                ChatLayout.SEARCH_ICON_SIZE, FontPalette.dim());
+        ChatUi.text(g, font, search, x + ChatLayout.SEARCH_TEXT_X,
+                y + (ChatLayout.SEARCH_HEIGHT - ChatUi.lineHeight(font, ChatLayout.META_SCALE)) / 2,
+                ChatLayout.META_SCALE, FontPalette.dim());
+        return y + ChatLayout.SEARCH_HEIGHT + ChatLayout.SECTION_GAP;
     }
 
     private void renderTabs(GuiGraphics g, Font font, int x, int y, int w, int mx, int my) {
-        g.fill(x, y, x + w, y + ChatLayout.TAB_HEIGHT, PhoneTheme.COLOR_CHAT_INPUT_BG);
-        g.fill(x, y, x + w, y + 1, PhoneTheme.COLOR_DIVIDER);
-        contactsTabHovered = GuiUtil.hit(mx, my, x + w / 4, y, w / 4, ChatLayout.TAB_HEIGHT);
+        ChatUi.glass(g, ChatGlass.Surface.NAVIGATION, x, y, w, ChatLayout.TAB_HEIGHT, false);
+        contactsTabHovered = ChatLayout.hit(mx, my, x + w / 4, y,
+                w * 2 / 4 - w / 4, ChatLayout.TAB_HEIGHT);
         for (int i = 0; i < TAB_KEYS.length; i++) {
             int left = x + w * i / 4;
             int right = x + w * (i + 1) / 4;
-            int color = i == 0 ? PhoneTheme.FONT_COLOR_CHAT_SEND
+            float centerX = (left + right) / 2f;
+            int color = i == 0 ? ChatUi.accent()
                     : (i == 1 ? FontPalette.body() : FontPalette.dim());
-            ChatUi.icon(g, TAB_ICONS[i], (left + right - 9) / 2, y + 3, color);
+            ChatUi.centeredIcon(g, TAB_ICONS[i], centerX,
+                    y + ChatLayout.TAB_ICON_TOP, color);
             String label = ChatUi.truncate(font,
                     Component.translatable("mcphone.chat.layout." + TAB_KEYS[i]).getString(),
-                    right - left - 2, ChatLayout.META_SCALE);
-            ChatUi.text(g, font, label, (left + right - ChatUi.width(font, label, ChatLayout.META_SCALE)) / 2,
-                    y + 15, ChatLayout.META_SCALE, color);
+                    right - left - 2, ChatLayout.TAB_LABEL_SCALE);
+            ChatUi.centeredText(g, font, label, centerX,
+                    y + ChatLayout.TAB_LABEL_TOP, ChatLayout.TAB_LABEL_SCALE, color);
+            if (i == 0) {
+                int underlineW = Math.min(16, right - left - 4);
+                int underlineX = Math.round(centerX - underlineW / 2f);
+                g.fill(underlineX, y + ChatLayout.TAB_HEIGHT - 1,
+                        underlineX + underlineW, y + ChatLayout.TAB_HEIGHT, color);
+            }
         }
     }
 
@@ -193,64 +200,55 @@ public final class ChatList {
             if (y + rowH > bottom) break;
 
             ConversationSummary c = list.get(i);
-            boolean hovered = mouseX >= x && mouseX <= x + w && mouseY >= y && mouseY < y + rowH;
-            if (hovered) {
-                hoveredPeer = c.id();
-                g.fill(x, y, x + w, y + rowH, COLOR_ROW_HOVER);
-            }
+            boolean hovered = ChatLayout.hit(mouseX, mouseY, x, y, w, rowH);
+            if (hovered) hoveredPeer = c.id();
+            ChatUi.glass(g, ChatGlass.Surface.CARD, x, y, w, rowH, hovered);
 
             if (renderRow(g, font, c, x, y, w, mouseX, mouseY)) teleportHoveredPeer = c.id();
-            y += rowH;
+            y += rowH + ChatLayout.CARD_GAP;
         }
     }
 
     /** 返回鼠标是否停在这一行的传送图标上 */
     private boolean renderRow(GuiGraphics g, Font font, ConversationSummary c,
                               int x, int y, int w, int mouseX, int mouseY) {
-        int avatarY = y + (rowHeight(font) - AVATAR_SIZE) / 2;
-        PlayerAvatar.drawWithStatus(g, c.id(), x, avatarY, AVATAR_SIZE, c.online());
-
-        // 时间始终在右侧，未读移到头像右上角，避免把时间挤掉。
+        // 时间在右上、未读在右下；头像不再被数字压住。
         String right = GuiUtil.formatTime(c.lastTime());
         int rightW = ChatUi.width(font, right, ChatLayout.META_SCALE);
-
-        int nameX = x + AVATAR_SIZE + AVATAR_GAP;
-        int nameMaxW = w - (nameX - x) - rightW - 4;
-        String name = ChatUi.truncate(font, c.name(), nameMaxW, ChatLayout.TEXT_SCALE);
-        ChatUi.text(g, font, name, nameX, y + 3, ChatLayout.TEXT_SCALE, colorName());
-
         // 传送图标只给在线的人。这里读的是【服务端】的开关 —— 它读得到，靠的是加载器
         // 把 SERVER 档的配置推给客户端；哪些目标做得到，见 versions/targets.json 的
         // server_config_sync。读错了只是图标显隐不对，真正的拦截在 TeleportService。
-        // 位置先算、图最后画：第二行预览要按它让出的宽度截断
         boolean canTeleport = c.online() && ServerConfig.allowFriendTeleport();
-        int secondLineY = y + 12;
-        int tpW = 0;
-        int tpX = 0;
-        int tpY = 0;
-        boolean tpHovered = false;
-        if (canTeleport) {
-            // 往里缩 TP_HIT_PAD：悬停高亮铺的是点击区，贴边会凸出整行高亮
-            tpW = TP_ICON_SIZE + TP_HIT_PAD + TP_GAP;
-            tpX = x + w - TP_ICON_SIZE - TP_HIT_PAD;
-            tpY = secondLineY;
-            tpHovered = GuiUtil.hit(mouseX, mouseY,
-                    tpX - TP_HIT_PAD, tpY - TP_HIT_PAD,
-                    TP_ICON_SIZE + TP_HIT_PAD * 2, TP_ICON_SIZE + TP_HIT_PAD * 2);
-        }
+        String unread = c.unread() > 0 ? unreadLabel(c.unread()) : "";
+        int badgeW = unread.isEmpty() ? 0 : Math.max(ChatLayout.UNREAD_HEIGHT, UnreadBadge.width(font, unread));
+        var layout = ChatLayout.card(w, ChatUi.lineHeight(font, ChatLayout.TEXT_SCALE),
+                ChatUi.lineHeight(font, ChatLayout.META_SCALE), rightW, badgeW, canTeleport);
+        var frame = layout.avatarFrame();
+        ChatUi.glass(g, ChatGlass.Surface.AVATAR, x + frame.x(), y + frame.y(),
+                frame.width(), frame.height(), false);
+        PlayerAvatar.draw(g, c.id(), x + frame.x() + ChatLayout.AVATAR_FRAME,
+                y + frame.y() + ChatLayout.AVATAR_FRAME, AVATAR_SIZE);
+        // 小状态方点落在外框边角，不再用一大块黑色描边遮住脸部。
+        int dot = ChatLayout.AVATAR_STATUS_SIZE;
+        int dotX = x + frame.x() + frame.width() - dot;
+        int dotY = y + frame.y() + frame.height() - dot;
+        g.fill(dotX, dotY, dotX + dot, dotY + dot,
+                c.online() ? PlayerAvatar.COLOR_ONLINE : PlayerAvatar.COLOR_OFFLINE);
+
+        int nameX = x + layout.textX();
+        String name = ChatUi.truncate(font, c.name(), layout.nameWidth(), ChatLayout.TEXT_SCALE);
+        ChatUi.text(g, font, name, nameX, y + layout.nameY(), ChatLayout.TEXT_SCALE, colorName());
+        boolean tpHovered = canTeleport && layout.teleportHit().contains(mouseX - x, mouseY - y);
 
         if (!right.isEmpty()) {
-            int rx = x + w - rightW;
-            ChatUi.text(g, font, right, rx, y + 3, ChatLayout.META_SCALE, colorTime());
+            ChatUi.text(g, font, right, x + layout.timeX(), y + layout.timeY(), ChatLayout.META_SCALE, colorTime());
         }
         if (c.unread() > 0) {
-            String unread = unreadLabel(c.unread());
-            int badgeW = ChatUi.width(font, unread, ChatLayout.META_SCALE) + 4;
-            int badgeX = x + AVATAR_SIZE - badgeW + 2;
-            PhoneSkin.drawOrFill(g, PhoneSkin.Element.UNREAD_BADGE,
-                    badgeX, avatarY - 2, badgeW, 8, COLOR_UNREAD_BG);
-            ChatUi.text(g, font, unread, badgeX + 2, avatarY - 1,
-                    ChatLayout.META_SCALE, PhoneTheme.FONT_COLOR_BADGE);
+            var badge = layout.unread();
+            ChatUi.glass(g, ChatGlass.Surface.BADGE, x + badge.x(), y + badge.y(),
+                    badge.width(), badge.height(), false);
+            UnreadBadge.label(g, font, unread, x + badge.x() + badge.width() / 2f,
+                    y + badge.y() + badge.height() / 2f, ChatLayout.META_SCALE, 0xFFFFF7FB);
         }
 
         // 第二行：消息预览，停在传送图标上时改说传送提示
@@ -266,11 +264,9 @@ public final class ChatList {
                     : Component.translatable("mcphone.chat.no_message").getString();
             previewColor = colorPreview();
         }
-        ChatUi.text(g, font, ChatUi.truncate(font, preview, w - (nameX - x) - tpW, ChatLayout.META_SCALE),
-                nameX, secondLineY, ChatLayout.META_SCALE, previewColor);
+        ChatUi.preview(g, font, preview, nameX, y + layout.previewY(), layout.previewWidth(), previewColor);
 
-        if (canTeleport) renderTeleportIcon(g, font, tpX, tpY, tpHovered);
-        g.fill(nameX, y + rowHeight(font) - 1, x + w, y + rowHeight(font), PhoneTheme.COLOR_DIVIDER_FAINT);
+        if (canTeleport) renderTeleportIcon(g, font, x, y, layout, tpHovered);
 
         return tpHovered;
     }
@@ -311,21 +307,20 @@ public final class ChatList {
 
     /** 传送图标：悬停先铺高亮，再画贴图，没有贴图就画 → 字符兜底 */
     private static void renderTeleportIcon(GuiGraphics g, Font font,
-                                           int x, int y, boolean hovered) {
-        if (hovered) {
-            g.fill(x - TP_HIT_PAD, y - TP_HIT_PAD,
-                    x + TP_ICON_SIZE + TP_HIT_PAD, y + TP_ICON_SIZE + TP_HIT_PAD,
-                    PhoneTheme.COLOR_HOVER_STRONG);
+                                           int x, int y, ChatLayout.Card layout, boolean hovered) {
+        var hit = layout.teleportHit();
+        // 操作底板和数字角标同高、同中心，不另画白色悬停块。
+        ChatUi.glass(g, ChatGlass.Surface.BUTTON, x + hit.x(), y + hit.y(), hit.width(), hit.height(), hovered);
+        g.pose().pushPose();
+        try {
+            g.pose().translate(x + layout.teleportX(), y + layout.teleportY(), 0);
+            if (!PhoneSkin.draw(g, PhoneSkin.Element.CHAT_TELEPORT, 0, 0, TP_ICON_SIZE, TP_ICON_SIZE)) {
+                ChatUi.centeredText(g, font, "→", TP_ICON_SIZE / 2f, 0, ChatLayout.TEXT_SCALE,
+                        hovered ? FontPalette.title() : FontPalette.link());
+            }
+        } finally {
+            g.pose().popPose();
         }
-
-        if (PhoneSkin.draw(g, PhoneSkin.Element.CHAT_TELEPORT,
-                x, y, TP_ICON_SIZE, TP_ICON_SIZE)) {
-            return;
-        }
-
-        String glyph = "→";
-        g.drawString(font, glyph, x + (TP_ICON_SIZE - font.width(glyph)) / 2, y,
-                hovered ? FontPalette.title() : FontPalette.link(), false);
     }
 
     private void maybeRefresh() {
@@ -337,12 +332,12 @@ public final class ChatList {
     }
 
     private static int rowHeight(Font font) {
-        return Math.max(AVATAR_SIZE + 6, ChatUi.lineHeight(font, ChatLayout.TEXT_SCALE)
-                + ChatUi.lineHeight(font, ChatLayout.META_SCALE) + 9);
+        return ChatLayout.cardHeight(ChatUi.lineHeight(font, ChatLayout.TEXT_SCALE),
+                ChatUi.lineHeight(font, ChatLayout.META_SCALE));
     }
 
     private void clampScroll(int total, int availableHeight, Font font) {
-        int visible = Math.max(1, availableHeight / rowHeight(font));
+        int visible = ChatLayout.visibleCards(availableHeight, rowHeight(font));
         int maxOffset = Math.max(0, total - visible);
         if (scrollOffset > maxOffset) scrollOffset = maxOffset;
         if (scrollOffset < 0) scrollOffset = 0;

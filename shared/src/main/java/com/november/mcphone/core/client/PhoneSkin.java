@@ -102,7 +102,7 @@ public final class PhoneSkin {
         /** 对方发来的聊天气泡底。拉伸方式同 {@link #CHAT_BUBBLE_SELF} */
         CHAT_BUBBLE_PEER("chat/bubble_peer", "chat_bubble_peer"),
 
-        /** 会话界面底部输入框的底。按设备宽度自适应，高 18；mcphone_skin.border 可保留边角 */
+        /** 会话界面底部输入框的底。按设备宽度自适应，高 12；mcphone_skin.border 可保留边角 */
         CHAT_INPUT_BAR("chat/input_bar", "chat_input_bar"),
 
         /** 会话列表在线好友行的"传送"小图标。建议 7×7，按实际绘制尺寸画（不做平滑缩放）；缺图时画 → 字符 */
@@ -110,6 +110,18 @@ public final class PhoneSkin {
 
         /** 会话界面输入栏右边的「+」（空白输入时点开图片 / 表情）。建议 9×9；缺图时画圆圈加号 */
         CHAT_ATTACH("chat/attach", "chat_attach"),
+
+        /** 聊天界面的 24×24 透明图标，资源包可按同一路径覆盖；白色源图允许界面着色。 */
+        CHAT_TAB_MESSAGE("chat/ui/message"),
+        CHAT_TAB_CONTACTS("chat/ui/contact"),
+        CHAT_TAB_DISCOVER("chat/ui/compass"),
+        CHAT_TAB_PROFILE("chat/ui/user"),
+        CHAT_SEARCH("chat/ui/search"),
+        /** 用户提供的 96×96 抗锯齿透明图标，按现有逻辑尺寸绘制并着色。 */
+        CHAT_BACK("chat/ui/back"),
+        CHAT_MORE("chat/ui/more"),
+        CHAT_SMILE("chat/ui/smile"),
+        CHAT_VOICE("chat/ui/voice"),
 
         /** 收到消息的通知底。建议 160×32（原版通知槽位尺寸） */
         TOAST_BG("phone/toast", "toast_bg"),
@@ -242,16 +254,45 @@ public final class PhoneSkin {
     }
 
     /** 一张已确认存在的贴图及其真实尺寸 */
-    private record SkinTexture(ResourceLocation location, int width, int height, int border) {}
+    private record SkinTexture(ResourceLocation location, int width, int height, int border, int scale, Integer textColor) {}
+
+    record SkinMetadata(int border, int scale, Integer textColor) {
+        SkinMetadata(int border, int scale) { this(border, scale, null); }
+    }
+
+    /** scale 是源像素相对逻辑像素的倍率。旧包未写时仍为 1，不改变原有边角尺寸。 */
+    static SkinMetadata parseSkinMetadata(JsonObject json) {
+        int border = json.has("border") ? json.get("border").getAsInt() : 0;
+        int scale = json.has("scale") ? json.get("scale").getAsInt() : 1;
+        if (scale < 1 || scale > 16 || (json.has("scale") && json.get("scale").getAsDouble() != scale)) {
+            throw new IllegalArgumentException("scale 必须是 1～16 的整数");
+        }
+        Integer color = null;
+        if (json.has("text_color")) {
+            String hex = json.get("text_color").getAsString().replace("#", "");
+            if (hex.length() != 6 && hex.length() != 8) throw new IllegalArgumentException("text_color 需要六位 RGB 或八位 ARGB");
+            color = (int) Long.parseLong(hex, 16);
+            if (hex.length() == 6) color |= 0xFF000000;
+        }
+        return new SkinMetadata(border, scale, color);
+    }
+
+    static SkinMetadata effectiveSkinMetadata(SkinMetadata metadata, boolean samePack) {
+        // 旧资源包可能只覆盖 PNG，继承到本体的八倍 mcmeta；不能把它的普通图当八倍图缩小边角。
+        // 新 scale 属性随同一资源包的 PNG 与 mcmeta 一起声明；旧 border 单独覆盖仍照常生效。
+        if (samePack) return metadata;
+        return metadata.scale() > 1 ? new SkinMetadata(metadata.border() / metadata.scale(), 1)
+                : new SkinMetadata(metadata.border(), metadata.scale());
+    }
 
     /** 可选的源像素边宽；未声明时沿用旧资源包的整张拉伸行为。 */
-    private static final MetadataSectionSerializer<Integer> SKIN_METADATA = new MetadataSectionSerializer<>() {
+    private static final MetadataSectionSerializer<SkinMetadata> SKIN_METADATA = new MetadataSectionSerializer<>() {
         @Override
         public String getMetadataSectionName() { return "mcphone_skin"; }
 
         @Override
-        public Integer fromJson(JsonObject json) {
-            return json.has("border") ? json.get("border").getAsInt() : 0;
+        public SkinMetadata fromJson(JsonObject json) {
+            return parseSkinMetadata(json);
         }
     };
 
@@ -274,13 +315,25 @@ public final class PhoneSkin {
         SkinTexture tex = resolve(element).orElse(null);
         if (tex == null) return false;
 
-        // 走 GuiUtil 而不是 g.blit：原版那条 blit 不开混合，半透明贴图会被当成不透明画
-        if (tex.border() > 0) {
-            GuiUtil.drawNineSlice(g, tex.location(), x, y, w, h, tex.width(), tex.height(), tex.border());
-        } else {
-            GuiUtil.drawTexture(g, tex.location(), x, y, w, h, tex.width(), tex.height());
-        }
+        drawTexture(g, tex, x, y, w, h);
         return true;
+    }
+
+    private static void drawTexture(GuiGraphics g, SkinTexture tex, int x, int y, int w, int h) {
+        // 八倍源图在八倍坐标绘制后缩回；九宫格边角因此仍是逻辑尺寸，不会跟长消息被拉大。
+        g.pose().pushPose();
+        try {
+            g.pose().translate(x, y, 0);
+            g.pose().scale(1f / tex.scale(), 1f / tex.scale(), 1f);
+            if (tex.border() > 0) {
+                GuiUtil.drawNineSlice(g, tex.location(), 0, 0, w * tex.scale(), h * tex.scale(),
+                        tex.width(), tex.height(), tex.border());
+            } else {
+                GuiUtil.drawTexture(g, tex.location(), 0, 0, w * tex.scale(), h * tex.scale(), tex.width(), tex.height());
+            }
+        } finally {
+            g.pose().popPose();
+        }
     }
 
     /**
@@ -329,7 +382,7 @@ public final class PhoneSkin {
         // 贴图自己声明了 border 就照它来 —— 那是【源图像素】，与聊天气泡那类 1× 贴图
         // 同一套规矩。资源包既然写了元数据，就该是它说了算，行为与从前一字不差
         if (tex.border() > 0) {
-            GuiUtil.drawNineSlice(g, tex.location(), x, y, w, h, tex.width(), tex.height(), tex.border());
+            drawTexture(g, tex, x, y, w, h);
             return true;
         }
 
@@ -341,6 +394,12 @@ public final class PhoneSkin {
     /** 这个元素有没有贴图。给贴图与兜底形状不一样的地方用（如相册删除键），画之前就要知道走哪一支 */
     public static boolean has(Element element) {
         return resolve(element).isPresent();
+    }
+
+    /** 浅色输入底需要深字；旧资源包未声明时仍用原来的白字，不猜测贴图颜色。 */
+    public static int textColor(Element element, int fallback) {
+        SkinTexture texture = resolve(element).orElse(null);
+        return texture != null && texture.textColor() != null ? texture.textColor() : fallback;
     }
 
     /** 画贴图；没有贴图则用兜底色填满同一区域 */
@@ -408,15 +467,26 @@ public final class PhoneSkin {
                 return Optional.empty();
             }
             int border = 0;
+            int scale = 1;
+            Integer textColor = null;
             try {
-                int requested = res.get().metadata().getSection(SKIN_METADATA).orElse(0);
+                SkinMetadata metadata = res.get().metadata().getSection(SKIN_METADATA)
+                        .orElse(new SkinMetadata(0, 1));
+                ResourceLocation metaLocation = ResourceLocation.fromNamespaceAndPath(
+                        loc.getNamespace(), loc.getPath() + ".mcmeta");
+                boolean samePack = mc.getResourceManager().getResource(metaLocation)
+                        .map(meta -> meta.sourcePackId().equals(res.get().sourcePackId())).orElse(false);
+                metadata = effectiveSkinMetadata(metadata, samePack);
+                int requested = metadata.border();
                 if (requested > 0 && requested <= (Math.min(size[0], size[1]) - 1) / 2) {
                     border = requested;
                 }
+                scale = metadata.scale();
+                textColor = metadata.textColor();
             } catch (Exception e) {
                 MCphone.LOGGER.warn("[MCphone] {} 的圆角元数据无效，使用整张拉伸: {}", loc, e.toString());
             }
-            return Optional.of(new SkinTexture(loc, size[0], size[1], border));
+            return Optional.of(new SkinTexture(loc, size[0], size[1], border, scale, textColor));
         } catch (Exception e) {
             MCphone.LOGGER.warn("[MCphone] 读取贴图 {} 失败: {}", loc, e.toString());
             return Optional.empty();

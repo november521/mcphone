@@ -1,6 +1,7 @@
 package com.november.mcphone.platform.client;
 
 import net.minecraft.client.Minecraft;
+import com.november.mcphone.core.client.RememberedPlayerSkins;
 import net.minecraft.client.multiplayer.PlayerInfo;
 import net.minecraft.client.resources.DefaultPlayerSkin;
 import net.minecraft.resources.ResourceLocation;
@@ -31,13 +32,37 @@ public final class PlayerSkins {
 
     private PlayerSkins() {}
 
-    /** 在线的取真皮肤，离线的退回默认皮肤。 */
+    private static final RememberedPlayerSkins<ResourceLocation> MEMORY = new RememberedPlayerSkins<>(512);
+    private static int ticksUntilRefresh;
+
+    /** 原版皮肤读取的版本差异只留在这一处。 */
+    private static ResourceLocation textureOf(PlayerInfo info) {
+        return info.getSkin().texture();
+    }
+
+    private static void bind(Minecraft mc) {
+        if (MEMORY.bindConnection(mc.getConnection())) ticksUntilRefresh = 0;
+    }
+
+    /** 每秒记住在线玩家资料，未打开聊天 App 时也可记住稍后下线的好友。 */
+    public static void tick() {
+        Minecraft mc = Minecraft.getInstance();
+        bind(mc);
+        if (mc.getConnection() == null || ticksUntilRefresh-- > 0) return;
+        ticksUntilRefresh = 19;
+        for (PlayerInfo info : mc.getConnection().getOnlinePlayers()) {
+            MEMORY.remember(info.getProfile().getId(), () -> textureOf(info));
+        }
+    }
+
+    /** 在线优先更新，好友下线后继续使用最近加载成功的皮肤。 */
     public static ResourceLocation faceTexture(UUID player) {
         Minecraft mc = Minecraft.getInstance();
+        bind(mc);
         if (mc.getConnection() != null) {
             PlayerInfo info = mc.getConnection().getPlayerInfo(player);
-            if (info != null) return info.getSkin().texture();
+            if (info != null) MEMORY.remember(player, () -> textureOf(info));
         }
-        return DefaultPlayerSkin.get(player).texture();
+        return MEMORY.resolve(player, DefaultPlayerSkin.get(player).texture());
     }
 }

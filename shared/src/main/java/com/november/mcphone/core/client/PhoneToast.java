@@ -51,7 +51,6 @@ public final class PhoneToast implements Toast {
     private static final int COLOR_BORDER = PhoneTheme.COLOR_TOAST_BORDER;
     private static final int COLOR_NAME = PhoneTheme.FONT_COLOR_TOAST_TITLE;
     private static final int COLOR_TEXT = PhoneTheme.FONT_COLOR_TOAST;
-    private static final int COLOR_BADGE_BG = PhoneTheme.COLOR_UNREAD_BADGE;
 
     private final UUID sender;
     private final String senderName;
@@ -122,17 +121,14 @@ public final class PhoneToast implements Toast {
         int textW = WIDTH - textX - PAD;
 
         // 有多条时右上角留出角标的位置，名字不能压到它
-        int badgeW = count > 1 ? font.width(countLabel()) + 4 : 0;
+        int badgeW = count > 1 ? UnreadBadge.width(font, countLabel()) : 0;
         g.drawString(font, GuiUtil.truncate(font, senderName, textW - badgeW - 2),
                 textX, 7, COLOR_NAME, false);
         g.drawString(font, GuiUtil.truncate(font, text, textW), textX, 18, COLOR_TEXT, false);
 
         if (count > 1) {
             int badgeX = WIDTH - PAD - badgeW;
-            // 与会话列表的未读角标共用贴图，换肤时两处一致
-            PhoneSkin.drawOrFill(g, PhoneSkin.Element.UNREAD_BADGE,
-                    badgeX, 6, badgeW, font.lineHeight + 1, COLOR_BADGE_BG);
-            g.drawString(font, countLabel(), badgeX + 2, 7, COLOR_NAME, false);
+            UnreadBadge.draw(g, font, countLabel(), badgeX, 7);
         }
 
         // 原版按显示时长的倍率缩放，玩家在设置里调过通知时间就该跟着变

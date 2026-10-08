@@ -81,6 +81,7 @@ public class MCphoneClient implements ClientModInitializer {
         ClientTicks.onEndTick(com.november.mcphone.feature.reader.client.ReaderKeyHandler::tick);
         ClientTicks.onEndTick(LocalPlayback::tick);
         ClientTicks.onEndTick(ChatImageSender::tick);
+        ClientTicks.onEndTick(com.november.mcphone.platform.client.PlayerSkins::tick);
         // 快门与退出键由 CameraHandler 在 tick 末尾消费。只注册下面的 HUD 回调会让
         // 按键设置里看得到 V / X，却没有任何代码读取按下次数，两个键因而完全失效。
         ClientTicks.onEndTick(CameraHandler::onClientTick);

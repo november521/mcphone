@@ -29,7 +29,7 @@ public final class ChatAddContact {
 
     private static final long REFRESH_INTERVAL_MS = 3000L;
 
-    private static final int AVATAR_SIZE = 16;
+    private static final int AVATAR_SIZE = ChatLayout.AVATAR_SIZE;
 
     private static final int AVATAR_GAP = 3;
 
@@ -65,15 +65,16 @@ public final class ChatAddContact {
         final int x = phoneLeft + PAD;
         final int w = screenW - PAD * 2;
         final int bottom = phoneTop + screenH - navH;
-        int y = phoneTop + statusH + 4;
+        int y = phoneTop + statusH + ChatLayout.TOP_GAP;
 
         String title = ChatUi.truncate(font, Component.translatable("mcphone.chat.add_contact").getString(),
                 w, ChatLayout.TEXT_SCALE);
         ChatUi.text(g, font, title, x + (w - ChatUi.width(font, title, ChatLayout.TEXT_SCALE)) / 2,
-                y, ChatLayout.TEXT_SCALE, FontPalette.title());
-        y += ChatUi.lineHeight(font, ChatLayout.TEXT_SCALE) + 6;
+                y + (ChatLayout.HEADER_HEIGHT - ChatUi.lineHeight(font, ChatLayout.TEXT_SCALE)) / 2,
+                ChatLayout.TEXT_SCALE, FontPalette.title());
+        y += ChatLayout.HEADER_HEIGHT;
         g.fill(x, y, x + w, y + 1, PhoneTheme.COLOR_DIVIDER);
-        y += 4;
+        y += ChatLayout.SECTION_GAP;
 
         List<OnlinePlayer> players = ChatClientCache.getOnlinePlayers();
 

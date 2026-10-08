@@ -139,6 +139,7 @@ public final class ChatImageSender {
     private static final long COOLDOWN_MS = 2_000L;
 
     private static long sendingSince;
+    private static final ChatUploadSession SESSION = new ChatUploadSession();
 
     /** 冷却到期的时刻 */
     private static long readyAt;
@@ -149,13 +150,13 @@ public final class ChatImageSender {
     /** 这会儿有一张正在发，或者刚发完还在冷却。再点的会排队，见 {@link #send} */
     public static boolean isBusy() {
         long now = System.currentTimeMillis();
+        expireUpload(now);
+        return sendingSince != 0L || now < readyAt;
+    }
 
-        if (sendingSince != 0L) {
-            if (now - sendingSince <= SEND_TIMEOUT_MS) return true;
-            // 服务端拒收时不会有回声（拒收的理由它已经单独说过了），不能让界面永远卡在"发送中"
-            finish();
-        }
-        return now < readyAt;
+    private static void expireUpload(long now) {
+        // 服务端拒收时没有回声；慢压缩完成前也可能已超时，不能靠页面是否仍在查询来判断。
+        if (sendingSince != 0L && now - sendingSince > SEND_TIMEOUT_MS) finish();
     }
 
     /** 队伍也满了，这一下真的收不下。界面据此把「+」画成灰的并且点不动 */
@@ -203,6 +204,9 @@ public final class ChatImageSender {
 
     /** 真的开始发这一张：压缩在后台，发包回渲染线程 */
     private static void start(UUID peer, Path photo) {
+        var connection = Minecraft.getInstance().getConnection();
+        if (connection == null) return;
+        var ticket = SESSION.start(connection);
         sendingSince = System.currentTimeMillis();
         pendingPng = null;
 
@@ -221,7 +225,7 @@ public final class ChatImageSender {
                 attempt = Attempt.failed("mcphone.chat.image_unreadable");
             }
             Attempt done = attempt;
-            Minecraft.getInstance().execute(() -> upload(peer, done));
+            Minecraft.getInstance().execute(() -> upload(peer, ticket, done));
         });
     }
 
@@ -388,18 +392,16 @@ public final class ChatImageSender {
     }
 
     /** 切片发上去。在渲染线程 */
-    private static void upload(UUID peer, Attempt attempt) {
+    private static void upload(UUID peer, ChatUploadSession.Ticket ticket, Attempt attempt) {
+        expireUpload(System.currentTimeMillis());
+        // clear、超时或新上传都能让旧结果失效；只看非空连接会把旧服务器的任务发到新服务器。
+        if (!SESSION.accepts(ticket, Minecraft.getInstance().getConnection())) return;
         ImageCodec.Encoded encoded = attempt.encoded();
         if (encoded == null) {
             tell(attempt.failureKey());
             finish();
             return;
         }
-        if (Minecraft.getInstance().getConnection() == null) {
-            finish();   // 压缩那会儿工夫里断线了
-            return;
-        }
-
         byte[] png = encoded.png();
         int chunkCount = (png.length + ChatImage.CHUNK_BYTES - 1) / ChatImage.CHUNK_BYTES;
 
@@ -445,6 +447,7 @@ public final class ChatImageSender {
      * 压好的字节留着（{@link #ENCODED}）——那只跟文件有关，跟在哪个服务器无关。
      */
     public static void clear() {
+        SESSION.cancel();
         sendingSince = 0L;
         pendingPng = null;
         readyAt = 0L;
@@ -453,6 +456,7 @@ public final class ChatImageSender {
 
     /** 一次上传就此结束（成了、超时了、或者压根没发出去），并开始冷却 */
     private static void finish() {
+        SESSION.cancel();
         sendingSince = 0L;
         pendingPng = null;
         readyAt = System.currentTimeMillis() + COOLDOWN_MS;

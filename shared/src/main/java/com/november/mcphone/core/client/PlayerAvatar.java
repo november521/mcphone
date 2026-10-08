@@ -11,24 +11,19 @@ import java.util.UUID;
  *
  * 皮肤从哪来
  *
- * 在线玩家走 Tab 玩家列表（{@link PlayerInfo}）。那是客户端唯一持有
+ * 在线玩家走 Tab 玩家列表。那是客户端持有
  * 别人皮肤的地方，不受维度与视距限制——好友在下界、在几千格外都照样
  * 显示，因为玩家列表本来就是全服共享的。绘制用原版
  * {@link PlayerFaceRenderer}，与 Tab 列表同一个类，帽子层一并画上。
  *
- * 离线玩家【没有】真皮肤：他们压根不在玩家列表里，客户端手上只剩一个
- * UUID。这时退回原版按 UUID 算出的默认皮肤，也就是 Steve 或 Alex，
- * 与在别处遇到无皮肤玩家时是同一个效果。
+ * 玩家下线后由 PlayerSkins 保留最近见过的资料与已加载皮肤，不再直接退回默认头像。
+ * 尚未见过资料的离线 UUID 才使用原版默认皮肤。下载和贴图注册仍由原版皮肤管理器负责。
  *
- * 想让离线好友也显示真皮肤，得拿 UUID 异步查会话服务器再缓存一份，
- * 而离线模式的服务器上根本查不到。不值得为此把一个纯渲染的工具类
- * 变成带网络请求和缓存失效的东西。
- *
- * 尺寸只用 8 的整数倍
+ * 尺寸优先用 8 的整数倍
  *
  * 皮肤的头部区域是 8×8 像素。放大到 16、24 这样的整数倍，每个源像素
  * 恰好对应等大的方块，边缘锐利；放成 12 这种 1.5 倍，采样会让有的
- * 像素占 2 点、有的占 1 点，看上去毛糙。
+ * 像素占 2 点、有的占 1 点。聊天页为了给文字让出空间使用 12；仍按最近邻显示，不引入平滑模糊。
  */
 public final class PlayerAvatar {
 
@@ -58,9 +53,11 @@ public final class PlayerAvatar {
                                       int x, int y, int size, boolean online) {
         draw(g, player, x, y, size);
 
-        int dx = x + size - DOT_SIZE;
-        int dy = y + size - DOT_SIZE;
-        g.fill(dx - 1, dy - 1, dx + DOT_SIZE + 1, dy + DOT_SIZE + 1, COLOR_DOT_OUTLINE);
-        g.fill(dx, dy, dx + DOT_SIZE, dy + DOT_SIZE, online ? COLOR_ONLINE : COLOR_OFFLINE);
+        // 小头像的状态点也随之收紧；原有 16 像素头像仍是 4 像素状态点。
+        int dot = Math.min(DOT_SIZE, Math.max(2, size / 4));
+        int dx = x + size - dot;
+        int dy = y + size - dot;
+        g.fill(dx - 1, dy - 1, dx + dot + 1, dy + dot + 1, COLOR_DOT_OUTLINE);
+        g.fill(dx, dy, dx + dot, dy + dot, online ? COLOR_ONLINE : COLOR_OFFLINE);
     }
 }
