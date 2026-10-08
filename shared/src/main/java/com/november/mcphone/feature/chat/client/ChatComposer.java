@@ -81,6 +81,8 @@ final class ChatComposer {
     }
 
     void blur() { setFocused(false); }
+    /** 打开消息操作时关闭附件弹层，避免同一页叠着两个菜单。 */
+    void dismissAttachmentMenu() { attachMenuOpen = false; attachHovered = null; }
     private void setFocused(boolean focused) {
         inputFocused = focused;
         if (box != null) box.setFocused(focused);

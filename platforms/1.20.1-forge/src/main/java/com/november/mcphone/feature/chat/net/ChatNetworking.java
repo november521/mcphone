@@ -7,6 +7,8 @@ import com.november.mcphone.feature.chat.ChatImageUploads;
 import com.november.mcphone.feature.chat.ChatDelivery;
 import com.november.mcphone.feature.chat.ChatMessage;
 import com.november.mcphone.feature.chat.ChatService;
+import com.november.mcphone.feature.chat.ChatMessageDeletionService;
+import com.november.mcphone.feature.chat.ChatDeletionResult;
 import com.november.mcphone.feature.chat.ChatOutcome;
 import com.november.mcphone.feature.chat.ImageOutcome;
 import com.november.mcphone.feature.chat.TeleportService;
@@ -59,6 +61,11 @@ public final class ChatNetworking {
                 SyncMessagesPacket::decode,
                 ChatNetworking::handleSyncMessages
         );
+
+        MCphoneNetwork.registerToServer(DeleteChatMessagePacket.class, DeleteChatMessagePacket::encode,
+                DeleteChatMessagePacket::decode, ChatNetworking::handleDeleteMessage);
+        MCphoneNetwork.registerToClient(ChatMessageDeleteResultPacket.class, ChatMessageDeleteResultPacket::encode,
+                ChatMessageDeleteResultPacket::decode, ChatNetworking::handleDeleteResult);
 
         MCphoneNetwork.registerToServer(
                 MarkReadPacket.class,
@@ -160,6 +167,22 @@ public final class ChatNetworking {
         List<ChatMessage> messages = ChatService.getMessages(player, packet.peer());
         ChatService.markRead(player, packet.peer());
         MCphoneNetwork.sendToPlayer(player, new SyncMessagesPacket(packet.peer(), messages));
+    }
+
+    /** 删除成功先同步权威快照，再确认操作；限流失败也回结果，不让界面永久等待。 */
+    private static void handleDeleteMessage(DeleteChatMessagePacket packet, ServerPlayer player) {
+        var result = RequestThrottle.allow(player, RequestThrottle.Kind.CHAT_DELETE)
+                ? ChatMessageDeletionService.delete(player, packet.peer(), packet.messageId())
+                : ChatDeletionResult.BUSY;
+        if (result == ChatDeletionResult.OK) {
+            MCphoneNetwork.sendToPlayer(player, new SyncMessagesPacket(packet.peer(), ChatService.getMessages(player, packet.peer())));
+            MCphoneNetwork.sendToPlayer(player, new SyncConversationsPacket(ChatService.buildConversations(player)));
+        }
+        MCphoneNetwork.sendToPlayer(player, new ChatMessageDeleteResultPacket(packet.peer(), packet.messageId(), packet.requestId(), result));
+    }
+
+    private static void handleDeleteResult(ChatMessageDeleteResultPacket packet) {
+        ChatClientCache.onDeleteResult(packet.peer(), packet.messageId(), packet.requestId(), packet.result());
     }
 
     /** 不回包：未读数随下一轮会话列表下发。不校验好友：写的只是自己的已读进度，构不成滥用 */

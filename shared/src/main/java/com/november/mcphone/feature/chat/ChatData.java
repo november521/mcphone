@@ -110,8 +110,11 @@ public class ChatData extends PhoneSavedData {
      * 未读只数对方发的，否则自己发一条就给自己涨一个红点。since 是本人对这个会话的已读时刻。
      */
     public Tail tail(UUID self, UUID peer, long since) {
-        List<ChatMessage> list = conversations.get(conversationKey(self, peer));
-        if (list == null || list.isEmpty()) return Tail.EMPTY;
+        return tail(getMessages(self, peer), peer, since);
+    }
+
+    public static Tail tail(List<ChatMessage> list, UUID peer, long since) {
+        if (list.isEmpty()) return Tail.EMPTY;
 
         int unread = 0;
         for (int i = list.size() - 1; i >= 0; i--) {
@@ -134,7 +137,7 @@ public class ChatData extends PhoneSavedData {
         return tag;
     }
 
-    private static ChatData load(CompoundTag tag) {
+    static ChatData load(CompoundTag tag) {
         Map<String, List<ChatMessage>> loaded = CONVERSATIONS_CODEC
                 .parse(NbtOps.INSTANCE, tag.get("conversations"))
                 .resultOrPartial(err -> MCphone.LOGGER.error("聊天记录读取失败: {}", err))
@@ -142,14 +145,19 @@ public class ChatData extends PhoneSavedData {
 
         // Codec 解出来的列表不可变，必须复制成可变的；读不懂的键跳过而不是抛，别为一条坏记录让全服起不来
         Map<ConversationKey, List<ChatMessage>> mutable = new HashMap<>();
+        boolean[] migrated = {false};
         loaded.forEach((k, v) -> {
             ConversationKey key = ConversationKey.parse(k);
             if (key == null) {
                 MCphone.LOGGER.warn("[MCphone] 跳过一条读不懂的会话键: {}", k);
                 return;
             }
-            mutable.put(key, new ArrayList<>(v));
+            var migration = ChatMessageIdentity.normalize(key, v);
+            migrated[0] |= migration.changed();
+            mutable.put(key, new ArrayList<>(migration.messages()));
         });
-        return new ChatData(mutable);
+        ChatData data = new ChatData(mutable);
+        if (migrated[0]) data.setDirty();
+        return data;
     }
 }

@@ -42,7 +42,8 @@ public final class ChatService {
             String name = resolveName(server, friends, peer, online);
             if (isOnline) friends.rememberName(peer, name);
 
-            ChatData.Tail tail = chat.tail(selfId, peer, read.getLastRead(peer));
+            ChatData.Tail tail = ChatData.tail(ChatDeletionData.get(server).visible(selfId, peer,
+                    chat.getMessages(selfId, peer)), peer, read.getLastRead(peer));
 
             out.add(tail.last() == null
                     ? ConversationSummary.empty(peer, name, isOnline)
@@ -129,7 +130,7 @@ public final class ChatService {
     public static boolean mayReadImage(ServerPlayer self, UUID peer, UUID imageId) {
         if (!FriendData.get(self.server).areFriends(self.getUUID(), peer)) return false;
 
-        for (ChatMessage m : ChatData.get(self.server).getMessages(self.getUUID(), peer)) {
+        for (ChatMessage m : getMessages(self, peer)) {
             if (m.body() instanceof ImageBody image && image.image().equals(imageId)) return true;
         }
         return false;
@@ -140,6 +141,11 @@ public final class ChatService {
         List<ChatMessage> evicted =
                 ChatData.get(sender.server).addMessage(sender.getUUID(), targetId, message);
 
+        if (!evicted.isEmpty()) {
+            var existing = ChatData.get(sender.server).getMessages(sender.getUUID(), targetId).stream()
+                    .map(ChatMessage::id).collect(java.util.stream.Collectors.toSet());
+            ChatDeletionData.get(sender.server).retain(sender.getUUID(), targetId, existing);
+        }
         for (ChatMessage old : evicted) {
             if (old.body() instanceof ImageBody image) {
                 deleteImageIfUnreferenced(sender.server, sender.getUUID(), targetId, image.image());
@@ -195,7 +201,8 @@ public final class ChatService {
     /** 非好友一律返回空，免得解除好友后还能翻旧账 */
     public static List<ChatMessage> getMessages(ServerPlayer self, UUID peer) {
         if (!FriendData.get(self.server).areFriends(self.getUUID(), peer)) return List.of();
-        return ChatData.get(self.server).getMessages(self.getUUID(), peer);
+        return ChatDeletionData.get(self.server).visible(self.getUUID(), peer,
+                ChatData.get(self.server).getMessages(self.getUUID(), peer));
     }
 
     /** 已读时刻由服务端盖章：采信客户端的话报一个未来时间就能让红点永远不出现 */

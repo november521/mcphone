@@ -44,6 +44,8 @@ final class ChatMessagePane {
     private int messageTop, messageBottom;
     private final ChatTextSelection selection = new ChatTextSelection();
     private final List<TextHit> textHits = new ArrayList<>();
+    private final List<MessageHit> messageHits = new ArrayList<>();
+    private record MessageHit(ChatMessage message, int x, int y, int width, int height) {}
     private double dragX, dragY;
     private record TextHit(Block block, int x, int y, int lineStep) {}
     private record ImageHit(UUID image, int x, int y, int w, int h) {}
@@ -56,6 +58,7 @@ final class ChatMessagePane {
         blocks = List.of();
         imageHits.clear();
         textHits.clear();
+        messageHits.clear();
         selection.clear();
         messageTop = messageBottom = 0;
         scroll.reset();
@@ -65,6 +68,15 @@ final class ChatMessagePane {
     boolean mouseScrolled(double amount) { return scroll.scroll(amount); }
     void clearSelection() { selection.clear(); }
     String selectedText() { return selection.selectedText(); }
+    String selectedText(UUID message) { return selection.owns(message) ? selection.selectedText() : ""; }
+    void prepareMenu(UUID message) { selection.release(); if (!selection.owns(message)) selection.clear(); }
+    ChatMessage messageAt(double mx, double my) {
+        if (my < messageTop || my >= messageBottom) return null;
+        for (var hit : messageHits) {
+            if (GuiUtil.hit(mx, my, hit.x(), hit.y(), hit.width(), hit.height())) return hit.message();
+        }
+        return null;
+    }
 
     boolean mouseClicked(double mx, double my) {
         selection.clear();
@@ -72,7 +84,7 @@ final class ChatMessagePane {
         for (TextHit hit : textHits) {
             Block b = hit.block();
             if (b.text().selectable() && GuiUtil.hit(mx, my, hit.x(), hit.y(), b.w(), b.h())) {
-                selection.begin(b.message(), b.text(), indexAt(hit, mx, my));
+                selection.begin(b.message().id(), b.text(), indexAt(hit, mx, my));
                 dragX = mx; dragY = my;
                 return true;
             }
@@ -95,7 +107,7 @@ final class ChatMessagePane {
 
     private void updateDrag() {
         for (TextHit hit : textHits) {
-            if (selection.owns(hit.block().message())) {
+            if (selection.owns(hit.block().message().id())) {
                 selection.extend(indexAt(hit, dragX, dragY));
                 return;
             }
@@ -138,6 +150,7 @@ final class ChatMessagePane {
         // 每帧重建：滚一下、来一条新消息，位置就全变了
         imageHits.clear();
         textHits.clear();
+        messageHits.clear();
         messageTop = top;
         messageBottom = bottom;
 
@@ -164,6 +177,8 @@ final class ChatMessagePane {
         // 完整几何先算一遍，拖出可见区仍归原消息；滚动/新消息后不使用上一帧的命中区。
         int rowY = y;
         for (Block b : blocks) {
+            if (b.type() != BlockType.STAMP) messageHits.add(new MessageHit(b.message(), bubbleX(b, x, w),
+                    rowY + b.placement().contentY(), b.w(), b.h()));
             if (b.type() == BlockType.TEXT) {
                 int bx = bubbleX(b, x, w);
                 textHits.add(new TextHit(b, bx, rowY + b.placement().contentY(),
@@ -222,7 +237,7 @@ final class ChatMessagePane {
     }
 
     private void renderSelection(GuiGraphics g, Font font, Block b, int bx, int y) {
-        if (!selection.owns(b.message()) || selection.start() == selection.end()) return;
+        if (!selection.owns(b.message().id()) || selection.start() == selection.end()) return;
         var origin = b.textOrigin();
         int step = ChatUi.lineHeight(font, ChatLayout.TEXT_SCALE);
         g.pose().pushPose();

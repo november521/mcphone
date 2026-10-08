@@ -66,7 +66,8 @@ public final class MCphoneNetwork {
     // "6"：S17 Stage 2 的握手下发（script_push 三个包）里，部署项加了 approvalRevision /
     // approvedAt 两个 varlong。字段格式变了一样要抬：旧客户端会把批准轴当动作表长度解码，
     // 结果是"解不开 → 握手批次永远收不齐 → 本服看起来没部署"。宁可拒绝连接给人话。
-    private static final String PROTOCOL_VERSION = "6";
+    // "7"：聊天消息增加稳定 ID，并注册个人删除请求与确认。
+    private static final String PROTOCOL_VERSION = "7";
 
     private static final SimpleChannel CHANNEL = NetworkRegistry.newSimpleChannel(
             ResourceLocation.fromNamespaceAndPath(MCphone.MODID, "main"),

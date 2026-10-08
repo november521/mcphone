@@ -451,5 +451,15 @@
   "mcphone.economy.emc_legacy.no_balance": "旧版钱包接口不提供读余额。",
   "mcphone.economy.scoreboard.unknown_player": "查不到这个玩家的名字（很久没上线，或者从没来过），计分板按名字记账，读不到他的分。",
   "mcphone.economy.no_such_currency": "这台服务器上没有这种货币（可能是服主改了配置）。",
-  "mcphone.economy.invalid_amount": "金额不对：没给，或者大得装不下。"
+  "mcphone.economy.invalid_amount": "金额不对：没给，或者大得装不下。",
+  "mcphone.chat.message_action.copy_message": "复制消息",
+  "mcphone.chat.message_action.copy_selection": "复制选中文字",
+  "mcphone.chat.message_action.delete_message": "删除消息",
+  "mcphone.chat.message_action.deleting": "删除处理中",
+  "mcphone.chat.message_action.timeout": "删除确认超时，请重新打开会话查看结果",
+  "mcphone.chat.message_action.not_found": "消息已不在当前记录中",
+  "mcphone.chat.message_action.busy": "操作过快，请稍后再试",
+  "mcphone.chat.message_action.forbidden": "无法删除这条消息",
+  "mcphone.chat.message_action.storage_error": "聊天记录存储异常，请联系服主检查",
+  "mcphone.chat.protocol_mismatch": "MCphone 聊天协议不兼容，请将客户端和服务端更新到同一版本"
 }
