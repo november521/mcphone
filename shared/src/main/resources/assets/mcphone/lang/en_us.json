@@ -164,7 +164,7 @@
   "mcphone.config.music_mode": "Loop Mode",
   "mcphone.config.music_volume": "Music Volume",
   "mcphone.music.empty": "Nothing here yet",
-  "mcphone.music.empty_hint": "Drop music into config/mcphone/music/ — %s supported",
+  "mcphone.music.empty_hint": "Open the folder above, add music, then tap Refresh. Supported: %s",
   "mcphone.music.disc.not_a_disc": "That is not a music disc",
   "mcphone.music.disc.insert_hint": "Insert a disc",
   "mcphone.music.disc.backpack_hint": "From your bag",

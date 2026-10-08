@@ -2,6 +2,7 @@ package com.november.mcphone.feature.music.client;
 
 import com.november.mcphone.core.client.ClientConfig;
 import com.november.mcphone.platform.client.DiscSongs;
+import com.november.mcphone.platform.client.SystemFiles;
 import com.november.mcphone.core.client.FontPalette;
 import com.november.mcphone.core.client.GuiUtil;
 import com.november.mcphone.core.client.PhoneSkin;
@@ -12,6 +13,7 @@ import com.november.mcphone.feature.music.Track;
 import com.november.mcphone.feature.music.client.playback.AudioDecoders;
 import com.november.mcphone.feature.music.client.playback.LocalPlayback;
 import com.november.mcphone.feature.music.client.source.MusicSources;
+import com.november.mcphone.feature.music.client.source.LocalFileSource;
 import com.november.mcphone.feature.music.net.DiscActionPacket;
 import com.november.mcphone.feature.music.net.OpenDiscBayPacket;
 import net.minecraft.client.gui.Font;
@@ -29,6 +31,9 @@ import java.util.List;
 public final class MusicPage {
 
     private static final int PAD = 4;
+
+    /** 标题栏的文字与两个快捷入口之间留出的空隙。 */
+    private static final int HEADER_GAP = 4;
 
     /** 一行曲目的高度：一行字加上下各 1 像素 */
     private static final int ROW_EXTRA = 2;
@@ -68,6 +73,7 @@ public final class MusicPage {
     private boolean barVisible;
 
     private boolean refreshHovered;
+    private boolean openFolderHovered;
 
     /** 播放条的上沿，滚轮判定要用 */
     private int barTop;
@@ -87,6 +93,8 @@ public final class MusicPage {
     public void open() {
         scrollOffset = 0;
         hoveredTrack = null;
+        refreshHovered = false;
+        openFolderHovered = false;
         MusicSources.refreshAll();
 
         // 唱片仓的真值在服务端，进来先要一份，否则会先显示上一次的快照
@@ -96,6 +104,8 @@ public final class MusicPage {
     /** 离开 App 刻意不停音乐；退出世界时才由 LocalPlayback.shutdown 收掉 */
     public void close() {
         hoveredTrack = null;
+        refreshHovered = false;
+        openFolderHovered = false;
     }
 
     public void render(GuiGraphics g, int phoneLeft, int phoneTop,
@@ -127,20 +137,26 @@ public final class MusicPage {
         if (barVisible) {
             renderBar(g, font, x, barTop, w, mouseX, mouseY);
         }
+        GuiUtil.drawFolderTooltip(g, font, openFolderHovered, x, phoneTop + statusH + 4, w);
     }
 
     private int renderHeader(GuiGraphics g, Font font, int x, int y, int w,
                              int mouseX, int mouseY) {
-        g.drawString(font, Component.translatable("mcphone.app.music").getString(),
-                x, y, FontPalette.title(), true);
+        int folderX = x + w - GuiUtil.FOLDER_BUTTON_SIZE;
+        openFolderHovered = GuiUtil.drawFolderButton(g, folderX, y, font.lineHeight, mouseX, mouseY);
 
+        // 刷新留在文件夹左边，按完整命中区留间距，避免两个入口互相抢点击。
         String refresh = Component.translatable("mcphone.music.refresh").getString();
         int rw = font.width(refresh);
-        int rx = x + w - rw - EDGE_INSET;
+        int rx = folderX - HEADER_GAP - HIT_PAD - rw;
         refreshHovered = GuiUtil.hit(mouseX, mouseY, rx - HIT_PAD, y - 2,
                 rw + HIT_PAD * 2, font.lineHeight + 4);
         g.drawString(font, refresh, rx, y,
                 refreshHovered ? FontPalette.title() : FontPalette.link(), false);
+
+        String title = GuiUtil.truncate(font, Component.translatable("mcphone.app.music").getString(),
+                rx - HIT_PAD - HEADER_GAP - x);
+        g.drawString(font, title, x, y, FontPalette.title(), true);
 
         y += font.lineHeight + 4;
         g.fill(x, y, x + w, y + 1, PhoneTheme.COLOR_DIVIDER);
@@ -240,7 +256,7 @@ public final class MusicPage {
                 x, y, FontPalette.subtle(), false);
         y += font.lineHeight + 2;
 
-        // 按词换行，硬截断会把路径截掉一半
+        // 按词换行，完整保留导入步骤和支持的格式。
         Component hint = Component.translatable("mcphone.music.empty_hint",
                 AudioDecoders.supportedNames());
         for (var line : font.split(hint, w)) {
@@ -375,6 +391,12 @@ public final class MusicPage {
 
     public boolean mouseClicked(double mx, double my, int button) {
         if (button != 0) return false;
+
+        if (openFolderHovered) {
+            // 音源负责目录的真值和创建，平台入口负责唤起文件管理器。
+            SystemFiles.openInFileManager(LocalFileSource.directory());
+            return true;
+        }
 
         if (refreshHovered) {
             MusicProblems.clearAll();
