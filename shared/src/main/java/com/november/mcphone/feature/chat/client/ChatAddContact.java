@@ -67,9 +67,11 @@ public final class ChatAddContact {
         final int bottom = phoneTop + screenH - navH;
         int y = phoneTop + statusH + 4;
 
-        g.drawString(font, Component.translatable("mcphone.chat.add_contact").getString(),
-                x, y, FontPalette.title(), true);
-        y += font.lineHeight + 4;
+        String title = ChatUi.truncate(font, Component.translatable("mcphone.chat.add_contact").getString(),
+                w, ChatLayout.TEXT_SCALE);
+        ChatUi.text(g, font, title, x + (w - ChatUi.width(font, title, ChatLayout.TEXT_SCALE)) / 2,
+                y, ChatLayout.TEXT_SCALE, FontPalette.title());
+        y += ChatUi.lineHeight(font, ChatLayout.TEXT_SCALE) + 6;
         g.fill(x, y, x + w, y + 1, PhoneTheme.COLOR_DIVIDER);
         y += 4;
 
@@ -77,17 +79,19 @@ public final class ChatAddContact {
 
         if (ChatClientCache.isOnlineListTruncated()) {
             for (var line : font.split(Component.translatable("mcphone.chat.truncated",
-                    players.size(), ChatClientCache.getTotalOnline()), w)) {
-                g.drawString(font, line, x, y, FontPalette.notice(), false);
-                y += font.lineHeight;
+                    players.size(), ChatClientCache.getTotalOnline()),
+                    ChatLayout.unscaledWidth(w, ChatLayout.TEXT_SCALE))) {
+                ChatUi.text(g, font, line, x, y, ChatLayout.TEXT_SCALE, FontPalette.notice());
+                y += ChatUi.lineHeight(font, ChatLayout.TEXT_SCALE);
             }
             y += 2;
         }
 
         if (players.isEmpty()) {
-            for (var line : font.split(Component.translatable("mcphone.chat.online_empty"), w)) {
-                g.drawString(font, line, x, y, FontPalette.subtle(), false);
-                y += font.lineHeight;
+            for (var line : font.split(Component.translatable("mcphone.chat.online_empty"),
+                    ChatLayout.unscaledWidth(w, ChatLayout.TEXT_SCALE))) {
+                ChatUi.text(g, font, line, x, y, ChatLayout.TEXT_SCALE, FontPalette.subtle());
+                y += ChatUi.lineHeight(font, ChatLayout.TEXT_SCALE);
             }
             hovered = null;
             return;
@@ -113,19 +117,19 @@ public final class ChatAddContact {
             }
 
             String action = Component.translatable(actionKey(p.relation())).getString();
-            int actionW = font.width(action);
+            int actionW = ChatUi.width(font, action, ChatLayout.TEXT_SCALE);
 
             // 全是在线玩家，不画状态点
             int avatarY = y + (rowH - AVATAR_SIZE) / 2;
             PlayerAvatar.draw(g, p.id(), x, avatarY, AVATAR_SIZE);
 
             int nameX = x + AVATAR_SIZE + AVATAR_GAP;
-            int textY = y + (rowH - font.lineHeight) / 2;
+            int textY = y + (rowH - ChatUi.lineHeight(font, ChatLayout.TEXT_SCALE)) / 2;
 
-            String name = GuiUtil.truncate(font, p.name(), w - (nameX - x) - actionW - 6);
-            g.drawString(font, name, nameX, textY, colorName(), false);
-            g.drawString(font, action, x + w - actionW - 2, textY,
-                    actionColor(p.relation()), false);
+            String name = ChatUi.truncate(font, p.name(), w - (nameX - x) - actionW - 6, ChatLayout.TEXT_SCALE);
+            ChatUi.text(g, font, name, nameX, textY, ChatLayout.TEXT_SCALE, colorName());
+            ChatUi.text(g, font, action, x + w - actionW - 2, textY,
+                    ChatLayout.TEXT_SCALE, actionColor(p.relation()));
 
             y += rowH;
         }

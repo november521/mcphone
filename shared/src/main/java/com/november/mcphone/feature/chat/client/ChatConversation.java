@@ -54,7 +54,7 @@ public final class ChatConversation {
     private static final int BUBBLE_PAD_X = 3;
     private static final int BUBBLE_PAD_Y = 2;
 
-    private static final int BLOCK_GAP = 3;
+    private static final int BLOCK_GAP = 5;
 
     private static final int STAMP_PAD_Y = 2;
 
@@ -64,7 +64,7 @@ public final class ChatConversation {
     /** 滚轮一格滚多少像素 */
     private static final int SCROLL_STEP = 18;
 
-    private static final int INPUT_H = 14;
+    private static final int INPUT_H = ChatLayout.INPUT_HEIGHT;
 
     private static final int INPUT_GAP = 2;
 
@@ -86,15 +86,14 @@ public final class ChatConversation {
      */
     private static final int IMAGE_MAX_H = 56;
 
-    /** 输入栏左边那个「+」键的边长。与音乐页那几个键一样大，它们是同一家的 */
+    /** 右侧加号槽内的图标大小，发送按钮与它共用位置。 */
     private static final int ATTACH_BTN = 9;
-
-    /** 「+」与输入框之间的空隙 */
-    private static final int ATTACH_BTN_GAP = 2;
 
     /** 「+」弹出的那张小菜单：内边距，以及每一行比字高出多少 */
     private static final int MENU_PAD = 3;
     private static final int MENU_ROW_EXTRA = 3;
+    private static final String[] RESERVED_ATTACH_KEYS = {
+            "mcphone.chat.layout.voice", "mcphone.chat.layout.file", "mcphone.chat.layout.location"};
 
     /**
      * 文字按钮的命中区四边各放宽多少。
@@ -136,6 +135,15 @@ public final class ChatConversation {
     private boolean sendHovered;
 
     private boolean attachBtnHovered;
+
+    private boolean stickerHovered;
+    private boolean backHovered;
+    private boolean pendingBack;
+    private int inputOriginX;
+    private int inputOriginY;
+    private int inputWidth;
+    private int contentLeft;
+    private int contentWidth;
 
     /** 「+」点开之后那张小菜单开着没有 */
     private boolean attachMenuOpen;
@@ -212,7 +220,9 @@ public final class ChatConversation {
      * 而画的时候要靠它挑帧。
      */
     private record Block(BlockType type, boolean self, List<FormattedCharSequence> lines,
-                         UUID image, int w, int h, int frames, int frameMs) {}
+                         UUID image, int w, int h, int frames, int frameMs) {
+        int rowHeight() { return type == BlockType.STAMP ? h : Math.max(AVATAR_SIZE, h); }
+    }
 
     /**
      * 进入会话。必须先 openConversation 再发请求，顺序不能颠倒：
@@ -239,6 +249,9 @@ public final class ChatConversation {
         this.attachMenuOpen = false;
         this.attachHovered = null;
         this.pendingAttach = null;
+        this.pendingBack = false;
+        this.backHovered = false;
+        this.stickerHovered = false;
         this.imageHits.clear();
 
         ChatClientCache.openConversation(peer);
@@ -258,6 +271,9 @@ public final class ChatConversation {
         contentH = 0;
         sendHovered = false;
         attachBtnHovered = false;
+        stickerHovered = false;
+        backHovered = false;
+        pendingBack = false;
         attachMenuOpen = false;
         attachHovered = null;
         viewingImage = null;
@@ -278,12 +294,14 @@ public final class ChatConversation {
 
         final int x = phoneLeft + PAD;
         final int w = screenW - PAD * 2;
+        contentLeft = x;
+        contentWidth = w;
 
         final int inputTop = phoneTop + screenH - navH - INPUT_H - INPUT_GAP;
         final int bottom = inputTop - INPUT_GAP;
 
         int y = phoneTop + statusH + 4;
-        y = renderHeader(g, font, x, y, w);
+        y = renderHeader(g, font, x, y, w, mouseX, mouseY);
 
         relayout(font, w);
         renderMessages(g, font, x, y, w, bottom);
@@ -407,21 +425,23 @@ public final class ChatConversation {
         return peer;
     }
 
-    private int renderHeader(GuiGraphics g, Font font, int x, int y, int w) {
+    public boolean consumeBackRequest() {
+        boolean out = pendingBack;
+        pendingBack = false;
+        return out;
+    }
+
+    private int renderHeader(GuiGraphics g, Font font, int x, int y, int w, int mx, int my) {
         ConversationSummary s = summary();
-        boolean online = s != null && s.online();
-
-        // 刚 close 完的那一帧 peer 为空
-        if (peer != null) {
-            PlayerAvatar.drawWithStatus(g, peer, x, y, AVATAR_SIZE, online);
-        }
-
-        int nameX = x + AVATAR_SIZE + AVATAR_GAP;
-        g.drawString(font, GuiUtil.truncate(font, peerName(s), w - (nameX - x)),
-                nameX, y + (AVATAR_SIZE - font.lineHeight) / 2,
-                FontPalette.title(), true);
-
-        y += AVATAR_SIZE + 4;
+        backHovered = GuiUtil.hit(mx, my, x, y, 12, 14);
+        ChatUi.icon(g, ChatUi.Icon.BACK, x, y + 2,
+                backHovered ? FontPalette.title() : FontPalette.link());
+        // 更多菜单只留位置；不挂点击动作，也不借用现有附件菜单。
+        ChatUi.icon(g, ChatUi.Icon.MORE, x + w - 9, y + 2, FontPalette.dim());
+        String name = ChatUi.truncate(font, peerName(s), w - 30, ChatLayout.TEXT_SCALE);
+        ChatUi.text(g, font, name, x + (w - ChatUi.width(font, name, ChatLayout.TEXT_SCALE)) / 2,
+                y + 3, ChatLayout.TEXT_SCALE, FontPalette.title());
+        y += 16;
         g.fill(x, y, x + w, y + 1, PhoneTheme.COLOR_DIVIDER);
         return y + 4;
     }
@@ -434,9 +454,10 @@ public final class ChatConversation {
 
         if (blocks.isEmpty()) {
             int y = top;
-            for (var line : font.split(Component.translatable("mcphone.chat.conversation_empty"), w)) {
-                g.drawString(font, line, x, y, colorEmpty(), false);
-                y += font.lineHeight;
+            for (var line : font.split(Component.translatable("mcphone.chat.conversation_empty"),
+                    ChatLayout.unscaledWidth(w, ChatLayout.TEXT_SCALE))) {
+                ChatUi.text(g, font, line, x, y, ChatLayout.TEXT_SCALE, colorEmpty());
+                y += ChatUi.lineHeight(font, ChatLayout.TEXT_SCALE);
             }
             maxScroll = 0;
             return;
@@ -453,20 +474,24 @@ public final class ChatConversation {
         // 套在一层缩放里画的（界面大小 × 开机动画）。直接交本地坐标，界面大小一改字就被切
         GuiUtil.enableScissor(g, x, top, x + w, bottom);
         for (Block b : blocks) {
-            if (y + b.h() > top && y < bottom) renderBlock(g, font, b, x, y, w);
-            y += b.h() + BLOCK_GAP;
+            if (y + b.rowHeight() > top && y < bottom) renderBlock(g, font, b, x, y, w);
+            y += b.rowHeight() + BLOCK_GAP;
         }
         GuiUtil.disableScissor(g);
     }
 
     private void renderBlock(GuiGraphics g, Font font, Block b, int x, int y, int w) {
         if (b.type() == BlockType.STAMP) {
-            g.drawString(font, b.lines().get(0), x + (w - b.w()) / 2, y + STAMP_PAD_Y,
-                    colorStamp(), false);
+            ChatUi.text(g, font, b.lines().get(0), x + (w - b.w()) / 2, y + STAMP_PAD_Y,
+                    ChatLayout.META_SCALE, colorStamp());
             return;
         }
 
-        int bx = b.self() ? x + w - b.w() : x;
+        UUID avatar = b.self() ? selfId() : peer;
+        if (avatar != null) PlayerAvatar.draw(g, avatar,
+                b.self() ? x + w - AVATAR_SIZE : x, y, AVATAR_SIZE);
+        int bx = b.self() ? x + w - AVATAR_SIZE - AVATAR_GAP - b.w()
+                          : x + AVATAR_SIZE + AVATAR_GAP;
 
         // 图片不套气泡：真实的聊天软件里图片就是图片本身，没有底色也没有一圈留白，
         // 谁发的靠左右对齐看得出来。套一层气泡等于在图周围多画一圈没有意义的色块，
@@ -483,9 +508,9 @@ public final class ChatConversation {
 
         int ty = y + BUBBLE_PAD_Y;
         for (var line : b.lines()) {
-            g.drawString(font, line, bx + BUBBLE_PAD_X, ty,
-                    b.self() ? COLOR_TEXT_SELF : COLOR_TEXT_PEER, false);
-            ty += font.lineHeight;
+            ChatUi.text(g, font, line, bx + BUBBLE_PAD_X, ty, ChatLayout.TEXT_SCALE,
+                    b.self() ? COLOR_TEXT_SELF : COLOR_TEXT_PEER);
+            ty += ChatUi.lineHeight(font, ChatLayout.TEXT_SCALE);
         }
     }
 
@@ -557,55 +582,68 @@ public final class ChatConversation {
                                 int mouseX, int mouseY, float partialTick) {
 
         String send = Component.translatable("mcphone.chat.send").getString();
-        int sendW = font.width(send) + 4;
-
-        // 服主关掉发图片时连位置都不留：那一格空着比一个点了没反应的键好。
-        // 「+」眼下只通向图片与表情，两者都是图片消息，所以这个开关一关它就该消失
+        var layout = ChatLayout.composer(w, ChatUi.width(font, send, ChatLayout.TEXT_SCALE));
+        boolean hasText = box != null && ChatLayout.hasText(box.getValue());
         boolean canAttach = ServerConfig.allowChatImages();
-        int btnRoom = canAttach ? ATTACH_BTN + ATTACH_BTN_GAP : 0;
-
-        int barX = x + btnRoom;
-        int boxW = w - sendW - 2 - btnRoom;
-
-        if (canAttach) {
-            renderAttachButton(g, font, x, y, mouseX, mouseY);
-        } else {
-            attachBtnHovered = false;
-            attachMenuOpen = false;
-        }
+        int barX = x + layout.inputX();
+        int boxW = layout.inputWidth();
+        int iconY = y + (INPUT_H - ATTACH_BTN) / 2;
+        // 语音仅留出固定槽位，现阶段没有录音或切换输入方式的动作。
+        ChatUi.icon(g, ChatUi.Icon.VOICE, x, iconY, FontPalette.dim());
+        stickerHovered = canAttach && !ChatImageSender.isFull() && GuiUtil.hit(mouseX, mouseY,
+                x + layout.stickerX() - 1, y, ATTACH_BTN + 2, INPUT_H);
+        ChatUi.icon(g, ChatUi.Icon.SMILE, x + layout.stickerX(), iconY,
+                stickerHovered ? COLOR_SEND_HOVER : (canAttach ? COLOR_SEND : COLOR_SEND_OFF));
+        attachBtnHovered = false;
+        attachHovered = null;
+        if (hasText || !canAttach || ChatImageSender.isFull()) attachMenuOpen = false;
 
         PhoneSkin.drawOrFill(g, PhoneSkin.Element.CHAT_INPUT_BAR,
                 barX, y, boxW, INPUT_H, COLOR_INPUT_BG);
 
         // 无边框的 EditBox 不会自己垂直居中，手动摆到栏中间
-        int textY = y + (INPUT_H - font.lineHeight) / 2 + 1;
-        int textW = boxW - INPUT_TEXT_PAD * 2 - cursorRoom(font);
+        int textY = y + (INPUT_H - ChatUi.lineHeight(font, ChatLayout.TEXT_SCALE)) / 2;
+        int textW = ChatLayout.unscaledWidth(boxW - INPUT_TEXT_PAD * 2, ChatLayout.TEXT_SCALE)
+                - cursorRoom(font);
+        inputOriginX = barX + INPUT_TEXT_PAD;
+        inputOriginY = textY;
+        inputWidth = boxW - INPUT_TEXT_PAD * 2;
 
         if (box == null) {
-            box = new EditBox(font, barX + INPUT_TEXT_PAD, textY,
-                    textW, INPUT_H - 4,
+            box = new EditBox(font, 0, 0, textW, font.lineHeight,
                     Component.translatable("mcphone.app.chat"));
             box.setMaxLength(TextBody.MAX_LENGTH);
             box.setBordered(false);
             box.setFocused(true);
         } else {
-            box.setX(barX + INPUT_TEXT_PAD);
-            box.setY(textY);
             box.setWidth(textW);
         }
-        box.render(g, mouseX, mouseY, partialTick);
+        // 控件保持原字体坐标，渲染与鼠标同时反向换算。光标、选择高亮和长文本滚动仍由 EditBox 管。
+        GuiUtil.enableScissor(g, barX, y, barX + boxW, y + INPUT_H);
+        g.pose().pushPose();
+        g.pose().translate(inputOriginX, inputOriginY, 0);
+        g.pose().scale(ChatLayout.TEXT_SCALE, ChatLayout.TEXT_SCALE, 1f);
+        box.render(g, (int) ((mouseX - inputOriginX) / ChatLayout.TEXT_SCALE),
+                (int) ((mouseY - inputOriginY) / ChatLayout.TEXT_SCALE), partialTick);
+        g.pose().popPose();
+        GuiUtil.disableScissor(g);
 
-        int sendX = x + w - sendW;
-        sendHovered = mouseX >= sendX && mouseX <= x + w
-                   && mouseY >= y && mouseY < y + INPUT_H;
-
-        boolean empty = box.getValue().isBlank();
-        g.drawString(font, send, sendX + 2, textY,
-                empty ? COLOR_SEND_OFF : (sendHovered ? COLOR_SEND_HOVER : COLOR_SEND), false);
+        int actionX = x + layout.actionX();
+        sendHovered = hasText && GuiUtil.hit(mouseX, mouseY, actionX, y, layout.actionWidth(), INPUT_H);
+        if (hasText) {
+            g.fill(actionX, y + 2, actionX + layout.actionWidth(), y + INPUT_H - 2,
+                    sendHovered ? 0xFF06AD56 : 0xFF07C160);
+            ChatUi.text(g, font, send,
+                    actionX + (layout.actionWidth() - ChatUi.width(font, send, ChatLayout.TEXT_SCALE)) / 2,
+                    textY, ChatLayout.TEXT_SCALE, 0xFFFFFFFF);
+        } else {
+            renderAttachButton(g, font, actionX + (layout.actionWidth() - ATTACH_BTN) / 2,
+                    y, mouseX, mouseY, canAttach);
+        }
     }
 
     /**
-     * 输入栏左边那个「+」：贴图优先，没有贴图就画一个 + 字符兜底，与音乐页那几个键同一个规矩。
+     * 输入栏右边那个「+」：仅在没有可发送文字时显示，原有图片 / 表情入口继续沿用。
      *
      * 为什么是「+」而不是直接一个图片键：能发的东西不止一种（现在是图片与表情，往后还会有别的），
      * 每多一种就在输入栏挤一个键的话，那条栏很快就没地方打字了。「+」把它们收进一张小菜单。
@@ -615,11 +653,11 @@ public final class ChatConversation {
      * 只有队伍也排满了才真的点不动——那时候再收就不是手快而是刷屏了。
      */
     private void renderAttachButton(GuiGraphics g, Font font, int x, int barY,
-                                    int mouseX, int mouseY) {
+                                    int mouseX, int mouseY, boolean canAttach) {
 
         int by = barY + (INPUT_H - ATTACH_BTN) / 2;
         boolean sending = ChatImageSender.isBusy();
-        boolean blocked = ChatImageSender.isFull();
+        boolean blocked = !canAttach || ChatImageSender.isFull();
         if (blocked) attachMenuOpen = false;
 
         attachBtnHovered = !blocked && GuiUtil.hit(mouseX, mouseY,
@@ -630,12 +668,10 @@ public final class ChatConversation {
                     PhoneTheme.COLOR_HOVER_STRONG);
         }
 
-        if (!PhoneSkin.draw(g, PhoneSkin.Element.CHAT_ATTACH, x, by, ATTACH_BTN, ATTACH_BTN)) {
-            String glyph = "+";
-            g.drawString(font, glyph, x + (ATTACH_BTN - font.width(glyph)) / 2, by,
+        if (blocked || !PhoneSkin.draw(g, PhoneSkin.Element.CHAT_ATTACH, x, by, ATTACH_BTN, ATTACH_BTN)) {
+            ChatUi.icon(g, ChatUi.Icon.PLUS, x, by,
                     sending || blocked ? COLOR_SEND_OFF
-                            : (attachBtnHovered || attachMenuOpen ? COLOR_SEND_HOVER : COLOR_SEND),
-                    false);
+                            : (attachBtnHovered || attachMenuOpen ? COLOR_SEND_HOVER : COLOR_SEND));
         }
 
         if (attachMenuOpen) renderAttachMenu(g, font, x, by, mouseX, mouseY);
@@ -651,14 +687,18 @@ public final class ChatConversation {
                                   int mouseX, int mouseY) {
 
         Attach[] items = Attach.values();
-        int rowH = font.lineHeight + MENU_ROW_EXTRA;
+        float scale = ChatLayout.TEXT_SCALE;
+        int rowH = ChatUi.lineHeight(font, scale) + MENU_ROW_EXTRA;
 
         int width = 0;
-        for (Attach item : items) width = Math.max(width, font.width(item.label()));
+        for (Attach item : items) width = Math.max(width, ChatUi.width(font, item.label(), scale));
+        for (String key : RESERVED_ATTACH_KEYS) width = Math.max(width,
+                ChatUi.width(font, Component.translatable(key).getString(), scale));
         width += MENU_PAD * 2;
+        width = Math.min(width, contentWidth);
 
-        int height = items.length * rowH + MENU_PAD * 2;
-        int menuX = btnX;
+        int height = (items.length + RESERVED_ATTACH_KEYS.length) * rowH + MENU_PAD * 2;
+        int menuX = Math.max(contentLeft, btnX + ATTACH_BTN - width);
         int menuY = btnY - height - 2;
 
         g.fill(menuX, menuY, menuX + width, menuY + height, PhoneTheme.COLOR_OVERLAY);
@@ -673,8 +713,16 @@ public final class ChatConversation {
                 g.fill(menuX + 1, rowY, menuX + width - 1, rowY + rowH - 1,
                         PhoneTheme.COLOR_ROW_HOVER);
             }
-            g.drawString(font, item.label(), menuX + MENU_PAD, rowY + (rowH - font.lineHeight) / 2,
-                    hovered ? FontPalette.title() : FontPalette.body(), false);
+            ChatUi.text(g, font, ChatUi.truncate(font, item.label(), width - MENU_PAD * 2, scale), menuX + MENU_PAD,
+                    rowY + (rowH - ChatUi.lineHeight(font, scale)) / 2, scale,
+                    hovered ? FontPalette.title() : FontPalette.body());
+            rowY += rowH;
+        }
+        // 灰色项只是为后续布局占位，不加入 Attach 枚举，也不发送请求。
+        for (String key : RESERVED_ATTACH_KEYS) {
+            ChatUi.text(g, font, ChatUi.truncate(font, Component.translatable(key).getString(),
+                    width - MENU_PAD * 2, scale), menuX + MENU_PAD,
+                    rowY + (rowH - ChatUi.lineHeight(font, scale)) / 2, scale, FontPalette.dim());
             rowY += rowH;
         }
     }
@@ -685,8 +733,10 @@ public final class ChatConversation {
         if (src == laidOutFrom && maxW == laidOutWidth) return;
 
         final UUID selfId = selfId();
-        final int bubbleMaxW = Math.max(24, (int) (maxW * BUBBLE_MAX_RATIO));
-        final int textMaxW = bubbleMaxW - BUBBLE_PAD_X * 2;
+        final int bubbleMaxW = Math.max(24, Math.min((int) (maxW * BUBBLE_MAX_RATIO),
+                maxW - AVATAR_SIZE - AVATAR_GAP - 12));
+        final int textMaxW = ChatLayout.unscaledWidth(bubbleMaxW - BUBBLE_PAD_X * 2,
+                ChatLayout.TEXT_SCALE);
 
         List<Block> out = new ArrayList<>();
         long prevTime = 0L;
@@ -696,7 +746,8 @@ public final class ChatConversation {
                 FormattedCharSequence stamp =
                         Component.literal(formatStamp(m.time())).getVisualOrderText();
                 out.add(new Block(BlockType.STAMP, false, List.of(stamp), null,
-                        font.width(stamp), font.lineHeight + STAMP_PAD_Y * 2, 1, 0));
+                        ChatLayout.scaledWidth(font.width(stamp), ChatLayout.META_SCALE),
+                        ChatUi.lineHeight(font, ChatLayout.META_SCALE) + STAMP_PAD_Y * 2, 1, 0));
             }
             prevTime = m.time();
 
@@ -713,12 +764,12 @@ public final class ChatConversation {
             for (var line : lines) textW = Math.max(textW, font.width(line));
 
             out.add(new Block(BlockType.TEXT, self, lines, null,
-                    textW + BUBBLE_PAD_X * 2,
-                    lines.size() * font.lineHeight + BUBBLE_PAD_Y * 2, 1, 0));
+                    ChatLayout.scaledWidth(textW, ChatLayout.TEXT_SCALE) + BUBBLE_PAD_X * 2,
+                    lines.size() * ChatUi.lineHeight(font, ChatLayout.TEXT_SCALE) + BUBBLE_PAD_Y * 2, 1, 0));
         }
 
         int total = 0;
-        for (Block b : out) total += b.h() + BLOCK_GAP;
+        for (Block b : out) total += b.rowHeight() + BLOCK_GAP;
 
         // 翻着历史时来了新消息，把新增高度补进滚动量，视图才不会跳；贴底时不补
         if (scrollPx > 0 && total > contentH) scrollPx += total - contentH;
@@ -757,6 +808,11 @@ public final class ChatConversation {
             return true;
         }
 
+        if (button == 0 && backHovered) {
+            pendingBack = true;
+            return true;
+        }
+
         // 菜单开着时：点中某一项就走那一项，点别处一律只是关掉菜单，不再往下传
         if (attachMenuOpen) {
             if (button == 0 && attachHovered != null) pendingAttach = attachHovered;
@@ -767,6 +823,10 @@ public final class ChatConversation {
 
         if (button == 0 && attachBtnHovered) {
             attachMenuOpen = true;
+            return true;
+        }
+        if (button == 0 && stickerHovered) {
+            pendingAttach = Attach.STICKER;
             return true;
         }
         if (button == 0 && sendHovered) {
@@ -782,7 +842,13 @@ public final class ChatConversation {
                 }
             }
         }
-        if (box != null) box.mouseClicked(mx, my, button);
+        if (box != null) {
+            boolean inInput = GuiUtil.hit(mx, my, inputOriginX - INPUT_TEXT_PAD, inputOriginY - INPUT_TEXT_PAD,
+                    inputWidth + INPUT_TEXT_PAD * 2, INPUT_H - 2);
+            box.setFocused(inInput);
+            if (inInput) box.mouseClicked((mx - inputOriginX) / ChatLayout.TEXT_SCALE,
+                    Mth.clamp((my - inputOriginY) / ChatLayout.TEXT_SCALE, 0, box.getHeight() - 1), button);
+        }
         return false;
     }
 

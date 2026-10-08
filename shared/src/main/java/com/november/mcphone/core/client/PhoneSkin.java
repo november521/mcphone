@@ -102,13 +102,13 @@ public final class PhoneSkin {
         /** 对方发来的聊天气泡底。拉伸方式同 {@link #CHAT_BUBBLE_SELF} */
         CHAT_BUBBLE_PEER("chat/bubble_peer", "chat_bubble_peer"),
 
-        /** 会话界面底部输入栏的底。建议 90×14 */
+        /** 会话界面底部输入框的底。按设备宽度自适应，高 18；mcphone_skin.border 可保留边角 */
         CHAT_INPUT_BAR("chat/input_bar", "chat_input_bar"),
 
         /** 会话列表在线好友行的"传送"小图标。建议 7×7，按实际绘制尺寸画（不做平滑缩放）；缺图时画 → 字符 */
         CHAT_TELEPORT("chat/teleport", "chat_teleport"),
 
-        /** 会话界面输入栏左边那个「+」（点开是图片 / 表情）。建议 9×9，与音乐页那几个键等大；缺图时画 + 字符 */
+        /** 会话界面输入栏右边的「+」（空白输入时点开图片 / 表情）。建议 9×9；缺图时画圆圈加号 */
         CHAT_ATTACH("chat/attach", "chat_attach"),
 
         /** 收到消息的通知底。建议 160×32（原版通知槽位尺寸） */
