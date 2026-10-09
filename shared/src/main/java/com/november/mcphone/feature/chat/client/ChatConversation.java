@@ -16,6 +16,10 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
+import com.november.mcphone.feature.chat.client.messageaction.ChatMessageActions;
+import com.november.mcphone.feature.chat.TextBody;
+import com.november.mcphone.feature.chat.net.DeleteChatMessagePacket;
+import net.minecraft.network.chat.Component;
 
 import java.util.List;
 import java.util.UUID;
@@ -27,7 +31,18 @@ public final class ChatConversation {
     private static final long REFRESH_INTERVAL_MS = 3000L;
     private final ChatMessagePane messages = new ChatMessagePane();
     private final ChatImageViewer viewer = new ChatImageViewer();
-    private final ChatComposer composer = new ChatComposer(this::send);
+    private final ChatComposer composer = new ChatComposer(this::send,
+            () -> Minecraft.getInstance().keyboardHandler.getClipboard(),
+            (g,x,y,w,h) -> ChatUi.glass(g, ChatGlass.Surface.MENU, x,y,w,h,false));
+    private final ChatMessageActions actions = new ChatMessageActions(
+            (g, x, y, w, h) -> ChatUi.glass(g, ChatGlass.Surface.MENU, x, y, w, h, false),
+            text -> Minecraft.getInstance().keyboardHandler.setClipboard(text),
+            (target, message, request) -> {
+                ChatClientCache.beginDeletion(target, message, request);
+                MCphoneNetwork.sendToServer(new DeleteChatMessagePacket(target, message, request));
+            }, ChatClientCache::cancelDeletion,
+            key -> { var player = Minecraft.getInstance().player;
+                if (player != null) player.displayClientMessage(Component.translatable(key), true); });
     private UUID peer;
     private long lastRequestMs;
     private List<ChatMessage> markedFrom;
@@ -52,6 +67,7 @@ public final class ChatConversation {
     }
 
     private void resetComponents(boolean focused) {
+        actions.reset();
         messages.reset();
         viewer.dismiss();
         composer.reset(focused);
@@ -61,6 +77,11 @@ public final class ChatConversation {
     public UUID peer() { return peer; }
     public boolean isViewing(UUID other) { return peer != null && peer.equals(other); }
     public boolean dismissViewer() { return viewer.dismiss(); }
+    public boolean hasContextMenu() { return actions.isOpen() || composer.hasContextMenu(); }
+    public boolean dismissContextMenu() {
+        boolean closed = actions.dismiss();
+        return composer.dismissContextMenu() || closed;
+    }
     public ChatAttachment consumeAttachRequest() { return composer.consumeAttachRequest(); }
     public boolean consumeBackRequest() {
         boolean out = pendingBack;
@@ -72,6 +93,10 @@ public final class ChatConversation {
                        int screenW, int screenH, int statusH, int navH,
                        int mouseX, int mouseY, float partialTick, Font font) {
         if (peer == null) return;
+        var receipt = ChatClientCache.consumeDeleteResult();
+        if (receipt != null) actions.result(receipt.request(), receipt.result());
+        actions.tick(System.currentTimeMillis());
+        actions.reconcile(ChatClientCache.getMessages());
         maybeRefresh();
         maybeMarkRead();
         int x = phoneLeft + PAD, w = screenW - PAD * 2;
@@ -85,11 +110,29 @@ public final class ChatConversation {
                 screenH - statusH - navH, mouseX, mouseY);
         // 查看器遮住消息区时只取放大图；最后统一按当前会话发请求。
         ChatImageCache.flushRequests(peer);
+        int menuX = phoneLeft + PAD, menuY = phoneTop + statusH + ChatLayout.TOP_GAP;
+        int menuW = screenW - PAD * 2, menuH = screenH - statusH - navH - ChatLayout.TOP_GAP * 2;
+        actions.render(g, font, menuX, menuY, menuW, menuH, mouseX, mouseY);
+        composer.renderContextMenu(g, font, menuX, menuY, menuW, menuH, mouseX, mouseY);
     }
 
     public boolean mouseClicked(double mx, double my, int button) {
         if (peer == null) return false;
         if (viewer.mouseClicked(button)) return true;
+        if (composer.contextMouseClicked(mx, my, button)) return true;
+        if (actions.mouseClicked(mx, my, button, System.currentTimeMillis())) return true;
+        if (button == 1) {
+            if (composer.openContextMenu(mx, my)) { messages.clearSelection(); return true; }
+            ChatMessage target = messages.messageAt(mx, my);
+            if (target != null) {
+                messages.prepareMenu(target.id());
+                composer.dismissAttachmentMenu();
+                composer.blur();
+                actions.open(peer, target.id(), target.body() instanceof TextBody text ? text.text() : null,
+                        messages.selectedText(target.id()), mx, my);
+            }
+            return true;
+        }
         if (button == 0 && backHovered) { pendingBack = true; return true; }
         if (composer.mouseClicked(button)) { messages.clearSelection(); return true; }
         UUID image = button == 0 ? messages.imageAt(mx, my) : null;
@@ -105,16 +148,16 @@ public final class ChatConversation {
     }
 
     public boolean mouseDragged(double mx, double my, int button) {
-        return peer != null && (viewer.isOpen() || messages.mouseDragged(mx, my, button));
+        return peer != null && (viewer.isOpen() || hasContextMenu() || messages.mouseDragged(mx, my, button));
     }
     public boolean mouseReleased(double mx, double my, int button) {
-        return peer != null && (viewer.isOpen() || messages.mouseReleased(mx, my, button));
+        return peer != null && (viewer.isOpen() || hasContextMenu() || messages.mouseReleased(mx, my, button));
     }
 
-    /** 查看器是模态层；隐藏的输入框不能继续打字或按 Enter 发出草稿。 */
+    /** 查看器、消息菜单和粘贴菜单是模态层；菜单未关闭时不能修改或发送草稿。 */
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
         if (peer == null) return false;
-        if (viewer.isOpen()) return true;
+        if (viewer.isOpen() || hasContextMenu()) return true;
         if (Screen.isCopy(keyCode) && !messages.selectedText().isEmpty()) {
             Minecraft.getInstance().keyboardHandler.setClipboard(messages.selectedText());
             return true;
@@ -122,10 +165,12 @@ public final class ChatConversation {
         return composer.keyPressed(keyCode, scanCode, modifiers);
     }
     public boolean charTyped(char c, int modifiers) {
-        return peer != null && (viewer.isOpen() || composer.charTyped(c, modifiers));
+        return peer != null && (viewer.isOpen() || hasContextMenu() || composer.charTyped(c, modifiers));
     }
     public boolean mouseScrolled(double amount) {
-        return peer != null && (viewer.isOpen() || messages.mouseScrolled(amount));
+        if (peer == null) return false;
+        if (dismissContextMenu()) return true;
+        return viewer.isOpen() || messages.mouseScrolled(amount);
     }
 
     /** 服务端回声才插入消息，避免校验拒收后客户端还留下假消息。 */

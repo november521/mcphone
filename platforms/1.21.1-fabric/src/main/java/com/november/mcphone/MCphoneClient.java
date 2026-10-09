@@ -124,6 +124,13 @@ public class MCphoneClient implements ClientModInitializer {
         });
 
         ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> {
+            if (net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking.canSend(
+                    com.november.mcphone.feature.chat.net.RequestMessagesPacket.TYPE)
+                    && !net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking.canSend(
+                    com.november.mcphone.feature.chat.net.DeleteChatMessagePacket.TYPE)) {
+                handler.getConnection().disconnect(net.minecraft.network.chat.Component.translatable("mcphone.chat.protocol_mismatch"));
+                return;
+            }
             // 【必须在 loadForCurrentWorld 之前】：玩家放进 mcphone/apps/ 的脚本 App 是动态登记的，
             // 而那一句读存档时只认目录里已有的 id，读完还会按当前目录覆写存档 —— 晚一步，
             // 重启后已装的脚本 App 会从主屏消失，并且被从存档里抹掉

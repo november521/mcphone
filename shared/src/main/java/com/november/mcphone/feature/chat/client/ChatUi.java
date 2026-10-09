@@ -3,6 +3,7 @@ package com.november.mcphone.feature.chat.client;
 import com.november.mcphone.core.client.GuiUtil;
 import com.november.mcphone.core.client.FontPalette;
 import com.november.mcphone.core.client.PhoneSkin;
+import com.november.mcphone.core.client.PhoneTheme;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.util.FormattedCharSequence;
@@ -29,6 +30,23 @@ final class ChatUi {
         } finally {
             g.pose().popPose();
         }
+    }
+
+    static void bubble(GuiGraphics g, boolean self, int x, int y, int w, int h) {
+        surface(g, self ? PhoneSkin.Element.CHAT_BUBBLE_SELF : PhoneSkin.Element.CHAT_BUBBLE_PEER,
+                x,y,w,h, self ? PhoneTheme.COLOR_CHAT_BUBBLE_SELF : PhoneTheme.COLOR_CHAT_BUBBLE_PEER,
+                self ? PhoneTheme.COLOR_CHAT_BUBBLE_SELF_EDGE : PhoneTheme.COLOR_CHAT_BUBBLE_PEER_EDGE);
+    }
+    static void inputBar(GuiGraphics g, int x, int y, int w, int h) {
+        surface(g,PhoneSkin.Element.CHAT_INPUT_BAR,x,y,w,h,PhoneTheme.COLOR_CHAT_INPUT_BG,PhoneTheme.COLOR_CHAT_INPUT_EDGE);
+    }
+    private static void surface(GuiGraphics g, PhoneSkin.Element element, int x, int y, int w, int h, int fill, int edge) {
+        if (PhoneSkin.draw(g,element,x,y,w,h)) return;
+        g.pose().pushPose();
+        try {
+            g.pose().scale(1f/ChatGlass.PRECISION,1f/ChatGlass.PRECISION,1);
+            ChatGlass.paint(g::fill,x,y,w,h,3,new ChatGlass.Palette(fill,fill,edge,edge));
+        } finally { g.pose().popPose(); }
     }
 
     static int width(Font font, String text, float scale) {

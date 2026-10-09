@@ -113,7 +113,8 @@ public final class PhoneChat {
         if (!friends.areFriends(selfId, peer)) return Optional.empty();
 
         long since = PhonePlayerData.of(self).chatRead().getLastRead(peer);
-        ChatData.Tail tail = ChatData.get(server).tail(selfId, peer, since);
+        // 附属读会话时也采用本人可见记录，与手机预览和未读保持一致。
+        ChatData.Tail tail = ChatData.tail(ChatService.getMessages(self, peer), peer, since);
         OptionalLong last = tail.last() == null ? OptionalLong.empty() : OptionalLong.of(tail.last().time());
         return Optional.of(new PhoneConversation(selfId, contact(server, friends, peer), tail.unread(), last));
     }

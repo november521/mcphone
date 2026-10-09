@@ -451,5 +451,16 @@
   "mcphone.economy.emc_legacy.no_balance": "The legacy wallet interface does not expose balances.",
   "mcphone.economy.scoreboard.unknown_player": "This player's name is unknown (not seen for a long time, or never joined); the scoreboard keys balances by name, so it cannot be read.",
   "mcphone.economy.no_such_currency": "This server has no such currency (the server owner may have changed the configuration).",
-  "mcphone.economy.invalid_amount": "Invalid amount: missing, or too large to represent."
+  "mcphone.economy.invalid_amount": "Invalid amount: missing, or too large to represent.",
+  "mcphone.chat.message_action.copy_message": "Copy",
+  "mcphone.chat.message_action.copy_selection": "Copy",
+  "mcphone.chat.message_action.delete_message": "Delete",
+  "mcphone.chat.message_action.deleting": "Pending",
+  "mcphone.chat.message_action.timeout": "Delete confirmation timed out. Reopen the conversation to check.",
+  "mcphone.chat.message_action.not_found": "The message is no longer in the history.",
+  "mcphone.chat.message_action.busy": "Too many requests. Please try again shortly.",
+  "mcphone.chat.message_action.forbidden": "This message cannot be deleted.",
+  "mcphone.chat.message_action.storage_error": "Chat history storage is unavailable. Please contact the server owner.",
+  "mcphone.chat.protocol_mismatch": "MCphone chat protocol mismatch. Update the client and server together.",
+  "mcphone.chat.message_action.paste": "Paste"
 }

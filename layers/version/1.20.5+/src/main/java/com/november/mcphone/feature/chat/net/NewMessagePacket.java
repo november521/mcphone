@@ -18,7 +18,7 @@ public record NewMessagePacket(UUID peer, ChatMessage message) implements Custom
 
     public static final CustomPacketPayload.Type<NewMessagePacket> TYPE =
             new CustomPacketPayload.Type<>(
-                    ResourceLocation.fromNamespaceAndPath(MCphone.MODID, "new_chat_message"));
+                    ResourceLocation.fromNamespaceAndPath(MCphone.MODID, "new_chat_message_v2"));
 
     public static final StreamCodec<ByteBuf, NewMessagePacket> STREAM_CODEC =
             StreamCodec.composite(

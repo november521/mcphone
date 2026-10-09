@@ -8,6 +8,8 @@ import net.minecraft.network.chat.Style;
 import net.minecraft.util.FormattedCharSequence;
 
 import java.util.List;
+import java.util.UUID;
+import com.november.mcphone.feature.chat.ChatMessage;
 
 /** 使用真实 StringSplitter 与确定字宽，验证命中、原文复制、字素边界与消息生命周期。 */
 public final class ChatTextSelectionTest {
@@ -40,15 +42,15 @@ public final class ChatTextSelectionTest {
         equal(text.indexAt(12, 0, 7), 2, "点击汉字边界映射到原文");
         equal(text.indexAt(17.9, 0, 7), 3, "半字按最近边界吸附");
         var selection = new ChatTextSelection();
-        Object message = new Object();
-        selection.begin(message, text, text.indexAt(12, 0, 7));
+        ChatMessage message = ChatMessage.text(new UUID(0, 1), "目标", 1);
+        selection.begin(message.id(), text, text.indexAt(12, 0, 7));
         selection.extend(text.indexAt(30, 0, 7));
         equal(selection.selectedText(), "好想吃", "只复制气泡局部文字");
         check(selection.release() && !selection.dragging(), "松手保留选区并结束拖动");
         selection.extend(0);
         equal(selection.selectedText(), "好想吃", "松手后的鼠标移动不更改选区");
         check(!selection.release(), "没有拖动时不截获松手");
-        selection.begin(message, text, 5);
+        selection.begin(message.id(), text, 5);
         selection.extend(2);
         equal(selection.selectedText(), "好想吃", "反向拖选得到相同原文");
         equal(text.lines().get(0).spans(selection.start(), selection.end()),
@@ -65,7 +67,7 @@ public final class ChatTextSelectionTest {
         var wrapped = ChatTextLayout.build(font, original, 36);
         check(wrapped.lines().size() >= 3, "真实原版算法执行软换行");
         equal(wrapped.lines().get(1).start(), 6, "保留换行处被原版隐藏的空格位置");
-        selection.begin(message, wrapped, 0);
+        selection.begin(message.id(), wrapped, 0);
         selection.extend(wrapped.indexAt(0, 1000, 7));
         equal(selection.selectedText(), original, "跨软换行复制保留空格且不插入换行");
         var repeated = ChatTextLayout.build(font, "abcabcabc", 18);
@@ -74,7 +76,7 @@ public final class ChatTextSelectionTest {
         var multiline = ChatTextLayout.build(font, "你好\n\n世界\n", 100);
         equal(multiline.lines().size(), 4, "保留显式空行及末尾换行");
         equal(multiline.indexAt(0, 7, 7), 3, "空行仍有原文光标位置");
-        selection.begin(message, multiline, 1);
+        selection.begin(message.id(), multiline, 1);
         selection.extend(multiline.indexAt(100, 14, 7));
         equal(selection.selectedText(), "好\n\n世界", "显式换行原样复制");
         equal(multiline.indexAt(100, -1, 7), 0, "拖到消息上方选择至原文开头");
@@ -89,7 +91,7 @@ public final class ChatTextSelectionTest {
             equal(glyphs.size(), 3, "组合字符合并成一个命中区");
             equal(glyphs.get(1).start(), 1, "字素起点不落在代理对/组合序列内");
             equal(glyphs.get(1).end(), 1 + cluster.length(), "字素终点包含完整序列");
-            selection.begin(message, unicode, glyphs.get(1).start());
+            selection.begin(message.id(), unicode, glyphs.get(1).start());
             selection.extend(glyphs.get(1).end());
             equal(selection.selectedText(), cluster, "emoji 与重音原样复制");
             var tiny = ChatTextLayout.build(font, "a" + cluster + "b", 6);
@@ -118,15 +120,17 @@ public final class ChatTextSelectionTest {
         var rtlFirst = ChatTextLayout.build(rtlFont, "אבג abc", 100);
         equal(rtlFirst.lines().get(0).glyphs().get(0).start(), 4, "RTL 段落中的英文按实际视觉游程排列");
 
-        selection.begin(message, text, 1);
+        selection.begin(message.id(), text, 1);
         selection.extend(4);
-        selection.reconcile(List.of(new Object(), message, new Object()));
+        selection.reconcile(List.of(ChatMessage.text(new UUID(0, 1), "新消息", 2), message));
         equal(selection.selectedText(), "呀好想", "新消息和下标变动不串选区");
-        selection.reconcile(List.of(new Object()));
+        selection.reconcile(List.of(new ChatMessage(message.id(), message.sender(), message.time(), message.body())));
+        equal(selection.selectedText(), "呀好想", "历史重同步产生新对象也按稳定 ID 保留选区");
+        selection.reconcile(List.of(ChatMessage.text(new UUID(0, 1), "新消息", 2)));
         check(selection.selectedText().isEmpty() && !selection.dragging(), "消息淘汰同时清理拖动与复制源");
-        String duplicate1 = new String("same"), duplicate2 = new String("same");
+        UUID duplicate1 = new UUID(0, 2), duplicate2 = new UUID(0, 3);
         selection.begin(duplicate1, text, 0);
-        check(!selection.owns(duplicate2), "内容相同的消息仍按对象身份隔离");
+        check(!selection.owns(duplicate2), "不同消息 ID 的选区隔离");
         selection.extend(2);
         selection.clear();
         check(selection.selectedText().isEmpty() && !selection.owns(duplicate1), "切换会话清除旧选区");

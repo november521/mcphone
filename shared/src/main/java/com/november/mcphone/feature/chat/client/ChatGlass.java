@@ -24,7 +24,7 @@ final class ChatGlass {
         }
     };
 
-    enum Surface { CARD, SEARCH, NAVIGATION, AVATAR, BUTTON, BADGE }
+    enum Surface { CARD, SEARCH, NAVIGATION, AVATAR, BUTTON, BADGE, MENU }
 
     record Palette(int top, int bottom, int edge, int shine) {}
 
@@ -37,12 +37,14 @@ final class ChatGlass {
         Palette p;
         if (darkText) {
             p = switch (surface) {
+                case MENU -> new Palette(0xCCFFF1F8, 0xCFE5BED1, 0x809D527A, 0x88FFFFFF);
                 case BADGE -> new Palette(0xD4B35084, 0xCE8B3D65, 0x80C56B98, 0x88FFE0F0);
                 case BUTTON -> new Palette(0x85F0C0D8, 0x60BE86A3, 0x809D527A, 0x88FFF0F8);
                 default -> new Palette(0xA6FFF5FA, 0x75DFB9CF, 0x55AD809A, 0xA6FFFFFF);
             };
         } else {
             p = switch (surface) {
+                case MENU -> new Palette(0xCC794864, 0xCF503347, 0x709D6B90, 0x67ECC3DD);
                 case CARD -> new Palette(0x726D486D, 0x483A253E, 0x338F6C92, 0x40D9A4C8);
                 case SEARCH -> new Palette(0x635F4860, 0x5A382C40, 0x588D6D86, 0x52D8AFCA);
                 case NAVIGATION -> new Palette(0x566B4668, 0x723E2944, 0x40987193, 0x52DFC0D5);

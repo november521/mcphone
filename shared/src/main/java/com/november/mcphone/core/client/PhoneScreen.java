@@ -996,13 +996,7 @@ public final class PhoneScreen extends PhoneScreenBase {
                 Component.translatable("mcphone.app.app_manager").getString(),
                 () -> navigateTo(Mode.APP_MANAGER),
                 () -> String.valueOf(PhoneScreenRegistry.getAppCount())));
-        settingItems.add(new SettingsList.Item(
-                Component.translatable("mcphone.settings.vault").getString(),
-                () -> navigateTo(Mode.VAULT)));
-        // 开发者那一档（§12.6 原文的路径：设置 → 开发者 → 我的签名密钥）
-        settingItems.add(new SettingsList.Item(
-                Component.translatable("mcphone.settings.author_key").getString(),
-                () -> navigateTo(Mode.AUTHOR_KEY)));
+        // 保险箱与我的签名密钥尚未开放，暂不注册设置入口；页面和已有数据继续保留。
         settingItems.add(new SettingsList.Item(
                 Component.translatable("mcphone.gui.about").getString(),
                 () -> navigateTo(Mode.ABOUT)));
@@ -1140,6 +1134,10 @@ public final class PhoneScreen extends PhoneScreenBase {
         // 屏幕这条路还在。两条都试过之后仍然绑不上，那就说明这一下压根没进游戏
         if (captureHotkeyMouse(button)) return true;
 
+        // 菜单打开时先接管所有点击，点机身外或导航栏也只关闭菜单，不穿透。
+        if (mode == Mode.CHAT_CONVERSATION && (chatConversation.hasContextMenu()
+                || button == 1 && isInsidePhone(unscaledX(rawX), unscaledY(rawY))))
+            return chatConversation.mouseClicked(unscaledX(rawX), unscaledY(rawY), button);
         if (button != 0) return super.mouseClicked(rawX, rawY, button);
 
         // 全屏读书这一帧没有机身，也就没有"点机身外＝关机"这回事；坐标也不必换算
@@ -1437,6 +1435,9 @@ public final class PhoneScreen extends PhoneScreenBase {
         final double mx = unscaledX(rawX);
         final double my = unscaledY(rawY);
 
+        // 菜单可见时滚轮只关闭菜单，不能绕过模态层缩放或滚动底下页面。
+        if (mode == Mode.CHAT_CONVERSATION && chatConversation.dismissContextMenu()) return true;
+
         // HUD 上 Ctrl+滚轮 ＝ 改大小。普通滚轮照旧翻这一页的内容——那是滚轮的本职，
         // 抢过来的话相册、聊天记录、便签在 HUD 上就翻不动了。
         //
@@ -1490,6 +1491,7 @@ public final class PhoneScreen extends PhoneScreenBase {
             appManagerDetail.captureKey(keyCode, scanCode);
             return true;
         }
+        if (keyCode == 256 && mode == Mode.CHAT_CONVERSATION && chatConversation.dismissContextMenu()) return true;
         if (keyCode == 256) { // ESC
             // ESC 一下直接关机，不退层；退层交给导航栏 ◁
             onClose();

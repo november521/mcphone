@@ -115,6 +115,8 @@ public final class RequestThrottle {
         PURCHASE(PRESS_INTERVAL_MS),
         /** 好友关系变更 */
         FRIEND_ACTION(PRESS_INTERVAL_MS),
+        /** 个人消息删除：成功会同步历史和会话摘要 */
+        CHAT_DELETE(PRESS_INTERVAL_MS),
         /** 笔记写入、删除或打印 */
         NOTE_ACTION(PRESS_INTERVAL_MS),
         /** 设备名与壁纸设置 */

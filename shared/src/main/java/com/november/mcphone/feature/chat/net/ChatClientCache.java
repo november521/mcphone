@@ -2,6 +2,7 @@ package com.november.mcphone.feature.chat.net;
 
 import com.november.mcphone.feature.chat.ChatMessage;
 import com.november.mcphone.feature.chat.ChatData;
+import com.november.mcphone.feature.chat.ChatDeletionResult;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -21,6 +22,29 @@ public final class ChatClientCache {
 
     /** 当前打开的会话对端；null 表示没有打开任何会话 */
     private static UUID openPeer;
+    private static UUID deletingPeer, deletingMessage, deletingRequest;
+    private static DeleteReceipt deleteReceipt;
+    public record DeleteReceipt(UUID request, ChatDeletionResult result) {}
+    public static void beginDeletion(UUID peer, UUID message, UUID request) {
+        deletingPeer = peer; deletingMessage = message; deletingRequest = request; deleteReceipt = null;
+    }
+    public static void cancelDeletion(UUID request) {
+        if (java.util.Objects.equals(deletingRequest, request)) clearDeletion();
+    }
+    private static void clearDeletion() {
+        deletingPeer = deletingMessage = deletingRequest = null; deleteReceipt = null;
+    }
+    static void onDeleteResult(UUID peer, UUID message, UUID request,
+            ChatDeletionResult result) {
+        if (!java.util.Objects.equals(openPeer, peer) || !java.util.Objects.equals(deletingPeer, peer)
+                || !java.util.Objects.equals(deletingMessage, message) || !java.util.Objects.equals(deletingRequest, request)) return;
+        deleteReceipt = new DeleteReceipt(request, result);
+    }
+    public static DeleteReceipt consumeDeleteResult() {
+        var receipt = deleteReceipt;
+        if (receipt != null) clearDeletion();
+        return receipt;
+    }
 
     /** 当前打开会话的消息，按时间升序 */
     private static List<ChatMessage> messages = List.of();
@@ -36,6 +60,7 @@ public final class ChatClientCache {
     /** 必须在发请求之前调用：新消息推送可能先于历史消息到达，不先记下对端会被 appendMessage 丢掉 */
     public static void openConversation(UUID peer) {
         if (!java.util.Objects.equals(openPeer, peer)) {
+            clearDeletion();
             openPeer = peer;
             messages = List.of();   // 换会话先清空，免得闪出上一个会话的内容
         }
@@ -43,6 +68,7 @@ public final class ChatClientCache {
 
     /** 界面退出会话时调用 */
     public static void closeConversation() {
+        clearDeletion();
         openPeer = null;
         messages = List.of();
     }

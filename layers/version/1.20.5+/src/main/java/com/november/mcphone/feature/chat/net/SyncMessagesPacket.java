@@ -19,7 +19,7 @@ public record SyncMessagesPacket(UUID peer, List<ChatMessage> messages)
 
     public static final CustomPacketPayload.Type<SyncMessagesPacket> TYPE =
             new CustomPacketPayload.Type<>(
-                    ResourceLocation.fromNamespaceAndPath(MCphone.MODID, "sync_messages"));
+                    ResourceLocation.fromNamespaceAndPath(MCphone.MODID, "sync_messages_v2"));
 
     public static final StreamCodec<ByteBuf, SyncMessagesPacket> STREAM_CODEC =
             StreamCodec.composite(
