@@ -2,7 +2,6 @@ package com.november.mcphone.feature.chat.client;
 
 import com.november.mcphone.core.client.FontPalette;
 import com.november.mcphone.core.client.GuiUtil;
-import com.november.mcphone.core.client.PhoneSkin;
 import com.november.mcphone.core.client.PhoneTheme;
 import com.november.mcphone.core.client.PlayerAvatar;
 import com.november.mcphone.feature.chat.ChatMessage;
@@ -26,8 +25,6 @@ import static com.november.mcphone.feature.chat.client.ChatMessageLayout.STAMP_P
 final class ChatMessagePane {
     private static final int AVATAR_SIZE = ChatLayout.AVATAR_SIZE;
     private static final int AVATAR_GAP = 3;
-    private static final int COLOR_BUBBLE_SELF = PhoneTheme.COLOR_CHAT_BUBBLE_SELF;
-    private static final int COLOR_BUBBLE_PEER = PhoneTheme.COLOR_CHAT_BUBBLE_PEER;
     private static final int COLOR_TEXT_SELF = PhoneTheme.FONT_COLOR_CHAT_SELF;
     private static final int COLOR_TEXT_PEER = PhoneTheme.FONT_COLOR_CHAT_PEER;
     private static int colorStamp() { return FontPalette.timestamp(); }
@@ -217,10 +214,7 @@ final class ChatMessagePane {
             return;
         }
 
-        PhoneSkin.drawOrFill(g,
-                b.self() ? PhoneSkin.Element.CHAT_BUBBLE_SELF : PhoneSkin.Element.CHAT_BUBBLE_PEER,
-                bx, contentY, b.w(), b.h(),
-                b.self() ? COLOR_BUBBLE_SELF : COLOR_BUBBLE_PEER);
+        ChatUi.bubble(g, b.self(), bx, contentY, b.w(), b.h());
 
         renderSelection(g, font, b, bx, contentY);
         var origin = b.textOrigin();
@@ -249,7 +243,9 @@ final class ChatMessagePane {
                 for (var span : b.text().lines().get(line).spans(selection.start(), selection.end())) {
                     int top = Math.round(line * step / ChatLayout.TEXT_SCALE * 16f);
                     g.fill(Math.round(span.left() * 16f), top,
-                            Math.round(span.right() * 16f), top + font.lineHeight * 16, 0x668D4169);
+                            Math.round(span.right() * 16f), top + font.lineHeight * 16, PhoneTheme.COLOR_CHAT_SELECTION);
+                    g.fill(Math.round(span.left() * 16f), top + font.lineHeight * 16 - 4,
+                            Math.round(span.right() * 16f), top + font.lineHeight * 16, PhoneTheme.COLOR_CHAT_SELECTION_EDGE);
                 }
             }
         } finally { g.pose().popPose(); }

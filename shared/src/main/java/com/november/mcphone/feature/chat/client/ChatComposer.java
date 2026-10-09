@@ -6,6 +6,8 @@ import com.november.mcphone.core.client.GuiUtil;
 import com.november.mcphone.core.client.PhoneSkin;
 import com.november.mcphone.core.client.PhoneTheme;
 import com.november.mcphone.feature.chat.TextBody;
+import com.november.mcphone.feature.chat.client.contextmenu.ChatContextMenuView;
+import java.util.function.Supplier;
 
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
@@ -24,12 +26,12 @@ final class ChatComposer {
     private static final int MENU_ROW_EXTRA = 3;
     private static final String[] RESERVED_ATTACH_KEYS = {
             "mcphone.chat.layout.voice", "mcphone.chat.layout.file", "mcphone.chat.layout.location"};
-    private static final int COLOR_INPUT_BG = PhoneTheme.COLOR_CHAT_INPUT_BG;
     private static int colorSend() { return ChatUi.accent(); }
     private static int colorSendHover() { return FontPalette.current().darkText() ? 0xFF863A66 : 0xFFFFD5E9; }
     private static int colorSendOff() { return FontPalette.muted(); }
     private static int cursorRoom(Font font) { return font.width("_"); }
     private final Consumer<String> onSend;
+    private final ChatInputMenu inputMenu;
     private EditBox box;
     private boolean sendHovered, attachBtnHovered, stickerHovered, attachMenuOpen;
     private boolean inputFocused = true;
@@ -38,9 +40,32 @@ final class ChatComposer {
     private float inputOriginY;
     private ChatLayout.Rect inputBounds = new ChatLayout.Rect(0, 0, 0, 0);
 
-    ChatComposer(Consumer<String> onSend) { this.onSend = onSend; }
+    ChatComposer(Consumer<String> onSend, Supplier<String> clipboard, ChatContextMenuView.PanelPainter painter) {
+        this.onSend = onSend;
+        inputMenu = new ChatInputMenu(clipboard, this::paste, painter);
+    }
+    boolean hasContextMenu() { return inputMenu.isOpen(); }
+    boolean dismissContextMenu() { return inputMenu.dismiss(); }
+    boolean contextMouseClicked(double mx, double my, int button) { return inputMenu.mouseClicked(mx, my, button); }
+    boolean openContextMenu(double mx, double my) {
+        if (box == null || !inputBounds.contains(mx, my)) return false;
+        dismissAttachmentMenu();
+        setFocused(true);
+        // 右键不改光标或已有选区；粘贴和 Ctrl+V 采用相同的 EditBox 插入规则。
+        inputMenu.open(mx, my);
+        return true;
+    }
+    private void paste(String text) {
+        if (box == null) return;
+        setFocused(true);
+        box.insertText(text);
+    }
+    void renderContextMenu(GuiGraphics g, Font font, int x, int y, int width, int height, int mx, int my) {
+        inputMenu.render(g, font, x, y, width, height, mx, my);
+    }
 
     void reset(boolean focused) {
+        inputMenu.dismiss();
         inputFocused = focused;
         sendHovered = attachBtnHovered = stickerHovered = attachMenuOpen = false;
         attachHovered = pendingAttach = null;
@@ -122,8 +147,7 @@ final class ChatComposer {
         attachHovered = null;
         if (hasText || !canAttach || ChatImageSender.isFull()) attachMenuOpen = false;
 
-        PhoneSkin.drawOrFill(g, PhoneSkin.Element.CHAT_INPUT_BAR,
-                barX, y, boxW, INPUT_H, COLOR_INPUT_BG);
+        ChatUi.inputBar(g, barX, y, boxW, INPUT_H);
 
         // 无边框的 EditBox 不会自己垂直居中，手动摆到栏中间
         float textY = y + (INPUT_H - font.lineHeight * ChatLayout.TEXT_SCALE) / 2f;

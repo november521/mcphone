@@ -1,0 +1,5 @@
+copy.png: Material Symbols content-copy-outline (Apache-2.0). https://icon-sets.iconify.design/material-symbols/content-copy-outline/
+delete.png: Material Symbols delete-outline (Apache-2.0). https://icon-sets.iconify.design/material-symbols/delete-outline/
+paste.png: Lucide clipboard-paste (ISC). https://lucide.dev/icons/clipboard-paste
+PNG: 96x96 RGBA transparent. Original shapes preserved; only export dimensions and color changed.
+black/ and white/: 3 PNGs each. svg/black/ and svg/white/: matching SVG sources.

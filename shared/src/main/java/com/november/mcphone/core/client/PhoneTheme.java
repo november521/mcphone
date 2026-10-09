@@ -150,16 +150,24 @@ public final class PhoneTheme {
     // 气泡底与输入栏底是兜底色，贴图见 PhoneSkin.Element 的 CHAT_BUBBLE_SELF / CHAT_BUBBLE_PEER / CHAT_INPUT_BAR
 
     /** 自己发的气泡底 */
-    public static final int COLOR_CHAT_BUBBLE_SELF = 0xFF2E6FDB;
+    public static final int COLOR_CHAT_BUBBLE_SELF = 0xC58A5072;
 
     /** 对方发的气泡底 */
-    public static final int COLOR_CHAT_BUBBLE_PEER = 0xFF3A3A4E;
+    public static final int COLOR_CHAT_BUBBLE_PEER = 0xC1687B94;
 
     /** 对方气泡里的字。比纯白暗一点点，深色气泡上不刺眼 */
     public static final int FONT_COLOR_CHAT_PEER = 0xFFEEEEEE;
 
     /** 会话底部输入栏的底 */
-    public static final int COLOR_CHAT_INPUT_BG = 0xFF26263A;
+    public static final int COLOR_CHAT_INPUT_BG = 0xAA1D1C25;
+
+    /** 气泡和输入框缺贴图时的浅色细描边，与默认矢量表面保持同一色相。 */
+    public static final int COLOR_CHAT_BUBBLE_SELF_EDGE = 0x99F2D2E7;
+    public static final int COLOR_CHAT_BUBBLE_PEER_EDGE = 0x91D5E2F6;
+    public static final int COLOR_CHAT_INPUT_EDGE = 0x75CCD6EA;
+    /** 冷蓝选区与莓紫/灰蓝气泡区分，浅色底沿帮助识别字素范围。 */
+    public static final int COLOR_CHAT_SELECTION = 0xCC2F6FAE;
+    public static final int COLOR_CHAT_SELECTION_EDGE = 0xBFAADFFF;
 
     /** 未读条数角标的底。兜底色，见 PhoneSkin.Element.UNREAD_BADGE */
     public static final int COLOR_UNREAD_BADGE = 0xFFAC477B;

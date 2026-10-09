@@ -123,3 +123,16 @@ Material Symbols / Iconoir - 聊天操作图标
 转换     用户提供的 96x96 纯白透明 PNG 原样打包；SVG 仅改颜色及输出尺寸，路径未改。
 授权     Material Symbols: Apache-2.0，完整许可见 licenses/material-symbols-Apache-2.0.txt。
          Iconoir: MIT，完整许可见 licenses/iconoir-MIT.txt。
+
+
+================================================================
+Material Symbols / Lucide - 复制、删除、粘贴菜单图标
+================================================================
+用途     消息复制/删除和输入框粘贴。用户提供的白色 96x96 PNG 原样打包。
+位置     assets/mcphone/textures/chat/ui/{copy,delete,paste}.png
+原稿     docs/assets/chat-ui/clipboard-actions-96px/，来源记录见 sources.txt。
+来源     Material Symbols content-copy-outline / delete-outline:
+         https://github.com/google/material-design-icons
+         Lucide clipboard-paste: https://lucide.dev/icons/clipboard-paste
+授权     Material Symbols: Apache-2.0，见 licenses/material-symbols-Apache-2.0.txt。
+         Lucide: ISC，完整许可见 licenses/lucide-ISC.txt。

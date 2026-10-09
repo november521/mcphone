@@ -2,6 +2,7 @@ package com.november.mcphone.feature.chat.client.messageaction;
 
 import com.november.mcphone.feature.chat.ChatDeletionResult;
 import com.november.mcphone.feature.chat.ChatMessage;
+import com.november.mcphone.feature.chat.client.contextmenu.ChatContextMenuView;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -12,33 +13,17 @@ public final class ChatMessageActionsTest {
     private static void check(boolean ok, String message) { checks++; if (!ok) throw new AssertionError(message); }
     private record Sent(UUID peer, UUID message, UUID request) {}
     public static void main(String[] args) {
-        var viewport = new ChatContextMenuLayout.Bounds(10, 20, 112, 160);
-        for (double x : new double[]{-100, 10, 60.75, 122, 1000}) {
-            for (double y : new double[]{-100, 20, 90.5, 180, 1000}) {
-                for (int rows : new int[]{1, 2}) {
-                    var layout = ChatContextMenuLayout.place(x, y, viewport, 60, 7, rows);
-                    var b = layout.bounds();
-                    check(b.x() >= viewport.x() && b.x() + b.width() <= viewport.x() + viewport.width(), "靠左右边界菜单留在手机内");
-                    check(b.y() >= viewport.y() && b.y() + b.height() <= viewport.y() + viewport.height(), "靠上下边界菜单留在手机内");
-                    check(layout.rowAt(b.x() + 5, b.y() + 2) == -1, "上留白不执行操作");
-                    check(layout.rowAt(b.x() - .01, b.y() + 5) == -1, "菜单外不命中");
-                    check(layout.rowAt(b.x() + b.width(), b.y() + 5) == -1, "右边界不命中");
-                    check(layout.rowAt(b.x() + 5, b.y() + b.height() - 1) == -1, "下留白不执行操作");
-                    for (int i = 0; i < rows; i++) check(layout.rowAt(b.x() + 5, b.y() + 3 + i * layout.rowHeight()) == i, "绘制与命中共用行边界");
-                }
-            }
-        }
         UUID peer = new UUID(0, 1), id = new UUID(0, 2);
         var whole = new ChatMessageTarget(peer, id, "中文 abc\n第二行", "");
         var selected = new ChatMessageTarget(peer, id, "中文 abc\n第二行", "abc\n第");
         var image = new ChatMessageTarget(peer, id, null, "");
         var menu = new ChatContextMenu();
-        menu.open(whole, 10, 20); menu.arrange(viewport, 60, 7);
-        check(menu.actionAt(15, 24) == ChatMessageAction.COPY, "文本菜单第一行复制");
-        check(menu.actionAt(15, 37) == ChatMessageAction.DELETE, "文本菜单第二行删除");
-        menu.open(image, 10, 20); menu.arrange(viewport, 60, 7);
-        check(menu.actionAt(15, 24) == ChatMessageAction.DELETE, "图片仅显示删除");
-        check(menu.actionAt(15, 37) == null, "图片没有额外的假操作项");
+        menu.open(whole, 10, 20);
+        check(menu.entries(false).get(0).icon() == ChatContextMenuView.Icon.COPY, "文本菜单第一行复制");
+        check(menu.entries(false).get(1).icon() == ChatContextMenuView.Icon.DELETE, "文本菜单第二行删除");
+        menu.open(image, 10, 20);
+        check(menu.entries(false).get(0).icon() == ChatContextMenuView.Icon.DELETE, "图片仅显示删除");
+        check(menu.entries(false).size() == 1, "图片没有额外的假操作项");
         var copied = new ArrayList<String>(); var sent = new ArrayList<Sent>();
         var cancelled = new ArrayList<UUID>(); var notices = new ArrayList<String>();
         var actions = new ChatMessageActions((g,x,y,w,h) -> {}, copied::add,

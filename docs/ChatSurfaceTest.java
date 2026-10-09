@@ -70,8 +70,23 @@ public class ChatSurfaceTest {
             check(im.getHeight() == (name.equals("input_bar") ? 12 : 32) * 8, "等比放大高度");
             check((im.getRGB(0, 0) >>> 24) == 0, "圆角外侧需要完全透明");
             int centerAlpha = im.getRGB(im.getWidth() / 2, im.getHeight() / 2) >>> 24;
-            check(name.equals("input_bar") ? centerAlpha >= 160 && centerAlpha <= 200 : centerAlpha == 255,
-                    "输入框应透出背景，消息气泡保持不透明以保证可读性");
+            check(name.equals("input_bar") ? centerAlpha >= 160 && centerAlpha <= 190 : centerAlpha >= 180 && centerAlpha <= 210,
+                    "输入框与气泡在明确的半透明区间内，不能退回不透明或过度透明");
+            int center = im.getRGB(im.getWidth() / 2, im.getHeight() / 2);
+            int edge = im.getRGB(im.getWidth() / 2, 1);
+            int centerBrightness = (((center >> 16) & 255) * 3 + ((center >> 8) & 255) * 6 + (center & 255)) / 10;
+            int edgeBrightness = (((edge >> 16) & 255) * 3 + ((edge >> 8) & 255) * 6 + (edge & 255)) / 10;
+            check((edge >>> 24) > 0 && (edge >>> 24) < 255 && edgeBrightness > centerBrightness + 35,
+                    "浅色细描边必须与底板区分，并保留透明度");
+            if (name.equals("bubble_peer")) {
+                check(((center >> 16) & 255) < ((center >> 8) & 255) && ((center >> 8) & 255) < (center & 255),
+                        "接收气泡保持灰蓝色相");
+                check(centerBrightness >= 105, "接收气泡提亮，不能退回原深灰底");
+            } else if (name.equals("bubble_self")) {
+                check(((center >> 16) & 255) > (center & 255) && (center & 255) > ((center >> 8) & 255),
+                        "发送气泡保持莓紫色相");
+                check(((center >> 16) & 255) >= 120, "发送气泡提亮并保留莓紫层次");
+            }
             if (name.equals("input_bar")) {
                 check(metadata.textColor() == 0xFFFFF2F7, "偏黑底板使用浅色文字");
                 int rgb = im.getRGB(im.getWidth() / 2, im.getHeight() / 2);

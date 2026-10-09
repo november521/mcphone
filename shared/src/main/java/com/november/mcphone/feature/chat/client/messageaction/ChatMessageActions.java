@@ -1,6 +1,7 @@
 package com.november.mcphone.feature.chat.client.messageaction;
 
 import com.november.mcphone.feature.chat.ChatMessage;
+import com.november.mcphone.feature.chat.client.contextmenu.ChatContextMenuView;
 import com.november.mcphone.feature.chat.ChatDeletionResult;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
@@ -10,7 +11,7 @@ import java.util.function.Consumer;
 
 /** 消息操作模块的唯一公开入口；依赖由页面注入，内部菜单和几何不暴露给其他页面。 */
 public final class ChatMessageActions {
-    @FunctionalInterface public interface PanelPainter { void paint(GuiGraphics g, int x, int y, int width, int height); }
+    @FunctionalInterface public interface PanelPainter extends ChatContextMenuView.PanelPainter {}
     @FunctionalInterface public interface DeleteSender { void send(UUID peer, UUID message, UUID request); }
     private record Pending(UUID peer, UUID message, UUID request, long deadline) {}
     private final ChatContextMenu menu = new ChatContextMenu();
@@ -70,6 +71,6 @@ public final class ChatMessageActions {
         }
     }
     public void render(GuiGraphics g, Font font, int x, int y, int width, int height, int mx, int my) {
-        menu.render(g, font, new ChatContextMenuLayout.Bounds(x, y, width, height), mx, my, pending != null, painter);
+        menu.render(g, font, x, y, width, height, mx, my, pending != null, painter);
     }
 }

@@ -122,6 +122,10 @@ public final class PhoneSkin {
         CHAT_MORE("chat/ui/more"),
         CHAT_SMILE("chat/ui/smile"),
         CHAT_VOICE("chat/ui/voice"),
+        /** 右键菜单的透明图标，按统一 8×8 逻辑尺寸居中并随菜单文字着色。 */
+        CHAT_COPY("chat/ui/copy"),
+        CHAT_DELETE("chat/ui/delete"),
+        CHAT_PASTE("chat/ui/paste"),
 
         /** 收到消息的通知底。建议 160×32（原版通知槽位尺寸） */
         TOAST_BG("phone/toast", "toast_bg"),
