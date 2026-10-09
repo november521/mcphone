@@ -996,13 +996,7 @@ public final class PhoneScreen extends PhoneScreenBase {
                 Component.translatable("mcphone.app.app_manager").getString(),
                 () -> navigateTo(Mode.APP_MANAGER),
                 () -> String.valueOf(PhoneScreenRegistry.getAppCount())));
-        settingItems.add(new SettingsList.Item(
-                Component.translatable("mcphone.settings.vault").getString(),
-                () -> navigateTo(Mode.VAULT)));
-        // 开发者那一档（§12.6 原文的路径：设置 → 开发者 → 我的签名密钥）
-        settingItems.add(new SettingsList.Item(
-                Component.translatable("mcphone.settings.author_key").getString(),
-                () -> navigateTo(Mode.AUTHOR_KEY)));
+        // 保险箱与我的签名密钥尚未开放，暂不注册设置入口；页面和已有数据继续保留。
         settingItems.add(new SettingsList.Item(
                 Component.translatable("mcphone.gui.about").getString(),
                 () -> navigateTo(Mode.ABOUT)));
