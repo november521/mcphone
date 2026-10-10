@@ -24,6 +24,9 @@ import net.minecraft.network.chat.Component;
  * 反过来把 1.21 的横向量砍掉才是丢。
  */
 public abstract class PhoneScreenBase extends Screen {
+    /** 页面决定是否显示整屏背景；普通界面默认保留原版行为。 */
+    protected boolean shouldDrawBackground() { return true; }
+
 
     protected PhoneScreenBase(Component title) {
         super(title);

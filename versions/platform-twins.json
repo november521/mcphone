@@ -123,7 +123,7 @@
     "com/november/mcphone/platform/client/PhoneBookIcons.java": 2,
     "com/november/mcphone/platform/client/PhoneContainerScreenBase.java": 13,
     "com/november/mcphone/platform/client/PhoneKeyInput.java": 4,
-    "com/november/mcphone/platform/client/PhoneScreenBase.java": 57,
+    "com/november/mcphone/platform/client/PhoneScreenBase.java": 58,
     "com/november/mcphone/platform/client/PhoneSoundDevice.java": 2,
     "com/november/mcphone/platform/client/PhoneToastBase.java": 16,
     "com/november/mcphone/platform/client/PhoneWeather.java": 2,
