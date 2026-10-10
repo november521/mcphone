@@ -4,7 +4,7 @@
 
 本次针对 WorldEdit 与 MCPhone 同时导出 `org.mozilla.*` 的 Java 模块解析冲突。已用用户实例里的 WorldEdit 7.3.8 实物 JAR 重现原始 Rhino 的同包解析失败；换成私有 Rhino 后，两份引擎的模块层解析及各自代表性脚本均通过。这个探针没有启动 Minecraft，也没有测试 WorldEdit 编辑和 CraftScript 全流程。
 
-工作基线为 `codex/port-26.1-neoforge`、`d540374`（1.11.0），保留此前未提交的 26.1.2 移植及用户已实测通过的相机修复。没有修改另一个 `mcphone` 工作目录、根 mod_version、发布工作流或用户实例；没有提交、推送、提 PR 或发布。
+工作基线为 `codex/port-26.1-neoforge`、`d540374`（1.11.0），包含此前完成的 26.1.2 移植及用户已实测通过的相机修复。没有修改另一个 `mcphone` 工作目录、根 mod_version 或用户实例；发布工作流仅补充 Java 25 工具链，未触发发布。本次工作已提交至 [PR #68](https://github.com/november521/mcphone/pull/68)，不自动合并。
 
 **固定依赖与维护入口**
 
@@ -100,3 +100,14 @@ Forge 和两份 NeoForge 内嵌引擎整个 JAR 的摘要与规范产物一致�
 回滚应一起回退私有依赖锁、消费规则和内部类型迁移；不删存档、不撤销无关相机/聊天改动。回到原始 Rhino 会重新引入 WorldEdit 同包冲突。附属 mod 使用公开 API，不重复嵌入引擎，也不直接传递原始 Rhino 的 Context/Function/Scriptable。
 
 参考依据：[Rhino 上游模块声明](https://raw.githubusercontent.com/mozilla/rhino/Rhino1_9_1_Release/rhino/src/main/java/module-info.java)、[ModDevGradle 库依赖与运行](https://docs.neoforged.net/toolchain/docs/plugins/mdg/)、[Loom include](https://docs.fabricmc.net/develop/loom/)、[Shadow 兼容矩阵](https://github.com/GradleUp/shadow#compatibility-matrix)。
+
+**PR CI 补正（2026-10-10）**
+
+首次 Linux CI 的三个旧平台全量构建通过；26.1.2 的两个失败暴露出此前 Windows 验收未能覆盖的路径：
+
+- `DeploymentAuthorityTest` 的命令权限 codec 需要新版注册表引导。26.1.2 为它及 `EconomyDataTest` 接入官方 FML `StartupArgs`、`FMLLoader`、`JUnitGameBootstrapper` 流程；完整调用原断言 main，不创建服务器或世界。入口位于独立的 `src/assertionBootstrap/java/com/november/testbootstrap/`，不进入玩家包，也不借修改生产命令避开测试。运行类路径不引入 compileOnly 联动，主源码和断言通过 MOD_CLASSES 交给同一加载器，运行目录隔离在 build 下。
+- Java 25 的文件系统可能将 ENOTDIR 判成不存在。经济存档现在读取文件属性并核对最近已有父级：普通文件、失效链接、不可访问路径继续按看不到处理，只有能确认的缺失才允许新账本。保留原有坏路径锁账断言；Java 17/25 的原存档路径用例及正常缺失目录对照共各 21 条通过。
+
+接入后的 Windows 命令测试 94 条通过；完整经济测试的异常仍如实传递为失败，仅剩 Windows POSIX 权限限制。配置缓存已保存，Linux 完整回归在 PR CI 继续确认。此前预览包的摘要和旧全量计数是对应交付时的记录，不代表这些补正后的 JAR。
+
+测试引导依据：[NeoForge 官方 JUnitService](https://github.com/neoforged/FancyModLoader/blob/main/junit-fml/src/main/java/net/neoforged/fml/junit/JUnitService.java)。

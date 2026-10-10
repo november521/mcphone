@@ -406,3 +406,39 @@ apply from: '../../gradle/mcphone-port-bindings.gradle'
 
 // 开发、测试与发行共用已验收的私有 Rhino 依赖。
 apply from: '../../gradle/mcphone-engine-dependency.gradle'
+
+// 新版命令权限 codec 会初始化注册表。保持原测试完整执行，使用 FML 官方无窗口引导。
+// 测试入口独立于 main，普通平台断言与玩家发行包不会携带它。
+def loaderAssertionClasses = layout.buildDirectory.dir('classes/loader-assertion-bootstrap')
+def compileLoaderAssertionBootstrap = tasks.register('compileLoaderAssertionBootstrap', JavaCompile) {
+    source = fileTree('src/assertionBootstrap/java') { include '**/*.java' }
+    classpath = sourceSets.main.compileClasspath
+    destinationDirectory = loaderAssertionClasses
+    javaCompiler = javaToolchains.compilerFor(java.toolchain)
+}
+def loaderAssertionFolders = files(layout.buildDirectory.dir('classes/assert-tests'), sourceSets.main.output)
+def loaderAssertionModClasses = loaderAssertionFolders.files.collect {
+    "${mod_id}%%${it.absolutePath}"
+}.join(File.pathSeparator)
+[
+        DeploymentAuthorityTest: 'com.november.mcphone.core.script.server.DeploymentAuthorityTest',
+        EconomyDataTest: 'com.november.mcphone.core.script.server.economy.EconomyDataTest'
+].each { simple, entry ->
+    tasks.named("assertTest${simple}", JavaExec).configure {
+        dependsOn compileLoaderAssertionBootstrap
+        // 使用真实运行依赖，不能把仅供编译的可选联动强行变成待加载模组。
+        classpath = files(loaderAssertionClasses, loaderAssertionFolders, sourceSets.main.runtimeClasspath)
+        mainClass = 'com.november.testbootstrap.LoaderAssertionMain'
+        args entry
+        environment 'MOD_CLASSES', loaderAssertionModClasses
+        jvmArgs '--enable-native-access=ALL-UNNAMED', '--sun-misc-unsafe-memory-access=allow',
+                '--add-opens=java.base/java.lang.invoke=ALL-UNNAMED'
+        def runtimeDirectory = layout.buildDirectory.dir("assertion-runtime/${simple}").get().asFile
+        workingDir = runtimeDirectory
+        doFirst {
+            if (!runtimeDirectory.isDirectory() && !runtimeDirectory.mkdirs()) {
+                throw new GradleException("无法创建隔离的断言运行目录：${runtimeDirectory}")
+            }
+        }
+    }
+}

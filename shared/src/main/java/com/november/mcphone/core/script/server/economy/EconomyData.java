@@ -112,11 +112,37 @@ public final class EconomyData extends PhoneSavedData implements BalanceStore, T
 
     /** 在、不在、看不到（没权限之类）：看不到的一律按"在"办 —— 当成不在就可能拿空账盖掉它，或者该挪开的旧快照没挪开还不报。 */
     private static boolean present(Path p) {
-        return !Files.notExists(p);
+        return !definitelyMissing(p);
+    }
+
+    /**
+     * 只有路径可以走通且文件确实不在才认作缺失。Java 25 的 notExists 也可能把
+     * ENOTDIR 算作不在；中间一节是普通文件或失效链接时，仍须锁账而不是给空账。
+     */
+    private static boolean definitelyMissing(Path path) {
+        try {
+            Files.readAttributes(path, java.nio.file.attribute.BasicFileAttributes.class,
+                    java.nio.file.LinkOption.NOFOLLOW_LINKS);
+            return false;
+        } catch (java.nio.file.NoSuchFileException absent) {
+            for (Path parent = path.toAbsolutePath().getParent(); parent != null; parent = parent.getParent()) {
+                try {
+                    return Files.readAttributes(parent, java.nio.file.attribute.BasicFileAttributes.class).isDirectory();
+                } catch (java.nio.file.NoSuchFileException missingParent) {
+                    // 不跟随链接时仍在：它是失效的链接，不是可以创建的新目录。
+                    if (Files.exists(parent, java.nio.file.LinkOption.NOFOLLOW_LINKS)) return false;
+                } catch (java.io.IOException | SecurityException unreadable) {
+                    return false;
+                }
+            }
+            return false;
+        } catch (java.io.IOException | SecurityException unreadable) {
+            return false;
+        }
     }
 
     private static String state(Path p, String ifThere) {
-        return Files.exists(p) ? ifThere : Files.notExists(p) ? " 不在" : " 看不到（权限或路径不对？）";
+        return Files.exists(p) ? ifThere : definitelyMissing(p) ? " 不在" : " 看不到（权限或路径不对？）";
     }
 
     /** 必须挂在主世界的 DataStorage：它按维度分，挂错了玩家去下界钱就「没了」且不报错。 */
@@ -175,7 +201,7 @@ public final class EconomyData extends PhoneSavedData implements BalanceStore, T
     static EconomyData loadPreferring(CompoundTag saved, Path snapshot, LongSupplier clock) {
         CompoundTag snap = readSnapshot(snapshot);
         if (snap == null) {
-            if (Files.notExists(snapshot)) MCphone.LOGGER.info("[MCphone] 还没有货币的原子快照，用 SavedData 那份");
+            if (definitelyMissing(snapshot)) MCphone.LOGGER.info("[MCphone] 还没有货币的原子快照，用 SavedData 那份");
             // 说出快照的状态：否则服主只挪走 SavedData，开服就静默按新世界开了
             return load(saved, clock, SAVED_DATA + "（原子快照 " + snapshot + state(snapshot, " 读不出来") + "）");
         }
@@ -199,7 +225,7 @@ public final class EconomyData extends PhoneSavedData implements BalanceStore, T
 
     /** 没有返回 null；有但读不出来记一条并返回 null。 */
     private static CompoundTag readSnapshot(Path snapshot) {
-        if (Files.notExists(snapshot)) return null;
+        if (definitelyMissing(snapshot)) return null;
         try {
             return EconomySnapshot.read(snapshot);
         } catch (java.io.IOException e) {
