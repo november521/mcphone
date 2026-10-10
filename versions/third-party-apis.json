@@ -54,16 +54,13 @@
     "vazkii.patchouli": {
       "mod": "Patchouli",
       "evidence": "PatchouliSource.java 在 1.20.1-forge 与 1.21.1-neoforge 上正文逐字相同（去注释后比对 origin/1.20.1-forge），vazkii.patchouli.* 的 4 条 import 两支完全一致：PatchouliAPI、BookIcon、Book、BookRegistry。同一份文本已在两个目标上各自编译通过。"
-    },
-    "org.mozilla.javascript": {
-      "mod": "Mozilla Rhino（不是模组，是中央仓库上的普通库）",
-      "evidence": "org.mozilla:rhino:1.9.1，纯 Java、不碰 Minecraft API，与 Minecraft 版本无关，三个目标共用一份。包名与 KubeJS 那个 fork（dev.latvian.mods.rhino）不同 —— 两个 Context 是两个类，静态字段与 ThreadLocal 各自独立，不会 split package。jar 里带 module-info.class（module org.mozilla.rhino，requires java.base/java.compiler/jdk.dynalink/java.desktop），随 jar-in-jar 原样带着不剥。⚠ java.desktop 这条意味着裁剪过 runtime image 的专用服务器会模块解析失败。"
     }
   },
   "banned_examples": {
     "_comment": "不在 allowed 里就是禁的，这里只记几个踩过的，方便下一个人对号入座",
     "appeng.menu.locator": "AE2：1.20.1 上 ItemMenuHostLocator / MenuLocators 不存在",
     "de.mari_023.ae2wtlib.api": "AE2WTLib：15.x 还没把 api 拆成单独子包与构件",
-    "com.refinedmods.refinedstorage.common.api": "Refined Storage：1.20.1 上是 1.12.x（RS1），没有这套注册点"
+    "com.refinedmods.refinedstorage.common.api": "Refined Storage：1.20.1 上是 1.12.x（RS1），没有这套注册点",
+    "org.mozilla.javascript": "与 WorldEdit 的同包模块冲突；引擎使用固定私有 Rhino。边界由 verifyPrivateEngineBoundary 按字节码校验。"
   }
 }

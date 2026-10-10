@@ -78,10 +78,7 @@ public final class Scores {
     public static String nameOf(MinecraftServer server, UUID player) {
         var online = server.getPlayerList().getPlayer(player);
         if (online != null) return online.getScoreboardName();
-        var profile = server.getProfileCache() == null
-                ? java.util.Optional.<com.mojang.authlib.GameProfile>empty()
-                : server.getProfileCache().get(player);
-        return profile.map(com.mojang.authlib.GameProfile::getName).orElse(null);
+        return com.november.mcphone.platform.PlayerAccess.cachedName(server,player).orElse(null);
     }
 
     /**

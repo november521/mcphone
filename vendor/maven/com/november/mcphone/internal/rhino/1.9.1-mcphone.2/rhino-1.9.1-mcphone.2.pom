@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"><modelVersion>4.0.0</modelVersion>
+  <groupId>com.november.mcphone.internal</groupId><artifactId>rhino</artifactId>
+  <version>1.9.1-mcphone.2</version><name>MCPhone private Rhino</name>
+  <url>https://github.com/november521/mcphone</url>
+  <licenses><license><name>Mozilla Public License 2.0</name>
+    <url>https://www.mozilla.org/MPL/2.0/</url><distribution>repo</distribution></license></licenses>
+  <description>Relocated Mozilla Rhino 1.9.1; no transitive upstream runtime dependency.</description>
+</project>

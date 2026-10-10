@@ -1,6 +1,7 @@
 package com.november.mcphone.core.script.server.economy;
 
 import com.november.mcphone.MCphone;
+import com.november.mcphone.core.PhoneNbt;
 import com.november.mcphone.api.economy.TxnResult;
 import com.november.mcphone.core.PhoneSavedData;
 import net.minecraft.nbt.CompoundTag;
@@ -165,7 +166,7 @@ public final class EconomyData extends PhoneSavedData implements BalanceStore, T
         } catch (java.io.IOException e) {
             return "写快照失败时挪开的 " + stale + " 也读不出来（" + e + "）";
         }
-        String gen = t.contains("generation", Tag.TAG_LONG) ? "第 " + t.getLong("generation") + " 次保存" : "不知道第几次保存";
+        String gen = PhoneNbt.contains(t, "generation", Tag.TAG_LONG) ? "第 " + PhoneNbt.getLong(t, "generation") + " 次保存" : "不知道第几次保存";
         return "上一份完整快照在 " + stale + "（" + gen + "，" + at + "，写快照失败时挪开的）。确认后改名成 " + snapshot.getFileName()
                 + " 再开服就回到那一次保存：那之后的变动全部作废，流水里那之后的行不会被自动标出来";
     }
@@ -209,11 +210,11 @@ public final class EconomyData extends PhoneSavedData implements BalanceStore, T
 
     /** "第 N 次保存"；没写就说没写，不编一个第 0 次。 */
     private static String genText(CompoundTag tag) {
-        return tag.contains("generation", Tag.TAG_LONG) ? "第 " + tag.getLong("generation") + " 次保存" : "没写第几次保存";
+        return PhoneNbt.contains(tag, "generation", Tag.TAG_LONG) ? "第 " + PhoneNbt.getLong(tag, "generation") + " 次保存" : "没写第几次保存";
     }
 
     private static long generationOf(CompoundTag tag) {
-        return tag.contains("generation", Tag.TAG_LONG) ? tag.getLong("generation") : 0;
+        return PhoneNbt.contains(tag, "generation", Tag.TAG_LONG) ? PhoneNbt.getLong(tag, "generation") : 0;
     }
 
     /** 之后每次保存都把同一个 tag 原子写到这里。 */
@@ -415,10 +416,10 @@ public final class EconomyData extends PhoneSavedData implements BalanceStore, T
     /** {@code source} 说这份 tag 是从哪个文件读的，写进锁住原因：只有一份坏时，服主据此只挪走坏的那份。 */
     static EconomyData load(CompoundTag tag, LongSupplier clock, String source) {
         String origin = source == null ? "" : source + "：";
-        if (!tag.contains("dataVersion", Tag.TAG_INT)) {
+        if (!PhoneNbt.contains(tag, "dataVersion", Tag.TAG_INT)) {
             return locked(origin + "存档里没有 dataVersion（这一版起每份都写），认不出是什么格式，不猜", clock);
         }
-        int v = tag.getInt("dataVersion");
+        int v = PhoneNbt.getInt(tag, "dataVersion");
         if (v > DATA_VERSION) {
             return locked(origin + "存档是更新版本的 MCphone 写的（格式第 " + v + " 版，这一版只认到第 " + DATA_VERSION
                     + " 版）；不降级、不覆盖，装回新版本就好", clock);
@@ -436,13 +437,13 @@ public final class EconomyData extends PhoneSavedData implements BalanceStore, T
 
         EconomyData d = new EconomyData(clock, null);
         d.generation = generationOf(t);
-        d.savedAt = t.contains("savedAt", Tag.TAG_LONG) ? t.getLong("savedAt") : 0;
+        d.savedAt = PhoneNbt.contains(t, "savedAt", Tag.TAG_LONG) ? PhoneNbt.getLong(t, "savedAt") : 0;
 
         Map<String, Tag> rawCurrencies = new LinkedHashMap<>();
         if (t.contains("currencies")) {
-            if (!t.contains("currencies", Tag.TAG_COMPOUND)) return locked(origin + "currencies 不是一张表", clock);
-            CompoundTag cs = t.getCompound("currencies");
-            for (String id : cs.getAllKeys()) {
+            if (!PhoneNbt.contains(t, "currencies", Tag.TAG_COMPOUND)) return locked(origin + "currencies 不是一张表", clock);
+            CompoundTag cs = PhoneNbt.getCompound(t, "currencies");
+            for (String id : PhoneNbt.getAllKeys(cs)) {
                 Tag raw = cs.get(id);
                 rawCurrencies.put(id, raw);
                 String why = canonicalCurrency(id) ? d.readCurrency(id, raw) : "货币 id 不是规范写法";
@@ -451,8 +452,8 @@ public final class EconomyData extends PhoneSavedData implements BalanceStore, T
         }
 
         if (t.contains("escrow")) {
-            if (!t.contains("escrow", Tag.TAG_LIST)) return locked(origin + "escrow 不是一个列表", clock);
-            ListTag list = t.getList("escrow", Tag.TAG_COMPOUND);
+            if (!PhoneNbt.contains(t, "escrow", Tag.TAG_LIST)) return locked(origin + "escrow 不是一个列表", clock);
+            ListTag list = PhoneNbt.getList(t, "escrow", Tag.TAG_COMPOUND);
             if (list.size() != ((ListTag) t.get("escrow")).size()) {
                 return locked(origin + "escrow 里有不是表的条目", clock);
             }
@@ -464,11 +465,11 @@ public final class EconomyData extends PhoneSavedData implements BalanceStore, T
             long base = Math.max(now, d.savedAt);
             Map<UUID, Long> fixed = new LinkedHashMap<>();
             for (int i = 0; i < list.size(); i++) {
-                CompoundTag e = list.getCompound(i);
-                if (!e.contains("currency", Tag.TAG_STRING)) {
+                CompoundTag e = PhoneNbt.getCompound(list, i);
+                if (!PhoneNbt.contains(e, "currency", Tag.TAG_STRING)) {
                     return locked(origin + "第 " + (i + 1) + " 笔托管读不出是哪种货币，不知道该锁哪一种", clock);
                 }
-                String currency = e.getString("currency");
+                String currency = PhoneNbt.getString(e, "currency");
                 // 大写之类的 id 不锁的话，这笔就成了哪种货币都不认领的孤儿
                 String why = canonicalCurrency(currency) ? readEscrow(e, ok, base, fixed) : "的货币 id 不是规范写法";
                 if (why != null) d.lockCurrency(currency, rawCurrencies.get(currency), "第 " + (i + 1) + " 笔托管" + why);
@@ -477,11 +478,11 @@ public final class EconomyData extends PhoneSavedData implements BalanceStore, T
             // 锁住的货币（不管是余额读坏还是托管读坏）它的托管条目一条都不放进账本，原样留着写回
             Map<UUID, EscrowLedger.Entry> live = new LinkedHashMap<>();
             for (CompoundTag e : pending) {
-                String currency = e.getString("currency");
+                String currency = PhoneNbt.getString(e, "currency");
                 if (d.lockedCurrencies.containsKey(currency)) {
                     d.lockedEscrow.add(e);
                 } else {
-                    UUID id = UUID.fromString(e.getString("id"));
+                    UUID id = UUID.fromString(PhoneNbt.getString(e, "id"));
                     live.put(id, ok.get(id));
                 }
             }
@@ -517,14 +518,14 @@ public final class EconomyData extends PhoneSavedData implements BalanceStore, T
         if (!(raw instanceof CompoundTag c)) return "不是一张表";
         Map<UUID, Long> m = new HashMap<>();
         if (c.contains("balances")) {
-            if (!c.contains("balances", Tag.TAG_COMPOUND)) return "balances 不是一张表";
-            CompoundTag bal = c.getCompound("balances");
-            for (String k : bal.getAllKeys()) {
+            if (!PhoneNbt.contains(c, "balances", Tag.TAG_COMPOUND)) return "balances 不是一张表";
+            CompoundTag bal = PhoneNbt.getCompound(c, "balances");
+            for (String k : PhoneNbt.getAllKeys(bal)) {
                 UUID p = canonicalUuid(k);
                 // 非规范写法（大写、省了前导零）会被 fromString 归一：两个键落到同一个人，后一个静默盖掉前一个
                 if (p == null) return "balances 里 " + k + " 不是规范写法的 UUID";
-                if (!bal.contains(k, Tag.TAG_LONG)) return "balances 里 " + k + " 的余额不是 long";
-                long value = bal.getLong(k);
+                if (!PhoneNbt.contains(bal, k, Tag.TAG_LONG)) return "balances 里 " + k + " 的余额不是 long";
+                long value = PhoneNbt.getLong(bal, k);
                 if (value != 0) m.put(p, value);
             }
         }
@@ -532,8 +533,8 @@ public final class EconomyData extends PhoneSavedData implements BalanceStore, T
         String[] keys = {"minted", "burned"};
         for (int i = 0; i < 2; i++) {
             if (!c.contains(keys[i])) continue;
-            if (!c.contains(keys[i], Tag.TAG_LONG)) return keys[i] + " 不是 long";
-            s[i] = c.getLong(keys[i]);
+            if (!PhoneNbt.contains(c, keys[i], Tag.TAG_LONG)) return keys[i] + " 不是 long";
+            s[i] = PhoneNbt.getLong(c, keys[i]);
             if (s[i] < 0) return keys[i] + " 是负数";
         }
         if (!m.isEmpty()) balances.put(id, m);
@@ -543,19 +544,19 @@ public final class EconomyData extends PhoneSavedData implements BalanceStore, T
 
     /** 读一笔托管。读不懂返回原因。 */
     private static String readEscrow(CompoundTag e, Map<UUID, EscrowLedger.Entry> out, long base, Map<UUID, Long> fixed) {
-        UUID id = canonicalUuid(e.getString("id"));
-        UUID owner = canonicalUuid(e.getString("owner"));
-        UUID beneficiary = canonicalUuid(e.getString("beneficiary"));
+        UUID id = canonicalUuid(PhoneNbt.getString(e, "id"));
+        UUID owner = canonicalUuid(PhoneNbt.getString(e, "owner"));
+        UUID beneficiary = canonicalUuid(PhoneNbt.getString(e, "beneficiary"));
         if (id == null || owner == null || beneficiary == null) return "的 id / owner / beneficiary 不是规范写法的 UUID";
-        if (!e.contains("amount", Tag.TAG_LONG) || !e.contains("createdAt", Tag.TAG_LONG)) {
+        if (!PhoneNbt.contains(e, "amount", Tag.TAG_LONG) || !PhoneNbt.contains(e, "createdAt", Tag.TAG_LONG)) {
             return "缺 amount 或 createdAt，或者不是 long";
         }
-        if (e.getLong("amount") <= 0) return "的金额不是正数";
-        long createdAt = e.getLong("createdAt");
+        if (PhoneNbt.getLong(e, "amount") <= 0) return "的金额不是正数";
+        long createdAt = PhoneNbt.getLong(e, "createdAt");
         // settled 缺了不取默认：按"没结清"读，放过款的那笔就能再放一次
-        if (!e.contains("settled", Tag.TAG_BYTE)) return "缺 settled，或者不是布尔";
+        if (!PhoneNbt.contains(e, "settled", Tag.TAG_BYTE)) return "缺 settled，或者不是布尔";
         if (out.containsKey(id)) return "的号 " + id + " 重复了";
-        boolean settled = e.getBoolean("settled");
+        boolean settled = PhoneNbt.getBoolean(e, "settled");
         // 超时判断是 now - createdAt ≥ 超时：建立时刻远在将来或不是正数（负得离谱会溢出），这笔就永远不会被退款。
         // 没结清的改成基准时刻、从那时起再等满一个超时周期；不锁 —— 为一笔时间戳停掉整种货币代价太大。
         // 基准不早于历次保存的最晚时刻，托管总是建好之后才被存进盘：只要时钟没在两次保存之间来回跳，改成基准不会比真实建立时刻后
@@ -567,10 +568,10 @@ public final class EconomyData extends PhoneSavedData implements BalanceStore, T
             createdAt = base;
         }
         // settledAt 只决定已结清的条目留多久，缺了按建立时刻算，不动钱；但写了就得是 long
-        if (e.contains("settledAt") && !e.contains("settledAt", Tag.TAG_LONG)) return "的 settledAt 不是 long";
-        long settledAt = !settled ? 0 : e.contains("settledAt") ? e.getLong("settledAt") : e.getLong("createdAt");
-        out.put(id, new EscrowLedger.Entry(owner, beneficiary, e.getString("currency"),
-                e.getLong("amount"), createdAt, settled, settledAt));
+        if (e.contains("settledAt") && !PhoneNbt.contains(e, "settledAt", Tag.TAG_LONG)) return "的 settledAt 不是 long";
+        long settledAt = !settled ? 0 : e.contains("settledAt") ? PhoneNbt.getLong(e, "settledAt") : PhoneNbt.getLong(e, "createdAt");
+        out.put(id, new EscrowLedger.Entry(owner, beneficiary, PhoneNbt.getString(e, "currency"),
+                PhoneNbt.getLong(e, "amount"), createdAt, settled, settledAt));
         return null;
     }
 

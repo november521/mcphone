@@ -58,7 +58,7 @@ public final class AppHotkeyHandler {
         if (mc.screen != null || mc.player == null || mc.level == null) return;
 
         // 与原版记按键同一套：有键位符号的用 KEYSYM，没有的退回扫描码
-        InputConstants.Key key = InputConstants.getKey(event.getKey(), event.getScanCode());
+        InputConstants.Key key = com.november.mcphone.platform.client.PhoneKeyInput.key(event.getKey(), event.getScanCode());
 
         // Ctrl / Shift / Alt 自己按下去不算数：组合键要等主键那一下才成立。
         // 不挡的话，绑了 Ctrl+K 的人光按 Ctrl 就会被当成"主键是 Ctrl"来查一遍

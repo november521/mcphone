@@ -24,7 +24,7 @@ public final class EconomyCommand {
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
         dispatcher.register(Commands.literal("mcphone")
                 .then(Commands.literal("economy")
-                        .requires(src -> src.hasPermission(3))
+                        .requires(src -> com.november.mcphone.platform.PlayerAccess.admin(src))
                         .then(Commands.literal("status").executes(ctx -> status(ctx.getSource())))
                         .then(Commands.literal("audit").executes(ctx -> audit(ctx.getSource())))));
     }

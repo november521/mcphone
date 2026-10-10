@@ -1,12 +1,6 @@
 package com.november.mcphone.feature.browser.client;
 
 import com.november.mcphone.platform.client.Draw;
-import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.blaze3d.vertex.BufferBuilder;
-import com.mojang.blaze3d.vertex.BufferUploader;
-import com.mojang.blaze3d.vertex.DefaultVertexFormat;
-import com.mojang.blaze3d.vertex.Tesselator;
-import com.mojang.blaze3d.vertex.VertexFormat;
 import com.november.mcphone.core.client.FontPalette;
 import com.november.mcphone.core.client.PhoneSkin;
 import com.november.mcphone.core.client.PhoneTheme;
@@ -20,7 +14,6 @@ import net.minecraft.client.gui.components.EditBox;
 import com.november.mcphone.platform.client.PhoneScreenBase;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
-import org.joml.Matrix4f;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
@@ -221,19 +214,7 @@ public final class BrowserScreen extends PhoneScreenBase {
         int texture = browser.textureId();
         if (texture <= 0) return;
 
-        Matrix4f matrix = g.pose().last().pose();
-
-        RenderSystem.disableDepthTest();
-        RenderSystem.setShader(net.minecraft.client.renderer.GameRenderer::getPositionTexColorShader);
-        RenderSystem.setShaderTexture(0, texture);
-
-        // 顶点缓冲那套 API 1.21 整个改过名，差别关在 Draw 里；
-        // uv 为什么要翻 v 轴见它的文档
-        Draw.texturedQuad(matrix, viewX, viewY, viewW, viewH);
-
-        // 把纹理槽还原。留着的话，之后画别的东西会莫名其妙糊上一层网页
-        RenderSystem.setShaderTexture(0, 0);
-        RenderSystem.enableDepthTest();
+        Draw.browserFrame(g,texture,viewX,viewY,viewW,viewH);
     }
 
     /** 顶部那一条：后退、前进、刷新，加地址栏 */

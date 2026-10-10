@@ -21,11 +21,11 @@ public final class ChatTextSelectionTest {
     private static void equal(Object actual, Object expected, String message) {
         check(expected.equals(actual), message + "：" + actual + " != " + expected);
     }
-    private static class TestFont extends Font {
+    private static class TestFont extends com.november.mcphone.test.TestFontBase {
         private final StringSplitter metrics = new StringSplitter((cp, style) -> switch (cp) {
             case 'i' -> 2; case 'W' -> 9; case '\u0301', '\u200D', '\uFE0F' -> 0; default -> 6;
         });
-        TestFont() { super(id -> null, false); }
+        TestFont() { super(); }
         @Override public StringSplitter getSplitter() { return metrics; }
         @Override public boolean isBidirectional() { return false; }
         @Override public int width(FormattedCharSequence text) { return (int) Math.ceil(metrics.stringWidth(text)); }

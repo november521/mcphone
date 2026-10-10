@@ -163,34 +163,34 @@ public class EconomyDataTest {
         bad.put("托管金额是负数", t -> escrowOf(t).putLong("amount", -50));
         bad.put("托管号是大写 UUID", t -> escrowOf(t).putString("id", UUID.randomUUID().toString().toUpperCase()));
         bad.put("余额键是大写 UUID（会与小写的那个归到同一个人）",
-                t -> t.getCompound("currencies").getCompound(COIN).getCompound("balances")
+                t -> com.november.mcphone.core.PhoneNbt.getCompound(com.november.mcphone.core.PhoneNbt.getCompound(com.november.mcphone.core.PhoneNbt.getCompound(t, "currencies"), COIN), "balances")
                         .putLong(a.toString().toUpperCase(), 700));
-        bad.put("余额键省了前导零", t -> t.getCompound("currencies").getCompound(COIN).getCompound("balances")
+        bad.put("余额键省了前导零", t -> com.november.mcphone.core.PhoneNbt.getCompound(com.november.mcphone.core.PhoneNbt.getCompound(com.november.mcphone.core.PhoneNbt.getCompound(t, "currencies"), COIN), "balances")
                 .putLong("1-1-1-1-1", 700));
-        bad.put("铸造累计是负数", t -> t.getCompound("currencies").getCompound(COIN).putLong("minted", -1));
-        bad.put("销毁累计是负数", t -> t.getCompound("currencies").getCompound(COIN).putLong("burned", -1));
+        bad.put("铸造累计是负数", t -> com.november.mcphone.core.PhoneNbt.getCompound(com.november.mcphone.core.PhoneNbt.getCompound(t, "currencies"), COIN).putLong("minted", -1));
+        bad.put("销毁累计是负数", t -> com.november.mcphone.core.PhoneNbt.getCompound(com.november.mcphone.core.PhoneNbt.getCompound(t, "currencies"), COIN).putLong("burned", -1));
         bad.put("托管 settledAt 不是 long", t -> escrowOf(t).putInt("settledAt", 5));
         for (var c : bad.entrySet()) {
             CompoundTag tag = goodTag(a);
             c.getValue().accept(tag);
             EconomyData d = EconomyData.load(tag, () -> 5);
             eq(d.lockedCurrencies(), Set.of(COIN), c.getKey() + " → 锁住 COIN");
-            eq(d.toTag().getCompound("currencies").get(COIN), tag.getCompound("currencies").get(COIN),
+            eq(com.november.mcphone.core.PhoneNbt.getCompound(d.toTag(), "currencies").get(COIN), com.november.mcphone.core.PhoneNbt.getCompound(tag, "currencies").get(COIN),
                     c.getKey() + " → 余额段原样写回");
         }
         eq(EconomyData.load(goodTag(a), () -> 5).lockedCurrencies(), Set.of(), "对照组：好的那一份不锁");
 
         CompoundTag upperKey = goodTag(a);
-        CompoundTag cs = upperKey.getCompound("currencies");
+        CompoundTag cs = com.november.mcphone.core.PhoneNbt.getCompound(upperKey, "currencies");
         Tag coinSection = cs.get(COIN);
         cs.remove(COIN);
         cs.put("MyServer:Coin", coinSection);
         EconomyData d1 = EconomyData.load(upperKey, () -> 5);
         check(d1.lockedCurrencies().contains("MyServer:Coin"), "货币 id 是大写：锁住，不当成另一种货币来记");
-        eq(d1.toTag().getCompound("currencies").get("MyServer:Coin"), coinSection, "原样写回");
+        eq(com.november.mcphone.core.PhoneNbt.getCompound(d1.toTag(), "currencies").get("MyServer:Coin"), coinSection, "原样写回");
 
         CompoundTag noNamespace = goodTag(a);
-        CompoundTag cs3 = noNamespace.getCompound("currencies");
+        CompoundTag cs3 = com.november.mcphone.core.PhoneNbt.getCompound(noNamespace, "currencies");
         cs3.put("coin", cs3.get(COIN).copy());
         check(EconomyData.load(noNamespace, () -> 5).lockedCurrencies().contains("coin"),
                 "货币 id 省了命名空间（coin 而不是 minecraft:coin）：锁住，不当成另一种货币来记");
@@ -199,7 +199,7 @@ public class EconomyDataTest {
         escrowOf(upperEscrow).putString("currency", "MyServer:Coin");
         EconomyData d2 = EconomyData.load(upperEscrow, () -> 5);
         eq(d2.lockedCurrencies(), Set.of("MyServer:Coin"), "托管的货币 id 是大写：锁那个 id，不让它成没人认领的孤儿");
-        eq(d2.toTag().getList("escrow", 10).getCompound(0), escrowOf(upperEscrow), "那笔托管原样写回");
+        eq(com.november.mcphone.core.PhoneNbt.getCompound(com.november.mcphone.core.PhoneNbt.getList(d2.toTag(), "escrow", 10), 0), escrowOf(upperEscrow), "那笔托管原样写回");
     }
 
     /** 开服补存档点：找不到存档点的老流水也补一个；没有流水目录的世界不为它建目录。 */
@@ -575,7 +575,7 @@ public class EconomyDataTest {
     }
 
     static CompoundTag escrowOf(CompoundTag tag) {
-        return tag.getList("escrow", 10).getCompound(0);
+        return com.november.mcphone.core.PhoneNbt.getCompound(com.november.mcphone.core.PhoneNbt.getList(tag, "escrow", 10), 0);
     }
 
     /**
@@ -623,10 +623,10 @@ public class EconomyDataTest {
         twice.putLong("savedAt", savedAt);
         escrowOf(twice).putLong("createdAt", savedAt - 3_600_000L);
         CompoundTag savedSlow = EconomyData.load(twice, () -> 30_000L).toTag();
-        eq(savedSlow.getLong("savedAt"), savedAt, "慢时钟上保存：savedAt 不往回拉");
+        eq(com.november.mcphone.core.PhoneNbt.getLong(savedSlow, "savedAt"), savedAt, "慢时钟上保存：savedAt 不往回拉");
         eq(EconomyData.load(savedSlow, () -> 30_000L).escrow().snapshot().values().iterator().next().createdAt(),
                 savedAt - 3_600_000L, "第二次开服时钟仍慢：正常的托管还是不改写（改成慢时钟的现在就是提前退款）");
-        eq(EconomyData.load(savedSlow, () -> savedAt + 5).toTag().getLong("savedAt"), savedAt + 5, "时钟正常时 savedAt 跟着走");
+        eq(com.november.mcphone.core.PhoneNbt.getLong(EconomyData.load(savedSlow, () -> savedAt + 5).toTag(), "savedAt"), savedAt + 5, "时钟正常时 savedAt 跟着走");
 
         // 时钟快过一年、那段时间建了托管并存过档，之后时钟恢复：选的是不提前动钱 —— 不改写、不标脏，savedAt 停在快的那一刻，
         // 等到那一刻再过一个超时周期（开服时大声报）。与上面慢时钟那条是同一个取舍的两面
@@ -638,7 +638,7 @@ public class EconomyDataTest {
         eq(fd.escrow().snapshot().values().iterator().next().createdAt(), fast - 1_000L, "时钟快过：那段时间建的托管不改写");
         check(!fd.isDirty(), "时钟快过：不标脏");
         eq(fd.escrow().expired().size(), 0, "时钟快过：恢复后 7 天也不到期");
-        eq(fd.toTag().getLong("savedAt"), fast, "时钟快过：savedAt 停在快的那一刻");
+        eq(com.november.mcphone.core.PhoneNbt.getLong(fd.toTag(), "savedAt"), fast, "时钟快过：savedAt 停在快的那一刻");
         eq(fd.aheadOfClock, 1, "时钟快过：开服报出 1 笔建立时刻晚于读档时刻的托管");
         for (long ahead : new long[]{6L * 86_400_000L, 2 * 3_600_000L}) {
             CompoundTag few = goodTag(UUID.randomUUID());
@@ -668,7 +668,7 @@ public class EconomyDataTest {
 
         // 那种货币本来就锁住了：改了也不落盘，不标脏（不然每次开服白白重写一遍存档）
         CompoundTag lockedOne = goodTag(UUID.randomUUID());
-        lockedOne.getCompound("currencies").getCompound(COIN).putString("minted", "坏");
+        com.november.mcphone.core.PhoneNbt.getCompound(com.november.mcphone.core.PhoneNbt.getCompound(lockedOne, "currencies"), COIN).putString("minted", "坏");
         escrowOf(lockedOne).putLong("createdAt", Long.MAX_VALUE);
         EconomyData ld = EconomyData.load(lockedOne, () -> now);
         eq(ld.lockedCurrencies(), Set.of(COIN), "对照：那种货币锁着");
@@ -769,8 +769,8 @@ public class EconomyDataTest {
         older.putLong("generation", 4);
         CompoundTag newer = goodTag(a);
         newer.putLong("generation", 5);
-        newer.getCompound("currencies").getCompound(COIN).getCompound("balances").putLong(a.toString(), 777);
-        newer.getCompound("currencies").getCompound(COIN).putLong("minted", 877);
+        com.november.mcphone.core.PhoneNbt.getCompound(com.november.mcphone.core.PhoneNbt.getCompound(com.november.mcphone.core.PhoneNbt.getCompound(newer, "currencies"), COIN), "balances").putLong(a.toString(), 777);
+        com.november.mcphone.core.PhoneNbt.getCompound(com.november.mcphone.core.PhoneNbt.getCompound(newer, "currencies"), COIN).putLong("minted", 877);
 
         EconomySnapshot.write(snap, newer);
         EconomyData pick = EconomyData.loadPreferring(older, snap, () -> 1);
@@ -802,10 +802,10 @@ public class EconomyDataTest {
         sameCoin.hold(holder, UUID.randomUUID(), 20, RSN);
         CompoundTag handedToMc = d.toTag();
         eq(EconomySnapshot.read(snap), handedToMc, "快照就是交给 MC 的那一份（含托管）");
-        check(handedToMc.getList("escrow", 10).size() == 1, "夹具里真有一笔托管");
-        long g1 = handedToMc.getLong("generation");
-        eq(d.toTag().getLong("generation"), g1 + 1, "再保存一次代数加一");
-        eq(EconomyData.load(handedToMc, t::get).toTag().getLong("generation"), g1 + 1,
+        check(com.november.mcphone.core.PhoneNbt.getList(handedToMc, "escrow", 10).size() == 1, "夹具里真有一笔托管");
+        long g1 = com.november.mcphone.core.PhoneNbt.getLong(handedToMc, "generation");
+        eq(com.november.mcphone.core.PhoneNbt.getLong(d.toTag(), "generation"), g1 + 1, "再保存一次代数加一");
+        eq(com.november.mcphone.core.PhoneNbt.getLong(EconomyData.load(handedToMc, t::get).toTag(), "generation"), g1 + 1,
                 "代数跨重启接着涨：从 0 重来的话，快照写失败时旧快照的代数反而更大"); 
 
         // 清单 #4 的离线版：保存 A → 改动 → 保存 B 写到一半被杀（快照只留半截临时文件、SavedData 被截断）→ 重启读到 A
@@ -888,7 +888,7 @@ public class EconomyDataTest {
         check(onlyStale.wholeLock() != null && onlyStale.wholeLock().contains(stale.toString()),
                 "只剩 .stale：整份锁住并点名它 —— " + onlyStale.wholeLock());
         String why = onlyStale.wholeLock();
-        check(why.contains("第 " + latest.getLong("generation") + " 次保存"), "锁住原因里说得出 .stale 是第几次保存");
+        check(why.contains("第 " + com.november.mcphone.core.PhoneNbt.getLong(latest, "generation") + " 次保存"), "锁住原因里说得出 .stale 是第几次保存");
         java.nio.file.attribute.FileTime past = java.nio.file.attribute.FileTime.fromMillis(1_600_000_000_000L);
         Files.setLastModifiedTime(stale, past);
         why = EconomyData.createFor(mcFile, snap, t::get).wholeLock();
@@ -1540,9 +1540,9 @@ public class EconomyDataTest {
         eq(gem.transfer(a, b, 4, RSN), TxnResult.OK, "没坏的那种照常");
 
         CompoundTag out = d.toTag();
-        eq(out.getCompound("currencies").get(COIN), bad, "坏的那一段原样写回");
-        ListTag outEsc = out.getList("escrow", 10);
-        check(outEsc.size() == 1 && outEsc.getCompound(0).equals(escrowTag(escId, COIN, 30, 1)),
+        eq(com.november.mcphone.core.PhoneNbt.getCompound(out, "currencies").get(COIN), bad, "坏的那一段原样写回");
+        ListTag outEsc = com.november.mcphone.core.PhoneNbt.getList(out, "escrow", 10);
+        check(outEsc.size() == 1 && com.november.mcphone.core.PhoneNbt.getCompound(outEsc, 0).equals(escrowTag(escId, COIN, 30, 1)),
                 "坏货币的托管原样写回，没被当成能放款的读进账本：" + outEsc);
         eq(EconomyData.load(out, t::get).lockedCurrencies(), Set.of(COIN), "写回去再读还是锁着 —— 没有被一本空账盖掉");
 
@@ -1559,7 +1559,7 @@ public class EconomyDataTest {
         t2.put("escrow", esc2);
         EconomyData d2 = EconomyData.load(t2, t::get);
         eq(d2.lockedCurrencies(), Set.of(GEM), "托管读坏也锁那种货币");
-        eq(d2.toTag().getCompound("currencies").get(GEM), good, "它的余额段原样写回，没丢");
+        eq(com.november.mcphone.core.PhoneNbt.getCompound(d2.toTag(), "currencies").get(GEM), good, "它的余额段原样写回，没丢");
     }
 
     /** 强杀：重启后看到的是上一次保存那一份完整快照 —— 总额守恒、对账平；流水里标出没进存档的几笔。 */
@@ -2136,7 +2136,7 @@ public class EconomyDataTest {
 
     static net.minecraft.commands.CommandSourceStack source(int level) {
         return new net.minecraft.commands.CommandSourceStack(net.minecraft.commands.CommandSource.NULL,
-                net.minecraft.world.phys.Vec3.ZERO, net.minecraft.world.phys.Vec2.ZERO, null, level, "t",
+                net.minecraft.world.phys.Vec3.ZERO, net.minecraft.world.phys.Vec2.ZERO, null, com.november.mcphone.test.CommandPermissions.level(level), "t",
                 Component.literal("t"), null, null);
     }
 

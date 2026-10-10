@@ -3,7 +3,7 @@ package com.november.mcphone.core.client;
 import com.november.mcphone.platform.client.Draw;
 import com.november.mcphone.core.menu.PhoneContainerMenu;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
+import com.november.mcphone.platform.client.PhoneContainerScreenBase;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.player.Inventory;
 
@@ -19,15 +19,13 @@ import net.minecraft.world.entity.player.Inventory;
  * 会导致看不见对面、也没法拖拽——而"把东西放进末影箱"正是这个界面
  * 唯一的用途。手机的视觉由外壳边框与壁纸保留。
  */
-public class PhoneContainerScreen extends AbstractContainerScreen<PhoneContainerMenu> {
+public class PhoneContainerScreen extends PhoneContainerScreenBase<PhoneContainerMenu> {
 
     public PhoneContainerScreen(PhoneContainerMenu menu, Inventory playerInventory, Component title) {
-        super(menu, playerInventory, title);
+        super(menu, playerInventory, title, PhoneContainerMenu.IMAGE_WIDTH, menu.getImageHeight());
 
         // 尺寸与原版箱子一致，格子坐标正是相对于 leftPos/topPos，
         // 两边必须用同一套基准，否则格子会画在背板外面
-        this.imageWidth = PhoneContainerMenu.IMAGE_WIDTH;
-        this.imageHeight = menu.getImageHeight();
 
         // 标题与"物品栏"两行字的位置，同原版
         this.titleLabelX = 8;

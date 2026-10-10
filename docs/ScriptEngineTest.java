@@ -1,9 +1,9 @@
 package com.november.mcphone.core.script.engine;
 
 import com.november.mcphone.core.script.server.PlayerSnapshot;
-import org.mozilla.javascript.Context;
-import org.mozilla.javascript.Scriptable;
-import org.mozilla.javascript.ScriptableObject;
+import com.november.mcphone.internal.rhino.javascript.Context;
+import com.november.mcphone.internal.rhino.javascript.Scriptable;
+import com.november.mcphone.internal.rhino.javascript.ScriptableObject;
 
 import java.time.LocalTime;
 import java.time.ZoneId;

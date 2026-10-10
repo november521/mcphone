@@ -22,7 +22,7 @@ public final class TeleportService {
 
         if (!FriendGuard.mayActOn(self, targetId)) return TeleportOutcome.NOTHING;
 
-        ServerPlayer target = self.server.getPlayerList().getPlayer(targetId);
+        ServerPlayer target = self.level().getServer().getPlayerList().getPlayer(targetId);
         if (target == null) return TeleportOutcome.PEER_OFFLINE;
 
         // 出发点的音效必须在传送之前响，之后 self 已经在另一头了
@@ -30,7 +30,7 @@ public final class TeleportService {
                 SoundEvents.ENDERMAN_TELEPORT, SoundSource.PLAYERS, 1.0F, 1.0F);
 
         // 这一个调用同时覆盖同维度与跨维度，且自带 stopRiding()，不必自己先下马
-        self.teleportTo(target.serverLevel(),
+        com.november.mcphone.platform.PlayerAccess.teleport(self,target.serverLevel(),
                 target.getX(), target.getY(), target.getZ(),
                 target.getYRot(), target.getXRot());
 
@@ -38,7 +38,7 @@ public final class TeleportService {
                 SoundEvents.ENDERMAN_TELEPORT, SoundSource.PLAYERS, 1.0F, 1.0F);
 
         // 走动作栏不走聊天框：即时事件不该在公屏历史里留一行
-        target.displayClientMessage(
+        com.november.mcphone.platform.PlayerAccess.message(target,
                 Component.translatable("mcphone.chat.teleport_arrived",
                         self.getName().getString()), true);
 

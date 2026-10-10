@@ -1,11 +1,11 @@
 package com.november.mcphone.core.script.engine;
 
-import org.mozilla.javascript.Context;
-import org.mozilla.javascript.LambdaFunction;
-import org.mozilla.javascript.NativeArray;
-import org.mozilla.javascript.Scriptable;
-import org.mozilla.javascript.ScriptableObject;
-import org.mozilla.javascript.Undefined;
+import com.november.mcphone.internal.rhino.javascript.Context;
+import com.november.mcphone.internal.rhino.javascript.LambdaFunction;
+import com.november.mcphone.internal.rhino.javascript.NativeArray;
+import com.november.mcphone.internal.rhino.javascript.Scriptable;
+import com.november.mcphone.internal.rhino.javascript.ScriptableObject;
+import com.november.mcphone.internal.rhino.javascript.Undefined;
 
 import java.util.ArrayList;
 import java.util.List;

@@ -397,7 +397,7 @@ public final class AppManagerDetail {
             return;
         }
 
-        InputConstants.Key key = InputConstants.getKey(keyCode, scanCode);
+        InputConstants.Key key = com.november.mcphone.platform.client.PhoneKeyInput.key(keyCode, scanCode);
 
         // 修饰键本身不成一条绑定：还按着呢，等主键
         if (KeyModifiers.isModifierKey(key)) return;

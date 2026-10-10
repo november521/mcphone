@@ -18,8 +18,8 @@ public final class ChatMessageLayoutTest {
         if (!ok) throw new AssertionError(message);
     }
 
-    private static final class TestFont extends Font {
-        TestFont() { super(id -> null, false); }
+    private static final class TestFont extends com.november.mcphone.test.TestFontBase {
+        TestFont() { super(); }
         @Override public int width(FormattedCharSequence text) {
             int[] width = {0};
             text.accept((index, style, codePoint) -> { width[0] += 6; return true; });

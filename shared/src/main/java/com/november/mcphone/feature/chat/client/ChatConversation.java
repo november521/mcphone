@@ -42,7 +42,7 @@ public final class ChatConversation {
                 MCphoneNetwork.sendToServer(new DeleteChatMessagePacket(target, message, request));
             }, ChatClientCache::cancelDeletion,
             key -> { var player = Minecraft.getInstance().player;
-                if (player != null) player.displayClientMessage(Component.translatable(key), true); });
+                if (player != null) com.november.mcphone.platform.PlayerAccess.message(player, Component.translatable(key), true); });
     private UUID peer;
     private long lastRequestMs;
     private List<ChatMessage> markedFrom;

@@ -8,7 +8,6 @@ import com.november.mcphone.feature.chat.net.Relation;
 import com.november.mcphone.util.TextSanitizer;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.server.players.GameProfileCache;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -27,7 +26,7 @@ public final class ChatService {
 
     /** 会话列表就是好友列表；解除好友后会话消失但记录仍在。顺带把在线好友的名字记进缓存 */
     public static List<ConversationSummary> buildConversations(ServerPlayer self) {
-        MinecraftServer server = self.server;
+        MinecraftServer server = self.level().getServer();
         UUID selfId = self.getUUID();
 
         ChatData chat = ChatData.get(server);
@@ -110,7 +109,7 @@ public final class ChatService {
         ChatMessage message = new ChatMessage(senderId, System.currentTimeMillis(),
                 new ImageBody(imageId, width, height, frames, frameMs));
         store(sender, targetId, message);
-        trimImages(sender.server, senderId, targetId);
+        trimImages(sender.level().getServer(), senderId, targetId);
 
         markReadAt(sender, targetId, message.time());
         return message;
@@ -128,7 +127,7 @@ public final class ChatService {
      * 那条一样：多一份要保持同步的东西，就多一处会悄悄对不上的地方。
      */
     public static boolean mayReadImage(ServerPlayer self, UUID peer, UUID imageId) {
-        if (!FriendData.get(self.server).areFriends(self.getUUID(), peer)) return false;
+        if (!FriendData.get(self.level().getServer()).areFriends(self.getUUID(), peer)) return false;
 
         for (ChatMessage m : getMessages(self, peer)) {
             if (m.body() instanceof ImageBody image && image.image().equals(imageId)) return true;
@@ -139,16 +138,16 @@ public final class ChatService {
     /** 落库；被 100 条上限挤出去的若是图片消息，它那张图跟着删——没有消息认领的像素只是垃圾 */
     private static void store(ServerPlayer sender, UUID targetId, ChatMessage message) {
         List<ChatMessage> evicted =
-                ChatData.get(sender.server).addMessage(sender.getUUID(), targetId, message);
+                ChatData.get(sender.level().getServer()).addMessage(sender.getUUID(), targetId, message);
 
         if (!evicted.isEmpty()) {
-            var existing = ChatData.get(sender.server).getMessages(sender.getUUID(), targetId).stream()
+            var existing = ChatData.get(sender.level().getServer()).getMessages(sender.getUUID(), targetId).stream()
                     .map(ChatMessage::id).collect(java.util.stream.Collectors.toSet());
-            ChatDeletionData.get(sender.server).retain(sender.getUUID(), targetId, existing);
+            ChatDeletionData.get(sender.level().getServer()).retain(sender.getUUID(), targetId, existing);
         }
         for (ChatMessage old : evicted) {
             if (old.body() instanceof ImageBody image) {
-                deleteImageIfUnreferenced(sender.server, sender.getUUID(), targetId, image.image());
+                deleteImageIfUnreferenced(sender.level().getServer(), sender.getUUID(), targetId, image.image());
             }
         }
     }
@@ -200,14 +199,14 @@ public final class ChatService {
 
     /** 非好友一律返回空，免得解除好友后还能翻旧账 */
     public static List<ChatMessage> getMessages(ServerPlayer self, UUID peer) {
-        if (!FriendData.get(self.server).areFriends(self.getUUID(), peer)) return List.of();
-        return ChatDeletionData.get(self.server).visible(self.getUUID(), peer,
-                ChatData.get(self.server).getMessages(self.getUUID(), peer));
+        if (!FriendData.get(self.level().getServer()).areFriends(self.getUUID(), peer)) return List.of();
+        return ChatDeletionData.get(self.level().getServer()).visible(self.getUUID(), peer,
+                ChatData.get(self.level().getServer()).getMessages(self.getUUID(), peer));
     }
 
     /** 已读时刻由服务端盖章：采信客户端的话报一个未来时间就能让红点永远不出现 */
     public static void markRead(ServerPlayer self, UUID peer) {
-        if (!FriendData.get(self.server).areFriends(self.getUUID(), peer)) return;
+        if (!FriendData.get(self.level().getServer()).areFriends(self.getUUID(), peer)) return;
         markReadAt(self, peer, System.currentTimeMillis());
     }
 
@@ -227,7 +226,7 @@ public final class ChatService {
         UUID selfId = self.getUUID();
         if (selfId.equals(targetId)) return FriendOutcome.NOTHING;
 
-        MinecraftServer server = self.server;
+        MinecraftServer server = self.level().getServer();
         FriendData friends = FriendData.get(server);
 
         if (friends.areFriends(selfId, targetId)) return FriendOutcome.NOTHING;
@@ -260,7 +259,7 @@ public final class ChatService {
         if (!FriendGuard.carriesPhone(self)) return FriendOutcome.NOTHING;
 
         UUID selfId = self.getUUID();
-        FriendData friends = FriendData.get(self.server);
+        FriendData friends = FriendData.get(self.level().getServer());
 
         // 拦住伪造客户端凭空"同意"一条不存在的申请
         if (!friends.hasRequest(requesterId, selfId)) return FriendOutcome.NOTHING;
@@ -279,7 +278,7 @@ public final class ChatService {
 
         friends.removeRequest(requesterId, selfId);
         friends.addFriendship(selfId, requesterId);
-        rememberBoth(self.server, friends, selfId, requesterId);
+        rememberBoth(self.level().getServer(), friends, selfId, requesterId);
         return FriendOutcome.OK;
     }
 
@@ -287,7 +286,7 @@ public final class ChatService {
     public static boolean removeFriend(ServerPlayer self, UUID targetId) {
         if (!FriendGuard.carriesPhone(self)) return false;
 
-        FriendData friends = FriendData.get(self.server);
+        FriendData friends = FriendData.get(self.level().getServer());
         if (!friends.removeFriendship(self.getUUID(), targetId)) return false;
 
         PhonePlayerData data = PhonePlayerData.of(self);
@@ -305,14 +304,14 @@ public final class ChatService {
      */
     public static List<OnlinePlayer> listOnlinePlayers(ServerPlayer self, int limit) {
         UUID selfId = self.getUUID();
-        FriendData friends = FriendData.get(self.server);
+        FriendData friends = FriendData.get(self.level().getServer());
 
         List<OnlinePlayer> out = new ArrayList<>();
-        for (ServerPlayer p : self.server.getPlayerList().getPlayers()) {
+        for (ServerPlayer p : self.level().getServer().getPlayerList().getPlayers()) {
             UUID id = p.getUUID();
             if (id.equals(selfId)) continue;
 
-            String name = ConversationSummary.clampName(p.getGameProfile().getName());
+            String name = ConversationSummary.clampName(com.november.mcphone.platform.PlayerAccess.name(p));
             friends.rememberName(id, name);
 
             if (out.size() >= limit) continue;   // 仍要走完循环，名字缓存不能漏
@@ -323,7 +322,7 @@ public final class ChatService {
 
     /** 在线人数（不含本人），用于告知界面列表被截断了多少 */
     public static int countOnlineExcludingSelf(ServerPlayer self) {
-        return Math.max(0, self.server.getPlayerList().getPlayerCount() - 1);
+        return Math.max(0, self.level().getServer().getPlayerList().getPlayerCount() - 1);
     }
 
     public static Relation relationTo(FriendData friends, UUID selfId, UUID otherId) {
@@ -338,8 +337,7 @@ public final class ChatService {
         if (server.getPlayerList().getPlayer(id) != null) return true;
         if (friends.getName(id) != null) return true;
 
-        GameProfileCache cache = server.getProfileCache();
-        return cache != null && cache.get(id).isPresent();
+        return com.november.mcphone.platform.PlayerAccess.cachedName(server,id).isPresent();
     }
 
     /** 建立关系时把双方的名字都记一遍，日后任一方离线都显示得出来 */
@@ -359,17 +357,14 @@ public final class ChatService {
     private static String rawName(MinecraftServer server, FriendData friends,
                                   UUID id, ServerPlayer online) {
         if (online != null) {
-            return online.getGameProfile().getName();
+            return com.november.mcphone.platform.PlayerAccess.name(online);
         }
 
         String cached = friends.getName(id);
         if (cached != null) return cached;
 
-        GameProfileCache cache = server.getProfileCache();
-        if (cache != null) {
-            var profile = cache.get(id);
-            if (profile.isPresent()) return profile.get().getName();
-        }
+        var profile = com.november.mcphone.platform.PlayerAccess.cachedName(server,id);
+        if (profile.isPresent()) return profile.get();
 
         return id.toString().substring(0, 8);
     }

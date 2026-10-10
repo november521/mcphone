@@ -1,0 +1,178 @@
+import groovy.json.JsonSlurper
+import org.objectweb.asm.AnnotationVisitor
+import org.objectweb.asm.ClassReader
+import org.objectweb.asm.ClassVisitor
+import org.objectweb.asm.ClassWriter
+import org.objectweb.asm.Opcodes
+import org.gradle.api.file.ConfigurableFileCollection
+import org.gradle.api.tasks.InputFiles
+import org.gradle.api.tasks.PathSensitive
+import org.gradle.api.tasks.PathSensitivity
+import org.gradle.api.tasks.TaskAction
+
+// 显式使用公开 ASM 依赖，避免依赖 Gradle 内部过滤的 Groovy 实现类。
+buildscript {
+    repositories {
+        maven {
+            url = 'https://maven.neoforged.net/releases/'
+            content { includeGroup 'org.ow2.asm' }
+        }
+        mavenCentral()
+    }
+    dependencies { classpath 'org.ow2.asm:asm:9.9.1' }
+}
+
+/**
+ * 校验 Mixin 专用包及其子包的加载边界。
+ * 直接解析字节码，不反射加载注入类；Mixin 本身就禁止普通方式加载这些类。
+ * 依据：https://github.com/SpongePowered/Mixin/wiki/Introduction-to-Mixins---The-Mixin-Environment
+ */
+class MixinPackageRules {
+    static final String ANNOTATION = 'Lorg/spongepowered/asm/mixin/Mixin;'
+
+    static Map readClass(byte[] bytes) {
+        def reader = new ClassReader(bytes)
+        def annotations = new HashSet<String>()
+        reader.accept(new ClassVisitor(Opcodes.ASM9) {
+            @Override
+            AnnotationVisitor visitAnnotation(String descriptor, boolean visible) {
+                annotations.add(descriptor)
+                return null
+            }
+        }, ClassReader.SKIP_CODE | ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES)
+        [name: reader.className.replace('/', '.'), mixin: annotations.contains(ANNOTATION)]
+    }
+
+    static int verify(Map<String, Map> configurations, Map<String, Boolean> classes) {
+        def declared = new HashSet<String>()
+        configurations.each { resource, config ->
+            def packageName = config.get('package')
+            if (!(packageName instanceof String) || !(packageName ==~ /[\w$]+(?:\.[\w$]+)+/)) {
+                throw new GradleException("${resource} 缺少有效的 Mixin 专用包")
+            }
+            def prefix = packageName + '.'
+            classes.each { name, mixin ->
+                if (name.startsWith(prefix) && !mixin) {
+                    throw new GradleException("${resource} 的 Mixin 专用包混入普通类：${name}；子包也必须隔离")
+                }
+            }
+            ['mixins', 'client', 'server'].each { key ->
+                def entries = config.get(key, [])
+                if (!(entries instanceof List)) {
+                    throw new GradleException("${resource} 的 ${key} 必须是类名列表")
+                }
+                entries.each { relative ->
+                    if (!(relative instanceof String) || !(relative ==~ /[\w$]+(?:\.[\w$]+)*/)) {
+                        throw new GradleException("${resource} 的 ${key} 有无效的相对类名：${relative}")
+                    }
+                    def name = prefix + relative
+                    if (!classes.containsKey(name)) {
+                        throw new GradleException("${resource} 声明的 Mixin 类不存在：${name}")
+                    }
+                    if (!classes.get(name)) {
+                        throw new GradleException("${resource} 声明的类没有 @Mixin：${name}")
+                    }
+                    declared.add(name)
+                }
+            }
+        }
+        classes.each { name, mixin ->
+            if (mixin && !declared.contains(name)) {
+                throw new GradleException("@Mixin 类没有对应的配置声明：${name}")
+            }
+        }
+        return declared.size()
+    }
+}
+
+abstract class VerifyMixinPackages extends DefaultTask {
+    @InputFiles @PathSensitive(PathSensitivity.RELATIVE)
+    abstract ConfigurableFileCollection getConfigurationFiles()
+
+    @InputFiles @PathSensitive(PathSensitivity.RELATIVE)
+    abstract ConfigurableFileCollection getClassDirectories()
+
+    @TaskAction
+    void verify() {
+        def configurations = new TreeMap<String, Map>()
+        configurationFiles.files.each { file ->
+            def json = new JsonSlurper().parse(file, 'UTF-8')
+            // 不依赖固定配置文件名；资源改名后仍按 Mixin 配置结构识别。
+            if (file.name.endsWith('.mixins.json') || (json instanceof Map
+                    && json.containsKey('package') && ['mixins', 'client', 'server'].any { json.containsKey(it) })) {
+                if (!(json instanceof Map)) throw new GradleException("Mixin 配置不是 JSON 对象：${file}")
+                configurations.put(file.absolutePath, json as Map)
+            }
+        }
+        def classes = new TreeMap<String, Boolean>()
+        classDirectories.files.findAll { it.isDirectory() }.each { root ->
+            root.eachFileRecurse { file ->
+                if (file.name.endsWith('.class') && file.name != 'package-info.class') {
+                    def info = MixinPackageRules.readClass(file.bytes)
+                    if (classes.put(info.name as String, info.mixin as Boolean) != null) {
+                        throw new GradleException("Mixin 校验发现重复编译类型：${info.name}")
+                    }
+                }
+            }
+        }
+        int count = MixinPackageRules.verify(configurations, classes)
+        logger.lifecycle("Mixin 包隔离校验通过：${configurations.size()} 份配置、${count} 个注入类")
+    }
+}
+
+def verifyMixinPackages = tasks.register('verifyMixinPackages', VerifyMixinPackages) {
+    description = '校验 Mixin 专用包、注解和实际编译类型，防止普通类被限制加载'
+    group = 'verification'
+    dependsOn tasks.named('compileJava'), tasks.named('processResources')
+    configurationFiles.from(tasks.named('processResources').map {
+        it.outputs.files.asFileTree.matching { include '**/*.json' }
+    })
+    classDirectories.from(sourceSets.main.output.classesDirs)
+}
+
+// 回归用例覆盖这次崩溃和配置搬迁；夹具不进入模组 JAR。
+def verifyMixinPackageRules = tasks.register('verifyMixinPackageRules') {
+    description = '验证 Mixin 包隔离规则能拦截错误配置'
+    group = 'verification'
+    doLast {
+        def config = ['fixture.mixins.json': [package: 'example.client.mixin', client: ['CameraMixin']]]
+        def valid = ['example.client.mixin.CameraMixin': true, 'example.client.port.Texture': false]
+        assert MixinPackageRules.verify(config, valid) == 1
+        assert MixinPackageRules.verify([:], ['example.Normal': false]) == 0
+        assert MixinPackageRules.verify(config, valid + ['example.client.mixinExtra.Normal': false]) == 1
+        def rejects = { Map configs, Map classes, String reason ->
+            try {
+                MixinPackageRules.verify(configs, classes)
+            } catch (GradleException expected) {
+                assert expected.message.contains(reason): expected.message
+                return
+            }
+            throw new GradleException("Mixin 回归用例未拦截：${reason}")
+        }
+        rejects(config, valid + ['example.client.mixin.Texture': false], '混入普通类')
+        rejects(config, valid + ['example.client.mixin.helper.Texture': false], '混入普通类')
+        rejects(config, [:], '不存在')
+        rejects(config, ['example.client.mixin.CameraMixin': false], '混入普通类')
+        rejects([:], ['example.client.mixin.CameraMixin': true], '没有对应的配置声明')
+        rejects(['bad.json': [client: ['CameraMixin']]], valid, '专用包')
+        rejects(['bad.json': [package: 'example.client.mixin', client: 'CameraMixin']], valid, '类名列表')
+
+        def fixture = { boolean annotated ->
+            def writer = new ClassWriter(0)
+            writer.visit(Opcodes.V17, Opcodes.ACC_PUBLIC, 'example/Fixture', null, 'java/lang/Object', null)
+            // 普通字符串不能被误认为注解，必须通过 ASM 读取真实类注解。
+            writer.visitField(Opcodes.ACC_STATIC | Opcodes.ACC_FINAL, 'text', 'Ljava/lang/String;', null,
+                    MixinPackageRules.ANNOTATION).visitEnd()
+            if (annotated) writer.visitAnnotation(MixinPackageRules.ANNOTATION, false).visitEnd()
+            writer.visitEnd()
+            writer.toByteArray()
+        }
+        assert MixinPackageRules.readClass(fixture(true)).mixin
+        assert !MixinPackageRules.readClass(fixture(false)).mixin
+        logger.lifecycle('Mixin 包隔离回归校验通过：12 个用例')
+    }
+}
+
+tasks.named('check').configure { dependsOn verifyMixinPackages, verifyMixinPackageRules }
+// assemble 也会出交付包：避免只打包时漏掉同一种运行时加载错误。
+tasks.named('jar').configure { dependsOn verifyMixinPackages }

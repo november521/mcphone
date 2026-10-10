@@ -267,7 +267,7 @@ public final class LocalPlayback {
         try {
             Library lib = new Library();
             // 设备名 null ＝ 跟随系统默认；不开 HRTF，「耳机」不做空间化
-            lib.init(null, false);
+            com.november.mcphone.platform.client.PhoneSoundDevice.initialize(lib);
 
             ourContext = ALC10.alcGetCurrentContext();
             ourCaps = AL.getCapabilities();

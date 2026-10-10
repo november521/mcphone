@@ -11,7 +11,7 @@ import com.november.mcphone.feature.terminal.net.TerminalActionPacket;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
-import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
+import com.november.mcphone.platform.client.PhoneContainerScreenBase;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.player.Inventory;
 
@@ -32,14 +32,12 @@ import net.minecraft.world.entity.player.Inventory;
  * 版面尺寸与坐标全部从 {@link TerminalSlotMenu} 读，这里一个数都不重写：格子的 x/y 是
  * 相对 leftPos/topPos 的，两边必须同一套基准。
  */
-public class TerminalSlotScreen extends AbstractContainerScreen<TerminalSlotMenu> {
+public class TerminalSlotScreen extends PhoneContainerScreenBase<TerminalSlotMenu> {
 
     private Button openButton;
 
     public TerminalSlotScreen(TerminalSlotMenu menu, Inventory playerInventory, Component title) {
-        super(menu, playerInventory, title);
-        this.imageWidth = TerminalSlotMenu.IMAGE_WIDTH;
-        this.imageHeight = TerminalSlotMenu.IMAGE_HEIGHT;
+        super(menu, playerInventory, title, TerminalSlotMenu.IMAGE_WIDTH, TerminalSlotMenu.IMAGE_HEIGHT);
         this.titleLabelX = 8;
         this.titleLabelY = 6;
         this.inventoryLabelX = 8;

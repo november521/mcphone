@@ -5,7 +5,7 @@ import com.november.mcphone.core.script.server.ActionEvaluator;
 import com.november.mcphone.core.script.server.ScriptWorkers;
 import com.november.mcphone.core.script.server.store.KvBackend;
 import com.november.mcphone.core.script.server.store.StoreQuota;
-import org.mozilla.javascript.Context;
+import com.november.mcphone.internal.rhino.javascript.Context;
 
 import java.math.BigInteger;
 import java.time.LocalTime;
@@ -163,7 +163,7 @@ public final class ScriptAttributionTest {
         try {
             AppScope app = new AppScope("t:race", ScriptBudget.server(), Map.of());
             CountDownLatch start = new CountDownLatch(1);
-            java.util.concurrent.Callable<org.mozilla.javascript.ScriptableObject> getScope = () -> {
+            java.util.concurrent.Callable<com.november.mcphone.internal.rhino.javascript.ScriptableObject> getScope = () -> {
                 start.await();
                 Context cx = app.budget().enterContext();
                 try {

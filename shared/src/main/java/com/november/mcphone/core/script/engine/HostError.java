@@ -1,7 +1,7 @@
 package com.november.mcphone.core.script.engine;
 
 import com.november.mcphone.core.script.net.ScriptErrorCode;
-import org.mozilla.javascript.WrappedException;
+import com.november.mcphone.internal.rhino.javascript.WrappedException;
 
 /** A catchable host validation failure carrying an unforgeable host-side marker. */
 public final class HostError extends WrappedException {

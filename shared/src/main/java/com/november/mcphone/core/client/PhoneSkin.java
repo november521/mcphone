@@ -5,7 +5,6 @@ import com.november.mcphone.MCphone;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.server.packs.metadata.MetadataSectionSerializer;
 import net.minecraft.server.packs.resources.Resource;
 import org.jetbrains.annotations.Nullable;
 
@@ -289,16 +288,6 @@ public final class PhoneSkin {
                 : new SkinMetadata(metadata.border(), metadata.scale());
     }
 
-    /** 可选的源像素边宽；未声明时沿用旧资源包的整张拉伸行为。 */
-    private static final MetadataSectionSerializer<SkinMetadata> SKIN_METADATA = new MetadataSectionSerializer<>() {
-        @Override
-        public String getMetadataSectionName() { return "mcphone_skin"; }
-
-        @Override
-        public SkinMetadata fromJson(JsonObject json) {
-            return parseSkinMetadata(json);
-        }
-    };
 
     /** 探测结果缓存；empty（没有这张贴图）也要缓存，否则缺贴图的元素每帧都要查一次资源管理器 */
     private static final Map<Element, Optional<SkinTexture>> CACHE = new HashMap<>();
@@ -474,8 +463,7 @@ public final class PhoneSkin {
             int scale = 1;
             Integer textColor = null;
             try {
-                SkinMetadata metadata = res.get().metadata().getSection(SKIN_METADATA)
-                        .orElse(new SkinMetadata(0, 1));
+                SkinMetadata metadata = PhoneSkinMetadata.read(res.get());
                 ResourceLocation metaLocation = ResourceLocation.fromNamespaceAndPath(
                         loc.getNamespace(), loc.getPath() + ".mcmeta");
                 boolean samePack = mc.getResourceManager().getResource(metaLocation)

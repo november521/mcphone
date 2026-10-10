@@ -1,12 +1,12 @@
 package com.november.mcphone.core.script.engine;
 
-import org.mozilla.javascript.Parser;
-import org.mozilla.javascript.ast.AstNode;
-import org.mozilla.javascript.ast.AstRoot;
-import org.mozilla.javascript.ast.FunctionCall;
-import org.mozilla.javascript.ast.Name;
-import org.mozilla.javascript.ast.NodeVisitor;
-import org.mozilla.javascript.ast.StringLiteral;
+import com.november.mcphone.internal.rhino.javascript.Parser;
+import com.november.mcphone.internal.rhino.javascript.ast.AstNode;
+import com.november.mcphone.internal.rhino.javascript.ast.AstRoot;
+import com.november.mcphone.internal.rhino.javascript.ast.FunctionCall;
+import com.november.mcphone.internal.rhino.javascript.ast.Name;
+import com.november.mcphone.internal.rhino.javascript.ast.NodeVisitor;
+import com.november.mcphone.internal.rhino.javascript.ast.StringLiteral;
 
 import java.util.ArrayList;
 import java.util.HashMap;

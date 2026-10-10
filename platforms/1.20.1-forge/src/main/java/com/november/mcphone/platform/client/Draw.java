@@ -90,4 +90,19 @@ public final class Draw {
     public static boolean scissorLeaked(GuiGraphics g) {
         return GL11.glIsEnabled(GL11.GL_SCISSOR_TEST);
     }
+
+    /** 浏览器纹理由本版本负责提交，共用页面不操作全局 GL 状态。 */
+    public static void browserFrame(GuiGraphics g,int texture,int x,int y,int w,int h) {
+        com.mojang.blaze3d.systems.RenderSystem.disableDepthTest();
+        com.mojang.blaze3d.systems.RenderSystem.setShader(net.minecraft.client.renderer.GameRenderer::getPositionTexColorShader);
+        com.mojang.blaze3d.systems.RenderSystem.setShaderTexture(0,texture);
+        try { texturedQuad(g.pose().last().pose(),x,y,w,h); }
+        finally { com.mojang.blaze3d.systems.RenderSystem.setShaderTexture(0,0); com.mojang.blaze3d.systems.RenderSystem.enableDepthTest(); }
+    }
+    /** 拒绝旧版专用渲染器，避免第三方物品把整页 GUI 渲染打断。 */
+    public static boolean canDrawItemIcon(net.minecraft.world.item.ItemStack stack) {
+        var mc=net.minecraft.client.Minecraft.getInstance();
+        var model=mc.getItemRenderer().getModel(stack,mc.level,mc.player,0);
+        return model!=null&&!model.isCustomRenderer();
+    }
 }

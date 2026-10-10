@@ -1,6 +1,7 @@
 package com.november.mcphone.core.script.server;
 
 import com.november.mcphone.MCphone;
+import com.november.mcphone.core.PhoneNbt;
 import com.november.mcphone.core.PhoneSavedData;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
@@ -115,24 +116,24 @@ public final class AuthorityData extends PhoneSavedData {
     /** 坏 UUID <b>跳过并 WARN</b>，绝不从 load 抛（对抗组 Q7：这条在装配路径上）。 */
     static AuthorityData load(CompoundTag tag) {
         AuthorityData d = new AuthorityData();
-        ListTag all = tag.getList(EVERYONE, Tag.TAG_STRING);
+        ListTag all = PhoneNbt.getList(tag, EVERYONE, Tag.TAG_STRING);
         for (int i = 0; i < all.size(); i++) {
-            String id = all.getString(i);
+            String id = PhoneNbt.getString(all, i);
             if (!Deployment.validId(id)) continue;
             d.everyone.add(id);
         }
-        ListTag ps = tag.getList(PLAYERS, Tag.TAG_COMPOUND);
+        ListTag ps = PhoneNbt.getList(tag, PLAYERS, Tag.TAG_COMPOUND);
         for (int i = 0; i < ps.size(); i++) {
-            CompoundTag c = ps.getCompound(i);
-            String appId = c.getString("appId");
+            CompoundTag c = PhoneNbt.getCompound(ps, i);
+            String appId = PhoneNbt.getString(c, "appId");
             if (!Deployment.validId(appId)) {
                 MCphone.LOGGER.warn("[MCphone] 授权表里有一条 appId 读不出来，跳过");
                 continue;
             }
             Set<UUID> set = new TreeSet<>();
-            ListTag ids = c.getList("uuids", Tag.TAG_STRING);
+            ListTag ids = PhoneNbt.getList(c, "uuids", Tag.TAG_STRING);
             for (int j = 0; j < ids.size(); j++) {
-                String raw = ids.getString(j);
+                String raw = PhoneNbt.getString(ids, j);
                 try {
                     set.add(UUID.fromString(raw));
                 } catch (IllegalArgumentException e) {

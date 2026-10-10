@@ -7,3 +7,8 @@
 # 接缝清单由 updateSeamsDoc 生成，只吐 LF；不钉死的话 autocrlf 会把它变 CRLF，
 # 混行尾会让 verifySeamsDocCurrent 的字符串比对失败（Windows 上必现）
 shared/PLATFORM-SEAMS.md text eol=lf
+
+# 固定内部依赖按完整字节摘要验收，检出时不得转换 POM、来源记录或许可证换行。
+vendor/maven/** -text
+# 上游许可证逐字保存，保留其原始行尾空格。
+tools/private-rhino/inputs/LICENSE-Rhino.txt -text -whitespace

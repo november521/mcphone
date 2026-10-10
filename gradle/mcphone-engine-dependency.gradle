@@ -1,0 +1,255 @@
+import groovy.json.JsonSlurper
+import org.objectweb.asm.*
+import org.objectweb.asm.commons.ClassRemapper
+import org.objectweb.asm.commons.Remapper
+import java.security.MessageDigest
+import java.lang.module.ModuleDescriptor
+import java.nio.ByteBuffer
+import java.util.zip.ZipInputStream
+
+buildscript {
+    repositories {
+        maven { url = 'https://maven.neoforged.net/releases/'; content { includeGroup 'org.ow2.asm' } }
+        mavenCentral()
+    }
+    dependencies { classpath 'org.ow2.asm:asm:9.9.1'; classpath 'org.ow2.asm:asm-commons:9.9.1' }
+}
+
+/** 所有平台只消费这份锁定构件；生产工程不参与日常构建。 */
+class PrivateEngineRules {
+    static final String PREFIX = 'com/november/mcphone/internal/rhino/'
+    static final String MODULE = 'com.november.mcphone.internal.rhino'
+    static String sha(byte[] bytes) { MessageDigest.getInstance('SHA-256').digest(bytes).encodeHex().toString() }
+    static boolean hasPrivateContext(File file) {
+        new java.util.zip.ZipFile(file).withCloseable { zip -> zip.getEntry(PREFIX + 'javascript/Context.class') != null }
+    }
+    static void require(boolean ok, String detail) { if (!ok) throw new GradleException(detail) }
+    static Map<String, byte[]> entries(byte[] bytes) {
+        def result = new TreeMap<String, byte[]>()
+        new ZipInputStream(new ByteArrayInputStream(bytes)).withCloseable { zip ->
+            for (def e = zip.nextEntry; e != null; e = zip.nextEntry) {
+                if (e.directory) continue
+                require(!result.containsKey(e.name), "重复 jar 条目：${e.name}")
+                result.put(e.name, zip.readAllBytes())
+            }
+        }
+        result
+    }
+    static Set<String> references(byte[] bytes) {
+        def names = new HashSet<String>()
+        def remapper = new Remapper(Opcodes.ASM9) {
+            @Override String map(String name) { names.add(name); name }
+        }
+        // 访问正文、签名、注解、父类、泛型及 invokedynamic；不反射初始化任何模组类。
+        new ClassReader(bytes).accept(new ClassRemapper(new ClassWriter(0), remapper), 0)
+        names
+    }
+    static void boundary(byte[] bytes) {
+        def reader = new ClassReader(bytes)
+        def name = reader.className
+        def refs = references(bytes)
+        require(!refs.any { it.startsWith('org/mozilla/') }, "MCPhone 残留原始 Rhino 类型：${name}")
+        boolean engine = name.startsWith('com/november/mcphone/core/script/engine/')
+        require(engine || !refs.any { it.startsWith(PREFIX) }, "非引擎代码引用私有 Rhino：${name}")
+        if (name.startsWith('com/november/mcphone/api/')) {
+            require(!refs.any { it.startsWith(PREFIX) || it.startsWith('com/november/mcphone/core/script/engine/') },
+                "公开 API 引用内部脚本实现：${name}")
+        }
+    }
+    static int engine(Map<String, byte[]> entries) {
+        require(entries.containsKey('module-info.class'), '私有引擎缺显式模块声明')
+        def descriptor = ModuleDescriptor.read(ByteBuffer.wrap(entries.get('module-info.class')))
+        require(descriptor.name() == MODULE && !descriptor.automatic, '私有模块身份错误')
+        require(descriptor.requires().collect { it.name() }.toSet() == ['java.base','java.compiler','java.desktop','jdk.dynalink'].toSet(), 'JDK requires 不完整')
+        require(descriptor.requires().find { it.name() == 'java.desktop' }.modifiers().contains(ModuleDescriptor.Requires.Modifier.TRANSITIVE), 'java.desktop 丢失 transitive')
+        require(descriptor.exports().every { it.source().startsWith(MODULE + '.') }, '导出了原始包')
+        require(descriptor.uses().every { it.startsWith(MODULE + '.') }, 'uses 残留原始包')
+        def service = MODULE + '.javascript.RegExpLoader'
+        def provider = MODULE + '.javascript.regexp.RegExpLoaderImpl'
+        require(descriptor.provides().find { it.service() == service }?.providers() == [provider], '正则模块服务不完整')
+        require(entries.get('META-INF/services/' + service) != null &&
+                new String(entries.get('META-INF/services/' + service), 'UTF-8').readLines().findAll { it && !it.startsWith('#') }.collect { it.trim() } == [provider], '类路径正则服务不完整')
+        descriptor.exports().each { e -> require(entries.keySet().any { it.startsWith(e.source().replace('.', '/') + '/') }, "不存在的 exports：${e.source()}") }
+        ['javascript/Context.class','javascript/ContextFactory.class','classfile/ClassFileWriter.class',
+         'javascript/resources/Messages.properties','javascript/regexp/RegExpLoaderImpl.class'].each { suffix ->
+            require(entries.containsKey(PREFIX + suffix), "私有引擎缺少 ${suffix}")
+        }
+        int classes = 0
+        entries.each { name, bytes ->
+            require(!name.startsWith('org/mozilla/'), "私有引擎残留原包/资源：${name}")
+            if (name.endsWith('.class')) {
+                def major = ((bytes[6] & 255) << 8) | (bytes[7] & 255)
+                require(major <= 61, "私有引擎不兼容 Java 17：${name} major=${major}")
+                require(!references(bytes).any { it.startsWith('org/mozilla/') }, "引擎类型引用未转换：${name}")
+                classes++
+            }
+        }
+        require(entries.keySet().any { it.toUpperCase(Locale.ROOT).contains('LICENSE') }, '缺 Rhino 许可证')
+        classes
+    }
+    static int packaged(Map<String, byte[]> mod, Map<String, byte[]> canonical, boolean fabric, int depth = 0) {
+        require(depth < 8, '异常的内嵌 jar 深度')
+        int found = 0
+        mod.each { name, bytes ->
+            require(!name.startsWith('org/mozilla/'), "MCPhone 分发原始 Rhino：${name}")
+            if (name.endsWith('.class') && name.startsWith('com/november/mcphone/')) boundary(bytes)
+            if (name.endsWith('.jar')) {
+                def nested = entries(bytes)
+                if (nested.containsKey(PREFIX + 'javascript/Context.class')) {
+                    def extras = nested.keySet() - canonical.keySet()
+                    require(extras == ([] as Set) || (fabric && extras == (['fabric.mod.json'] as Set)), "未认可的引擎封装资源：${extras}")
+                    canonical.each { path, content -> require(Arrays.equals(content, nested.get(path)), "内嵌引擎发生变化：${path}") }
+                    engine(nested); found++
+                } else found += packaged(nested, canonical, fabric, depth + 1)
+            }
+        }
+        found
+    }
+}
+
+abstract class VerifyPrivateEngineIdentity extends DefaultTask {
+    @InputFiles @PathSensitive(PathSensitivity.NONE) abstract ConfigurableFileCollection getLockedFiles()
+    @Input abstract MapProperty<String, String> getExpected()
+    @InputFiles @PathSensitive(PathSensitivity.NONE) abstract ConfigurableFileCollection getCompileLibraries()
+    @InputFiles @PathSensitive(PathSensitivity.NONE) abstract ConfigurableFileCollection getRuntimeLibraries()
+    @InputFile @PathSensitive(PathSensitivity.NONE) abstract RegularFileProperty getEngineJar()
+    @Input abstract ListProperty<String> getLegacyDeclarations()
+    @TaskAction void run() {
+        def expected = expected.get()
+        PrivateEngineRules.require(legacyDeclarations.get().isEmpty(), "MCPhone 仍声明原始 Rhino 依赖：${legacyDeclarations.get()}")
+        lockedFiles.files.each { f ->
+            PrivateEngineRules.require(expected.containsKey(f.name), "未锁定依赖文件：${f}")
+            PrivateEngineRules.require(PrivateEngineRules.sha(f.bytes) == expected.get(f.name), "固定依赖摘要不匹配：${f}")
+        }
+        def canonical = engineJar.get().asFile
+        [compileLibraries.files, runtimeLibraries.files].each { libs ->
+            def candidates = libs.findAll { it.isFile() && it.name.endsWith('.jar') &&
+                PrivateEngineRules.hasPrivateContext(it) }
+            PrivateEngineRules.require(candidates.size() == 1 && candidates[0].canonicalFile == canonical.canonicalFile,
+                "编译/开发运行不是同一份 vendor 引擎：${candidates}")
+        }
+        int count = PrivateEngineRules.engine(PrivateEngineRules.entries(canonical.bytes))
+        logger.lifecycle("私有 Rhino 身份/资源/模块校验通过：${count} 个类，编译与开发运行一致")
+    }
+}
+abstract class VerifyPrivateEngineBoundary extends DefaultTask {
+    @InputFiles @PathSensitive(PathSensitivity.RELATIVE) abstract ConfigurableFileCollection getClasses()
+    @TaskAction void run() {
+        int count = 0
+        classes.files.each { root -> if (root.isDirectory()) root.eachFileRecurse { f ->
+            if (f.name.endsWith('.class')) { PrivateEngineRules.boundary(f.bytes); count++ }
+        } }
+        PrivateEngineRules.require(count > 0, '未找到 MCPhone 字节码，边界检查不能空转')
+        logger.lifecycle("脚本引擎类型边界校验通过：${count} 个类")
+    }
+}
+abstract class VerifyPrivateEnginePackage extends DefaultTask {
+    @InputFile @PathSensitive(PathSensitivity.NONE) abstract RegularFileProperty getModJar()
+    @InputFile @PathSensitive(PathSensitivity.NONE) abstract RegularFileProperty getEngineJar()
+    @Input abstract Property<Boolean> getFabricWrapping()
+    @Input abstract Property<String> getEngineVersion()
+    @TaskAction void run() {
+        def mod = PrivateEngineRules.entries(modJar.get().asFile.bytes)
+        int count = PrivateEngineRules.packaged(mod, PrivateEngineRules.entries(engineJar.get().asFile.bytes), fabricWrapping.get())
+        PrivateEngineRules.require(count == 1, "正式包内必须且只能有一个固定私有引擎：找到 ${count}")
+        if (!fabricWrapping.get()) {
+            def metadata = new JsonSlurper().parse(mod.get('META-INF/jarjar/metadata.json'))
+            def deps = metadata.jars.findAll { it.identifier.group == 'com.november.mcphone.internal' && it.identifier.artifact == 'rhino' }
+            PrivateEngineRules.require(deps.size() == 1 && deps[0].version.range == "[${engineVersion.get()}]" && deps[0].version.artifactVersion == engineVersion.get(), '内嵌引擎协商身份/精确范围错误')
+        }
+        logger.lifecycle("正式包内嵌引擎一致性校验通过：${modJar.get().asFile.name}")
+    }
+}
+
+abstract class VerifyPrivateEngineRulesTest extends DefaultTask {
+    static byte[] fixture(String name, String fieldType, String signature = null, String parent = 'java/lang/Object', String annotation = null) {
+        def writer = new ClassWriter(0)
+        writer.visit(Opcodes.V17, Opcodes.ACC_PUBLIC, name, null, parent, null)
+        writer.visitField(Opcodes.ACC_PUBLIC, 'value', fieldType, signature, null).visitEnd()
+        if (annotation != null) writer.visitAnnotation(annotation, true).visitEnd()
+        writer.visitEnd(); writer.toByteArray()
+    }
+    @TaskAction void run() {
+        def prefix = PrivateEngineRules.PREFIX
+        def engine = 'com/november/mcphone/core/script/engine/Probe'
+        def other = 'com/november/mcphone/feature/chat/Probe'
+        def api = 'com/november/mcphone/api/Probe'
+        def cases = [
+            [true, fixture(engine, 'L' + prefix + 'javascript/Context;')],
+            [true, fixture(other, 'Ljava/lang/String;')],
+            [true, fixture(other, 'Lcom/november/mcphone/core/script/engine/ScriptBudget;')],
+            [false, fixture(other, 'L' + prefix + 'javascript/Context;')],
+            [false, fixture(engine, 'Lorg/mozilla/javascript/Context;')],
+            [false, fixture(api, 'Lcom/november/mcphone/core/script/engine/ScriptBudget;')],
+            [false, fixture(api, 'L' + prefix + 'javascript/Context;')],
+            [false, fixture(other, 'Ljava/util/List;', 'Ljava/util/List<L' + prefix + 'javascript/Context;>;')],
+            [false, fixture(other, 'Ljava/lang/Object;', null, prefix + 'javascript/ContextFactory')],
+            [false, fixture(other, 'Ljava/lang/Object;', null, 'java/lang/Object', 'L' + prefix + 'javascript/annotations/JSFunction;')]
+        ]
+        cases.eachWithIndex { pair, index ->
+            boolean pass = true
+            try { PrivateEngineRules.boundary(pair[1] as byte[]) } catch (GradleException expected) { pass = false }
+            PrivateEngineRules.require(pass == pair[0], "引擎边界规则测试失败：${index}")
+        }
+        logger.lifecycle("私有引擎边界规则测试通过：${cases.size()} 个正常/拒绝用例")
+    }
+}
+
+def engineRepoRoot = file('../..')
+def lock = new JsonSlurper().parse(new File(engineRepoRoot, 'versions/private-rhino.json'))
+def engineDir = new File(engineRepoRoot, lock.mavenPath)
+def canonicalEngine = new File(engineDir, "rhino-${lock.version}.jar")
+def engineCoordinate = "com.november.mcphone.internal:rhino:${lock.version}"
+repositories {
+    exclusiveContent {
+        forRepository { maven { name = 'MCPhoneInternal'; url = new File(engineRepoRoot, 'vendor/maven').toURI(); metadataSources { mavenPom() } } }
+        filter { includeGroup 'com.november.mcphone.internal' }
+    }
+}
+dependencies {
+    implementation(engineCoordinate) { version { strictly lock.version }; transitive = false }
+    if (plugins.hasPlugin('fabric-loom')) include(engineCoordinate) { transitive = false }
+    else if (plugins.hasPlugin('net.minecraftforge.gradle')) {
+        jarJar(engineCoordinate) { transitive = false; jarJar.ranged(it, "[${lock.version}]"); jarJar.pin(it, lock.version) }
+        minecraftLibrary(engineCoordinate) { transitive = false }
+    } else {
+        jarJar(engineCoordinate) { version { strictly "[${lock.version}]"; prefer lock.version }; transitive = false }
+        // MDG 在 1.21.9+ 仍保留同名配置，但禁止添加依赖；当前旧运行模型只有此目标。
+        if (project.minecraft_version.toString() == '1.21.1')
+            additionalRuntimeClasspath(engineCoordinate) { transitive = false }
+    }
+}
+def identity = tasks.register('verifyPrivateEngineIdentity', VerifyPrivateEngineIdentity) {
+    group = 'verification'
+    lockedFiles.from(lock.files.keySet().collect { new File(engineDir, it) })
+    expected.set(lock.files as Map<String, String>)
+    engineJar.set(canonicalEngine)
+    compileLibraries.from(configurations.compileClasspath)
+    runtimeLibraries.from(configurations.runtimeClasspath)
+    // 不按文件名禁止 KubeJS 的 rhino 或 WorldEdit 自带的原始包；只拦本工程声明。
+    legacyDeclarations.set(configurations.collectMany { configuration -> configuration.allDependencies.findAll {
+        it.group == 'org.mozilla' && it.name == 'rhino'
+    }.collect { "${configuration.name}: ${it.group}:${it.name}:${it.version}".toString() } })
+}
+def rulesTest = tasks.register('verifyPrivateEngineRulesTest', VerifyPrivateEngineRulesTest) { group = 'verification' }
+def boundary = tasks.register('verifyPrivateEngineBoundary', VerifyPrivateEngineBoundary) {
+    group = 'verification'; dependsOn tasks.named('classes')
+    classes.from(sourceSets.main.output.classesDirs)
+}
+def releaseTaskName = plugins.hasPlugin('fabric-loom') ? 'remapJar' : plugins.hasPlugin('net.minecraftforge.gradle') ? 'jarJar' : 'jar'
+def packaged = tasks.register('verifyPrivateEnginePackage', VerifyPrivateEnginePackage) {
+    group = 'verification'
+    dependsOn tasks.named(releaseTaskName), identity, boundary
+    modJar.set(tasks.named(releaseTaskName).flatMap { it.archiveFile })
+    engineJar.set(canonicalEngine); fabricWrapping.set(plugins.hasPlugin('fabric-loom'))
+    engineVersion.set(lock.version.toString())
+}
+tasks.withType(JavaCompile).configureEach { dependsOn identity }
+tasks.named('check').configure { dependsOn identity, boundary, packaged, rulesTest }
+tasks.withType(JavaExec).configureEach {
+    if (name.startsWith('assertTest')) {
+        dependsOn identity
+        systemProperty 'mcphone.privateRhino.sha256', lock.files.get(canonicalEngine.name)
+        systemProperty 'mcphone.privateRhino.version', lock.version.toString()
+    }
+}

@@ -7,7 +7,7 @@ import com.november.mcphone.core.client.PhoneScreenOpener;
 import com.november.mcphone.feature.music.menu.DiscBayMenu;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
+import com.november.mcphone.platform.client.PhoneContainerScreenBase;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.player.Inventory;
 
@@ -15,14 +15,12 @@ import net.minecraft.world.entity.player.Inventory;
  * 唱片仓的界面 —— 一个唱片格 ＋ 玩家背包，让玩家不必关手机就能把唱片拖进去。
  * 176×133 与原版漏斗一致（手机竖屏放不下 9 列格子）；关掉后回到音乐 App 而不是回世界。
  */
-public class DiscBayScreen extends AbstractContainerScreen<DiscBayMenu> {
+public class DiscBayScreen extends PhoneContainerScreenBase<DiscBayMenu> {
 
     public DiscBayScreen(DiscBayMenu menu, Inventory playerInventory, Component title) {
-        super(menu, playerInventory, title);
+        super(menu, playerInventory, title, DiscBayMenu.IMAGE_WIDTH, DiscBayMenu.IMAGE_HEIGHT);
 
         // 格子坐标相对于 leftPos/topPos，尺寸必须与 Menu 用同一套基准
-        this.imageWidth = DiscBayMenu.IMAGE_WIDTH;
-        this.imageHeight = DiscBayMenu.IMAGE_HEIGHT;
 
         this.titleLabelX = 8;
         this.titleLabelY = 6;

@@ -449,7 +449,7 @@ public final class PhoneScreen extends PhoneScreenBase {
     private void tellPlayer(String translationKey, Object... args) {
         // 动作栏而不是聊天框：玩家的眼睛正看着手机屏幕
         if (minecraft != null && minecraft.player != null) {
-            minecraft.player.displayClientMessage(Component.translatable(translationKey, args), true);
+            com.november.mcphone.platform.PlayerAccess.message(minecraft.player, Component.translatable(translationKey, args), true);
         }
     }
 
@@ -1532,7 +1532,7 @@ public final class PhoneScreen extends PhoneScreenBase {
             return true;
         }
 
-        if (minecraft != null && minecraft.options.keyInventory.matches(keyCode, scanCode)) {
+        if (minecraft != null && com.november.mcphone.platform.client.PhoneKeyInput.matches(minecraft.options.keyInventory,keyCode,scanCode)) {
             if (mode != Mode.MAIN) back();
             else onClose();
             return true;

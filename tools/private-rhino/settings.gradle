@@ -1,0 +1,24 @@
+pluginManagement {
+    repositories {
+        maven { url = 'https://maven.neoforged.net/releases/'; content {
+            includeGroup 'org.ow2.asm'; includeGroup 'commons-io'; includeGroup 'org.apache.ant'
+            includeGroup 'org.codehaus.plexus'; includeGroup 'org.vafer'; includeGroup 'org.apache.logging.log4j'
+            includeGroup 'org.jdom'; includeGroup 'org.apache.commons'; includeGroup 'org.apache'
+            includeGroup 'com.google.guava'; includeGroup 'com.google.errorprone'; includeGroup 'com.google.j2objc'
+            includeGroup 'org.sonatype.oss'; includeGroup 'org.codehaus'; includeGroup 'org.checkerframework'
+            includeGroup 'org.junit'; includeGroup 'org.jetbrains.kotlin'; includeGroup 'org.jetbrains.kotlinx'
+            includeGroup 'org.apache.logging'
+            includeGroupByRegex 'org\\.apache(\\..*)?'
+            includeGroup 'org.mockito'; includeGroup 'io.netty'; includeGroup 'io.fabric8'
+            includeGroup 'com.lmax'; includeGroup 'org.fusesource.jansi'
+            includeGroup 'com.fasterxml'
+            includeGroupByRegex 'com\\.fasterxml(\\..*)?'
+            includeGroupByRegex 'org\\.codehaus(\\..*)?'
+            includeGroup 'jakarta.platform'; includeGroup 'org.eclipse.ee4j'; includeGroup 'net.java'
+            includeGroup 'org.springframework'; includeGroup 'org.graalvm.sdk'; includeGroup 'org.graalvm.polyglot'
+            includeGroup 'com.fasterxml.jackson'; includeGroup 'com.fasterxml.jackson.core'; includeGroup 'com.fasterxml.jackson.dataformat'
+        } }
+        gradlePluginPortal(); mavenCentral()
+    }
+}
+rootProject.name = 'mcphone-private-rhino-producer'
