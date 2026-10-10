@@ -134,6 +134,7 @@ jobs:
           java-version: |
             17
             21
+            25
 
       - name: 逐个目标构建
         id: buildall

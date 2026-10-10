@@ -1,8 +1,8 @@
 package com.november.mcphone.core.script.engine;
 
-import org.mozilla.javascript.Context;
-import org.mozilla.javascript.Scriptable;
-import org.mozilla.javascript.ScriptableObject;
+import com.november.mcphone.internal.rhino.javascript.Context;
+import com.november.mcphone.internal.rhino.javascript.Scriptable;
+import com.november.mcphone.internal.rhino.javascript.ScriptableObject;
 
 import java.util.Map;
 import java.util.Set;
@@ -169,7 +169,7 @@ public final class AppScope {
         Object accessor = scope.getGetterOrSetter(name, 0, false);
         // A retention audit must be observational. Calling script getters here both mutates state
         // and gives package code a second execution path. Accessor-backed values are skipped.
-        if (accessor instanceof org.mozilla.javascript.Callable) return org.mozilla.javascript.Undefined.instance;
+        if (accessor instanceof com.november.mcphone.internal.rhino.javascript.Callable) return com.november.mcphone.internal.rhino.javascript.Undefined.instance;
         return ScriptableObject.getProperty(scope, name);
     }
 

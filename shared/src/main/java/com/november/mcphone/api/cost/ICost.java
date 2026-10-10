@@ -38,7 +38,7 @@ public interface ICost {
     /** 要几个某种物品 */
     static ICost of(ItemLike item, int count) {
         return new ItemCost(stack -> stack.is(item.asItem()), count,
-                Component.translatable("mcphone.cost.item", count, item.asItem().getDescription()));
+                Component.translatable("mcphone.cost.item", count, com.november.mcphone.platform.PlayerAccess.itemName(item)));
     }
 
     /**

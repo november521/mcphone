@@ -1,7 +1,7 @@
 package com.november.mcphone.core.script.engine;
 
-import org.mozilla.javascript.Context;
-import org.mozilla.javascript.ContextFactory;
+import com.november.mcphone.internal.rhino.javascript.Context;
+import com.november.mcphone.internal.rhino.javascript.ContextFactory;
 
 /**
  * 指令预算与墙钟（施工方案 §16.4）。<b>每个 App 一个实例，不共用全局 ContextFactory。</b>

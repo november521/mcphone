@@ -41,7 +41,7 @@ public final class ScriptAdminCommand {
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
         dispatcher.register(Commands.literal("mcphone")
                 .then(Commands.literal("script")
-                        .requires(src -> src.hasPermission(3))
+                        .requires(src -> com.november.mcphone.platform.PlayerAccess.admin(src))
                         .then(Commands.literal("identity").executes(ctx -> {
                             ok(ctx.getSource(), "[脚本] 服务器身份 " + ServerIdentity.idOf(ctx.getSource().getServer()));
                             return 1;

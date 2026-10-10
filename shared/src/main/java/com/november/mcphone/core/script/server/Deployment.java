@@ -1,6 +1,7 @@
 package com.november.mcphone.core.script.server;
 
 import com.november.mcphone.MCphone;
+import com.november.mcphone.core.PhoneNbt;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.StringTag;
@@ -102,10 +103,10 @@ public record Deployment(
      * 批准人那一串解析不了时只丢批准人，不丢整条部署（对抗组 Q7）。
      */
     static Deployment fromTag(CompoundTag t) {
-        String appId = t.getString(APP_ID);
+        String appId = PhoneNbt.getString(t, APP_ID);
         if (!validId(appId)) return null;
         UUID approver = null;
-        String raw = t.getString(APPROVER);
+        String raw = PhoneNbt.getString(t, APPROVER);
         if (!raw.isEmpty()) {
             try {
                 approver = UUID.fromString(raw);
@@ -113,18 +114,18 @@ public record Deployment(
                 MCphone.LOGGER.warn("[MCphone] 部署 {} 的批准人 UUID 读不出来（{}），按无批准人处理", appId, raw);
             }
         }
-        String packageDigest = t.getString(PACKAGE_DIGEST);
-        String storedRevision = t.getString(REVISION);
+        String packageDigest = PhoneNbt.getString(t, PACKAGE_DIGEST);
+        String storedRevision = PhoneNbt.getString(t, REVISION);
         // M5：revision 与 packageDigest 是同一个值。读档一律以 packageDigest 为准，两边不一致就告警并归一 ——
         // 否则将来某一步只改一个字段，客户端的 deployRev 比对与"装配的是哪份代码"会静默分叉。
         if (!storedRevision.isEmpty() && !storedRevision.equals(packageDigest)) {
             MCphone.LOGGER.warn("[MCphone] 部署 {} 的 revision（{}）与包摘要不一致，按包摘要归一",
                     appId, storedRevision);
         }
-        return new Deployment(appId, t.getString(DEPLOYMENT_ID), packageDigest,
-                t.getLong(APPROVAL_REVISION), packageDigest, t.getString(FRONTEND_DIGEST),
+        return new Deployment(appId, PhoneNbt.getString(t, DEPLOYMENT_ID), packageDigest,
+                PhoneNbt.getLong(t, APPROVAL_REVISION), packageDigest, PhoneNbt.getString(t, FRONTEND_DIGEST),
                 cleanList(t, DECLARED_ACTIONS), cleanList(t, APPROVED_ACTIONS),
-                cleanList(t, DECLARED_CAPS), cleanList(t, APPROVED_CAPS), approver, t.getLong(APPROVED_AT));
+                cleanList(t, DECLARED_CAPS), cleanList(t, APPROVED_CAPS), approver, PhoneNbt.getLong(t, APPROVED_AT));
     }
 
     // ---------------------------------------------------------------- 校验与列表
@@ -174,9 +175,9 @@ public record Deployment(
     }
 
     static List<String> getList(CompoundTag t, String key) {
-        ListTag list = t.getList(key, Tag.TAG_STRING);
+        ListTag list = PhoneNbt.getList(t, key, Tag.TAG_STRING);
         List<String> out = new ArrayList<>(list.size());
-        for (int i = 0; i < list.size(); i++) out.add(list.getString(i));
+        for (int i = 0; i < list.size(); i++) out.add(PhoneNbt.getString(list, i));
         return out;
     }
 }

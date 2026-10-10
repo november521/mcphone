@@ -79,7 +79,7 @@ public final class TerminalOpener {
 
         // 三、哪儿都没有。把卡槽摆出来，比一句"你没有终端"有用
         if (!incapable.isEmpty()) {
-            player.displayClientMessage(
+            com.november.mcphone.platform.PlayerAccess.message(player,
                     Component.translatable("mcphone.terminal.no_remote", incapable.getHoverName()), false);
         }
         openSlotMenu(player);
@@ -113,7 +113,7 @@ public final class TerminalOpener {
             // enqueueWork 排给主线程的任务里 —— 让它冒出去就是一次服务端崩溃，
             // 起因只是某个玩家点了一下手机上的 App。
             MCphone.LOGGER.error("用 {} 打开终端时出错", integration.modId(), t);
-            player.displayClientMessage(
+            com.november.mcphone.platform.PlayerAccess.message(player,
                     Component.translatable("mcphone.terminal.open_failed", integration.displayName()), false);
             return true;   // 已经给过反馈了，别再往下找、也别再开卡槽界面
         }

@@ -4,11 +4,11 @@ import com.november.mcphone.MCphone;
 import com.november.mcphone.core.script.net.ScriptErrorCode;
 import com.november.mcphone.core.script.server.ActionEvaluator;
 import com.november.mcphone.core.script.server.ScriptWorkers;
-import org.mozilla.javascript.Callable;
-import org.mozilla.javascript.Context;
-import org.mozilla.javascript.RhinoException;
-import org.mozilla.javascript.Scriptable;
-import org.mozilla.javascript.ScriptableObject;
+import com.november.mcphone.internal.rhino.javascript.Callable;
+import com.november.mcphone.internal.rhino.javascript.Context;
+import com.november.mcphone.internal.rhino.javascript.RhinoException;
+import com.november.mcphone.internal.rhino.javascript.Scriptable;
+import com.november.mcphone.internal.rhino.javascript.ScriptableObject;
 
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -64,6 +64,7 @@ public final class RhinoEvaluator implements ActionEvaluator {
     public RhinoEvaluator(Map<String, AppScope> apps, StrikeTracker strikes,
                           CtxBuilder.Backends backends, Consumer<Runnable> mainThread,
                           com.november.mcphone.core.script.server.CapabilityPolicy capabilities) {
+        RhinoRuntimeIdentity.reportOnce();
         this.apps = apps;
         this.strikes = strikes;
         this.backends = backends;

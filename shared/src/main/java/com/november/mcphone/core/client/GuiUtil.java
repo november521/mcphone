@@ -4,7 +4,6 @@ import com.mojang.blaze3d.systems.RenderSystem;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.resources.model.BakedModel;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
@@ -360,8 +359,7 @@ public final class GuiUtil {
         if (mc == null) return false;
 
         try {
-            BakedModel model = mc.getItemRenderer().getModel(stack, mc.level, mc.player, 0);
-            return model != null && !model.isCustomRenderer();
+            return com.november.mcphone.platform.client.Draw.canDrawItemIcon(stack);
         } catch (Throwable t) {
             // 取模型这一步就抛了的物品，更不该让它去画。兜 Throwable 不是 Exception：
             // 模组的模型代码抛 NoClassDefFoundError / AbstractMethodError 都见过

@@ -1,6 +1,7 @@
 package com.november.mcphone.core.script.server;
 
 import com.november.mcphone.MCphone;
+import com.november.mcphone.core.PhoneNbt;
 import com.november.mcphone.core.PhoneSavedData;
 import com.november.mcphone.core.script.net.Handshake;
 import com.november.mcphone.core.script.net.ScriptProtocol;
@@ -73,7 +74,7 @@ public final class DeploymentData extends PhoneSavedData {
             String oldest = null;
             long at = Long.MAX_VALUE;
             for (Map.Entry<String, CompoundTag> e : candidates.entrySet()) {
-                long q = e.getValue().getLong("queuedAt");
+                long q = PhoneNbt.getLong(e.getValue(), "queuedAt");
                 if (q < at) {
                     at = q;
                     oldest = e.getKey();
@@ -221,24 +222,24 @@ public final class DeploymentData extends PhoneSavedData {
 
     static DeploymentData load(CompoundTag tag) {
         DeploymentData d = new DeploymentData();
-        ListTag cs = tag.getList(CANDIDATES, Tag.TAG_COMPOUND);
+        ListTag cs = PhoneNbt.getList(tag, CANDIDATES, Tag.TAG_COMPOUND);
         for (int i = 0; i < cs.size(); i++) {
-            CompoundTag c = cs.getCompound(i);
+            CompoundTag c = PhoneNbt.getCompound(cs, i);
             Candidate candidate = Candidate.fromTag(c);
             if (candidate == null) {
-                MCphone.LOGGER.warn("[MCphone] 候选 {} 读不出来，跳过", c.getString("packageDigest"));
+                MCphone.LOGGER.warn("[MCphone] 候选 {} 读不出来，跳过", PhoneNbt.getString(c, "packageDigest"));
                 continue;
             }
             d.candidates.put(candidate.packageDigest(), c);
         }
-        ListTag ds = tag.getList(DEPLOYMENTS, Tag.TAG_COMPOUND);
+        ListTag ds = PhoneNbt.getList(tag, DEPLOYMENTS, Tag.TAG_COMPOUND);
         for (int i = 0; i < ds.size(); i++) {
-            CompoundTag c = ds.getCompound(i);
+            CompoundTag c = PhoneNbt.getCompound(ds, i);
             if (Deployment.fromTag(c) == null) {
-                MCphone.LOGGER.warn("[MCphone] 部署 {} 读不出来，跳过", c.getString("appId"));
+                MCphone.LOGGER.warn("[MCphone] 部署 {} 读不出来，跳过", PhoneNbt.getString(c, "appId"));
                 continue;
             }
-            d.deployments.put(c.getString("appId"), c);
+            d.deployments.put(PhoneNbt.getString(c, "appId"), c);
         }
         return d;
     }
@@ -316,8 +317,8 @@ public final class DeploymentData extends PhoneSavedData {
         /** 坏条目返回 null（不抛）—— 读档路径上必须活。 */
         static Candidate fromTag(CompoundTag t) {
             try {
-                return new Candidate(t.getString("appId"), t.getString("packageDigest"), t.getString("frontendDigest"),
-                        t.getLong("queuedAt"),
+                return new Candidate(PhoneNbt.getString(t, "appId"), PhoneNbt.getString(t, "packageDigest"), PhoneNbt.getString(t, "frontendDigest"),
+                        PhoneNbt.getLong(t, "queuedAt"),
                         Deployment.getList(t, "declaredActions"), Deployment.getList(t, "declaredCapabilities"));
             } catch (IllegalArgumentException e) {
                 return null;

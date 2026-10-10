@@ -166,5 +166,67 @@
       "1.21+",
       "fabric"
     ]
+  },
+  "26.1.2-forge": {
+    "minecraft": "26.1.2",
+    "loader": "Forge",
+    "loader_version": null,
+    "server_config_sync": true,
+    "mappings": "official",
+    "java": 25,
+    "gradle": "9.2.1",
+    "project": "platforms/26.1.2-forge",
+    "buildable": false,
+    "note": "本轮仅移植 NeoForge；此加载器尚未开始，版本和构建工具占位值未验证。",
+    "layers": [
+      "1.20.3+",
+      "1.20.5+",
+      "1.21+",
+      "forge"
+    ],
+    "unverified": [
+      "loader_version",
+      "gradle"
+    ]
+  },
+  "26.1.2-neoforge": {
+    "minecraft": "26.1.2",
+    "loader": "NeoForge",
+    "loader_version": "26.1.2.100",
+    "server_config_sync": true,
+    "mappings": "official",
+    "java": 25,
+    "gradle": "9.2.1",
+    "project": "platforms/26.1.2-neoforge",
+    "buildable": false,
+    "note": "已完成源码 API 移植；以稳定 NeoForge 26.1.2.100 编译，运行范围见平台 gradle.properties。ATM11 0.11.1-beta 使用 109；用户负责游戏与整合包兼容性验收，暂不纳入正式发布。",
+    "layers": [
+      "1.20.3+",
+      "1.20.5+",
+      "1.21+",
+      "neoforge"
+    ]
+  },
+  "26.1.2-fabric": {
+    "minecraft": "26.1.2",
+    "loader": "Fabric",
+    "loader_version": null,
+    "server_config_sync": true,
+    "mappings": "official",
+    "java": 25,
+    "gradle": "9.7.1",
+    "project": "platforms/26.1.2-fabric",
+    "buildable": false,
+    "note": "本轮仅移植 NeoForge；此加载器尚未开始，版本和构建工具占位值未验证。",
+    "layers": [
+      "1.20.3+",
+      "1.20.5+",
+      "1.21+",
+      "fabric"
+    ],
+    "unverified": [
+      "loader_version",
+      "gradle"
+    ]
   }
 }

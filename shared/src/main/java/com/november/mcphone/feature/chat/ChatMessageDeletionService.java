@@ -8,7 +8,7 @@ public final class ChatMessageDeletionService {
     private ChatMessageDeletionService() {}
     public static ChatDeletionResult delete(ServerPlayer player, UUID peer, UUID messageId) {
         if (peer.equals(player.getUUID()) || !FriendGuard.mayActOn(player, peer)) return ChatDeletionResult.FORBIDDEN;
-        return deleteRecord(player.getUUID(), peer, messageId, ChatData.get(player.server), ChatDeletionData.get(player.server));
+        return deleteRecord(player.getUUID(), peer, messageId, ChatData.get(player.level().getServer()), ChatDeletionData.get(player.level().getServer()));
     }
     /** 门禁通过后只在本人参与的会话中找 ID；收到/发出、文本/图片使用相同规则。 */
     static ChatDeletionResult deleteRecord(UUID owner, UUID peer, UUID messageId, ChatData chat, ChatDeletionData deletions) {

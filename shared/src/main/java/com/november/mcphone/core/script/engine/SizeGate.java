@@ -1,9 +1,9 @@
 package com.november.mcphone.core.script.engine;
 
-import org.mozilla.javascript.NativeArray;
-import org.mozilla.javascript.Scriptable;
-import org.mozilla.javascript.ScriptableObject;
-import org.mozilla.javascript.SymbolKey;
+import com.november.mcphone.internal.rhino.javascript.NativeArray;
+import com.november.mcphone.internal.rhino.javascript.Scriptable;
+import com.november.mcphone.internal.rhino.javascript.ScriptableObject;
+import com.november.mcphone.internal.rhino.javascript.SymbolKey;
 
 import java.util.Collections;
 import java.util.IdentityHashMap;
@@ -131,10 +131,10 @@ public final class SizeGate {
      */
     private static void checkArrayFrom(Object[] args) {
         if (args == null || args.length == 0 || args[0] == null
-                || args[0] == org.mozilla.javascript.Undefined.instance) {
+                || args[0] == com.november.mcphone.internal.rhino.javascript.Undefined.instance) {
             return; // Let Rhino preserve its normal TypeError for null/undefined.
         }
-        if (args.length > 1 && args[1] != org.mozilla.javascript.Undefined.instance) {
+        if (args.length > 1 && args[1] != com.november.mcphone.internal.rhino.javascript.Undefined.instance) {
             // The callback can grow an iterable source while it is being consumed, and its output
             // shape cannot be estimated without executing script during preflight.
             throw HostError.invalid("Array.from: 受限沙箱不允许映射回调");
@@ -182,7 +182,7 @@ public final class SizeGate {
         }
         if (!object.has("length", object)) return;
         Object getter = object.getGetterOrSetter("length", 0, false);
-        if (getter instanceof org.mozilla.javascript.Callable) {
+        if (getter instanceof com.november.mcphone.internal.rhino.javascript.Callable) {
             throw HostError.invalid("Array.from: length 访问器不可用于放大型原生操作");
         }
         long length = safeArrayLikeLength(object.get("length", object), "Array.from");
@@ -206,7 +206,7 @@ public final class SizeGate {
     private static void checkApplyArgArray(Object[] args) {
         if (args == null || args.length < 2) return; // apply(thisArg) 就是零个参数
         Object list = args[1];
-        if (list == null || list == org.mozilla.javascript.Undefined.instance) return;
+        if (list == null || list == com.november.mcphone.internal.rhino.javascript.Undefined.instance) return;
 
         if (list instanceof NativeArray array) {
             check(array, "Function.prototype.apply 的参数表");
@@ -235,7 +235,7 @@ public final class SizeGate {
         }
         if (!object.has("length", object)) return; // 没有 length -> apply 当作零参数，不必拦
         Object getter = object.getGetterOrSetter("length", 0, false);
-        if (getter instanceof org.mozilla.javascript.Callable) {
+        if (getter instanceof com.november.mcphone.internal.rhino.javascript.Callable) {
             throw HostError.invalid("Function.prototype.apply: length 访问器不可用于放大型原生操作");
         }
         long length = safeArrayLikeLength(object.get("length", object), "Function.prototype.apply");
@@ -245,7 +245,7 @@ public final class SizeGate {
 
     private static long safeArrayLikeLength(Object value, String where) {
         if (value == null || value == Scriptable.NOT_FOUND
-                || value == org.mozilla.javascript.Undefined.instance) return 0;
+                || value == com.november.mcphone.internal.rhino.javascript.Undefined.instance) return 0;
         if (!(value instanceof Number number)) {
             throw HostError.invalid(where + ": length 必须是数字数据属性");
         }
@@ -258,7 +258,7 @@ public final class SizeGate {
     private static void rejectIndexedAccessors(ScriptableObject object, long length, String where) {
         for (int i = 0; i < length; i++) {
             Object getter = object.getGetterOrSetter(null, i, false);
-            if (getter instanceof org.mozilla.javascript.Callable) {
+            if (getter instanceof com.november.mcphone.internal.rhino.javascript.Callable) {
                 throw HostError.invalid(where + ": 元素访问器不可用于放大型原生操作");
             }
         }
@@ -295,7 +295,7 @@ public final class SizeGate {
                 for (Object arg : args) total = addBounded(total, primitiveStringLength(arg), "String.concat");
             }
         } else if ("replace".equals(method) || "replaceAll".equals(method)) {
-            if (args != null && args.length > 1 && args[1] instanceof org.mozilla.javascript.Callable) {
+            if (args != null && args.length > 1 && args[1] instanceof com.november.mcphone.internal.rhino.javascript.Callable) {
                 throw HostError.invalid("String." + method + ": 函数替换器不可在受限沙箱中使用");
             }
             long replacement = args != null && args.length > 1 ? primitiveStringLength(args[1]) : 0;
@@ -305,7 +305,7 @@ public final class SizeGate {
             if (worst > MAX_STRING) tooLarge("String." + method, worst, MAX_STRING);
         } else if ("split".equals(method)) {
             long limit = args != null && args.length > 1
-                    && args[1] != org.mozilla.javascript.Undefined.instance
+                    && args[1] != com.november.mcphone.internal.rhino.javascript.Undefined.instance
                     ? nonNegativeInteger(args, 1, "String.split") : Long.MAX_VALUE;
             if (Math.min(receiverLength + 1, limit) > MAX_ARRAY) {
                 tooLarge("String.split", Math.min(receiverLength + 1, limit), MAX_ARRAY);
@@ -353,7 +353,7 @@ public final class SizeGate {
         long total = 0;
         for (int i = 0; i < length; i++) {
             Object getter = array.getGetterOrSetter(null, i, false);
-            if (getter instanceof org.mozilla.javascript.Callable) {
+            if (getter instanceof com.november.mcphone.internal.rhino.javascript.Callable) {
                 throw HostError.invalid("Array.flat: 数组访问器不可用于放大型原生操作");
             }
             Object value = array.get(i, array);
@@ -375,7 +375,7 @@ public final class SizeGate {
 
     /** Safe subset of ToIntegerOrInfinity for flat's depth argument. */
     private static int flatDepth(Object[] args) {
-        if (args == null || args.length == 0 || args[0] == org.mozilla.javascript.Undefined.instance) return 1;
+        if (args == null || args.length == 0 || args[0] == com.november.mcphone.internal.rhino.javascript.Undefined.instance) return 1;
         Object raw = args[0];
         double value;
         if (raw == null) {
@@ -405,7 +405,7 @@ public final class SizeGate {
         long total = Math.max(0, array.getLength() - 1); // separators
         for (int i = 0; i < array.getLength(); i++) {
             Object getter = array.getGetterOrSetter(null, i, false);
-            if (getter instanceof org.mozilla.javascript.Callable) {
+            if (getter instanceof com.november.mcphone.internal.rhino.javascript.Callable) {
                 throw HostError.invalid("Array.join: 数组访问器不可用于放大型原生操作");
             }
             Object value = array.get(i, array);
@@ -421,7 +421,7 @@ public final class SizeGate {
 
     /** Conservative JSON output estimate without invoking script getters or toJSON hooks. */
     private static long jsonCost(Object value, Set<Object> seen, int depth) {
-        if (value == null || value == org.mozilla.javascript.Undefined.instance) return 4;
+        if (value == null || value == com.november.mcphone.internal.rhino.javascript.Undefined.instance) return 4;
         if (value instanceof CharSequence cs) return 2L + 6L * cs.length();
         if (value instanceof Number || value instanceof Boolean || value instanceof java.math.BigInteger) return 32;
         if (!(value instanceof ScriptableObject object)) return 32;
@@ -438,7 +438,7 @@ public final class SizeGate {
             Object getter = id instanceof Number n
                     ? object.getGetterOrSetter(null, n.intValue(), false)
                     : object.getGetterOrSetter(String.valueOf(id), 0, false);
-            if (getter instanceof org.mozilla.javascript.Callable) {
+            if (getter instanceof com.november.mcphone.internal.rhino.javascript.Callable) {
                 throw HostError.invalid("JSON.stringify: 不允许属性访问器");
             }
             Object child = id instanceof Number n
@@ -451,7 +451,7 @@ public final class SizeGate {
     }
 
     private static long primitiveStringLength(Object value) {
-        if (value == null || value == org.mozilla.javascript.Undefined.instance
+        if (value == null || value == com.november.mcphone.internal.rhino.javascript.Undefined.instance
                 || value == Scriptable.NOT_FOUND) return 0;
         if (value instanceof CharSequence cs) return cs.length();
         if (value instanceof Number || value instanceof Boolean || value instanceof java.math.BigInteger) return 32;
@@ -459,7 +459,7 @@ public final class SizeGate {
     }
 
     private static long nonNegativeInteger(Object[] args, int index, String where) {
-        if (args == null || index >= args.length || args[index] == org.mozilla.javascript.Undefined.instance) return 0;
+        if (args == null || index >= args.length || args[index] == com.november.mcphone.internal.rhino.javascript.Undefined.instance) return 0;
         if (!(args[index] instanceof Number number)) throw HostError.invalid(where + ": 长度必须是数字");
         double value = number.doubleValue();
         if (!Double.isFinite(value) || value < 0 || value != Math.rint(value)) {

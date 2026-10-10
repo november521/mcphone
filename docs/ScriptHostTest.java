@@ -10,7 +10,7 @@ import com.november.mcphone.core.script.net.ScriptErrorCode;
 import com.november.mcphone.core.script.net.ScriptProtocol;
 import com.november.mcphone.core.script.net.ScriptRpc;
 import com.november.mcphone.core.script.net.ScriptRpcResult;
-import org.mozilla.javascript.Context;
+import com.november.mcphone.internal.rhino.javascript.Context;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -339,8 +339,8 @@ public class ScriptHostTest {
         }
     }
 
-    static double number(org.mozilla.javascript.ScriptableObject scope, String name) {
-        Object v = org.mozilla.javascript.ScriptableObject.getProperty(scope, name);
+    static double number(com.november.mcphone.internal.rhino.javascript.ScriptableObject scope, String name) {
+        Object v = com.november.mcphone.internal.rhino.javascript.ScriptableObject.getProperty(scope, name);
         return v instanceof Number n ? n.doubleValue() : Double.NaN;
     }
 

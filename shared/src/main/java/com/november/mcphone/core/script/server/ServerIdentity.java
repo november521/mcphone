@@ -1,6 +1,7 @@
 package com.november.mcphone.core.script.server;
 
 import com.november.mcphone.MCphone;
+import com.november.mcphone.core.PhoneNbt;
 import com.november.mcphone.core.PhoneSavedData;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.MinecraftServer;
@@ -51,7 +52,7 @@ public final class ServerIdentity extends PhoneSavedData {
 
     /** 旧存档里没有这一段时生成一个新的，并标脏让它落盘。 */
     static ServerIdentity load(CompoundTag tag) {
-        if (tag.hasUUID(KEY)) return new ServerIdentity(tag.getUUID(KEY));
+        if (PhoneNbt.hasUUID(tag, KEY)) return new ServerIdentity(PhoneNbt.getUUID(tag, KEY));
         ServerIdentity fresh = new ServerIdentity();
         fresh.setDirty();
         return fresh;
@@ -59,7 +60,7 @@ public final class ServerIdentity extends PhoneSavedData {
 
     @Override
     protected CompoundTag write(CompoundTag tag) {
-        tag.putUUID(KEY, id);
+        PhoneNbt.putUUID(tag, KEY, id);
         return tag;
     }
 }

@@ -1,0 +1,99 @@
+import org.gradle.api.file.ConfigurableFileCollection
+import org.gradle.api.file.DirectoryProperty
+import org.gradle.api.provider.MapProperty
+import org.gradle.api.tasks.InputFiles
+import org.gradle.api.tasks.Input
+import org.gradle.api.tasks.OutputDirectory
+import org.gradle.api.tasks.PathSensitive
+import org.gradle.api.tasks.PathSensitivity
+import org.gradle.api.tasks.TaskAction
+
+/** 原版纯改名的编译绑定；不改协议字面量、注释或共用业务源码。 */
+abstract class BindMinecraftApiNames extends DefaultTask {
+    @InputFiles @PathSensitive(PathSensitivity.RELATIVE)
+    abstract ConfigurableFileCollection getOriginalSources()
+    @Input abstract MapProperty<String, String> getQualifiedNames()
+    @Input abstract MapProperty<String, String> getNames()
+    @OutputDirectory abstract DirectoryProperty getBoundSources()
+
+    @TaskAction
+    void generate() {
+        def output = boundSources.get().asFile.toPath().toAbsolutePath().normalize()
+        def expected = new HashSet<java.nio.file.Path>()
+        def protectedText = java.util.regex.Pattern.compile('(?s)/\\*.*?\\*/|//[^\\r\\n]*|""".*?"""|"(?:\\\\.|[^"\\\\])*"|\'(?:\\\\.|[^\'\\\\])*\'')
+        def identifier = java.util.regex.Pattern.compile('[\\p{javaJavaIdentifierStart}][\\p{javaJavaIdentifierPart}]*')
+        def bindCode = { String code ->
+            qualifiedNames.get().each { before, after -> code = code.replaceAll('(?<![\\w$])' + java.util.regex.Pattern.quote(before) + '(?![\\w$])', java.util.regex.Matcher.quoteReplacement(after)) }
+            def matcher = identifier.matcher(code)
+            def result = new StringBuffer()
+            while (matcher.find()) {
+                matcher.appendReplacement(result, java.util.regex.Matcher.quoteReplacement(names.get().getOrDefault(matcher.group(), matcher.group())))
+            }
+            matcher.appendTail(result)
+            result.toString()
+        }
+        originalSources.files.toSorted { it.absolutePath }.each { source ->
+            String original = source.getText('UTF-8')
+            def packageMatch = original =~ /(?m)^package\s+([\w.]+)\s*;/
+            String packageName = packageMatch.find() ? packageMatch.group(1) : ""
+            def destination = output.resolve((packageName ? packageName.replace('.', '/') + '/' : '') + source.name).normalize()
+            if (!destination.startsWith(output) || !expected.add(destination)) {
+                throw new GradleException("编译绑定出现越界或重复类型：${source}")
+            }
+            String transformed = original
+            if (!packageName.startsWith('com.november.mcphone.platform.client.port')) {
+                def result = new StringBuilder()
+                def matcher = protectedText.matcher(original)
+                int position = 0
+                while (matcher.find()) {
+                    result.append(bindCode(original.substring(position, matcher.start())))
+                    result.append(matcher.group())
+                    position = matcher.end()
+                }
+                result.append(bindCode(original.substring(position)))
+                transformed = result.toString()
+            }
+            java.nio.file.Files.createDirectories(destination.parent)
+            java.nio.file.Files.writeString(destination, transformed, java.nio.charset.StandardCharsets.UTF_8)
+        }
+        // 只清理任务自己生成且已不对应输入的 Java 文件，禁止触及源码或其他目录。
+        if (java.nio.file.Files.isDirectory(output)) {
+            def stream = java.nio.file.Files.walk(output)
+            try {
+                stream.filter { java.nio.file.Files.isRegularFile(it) && it.toString().endsWith('.java') && !expected.contains(it) }
+                        .forEach { java.nio.file.Files.delete(it) }
+            } finally { stream.close() }
+        }
+        logger.lifecycle("原版 API 编译绑定：${expected.size()} 个源码文件")
+    }
+}
+
+def bindingsFile = layout.projectDirectory.file('../../versions/26.1-api-names.json')
+def bindings = new groovy.json.JsonSlurper().parseText(providers.fileContents(bindingsFile).asText.get())
+def originalRoots = sourceSets.main.java.srcDirs.collect { root ->
+    fileTree(root) {
+        include '**/*.java'
+        if (root.canonicalFile != file('src/main/java').canonicalFile) exclude(bindings.overrides ?: [])
+    }
+}
+(bindings.overrides ?: []).each { relative ->
+    if (!file("src/main/java/${relative}").isFile()) throw new GradleException("版本覆盖缺少实现：${relative}")
+}
+def boundMain = tasks.register('bindMinecraftApiNames', BindMinecraftApiNames) {
+    originalSources.from(originalRoots)
+    qualifiedNames.set(bindings.qualified as Map<String, String>)
+    names.set(bindings.names as Map<String, String>)
+    boundSources.set(layout.buildDirectory.dir('generated/sources/mcphone-api-bindings/main'))
+}
+sourceSets.main.java.setSrcDirs([boundMain])
+
+// 断言仍会正常编译、注册和执行；绑定只处理同样的原版改名，不排除任何测试。
+def assertions = tasks.named('compileAssertTests', JavaCompile)
+def originalTests = assertions.get().source.files
+def boundTests = tasks.register('bindAssertionApiNames', BindMinecraftApiNames) {
+    originalSources.from(originalTests)
+    qualifiedNames.set(bindings.qualified as Map<String, String>)
+    names.set(bindings.names as Map<String, String>)
+    boundSources.set(layout.buildDirectory.dir('generated/sources/mcphone-api-bindings/assertions'))
+}
+assertions.configure { source = files(boundTests) }

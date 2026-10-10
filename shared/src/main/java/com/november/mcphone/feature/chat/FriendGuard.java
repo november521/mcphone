@@ -16,7 +16,7 @@ public final class FriendGuard {
     /** 手机在身上（主手/副手/背包/饰品槽）且对方是好友；好友这条同时堵住对随便编造的 UUID 操作 */
     public static boolean mayActOn(ServerPlayer self, UUID targetId) {
         return PhoneItem.isCarriedBy(self)
-                && FriendData.get(self.server).areFriends(self.getUUID(), targetId);
+                && FriendData.get(self.level().getServer()).areFriends(self.getUUID(), targetId);
     }
 
     /** 只查手机，给"对方还不是好友"的操作用（发申请、答复申请、解除好友） */

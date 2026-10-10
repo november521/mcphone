@@ -304,7 +304,7 @@ public class DeploymentAuthorityTest {
         ScriptAdminCommand.register(dispatcher);
         net.minecraft.commands.CommandSourceStack src = new net.minecraft.commands.CommandSourceStack(
                 net.minecraft.commands.CommandSource.NULL, net.minecraft.world.phys.Vec3.ZERO,
-                net.minecraft.world.phys.Vec2.ZERO, null, 3, "t",
+                net.minecraft.world.phys.Vec2.ZERO, null, com.november.mcphone.test.CommandPermissions.level(3), "t",
                 net.minecraft.network.chat.Component.literal("t"), null, null);
         for (String cmd : new String[]{
                 "mcphone script identity",

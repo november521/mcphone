@@ -43,7 +43,7 @@ public final class ChatDelivery {
 
         if (!sender.hasDisconnected()) p.push(sender, targetId, message);
 
-        ServerPlayer receiver = sender.server.getPlayerList().getPlayer(targetId);
+        ServerPlayer receiver = sender.level().getServer().getPlayerList().getPlayer(targetId);
         if (receiver == null) return false;
         p.push(receiver, sender.getUUID(), message);
         return true;

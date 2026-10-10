@@ -1595,3 +1595,6 @@ tasks.register('updateSeamsDoc', SeamsDocTask) {
 }
 
 tasks.named('check').configure { dependsOn tasks.named('verifySeamsDocCurrent') }
+
+// Mixin 专用包属于加载边界，打包前按实际资源和字节码校验。
+apply from: "${projectDir}/../../gradle/mcphone-mixin-checks.gradle"

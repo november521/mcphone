@@ -1,10 +1,10 @@
 package com.november.mcphone.core.script.engine;
 
-import org.mozilla.javascript.Callable;
-import org.mozilla.javascript.Context;
-import org.mozilla.javascript.LambdaFunction;
-import org.mozilla.javascript.Scriptable;
-import org.mozilla.javascript.ScriptableObject;
+import com.november.mcphone.internal.rhino.javascript.Callable;
+import com.november.mcphone.internal.rhino.javascript.Context;
+import com.november.mcphone.internal.rhino.javascript.LambdaFunction;
+import com.november.mcphone.internal.rhino.javascript.Scriptable;
+import com.november.mcphone.internal.rhino.javascript.ScriptableObject;
 
 import java.util.List;
 import java.util.Set;

@@ -29,7 +29,7 @@ import java.util.UUID;
  * 合并靠 {@link #getToken()} 返回发信人 UUID，
  * {@link ToastComponent#getToast} 据此找到已在显示或还在排队的那一条。
  */
-public final class PhoneToast implements Toast {
+public final class PhoneToast extends com.november.mcphone.platform.client.PhoneToastBase {
 
     /** 与原版槽位一致，照这个尺寸画才不会和别的模组的通知错位 */
     private static final int WIDTH = 160;
@@ -100,14 +100,20 @@ public final class PhoneToast implements Toast {
     }
 
     @Override
-    public Visibility render(GuiGraphics g, ToastComponent component, long timeSinceLastVisible) {
+    protected Visibility updateVisibility(ToastComponent component, long timeSinceLastVisible) {
         // 有新消息并进来就把计时重置，否则第五条刚到通知就消失了
         if (changed) {
             lastUpdateMs = timeSinceLastVisible;
             changed = false;
         }
 
-        Font font = component.getMinecraft().font;
+        // 原版按显示时长的倍率缩放，玩家在设置里调过通知时间就该跟着变
+        double limit = DISPLAY_TIME_MS * component.getNotificationDisplayTimeMultiplier();
+        return timeSinceLastVisible - lastUpdateMs < limit ? Visibility.SHOW : Visibility.HIDE;
+    }
+
+    @Override
+    protected void draw(GuiGraphics g,Font font) {
 
         // 底：贴图优先，没有贴图就画纯色加一圈边
         if (!PhoneSkin.draw(g, PhoneSkin.Element.TOAST_BG, 0, 0, WIDTH, HEIGHT)) {
@@ -131,9 +137,6 @@ public final class PhoneToast implements Toast {
             UnreadBadge.draw(g, font, countLabel(), badgeX, 7);
         }
 
-        // 原版按显示时长的倍率缩放，玩家在设置里调过通知时间就该跟着变
-        double limit = DISPLAY_TIME_MS * component.getNotificationDisplayTimeMultiplier();
-        return timeSinceLastVisible - lastUpdateMs < limit ? Visibility.SHOW : Visibility.HIDE;
     }
 
     /** 超过 99 就显示 99+，否则一个三位数会把角标撑变形 */

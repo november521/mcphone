@@ -65,7 +65,7 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
 
-      # 矩阵横跨 Java 17（1.20.1）与 21（1.21.1），两个都得在。
+      # 矩阵横跨 Java 17（1.20.1）、21（1.21.1）与 25（26.1），三者都得在。
       # ⚠ 这个列表要跟 versions/targets.json 里出现过的 java 值一致。多装一个不要紧，
       # 少装一个会在下面报"JAVA_HOME_17_X64 为空"——挑 JDK 那句取不到就直接失败，
       # 不退回默认 JDK：拿错 JDK 编出来的 class 文件版本不对，而那要等玩家装上才发现。
@@ -76,6 +76,7 @@ jobs:
           java-version: |
             17
             21
+            25
 
       # 【停在 v5，不要升 v6】。v6 把缓存那部分抽成了 gradle-actions-caching，
       # 那是个不再开源的商业组件，启用缓存就等于接受 Gradle 自己那份

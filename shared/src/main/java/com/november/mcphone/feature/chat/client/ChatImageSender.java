@@ -465,6 +465,6 @@ public final class ChatImageSender {
     private static void tell(String translationKey) {
         var player = Minecraft.getInstance().player;
         // 与服务端拒收时同一个位置：动作栏。玩家的眼睛正看着手机屏幕，聊天框那一行他看不见
-        if (player != null) player.displayClientMessage(Component.translatable(translationKey), true);
+        if (player != null) com.november.mcphone.platform.PlayerAccess.message(player, Component.translatable(translationKey), true);
     }
 }

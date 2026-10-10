@@ -1,0 +1,105 @@
+plugins {
+    id 'java'
+    id 'com.gradleup.shadow' version '8.3.6'
+}
+
+// 独立的库生产工程；日常平台构建不会执行这里，也不共享 Shadow 插件。
+java { toolchain.languageVersion = JavaLanguageVersion.of(17) }
+tasks.withType(JavaCompile).configureEach { options.encoding = 'UTF-8' }
+repositories {
+    maven { url = 'https://maven.neoforged.net/releases/'; content { includeGroup 'org.ow2.asm'; includeGroup 'org.mozilla' } }
+    mavenCentral()
+}
+configurations {
+    upstreamEngine { canBeConsumed = false; transitive = false }
+    upstreamSources { canBeConsumed = false; transitive = false }
+}
+dependencies {
+    implementation 'org.ow2.asm:asm:9.9.1'
+    implementation 'org.ow2.asm:asm-commons:9.9.1'
+    upstreamEngine 'org.mozilla:rhino:1.9.1'
+    upstreamSources 'org.mozilla:rhino:1.9.1:sources'
+}
+tasks.named('shadowJar') { enabled = false }
+tasks.register('shadeEngine', com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar) {
+    configurations = [project.configurations.upstreamEngine]
+    // 不能将生产工具自己的 ASM 类或源码塞进引擎。
+    archiveFileName = 'rhino-relocated-staging.jar'
+    relocate 'org.mozilla', 'com.november.mcphone.internal.rhino'
+    mergeServiceFiles()
+    exclude 'module-info.class', 'META-INF/versions/**/module-info.class'
+    exclude 'META-INF/*.SF', 'META-INF/*.RSA', 'META-INF/*.DSA'
+    preserveFileTimestamps = false
+    reproducibleFileOrder = true
+}
+def stagingDir = layout.buildDirectory.dir('staging')
+tasks.register('produceEngine', JavaExec) {
+    group = 'engine production'
+    dependsOn tasks.named('classes'), tasks.named('shadeEngine')
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'com.november.mcphone.tools.rhino.PrivateRhinoProducer'
+    inputs.files(configurations.upstreamEngine, configurations.upstreamSources, tasks.named('shadeEngine'))
+    outputs.dir(stagingDir)
+    // 文件集合延迟展开，支持配置缓存；不在执行期回读 project/configuration。
+    argumentProviders.add(new EngineArguments(configurations.upstreamEngine,
+        configurations.upstreamSources, tasks.named('shadeEngine').flatMap { it.archiveFile }, stagingDir, file('inputs/LICENSE-Rhino.txt')))
+}
+class EngineArguments implements CommandLineArgumentProvider {
+    @InputFiles @PathSensitive(PathSensitivity.NONE) final FileCollection engine
+    @InputFiles @PathSensitive(PathSensitivity.NONE) final FileCollection sources
+    @InputFile @PathSensitive(PathSensitivity.NONE) final Provider<RegularFile> relocated
+    @OutputDirectory final Provider<Directory> staging
+    @InputFile @PathSensitive(PathSensitivity.NONE) final File license
+    EngineArguments(FileCollection engine, FileCollection sources, Provider<RegularFile> relocated,
+                    Provider<Directory> staging, File license) {
+        this.engine = engine; this.sources = sources; this.relocated = relocated; this.staging = staging
+        this.license = license
+    }
+    Iterable<String> asArguments() {
+        [engine.singleFile.absolutePath, relocated.get().asFile.absolutePath,
+         sources.singleFile.absolutePath, staging.get().asFile.absolutePath, license.absolutePath]
+    }
+}
+tasks.register('verifyEnginePrototype', JavaExec) {
+    group = 'verification'
+    dependsOn tasks.named('produceEngine')
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'com.november.mcphone.tools.rhino.EngineProbe'
+    args stagingDir.get().file('rhino-1.9.1-mcphone.2.jar').asFile.absolutePath
+    args configurations.upstreamEngine.singleFile.absolutePath
+}
+
+tasks.register('verifyEngineSources', JavaExec) {
+    group = 'verification'
+    dependsOn tasks.named('produceEngine')
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'com.november.mcphone.tools.rhino.SourceDebugProbe'
+    args stagingDir.get().file('rhino-1.9.1-mcphone.2.jar').asFile.absolutePath,
+         stagingDir.get().file('rhino-1.9.1-mcphone.2-sources.jar').asFile.absolutePath,
+         configurations.upstreamEngine.singleFile.absolutePath
+}
+tasks.register('compileEngineSources', JavaCompile) {
+    group = 'verification'
+    dependsOn tasks.named('produceEngine')
+    source zipTree(stagingDir.get().file('rhino-1.9.1-mcphone.2-sources.jar').asFile).matching { include '**/*.java' }
+    classpath = files()
+    destinationDirectory = layout.buildDirectory.dir('classes/engine-sources-verification')
+    options.encoding = 'UTF-8'
+    options.release = 17
+}
+tasks.named('check').configure {
+    dependsOn tasks.named('verifyEnginePrototype'), tasks.named('verifyEngineSources'), tasks.named('compileEngineSources')
+}
+// 库更新时由维护者提供真实 WorldEdit 实物；生产工程不下载或改装第三方 mod。
+if (providers.gradleProperty('worldEditJar').isPresent()) {
+    tasks.register('verifyWorldEditLayer', JavaExec) {
+        group = 'verification'
+        dependsOn tasks.named('produceEngine')
+        classpath = sourceSets.main.runtimeClasspath
+        mainClass = 'com.november.mcphone.tools.rhino.WorldEditLayerProbe'
+        javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+        args stagingDir.get().file('rhino-1.9.1-mcphone.2.jar').asFile.absolutePath,
+             configurations.upstreamEngine.singleFile.absolutePath,
+             providers.gradleProperty('worldEditJar').get()
+    }
+}

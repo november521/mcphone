@@ -111,7 +111,7 @@ final class ChatImageViewer {
 
     private static void tell(String key, Object... args) {
         var player = Minecraft.getInstance().player;
-        if (player != null) player.displayClientMessage(Component.translatable(key, args), true);
+        if (player != null) com.november.mcphone.platform.PlayerAccess.message(player, Component.translatable(key, args), true);
     }
 
     static void drawImage(GuiGraphics g, ImageCodec.Texture sheet, UUID id,

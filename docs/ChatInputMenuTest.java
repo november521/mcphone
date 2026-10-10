@@ -20,9 +20,9 @@ public final class ChatInputMenuTest {
     private static void field(Object owner,String name,Object value) throws Exception {
         var field=owner.getClass().getDeclaredField(name);field.setAccessible(true);field.set(owner,value);
     }
-    private static final class TestFont extends Font {
+    private static final class TestFont extends com.november.mcphone.test.TestFontBase {
         private final StringSplitter splitter=new StringSplitter((cp,style)->6);
-        TestFont() { super(id->null,false); }
+        TestFont() { super(); }
         @Override public StringSplitter getSplitter() { return splitter; }
         @Override public int width(String text) { return (int)Math.ceil(splitter.stringWidth(text)); }
         @Override public int width(FormattedText text) { return (int)Math.ceil(splitter.stringWidth(text)); }
@@ -33,7 +33,7 @@ public final class ChatInputMenuTest {
     public static void main(String[] args) throws Exception {
         var clipboard=new AtomicReference<>("XY");var sent=new AtomicInteger();
         var composer=new ChatComposer(text->sent.incrementAndGet(),clipboard::get,(g,x,y,w,h)->{});
-        var box=new EditBox(new TestFont(),0,0,100,9,Component.empty());box.setMaxLength(8);box.setValue("abcd");
+        var box=com.november.mcphone.test.TestEditBoxFactory.create(new TestFont(),0,0,100,9,Component.empty());box.setMaxLength(8);box.setValue("abcd");
         // 给无窗口测试绑定实际控件与几何；生产路径仍在 render 中创建它们。
         field(composer,"box",box);field(composer,"inputBounds",new ChatLayout.Rect(10,20,50,12));
         var menu=(ChatInputMenu)field(composer,"inputMenu");

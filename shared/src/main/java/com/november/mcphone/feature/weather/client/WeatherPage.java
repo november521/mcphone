@@ -119,7 +119,7 @@ public final class WeatherPage {
 
         Weather.Precip local;
         try {
-            local = toPrecip(level.getBiome(pos).value().getPrecipitationAt(pos));
+            local = toPrecip(com.november.mcphone.platform.client.PhoneWeather.precipitation(level,pos));
         } catch (Throwable t) {
             // 生物群系拿不到（区块还没到、别的模组的自定义群系抛了异常）时
             // 按"什么都不落"算。为了一行天气预报崩掉整个手机界面不值得

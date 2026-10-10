@@ -17,9 +17,9 @@ import com.november.mcphone.core.script.server.economy.Amounts;
 import com.november.mcphone.core.script.server.economy.CurrencyRegistry;
 import com.november.mcphone.core.script.server.economy.ProviderFailure;
 import com.november.mcphone.core.script.server.PlayerSnapshot;
-import org.mozilla.javascript.Context;
-import org.mozilla.javascript.Scriptable;
-import org.mozilla.javascript.ScriptableObject;
+import com.november.mcphone.internal.rhino.javascript.Context;
+import com.november.mcphone.internal.rhino.javascript.Scriptable;
+import com.november.mcphone.internal.rhino.javascript.ScriptableObject;
 
 import java.time.Instant;
 import java.time.LocalTime;
@@ -746,7 +746,7 @@ public final class CtxBuilder {
      */
     private static Long amountOrNull(Object[] args, int i, String where) {
         Object v = args.length > i ? args[i] : null;
-        if (v == null || v instanceof org.mozilla.javascript.Undefined) return null;
+        if (v == null || v instanceof com.november.mcphone.internal.rhino.javascript.Undefined) return null;
         if (v instanceof java.math.BigInteger b && b.bitLength() > 63) return null;
         return Amounts.toLong(v, where);
     }
@@ -776,7 +776,7 @@ public final class CtxBuilder {
 
     /** 走沙箱里那个已经带了尺寸闸的 JSON.stringify。 */
     private static String json(Context cx, Scriptable scope, Object value) {
-        Object out = org.mozilla.javascript.NativeJSON.stringify(cx, scope, value, null, "");
+        Object out = com.november.mcphone.internal.rhino.javascript.NativeJSON.stringify(cx, scope, value, null, "");
         if (out instanceof CharSequence cs) {
             SizeGate.check(cs, "ctx 的 data");
             return cs.toString();

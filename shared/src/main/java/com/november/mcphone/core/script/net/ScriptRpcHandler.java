@@ -49,7 +49,7 @@ public final class ScriptRpcHandler {
         }
         PlayerSnapshot snapshot = new PlayerSnapshot(
                 player.getUUID(),
-                player.getGameProfile().getName(),
+                com.november.mcphone.platform.PlayerAccess.name(player),
                 player.level().dimension().location().toString(),
                 player.gameMode.getGameModeForPlayer().getName(),
                 0L);
