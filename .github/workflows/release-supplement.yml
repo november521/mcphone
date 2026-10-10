@@ -1,0 +1,149 @@
+name: Supplement release target
+run-name: 补发 ${{ inputs.tag }} / ${{ inputs.target }}
+
+# 已发布版本增加已验收目标时使用：从原标签构建，不改版本号、标签或已有文件。
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: '已有正式版本标签，例如 v1.11.1'
+        required: true
+        type: string
+      target:
+        description: '已验收并标记 buildable 的目标，例如 26.1.2-neoforge'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: supplement-${{ inputs.tag }}-${{ inputs.target }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.target.outputs.version }}
+      loader: ${{ steps.target.outputs.loader }}
+      minecraft: ${{ steps.target.outputs.minecraft }}
+      java: ${{ steps.target.outputs.java }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: 核对验收声明及原发布标签
+        id: target
+        env:
+          TAG: ${{ inputs.tag }}
+          TARGET: ${{ inputs.target }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          [[ "$TARGET" =~ ^[0-9]+(\.[0-9]+)+-(forge|neoforge|fabric)$ ]]
+          # 发布资格按当前主分支；构建代码按原标签，两者必须是同一个平台配置。
+          jq -e --arg t "$TARGET" '.[$t].buildable == true' versions/targets.json
+          CONFIG=$(jq -c --arg t "$TARGET" '.[$t] | {project,java,loader,minecraft}' versions/targets.json)
+          NOTES="docs/release-notes/supplements/${TAG}-${TARGET}.md"
+          test -f "$NOTES"
+          mkdir -p "$RUNNER_TEMP/supplement"
+          cp "$NOTES" "$RUNNER_TEMP/supplement/changelog.md"
+          gh release view "$TAG" --json isDraft,isPrerelease,assets > "$RUNNER_TEMP/supplement/release.json"
+          jq -e '.isDraft == false and .isPrerelease == false' "$RUNNER_TEMP/supplement/release.json"
+          ASSET="mcphone-${TAG#v}-${TARGET}.jar"
+          # 重复执行拒绝覆盖。外部平台失败时只重跑失败的 publish job。
+          jq -e --arg n "$ASSET" '[.assets[] | select(.name == $n)] | length == 0' "$RUNNER_TEMP/supplement/release.json"
+          git checkout --detach "$TAG"
+          test "$(grep '^mod_version=' gradle.properties | cut -d= -f2- | tr -d '[:space:]')" = "${TAG#v}"
+          test "$(jq -c --arg t "$TARGET" '.[$t] | {project,java,loader,minecraft}' versions/targets.json)" = "$CONFIG"
+          test -d "$(jq -r '.project' <<< "$CONFIG")"
+          {
+            echo "version=${TAG#v}"
+            echo "java=$(jq -r '.java' <<< "$CONFIG")"
+            echo "loader=$(jq -r '.loader | ascii_downcase' <<< "$CONFIG")"
+            echo "minecraft=$(jq -r '.minecraft' <<< "$CONFIG")"
+          } >> "$GITHUB_OUTPUT"
+          echo "从原标签构建：$(git rev-parse HEAD) / $ASSET"
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: ${{ steps.target.outputs.java }}
+      - uses: gradle/actions/setup-gradle@v5
+
+      - name: 完整构建与下限验证
+        env:
+          TARGET: ${{ inputs.target }}
+          VERSION: ${{ steps.target.outputs.version }}
+        run: |
+          set -euo pipefail
+          PROJ=$(jq -r --arg t "$TARGET" '.[$t].project' versions/targets.json)
+          ( cd "$PROJ" && chmod +x ./gradlew && ./gradlew build )
+          MIN_NEO=$(grep -E '^neo_version_range=' "$PROJ/gradle.properties" 2>/dev/null \
+            | sed -E 's/^neo_version_range=\[?([0-9]+(\.[0-9]+){2,3}).*/\1/' || true)
+          if [ -n "$MIN_NEO" ]; then
+            ( cd "$PROJ" && ./gradlew compileJava -Pneo_version="$MIN_NEO" )
+          fi
+          mkdir -p dist
+          cp "$PROJ/build/libs/mcphone-${VERSION}.jar" "dist/mcphone-${VERSION}-${TARGET}.jar"
+          cp "$RUNNER_TEMP/supplement/changelog.md" dist/changelog.md
+          sha256sum "dist/mcphone-${VERSION}-${TARGET}.jar" >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: supplement-target
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: 补充 GitHub 正式下载文件
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ inputs.tag }}
+          TARGET: ${{ inputs.target }}
+          VERSION: ${{ steps.target.outputs.version }}
+        run: gh release upload "$TAG" "dist/mcphone-${VERSION}-${TARGET}.jar"
+
+  publish:
+    name: 补发到 ${{ matrix.destination }}
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        destination: [modrinth, curseforge]
+    steps:
+      - uses: actions/download-artifact@v7
+        with:
+          name: supplement-target
+          path: dist
+
+      - name: 检查目标平台凭据
+        env:
+          PROJECT_ID: ${{ matrix.destination == 'modrinth' && vars.MODRINTH_ID || (matrix.destination == 'curseforge' && vars.CURSEFORGE_ID || '') }}
+          PUBLISH_TOKEN: ${{ matrix.destination == 'modrinth' && secrets.MODRINTH_TOKEN || (matrix.destination == 'curseforge' && secrets.CURSEFORGE_TOKEN || '') }}
+        run: |
+          test -n "$PROJECT_ID" && test -n "$PUBLISH_TOKEN" || {
+            echo '::error::发布平台凭据未配置'; exit 1;
+          }
+
+      # 两个平台分开重试，某个平台失败不重复上传另一个已成功的平台。
+      - uses: Kira-NT/mc-publish@v3.3.1
+        with:
+          modrinth-id: ${{ matrix.destination == 'modrinth' && vars.MODRINTH_ID || '' }}
+          modrinth-token: ${{ matrix.destination == 'modrinth' && secrets.MODRINTH_TOKEN || '' }}
+          curseforge-id: ${{ matrix.destination == 'curseforge' && vars.CURSEFORGE_ID || '' }}
+          curseforge-token: ${{ matrix.destination == 'curseforge' && secrets.CURSEFORGE_TOKEN || '' }}
+          files: dist/mcphone-${{ needs.build.outputs.version }}-${{ inputs.target }}.jar
+          name: MCphone ${{ inputs.tag }} (${{ inputs.target }})
+          version: ${{ needs.build.outputs.version }}+${{ inputs.target }}
+          version-type: release
+          changelog-file: dist/changelog.md
+          loaders: ${{ needs.build.outputs.loader }}
+          game-versions: ${{ needs.build.outputs.minecraft }}
+          java: ${{ needs.build.outputs.java }}
+          dependencies: ''

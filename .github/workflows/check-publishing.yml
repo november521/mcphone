@@ -16,6 +16,7 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v7
       # 一个都不 echo 令牌本身。curl 走请求头而不是 query string —— 后者会
       # 出现在日志、代理和对方的访问日志里。
       - name: Modrinth
@@ -81,13 +82,16 @@ jobs:
             esac
           fi
 
-          # release.yml 里两支分别声称的那几样，逐个确认对方表里有。
+          # 按当前正式发布矩阵核对版本、加载器与 Java，新增目标也不能漏查。
           # 对不上就是发版当场失败的那种错，宁可在这里先看见。
           python3 - <<'PY'
           import json, sys
           vs = json.load(open("versions.json"))
           names = {v["name"] for v in vs}
-          want = ["1.21.1", "1.20.1", "NeoForge", "Forge", "Java 21", "Java 17"]
+          targets = json.load(open("versions/targets.json", encoding="utf-8"))
+          published = [v for v in targets.values() if isinstance(v, dict) and v.get("buildable")]
+          want = sorted({name for t in published for name in
+                         (t["minecraft"], t["loader"], f'Java {t["java"]}')})
           missing = [w for w in want if w not in names]
           for w in want:
               print(f'  {"OK  " if w in names else "缺失"}  {w}')

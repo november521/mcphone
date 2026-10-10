@@ -198,8 +198,8 @@
     "java": 25,
     "gradle": "9.2.1",
     "project": "platforms/26.1.2-neoforge",
-    "buildable": false,
-    "note": "已完成源码 API 移植；以稳定 NeoForge 26.1.2.100 编译，运行范围见平台 gradle.properties。ATM11 0.11.1-beta 使用 109；用户负责游戏与整合包兼容性验收，暂不纳入正式发布。",
+    "buildable": true,
+    "note": "已完成源码 API 移植及用户游戏验收，纳入正式发布；以稳定 NeoForge 26.1.2.100 编译，运行范围见平台 gradle.properties。ATM11 测试基准为 0.11.1-beta。",
     "layers": [
       "1.20.3+",
       "1.20.5+",
