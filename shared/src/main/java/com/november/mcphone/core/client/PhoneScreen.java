@@ -784,13 +784,17 @@ public final class PhoneScreen extends PhoneScreenBase {
     @Override
     public void resize(Minecraft mc, int w, int h) { super.resize(mc, w, h); invalidateLayout(); }
 
+    /** HUD 唤出鼠标也只是操作游戏内浮窗，不显示整屏菜单背景。 */
+    @Override
+    protected boolean shouldDrawBackground() { return !hudMode; }
+
     @Override
     public void render(GuiGraphics g, int rawMouseX, int rawMouseY, float partialTick) {
         this.nowMs = System.currentTimeMillis();
         computeLayout();
 
         // HUD 那副面孔不铺背景。铺了就把世界糊成一片，而它存在的全部意义正是"边玩边看"
-        if (!hudMode) Draw.screenBackground(this, g, rawMouseX, rawMouseY, partialTick);
+        if (shouldDrawBackground()) Draw.screenBackground(this, g, rawMouseX, rawMouseY, partialTick);
 
         // 全屏读书：这一帧整块窗口都给那本书，机身、壁纸、状态栏、导航栏一概不画
         if (fullscreenReading()) {
@@ -1178,7 +1182,8 @@ public final class PhoneScreen extends PhoneScreenBase {
                 return true;
             }
             case TASKS -> {
-                // 多任务尚未实现，先吃掉点击，免得穿透到下面的界面
+                if (hudMode) PhoneHud.openFullscreen(location);
+                else PhoneHud.showAsHud(this);
                 return true;
             }
             case NONE -> { }
@@ -1617,7 +1622,7 @@ public final class PhoneScreen extends PhoneScreenBase {
     /** 交给 PhoneHud 托管：从此它的关机由那边负责，见 {@link #removed()} */
     void adoptByHud() {
         this.hudOwned = true;
-        this.hudMode = true;
+        setHudMode(true);
     }
 
     /** 画在 HUD 那个角上（true）还是屏幕正中（false） */

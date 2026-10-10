@@ -9,10 +9,16 @@ import net.minecraft.network.chat.Component;
 
 /** 手机页面的版本入口：26.1 提取渲染状态与输入事件转交给共用页面。 */
 public abstract class PhoneScreenBase extends Screen {
+    /** 页面决定是否显示整屏背景；普通界面默认保留原版行为。 */
+    protected boolean shouldDrawBackground() { return true; }
+
     protected PhoneScreenBase(Component title) { super(title); }
     @Override public void extractRenderState(GuiGraphicsExtractor g,int x,int y,float a) { render(new PhoneGraphics(g),x,y,a); }
     public void render(PhoneGraphics g,int x,int y,float a) { super.extractRenderState(g.nativeGraphics(),x,y,a); }
-    @Override public void extractBackground(GuiGraphicsExtractor g,int x,int y,float a) { renderBackground(new PhoneGraphics(g),x,y,a); }
+    @Override public void extractBackground(GuiGraphicsExtractor g,int x,int y,float a) {
+        if (shouldDrawBackground()) renderBackground(new PhoneGraphics(g),x,y,a);
+        else minecraft.gui.extractDeferredSubtitles();
+    }
     public void renderBackground(PhoneGraphics g,int x,int y,float a) { super.extractBackground(g.nativeGraphics(),x,y,a); }
     @Override public void resize(int w,int h) { resize(Minecraft.getInstance(),w,h); }
     public void resize(Minecraft mc,int w,int h) { super.resize(w,h); }
