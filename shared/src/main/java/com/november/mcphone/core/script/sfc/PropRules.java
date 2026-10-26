@@ -108,10 +108,11 @@ final class PropRules {
                 put(out, "args", Kind.ARGS, 0, 0);
                 put(out, "enabled", Kind.BOOL, 0, 0);
             }
-            case TEXT_INPUT -> {
+            case TEXT_INPUT, TEXTAREA -> {
                 put(out, "bind", Kind.BIND_STRING, 0, 0);
                 put(out, "placeholder", Kind.TEXT, 0, 0);
-                put(out, "max-length", Kind.INT, 1, com.november.mcphone.core.script.layout.StateRules.MAX_STRING);
+                put(out, "max-length", Kind.INT, 1,
+                        type == NodeType.TEXTAREA ? StateRules.MAX_PAGE_STRING : StateRules.MAX_STRING);
                 put(out, "enabled", Kind.BOOL, 0, 0);
             }
             case TOGGLE -> {
@@ -142,7 +143,7 @@ final class PropRules {
             case IMAGE -> List.of(List.of("src"));
             case ICON -> List.of(List.of("name"));
             case ITEM -> List.of(List.of("item"));
-            case TOGGLE, TEXT_INPUT -> List.of(List.of("bind"));
+            case TOGGLE, TEXT_INPUT, TEXTAREA -> List.of(List.of("bind"));
             case TAB_BAR -> List.of(List.of("bind"), List.of("tabs"));
             default -> List.of();
         };

@@ -215,9 +215,9 @@ public final class LayoutEngine {
                 contentW = (label != null ? tm.width(label) + 4L : 0) + TOGGLE_W;
                 contentH = Math.max(tm.lineHeight(), TOGGLE_H);
             }
-            case TEXT_INPUT -> {
+            case TEXT_INPUT, TEXTAREA -> {
                 contentW = bounded(innerW);
-                contentH = tm.lineHeight();
+                contentH = tm.lineHeight() * (n.node.type() == NodeType.TEXTAREA ? 4 : 1);
             }
             case TAB_BAR -> {
                 contentW = bounded(innerW);
