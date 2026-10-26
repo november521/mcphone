@@ -1,6 +1,12 @@
 # 下一版本
+<!-- date: 2026-10-26 -->
 
 ## 简体中文
+
+### 升级须知
+
+- 本次调整了本机文件目录，旧文件不会自动迁移或兼容读取。需要保留的音乐、小说、壁纸、表情、收藏和 App 记录，请按 [新旧目录对照](https://github.com/november521/mcphone/blob/main/docs/runtime-file-layout.md) 手动放入新位置；App 可重新安装，原文件保留在原处。
+- 本次包含聊天协议升级，联机客户端与服务端需要同步更新。
 
 ### 新增
 
@@ -47,6 +53,11 @@
 - 查看 [GitHub 发布记录](https://github.com/november521/mcphone/releases)。
 
 ## English
+
+### Upgrade notes
+
+- Local file locations have changed. Old files are not migrated or read automatically. Move media, favorites and App records manually using the [directory guide](https://github.com/november521/mcphone/blob/main/docs/runtime-file-layout.md), or reinstall Apps. Original files remain untouched.
+- This release updates the chat protocol. Multiplayer clients and servers must update together.
 
 ### Added
 
