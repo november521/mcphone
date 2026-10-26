@@ -5,6 +5,7 @@ import com.november.mcphone.core.script.layout.NodeParser;
 import com.november.mcphone.core.script.layout.NodeType;
 import com.november.mcphone.core.script.layout.UiState;
 import com.november.mcphone.core.script.layout.StateRules;
+import com.november.mcphone.core.script.http.HttpRequests;
 import com.november.mcphone.core.script.server.store.LocalStore;
 import com.november.mcphone.core.script.sfc.CompiledTemplate.BoundProp;
 import com.november.mcphone.core.script.sfc.CompiledTemplate.Chain;
@@ -92,6 +93,18 @@ public final class TemplateInstance {
         }
 
         public Statements.Outcome click(Node hit, UiState state, int segment, Supplier<LocalStore> storage) {
+            return click(hit, state, segment, storage, null);
+        }
+
+        public Statements.Outcome click(Node hit, UiState state, int segment, Supplier<LocalStore> storage,
+                                         HttpRequests requests) {
+            try (HttpRequests batch = requests) {
+                return clickTransaction(hit, state, segment, storage, batch);
+            }
+        }
+
+        private Statements.Outcome clickTransaction(Node hit, UiState state, int segment, Supplier<LocalStore> storage,
+                                                     HttpRequests requests) {
             if (!nodes.contains(hit)) {
                 throw new IllegalArgumentException("这个节点不是这棵树产出的：点击要用同一次 instantiate 的树去查");
             }
@@ -115,7 +128,7 @@ public final class TemplateInstance {
             try (LocalStore.Transaction transaction = new LocalStore.Transaction(storage)) {
                 Statements.Outcome outcome = bound == null
                         ? new Statements.Outcome(true, false, false, null, List.of(), List.of())
-                        : bound.run(trial, file, transaction);
+                        : bound.run(trial, file, transaction, requests);
                 if (outcome.applied()) {
                     if (!transaction.commit()) {
                         List<String> warnings = new ArrayList<>(outcome.warnings());
@@ -123,6 +136,7 @@ public final class TemplateInstance {
                         return new Statements.Outcome(false, false, false, null, List.of(), List.copyOf(warnings));
                     }
                     for (Map.Entry<String, Object> e : trial.values().entrySet()) state.set(e.getKey(), e.getValue());
+                    if (requests != null) requests.commit();
                 }
                 return outcome;
             }

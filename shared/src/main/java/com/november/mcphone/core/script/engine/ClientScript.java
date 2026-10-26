@@ -2,6 +2,7 @@ package com.november.mcphone.core.script.engine;
 
 import com.november.mcphone.core.script.layout.StateRules;
 import com.november.mcphone.core.script.layout.UiState;
+import com.november.mcphone.core.script.http.HttpRequests;
 import com.november.mcphone.core.script.server.store.LocalStore;
 import com.november.mcphone.core.script.server.store.StoreQuota;
 import com.november.mcphone.internal.rhino.javascript.Callable;
@@ -143,6 +144,23 @@ public final class ClientScript {
     /** Template arguments cross as bounded primitives, never wrapped Java objects or state containers. */
     public synchronized Map<String, Object> invoke(String name, List<?> arguments, Map<String, Object> values,
                                                    UiState state, LocalStore.Transaction storage) {
+        return invoke(name, arguments, values, state, storage, null);
+    }
+
+    public synchronized Map<String, Object> invoke(String name, List<?> arguments, Map<String, Object> values,
+                                                   UiState state, LocalStore.Transaction storage, HttpRequests requests) {
+        return invoke(name, arguments, values, state, storage, requests, state.stringLimit());
+    }
+
+    /** Only the HTTP host can pass the bounded response body beyond the normal template string limit. */
+    public synchronized Map<String, Object> respond(HttpRequests.Request request, HttpRequests.Result response,
+                                                    UiState state, LocalStore.Transaction storage, HttpRequests requests) {
+        return invoke(request.callback(), List.of(response.status(), response.body(), response.error()),
+                state.values(), state, storage, requests, HttpRequests.MAX_BODY_BYTES);
+    }
+
+    private Map<String, Object> invoke(String name, List<?> arguments, Map<String, Object> values,
+                                       UiState state, LocalStore.Transaction storage, HttpRequests requests, int argumentLimit) {
         if (!declares(name)) throw new Failure("没有声明客户端函数 '" + name + "'");
         if (arguments.size() != arity(name)) throw new Failure("客户端函数 '" + name + "' 需要 " + arity(name) + " 个参数");
         Object[] args = new Object[arguments.size()];
@@ -151,8 +169,8 @@ public final class ClientScript {
             if (!(value instanceof String || value instanceof Integer || value instanceof Boolean)) {
                 throw new Failure("客户端函数第 " + (i + 1) + " 个参数必须是字符串、32 位整数或布尔值");
             }
-            if (value instanceof String text && text.length() > state.stringLimit()) {
-                throw new Failure("客户端函数字符串参数最多 " + state.stringLimit() + " 个 UTF-16 代码单元");
+            if (value instanceof String text && text.length() > argumentLimit) {
+                throw new Failure("客户端函数字符串参数最多 " + argumentLimit + " 个 UTF-16 代码单元");
             }
             args[i] = value;
         }
@@ -171,7 +189,7 @@ public final class ClientScript {
                 scope.setParentScope(null);
                 Object snapshot = toJs(cx, scope, values);
                 ScriptableObject.defineProperty(scope, "state", snapshot, ScriptableObject.EMPTY);
-                installStore(cx, scope, storage);
+                installContext(cx, scope, storage, requests);
                 code.exec(cx, scope); // Only function declarations survived the compile-time AST pass.
                 Object fn = scope.get(name, scope);
                 if (!(fn instanceof Callable callable)) throw new Failure("客户端函数不可调用");
@@ -211,7 +229,7 @@ public final class ClientScript {
         }
     }
 
-    private static void installStore(Context cx, ScriptableObject scope, LocalStore.Transaction storage) {
+    private void installContext(Context cx, ScriptableObject scope, LocalStore.Transaction storage, HttpRequests requests) {
         ScriptableObject store = HostFn.obj(cx, scope);
         storeFunction(store, scope, "getString", 2, (c, s, args) -> {
             if (args.length < 1 || args.length > 2) throw HostError.invalid("getString 需要键名和可选的默认字符串");
@@ -229,8 +247,61 @@ public final class ClientScript {
         store.sealObject();
         ScriptableObject ctx = HostFn.obj(cx, scope);
         ScriptableObject.defineProperty(ctx, "store", store, ScriptableObject.READONLY | ScriptableObject.PERMANENT);
+        ScriptableObject http = HostFn.obj(cx, scope);
+        storeFunction(http, scope, "request", 2, (c, s, args) -> {
+            if (args.length != 2) throw HostError.invalid("request 需要请求选项和回调函数名");
+            if (requests == null) throw HostError.invalid("当前页面没有可用的网络请求宿主");
+            String callback = HostFn.str(args, 1, "request");
+            if (arity(callback) != 3 || "onInit".equals(callback)) throw HostError.invalid("HTTP 回调须为本页声明的三参数函数");
+            try { requests.add(readRequest(c, args[0], callback)); }
+            catch (IllegalArgumentException e) { throw HostError.invalid(e.getMessage()); }
+            catch (Failure e) { throw HostError.invalid(e.getMessage()); }
+            return com.november.mcphone.internal.rhino.javascript.Undefined.instance;
+        });
+        http.sealObject();
+        ScriptableObject.defineProperty(ctx, "http", http, ScriptableObject.READONLY | ScriptableObject.PERMANENT);
         ctx.sealObject();
         ScriptableObject.defineProperty(scope, "ctx", ctx, ScriptableObject.READONLY | ScriptableObject.PERMANENT);
+    }
+
+    private HttpRequests.Request readRequest(Context cx, Object value, String callback) {
+        Map<String, Object> options = ownFields(cx, value, 5);
+        if (!Set.of("url", "method", "headers", "body", "timeoutMs").containsAll(options.keySet())) {
+            throw HostError.invalid("未知的 HTTP 请求选项");
+        }
+        String url = requestString(options.get("url"), "url", 2048);
+        String method = requestString(options.getOrDefault("method", "GET"), "method", 4);
+        String body = requestString(options.getOrDefault("body", ""), "body", HttpRequests.MAX_BODY_BYTES);
+        Object rawTimeout = options.getOrDefault("timeoutMs", HttpRequests.DEFAULT_TIMEOUT_MS);
+        if (!(rawTimeout instanceof Number number) || !Double.isFinite(number.doubleValue())
+                || number.doubleValue() != Math.rint(number.doubleValue()) || number.doubleValue() < 1000
+                || number.doubleValue() > 120_000) throw HostError.invalid("timeoutMs 需为 1000–120000 的整数");
+        Map<String, String> headers = new LinkedHashMap<>();
+        if (options.containsKey("headers")) {
+            for (var field : ownFields(cx, options.get("headers"), 16).entrySet()) {
+                headers.put(field.getKey(), requestString(field.getValue(), "header", 4096));
+            }
+        }
+        return new HttpRequests.Request(url, method, headers, body, number.intValue(), callback);
+    }
+
+    private Map<String, Object> ownFields(Context cx, Object value, int limit) {
+        if (!(value instanceof NativeObject object)) throw HostError.invalid("请求选项和请求头必须是普通对象");
+        noSymbols(cx, object);
+        Object[] ids = object.getAllIds();
+        if (ids.length > limit) throw HostError.invalid("HTTP 对象字段过多");
+        Map<String, Object> fields = new LinkedHashMap<>();
+        for (Object id : ids) {
+            if (!(id instanceof String key)) throw HostError.invalid("HTTP 对象字段名必须是字符串");
+            noAccessor(object, key);
+            fields.put(key, object.get(key, object));
+        }
+        return fields;
+    }
+
+    private static String requestString(Object value, String field, int limit) {
+        if (!(value instanceof CharSequence text) || text.length() > limit) throw HostError.invalid(field + " 类型或长度不合法");
+        return text.toString();
     }
 
     private static void storeFunction(ScriptableObject target, Scriptable scope, String name, int arity, HostFn.Body body) {
