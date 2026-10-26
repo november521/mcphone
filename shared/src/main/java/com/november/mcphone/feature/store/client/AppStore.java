@@ -1,5 +1,6 @@
 package com.november.mcphone.feature.store.client;
 
+import com.november.mcphone.MCphone;
 import com.november.mcphone.api.client.store.AppInfo;
 import com.november.mcphone.api.client.store.IAppSource;
 import com.november.mcphone.core.client.FontPalette;
@@ -10,10 +11,15 @@ import com.november.mcphone.core.client.PhoneTheme;
 import com.november.mcphone.feature.store.client.AppSourceRegistry;
 import com.november.mcphone.feature.store.net.StoreClientCache;
 import com.november.mcphone.core.client.GuiUtil;
+import com.november.mcphone.core.script.client.ScriptAppFolder;
+import com.november.mcphone.platform.client.SystemFiles;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -62,6 +68,7 @@ public final class AppStore {
     private int hoveredIdx = -1;
     private boolean hoverPrev = false;
     private boolean hoverNext = false;
+    private boolean openFolderHovered = false;
 
     /** 玩家点开了哪个 App，等 PhoneScreen 来取 */
     private AppInfo openRequest = null;
@@ -111,6 +118,7 @@ public final class AppStore {
         requested = false;
         message = null;
         hoveredIdx = -1;
+        openFolderHovered = false;
         page = 0;
         openRequest = null;
         companionRequest = false;
@@ -200,8 +208,11 @@ public final class AppStore {
         int w = screenW - PAD * 2;
         int bottom = phoneTop + screenH - navH;
 
-        g.drawString(font, Component.translatable("mcphone.app.app_store").getString(),
-                x, y, FontPalette.title(), true);
+        int folderX = x + w - GuiUtil.FOLDER_BUTTON_SIZE;
+        openFolderHovered = GuiUtil.drawFolderButton(g, folderX, y, font.lineHeight, mouseX, mouseY);
+        String title = GuiUtil.truncate(font, Component.translatable("mcphone.app.app_store").getString(),
+                folderX - x - 4);
+        g.drawString(font, title, x, y, FontPalette.title(), true);
         y += font.lineHeight + 4;
 
         g.fill(x, y, x + w, y + 1, PhoneTheme.COLOR_DIVIDER);
@@ -218,6 +229,7 @@ public final class AppStore {
             g.drawString(font, Component.translatable("mcphone.store.empty").getString(),
                     x, y, FontPalette.subtle(), false);
             hoveredIdx = -1;
+            GuiUtil.drawFolderTooltip(g, font, openFolderHovered, x, phoneTop + statusH + 4, w);
             return;
         }
 
@@ -268,6 +280,7 @@ public final class AppStore {
         }
 
         renderPager(g, font, x, w, mouseX, mouseY);
+        GuiUtil.drawFolderTooltip(g, font, openFolderHovered, x, phoneTop + statusH + 4, w);
     }
 
     /**
@@ -356,6 +369,11 @@ public final class AppStore {
     //  鼠标
 
     public boolean mouseClicked(double mx, double my, int button) {
+        if (openFolderHovered) {
+            if (button != 0) return false;
+            openAppFolder();
+            return true;
+        }
         if (hoverPrev) {
             page--;
             clampPage();
@@ -387,5 +405,18 @@ public final class AppStore {
 
         openRequest = info;
         return true;
+    }
+
+    private void openAppFolder() {
+        Path directory = ScriptAppFolder.dir();
+        try {
+            if (directory == null) throw new IOException("Game directory is unavailable");
+            Files.createDirectories(directory);
+            SystemFiles.openInFileManager(directory);
+            message = null;
+        } catch (IOException | RuntimeException e) {
+            MCphone.LOGGER.warn("[MCphone] 打不开 App 目录 {}: {}", directory, e.toString());
+            message = Component.translatable("mcphone.store.error.open_folder");
+        }
     }
 }

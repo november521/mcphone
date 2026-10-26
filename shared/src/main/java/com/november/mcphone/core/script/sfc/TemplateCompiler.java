@@ -1,5 +1,6 @@
 package com.november.mcphone.core.script.sfc;
 
+import com.november.mcphone.core.script.engine.ClientScript;
 import com.november.mcphone.core.script.layout.NodeParser;
 import com.november.mcphone.core.script.layout.NodeType;
 import com.november.mcphone.core.script.layout.StateRules;
@@ -85,14 +86,16 @@ public final class TemplateCompiler {
 
     private final String src;
     private final int lineOffset;
+    private final ClientScript script;
     private int pos;
     private int line = 1;
     private int col = 1;
     private int elements;
 
-    private TemplateCompiler(String src, int lineOffset) {
+    private TemplateCompiler(String src, int lineOffset, ClientScript script) {
         this.src = src;
         this.lineOffset = lineOffset;
+        this.script = script;
     }
 
     /** 编译一个 {@code <template>} 块的内容。state 是 {@code <script>} 给的初值，决定哪些名字声明过。 */
@@ -104,12 +107,16 @@ public final class TemplateCompiler {
      * lineOffset 加在运行期 warn 的行号上（块内行 → 原文件行，§9.8）。编译期抛的错仍是块内行号，由 {@link SfcCompiler} 统一加偏移。
      */
     public static CompiledTemplate compile(String content, Map<String, Object> state, int lineOffset) {
+        return compile(content, state, lineOffset, null);
+    }
+
+    static CompiledTemplate compile(String content, Map<String, Object> state, int lineOffset, ClientScript script) {
         Objects.requireNonNull(content, "content");
-        TemplateCompiler c = new TemplateCompiler(content, lineOffset);
+        TemplateCompiler c = new TemplateCompiler(content, lineOffset, script);
         RawElement root = c.document();
         Map<String, Object> declared = Collections.unmodifiableMap(new LinkedHashMap<>(state));
         Element compiled = c.element(root, Scope.of(declared), 0, 1);
-        return new CompiledTemplate(compiled, declared);
+        return new CompiledTemplate(compiled, declared, script);
     }
 
     private RawElement document() {
@@ -443,6 +450,8 @@ public final class TemplateCompiler {
         }
 
         Map<String, Object> staticProps = new LinkedHashMap<>();
+        // Keep editing focus tied to this template element when conditional siblings change paths.
+        if (type == NodeType.TEXT_INPUT) staticProps.put("input-site", raw.line + ":" + raw.col);
         for (Attr a : statics) {
             PropRules.Spec spec = specs.get(a.name);
             if (spec.numberOrBool() && a.value != null && (inner.isState(a.value) || inner.isLoopVar(a.value))) {
@@ -563,7 +572,7 @@ public final class TemplateCompiler {
     }
 
     /**
-     * 文字内容 → 字面文字或拼接表达式，字面部分按 IR 的 text 判据查（§5.2：≤512 字、除换行外没有控制字符）。
+     * 文字内容 → 字面文字或拼接表达式；正文 ≤4096，按钮自身文字仍 ≤512，除换行外没有控制字符。
      * 连续 ASCII 空白压成一个空格、去掉首尾，和 Vue 的 condense 一样；在原文上压完才解码实体，否则 &#10; 解出的换行和 &nbsp; 会被一起压掉。
      */
     private Text content(List<Raw> raws, Scope scope, String owner, String what) {
@@ -600,9 +609,10 @@ public final class TemplateCompiler {
                 allLiteral = false;
             }
         }
-        if (literal.length() > NodeParser.MAX_TEXT || !PropRules.visible(literal.toString())) {
+        int maxText = owner.equals("button") ? NodeParser.MAX_TEXT : StateRules.MAX_PAGE_STRING;
+        if (literal.length() > maxText || !PropRules.visible(literal.toString())) {
             throw SfcError.at(Code.E_TPL_BAD_VALUE, at[0], at[1], owner, what, shorten(literal.toString()),
-                    "最多 " + NodeParser.MAX_TEXT + " 字，除换行外没有控制字符");
+                    "最多 " + maxText + " 字，除换行外没有控制字符");
         }
         if (allLiteral) return new Text(at[0] + lineOffset, literal.toString(), null);
 
@@ -657,7 +667,11 @@ public final class TemplateCompiler {
             ExprParser.Tok at = new ExprParser.Tok('n', String.valueOf(a.value), null, a.valueLine, a.valueCol, 0);
             throw ExprParser.unknownIdent(at, stateNames(scope));
         }
-        String want = spec.kind() == PropRules.Kind.BIND_BOOL ? "bool" : "int";
+        String want = switch (spec.kind()) {
+            case BIND_BOOL -> "bool";
+            case BIND_STRING -> "string";
+            default -> "int";
+        };
         String actual = StateRules.kind(scope.initial(a.value));
         if (!want.equals(actual)) {
             throw SfcError.at(Code.E_TPL_BAD_VALUE, a.line, a.col, tag, a.name, a.value, spec.allowed() + "，'" + a.value + "' 是 " + actual);
@@ -681,7 +695,7 @@ public final class TemplateCompiler {
     private Statements statements(Attr a, Scope scope) {
         Decoded d = decodeMapped(a.raw);
         try {
-            return Statements.parse(d.text(), scope, a.valueLine, a.valueCol).shifted(lineOffset);
+            return Statements.parse(d.text(), scope, a.valueLine, a.valueCol, script).shifted(lineOffset);
         } catch (SfcError e) {
             throw remap(e, d, a.raw, a.valueLine, a.valueCol);
         }

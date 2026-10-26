@@ -17,14 +17,27 @@ public final class UiState {
     /** 初值。写入对着它比形状，不对着当前值比：对着当前值比的话，先写 [] 再写 ['a'] 就把 int 数组换成了字符串数组。 */
     private final Map<String, Object> declared;
     private int revision;
+    private final int stringLimit;
+    private final int textBudget;
 
-    private UiState(Map<String, Object> values, Map<String, Object> declared) {
+    private UiState(Map<String, Object> values, Map<String, Object> declared, int stringLimit, int textBudget) {
         this.values = values;
         this.declared = declared;
+        this.stringLimit = stringLimit;
+        this.textBudget = textBudget;
     }
 
     /** 以初值建一份，例如 {@code NodeParser.Ui#state()}。初值按 §9.7 的全部规则查，不合规抛 {@link IllegalArgumentException}。 */
     public static UiState of(Map<String, Object> initial) {
+        return create(initial, StateRules.MAX_STRING, 0);
+    }
+
+    /** Frontend SFC pages have bounded long strings; shared IR validation keeps its original limits. */
+    public static UiState page(Map<String, Object> initial) {
+        return create(initial, StateRules.MAX_PAGE_STRING, StateRules.MAX_PAGE_TEXT);
+    }
+
+    private static UiState create(Map<String, Object> initial, int stringLimit, int textBudget) {
         if (initial.size() > StateRules.MAX_KEYS) {
             throw new IllegalArgumentException("state 最多 " + StateRules.MAX_KEYS + " 个 key，给了 " + initial.size() + " 个");
         }
@@ -34,21 +47,24 @@ public final class UiState {
             if (!StateRules.KEY.matcher(key).matches()) {
                 throw new IllegalArgumentException("state 的 key '" + key + "' 要" + StateRules.KEY_RULE);
             }
-            String why = StateRules.check(e.getValue());
+            String why = StateRules.check(e.getValue(), stringLimit);
             if (why != null) throw new IllegalArgumentException("state['" + key + "'] 的初值不合规：" + why);
             copy.put(key, StateRules.freeze(e.getValue()));
         }
-        return new UiState(copy, Collections.unmodifiableMap(new LinkedHashMap<>(copy)));
+        if (textBudget > 0 && StateRules.textUnits(copy) > textBudget) throw new IllegalArgumentException("页面 state 文本总量最多 " + textBudget + " 个 UTF-16 单元");
+        return new UiState(copy, Collections.unmodifiableMap(new LinkedHashMap<>(copy)), stringLimit, textBudget);
     }
 
     public static UiState empty() {
-        return new UiState(new LinkedHashMap<>(), Map.of());
+        return of(Map.of());
     }
 
     /** 同一份声明、当前值的副本，revision 从 0 起。点击先在副本上试，全部成功才写回原件。 */
     public UiState copy() {
-        return new UiState(new LinkedHashMap<>(values), declared);
+        return new UiState(new LinkedHashMap<>(values), declared, stringLimit, textBudget);
     }
+
+    public int stringLimit() { return stringLimit; }
 
     /** 全部键值，只读。模板编译拿它知道声明了哪些 key、各是什么种类。 */
     public Map<String, Object> values() {
@@ -82,8 +98,20 @@ public final class UiState {
         if (d == null) return "state 里没有 '" + key + "'";
         String why = StateRules.fits(d, value);
         if (why != null) return "state['" + key + "'] " + why;
-        why = StateRules.check(value);
+        why = StateRules.check(value, stringLimit);
         return why == null ? null : "state['" + key + "'] 不能写入：" + why;
+    }
+
+    /** Validate the final group, so several individually valid writes cannot exceed the page budget. */
+    public String writeProblems(Map<String, Object> next) {
+        if (textBudget == 0) return null; // Legacy statements permit trusted host values outside author limits.
+        if (!next.keySet().equals(declared.keySet())) return "不能添加或删除 state 字段";
+        for (var entry : next.entrySet()) {
+            String why = writeProblem(entry.getKey(), entry.getValue());
+            if (why != null) return why;
+        }
+        return textBudget > 0 && StateRules.textUnits(next) > textBudget
+                ? "页面 state 文本总量最多 " + textBudget + " 个 UTF-16 单元" : null;
     }
 
     /**

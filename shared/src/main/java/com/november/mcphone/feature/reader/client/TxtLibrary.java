@@ -1,5 +1,7 @@
 package com.november.mcphone.feature.reader.client;
 
+import com.november.mcphone.core.client.ClientPaths;
+import com.november.mcphone.core.PhonePaths;
 import com.november.mcphone.MCphone;
 
 import java.io.IOException;
@@ -14,7 +16,7 @@ import java.util.Locale;
 import java.util.stream.Stream;
 
 /**
- * 玩家自己的书 —— 扫描 {@code config/mcphone/reader/books/}，里面的 txt 就是他的小说。
+ * 玩家自己的书 —— 扫描 {@code mcphone/books/}，里面的 txt 就是他的小说。
  *
  * <h2>为什么是一个目录，而不是游戏里的"导入"按钮</h2>
  *
@@ -37,8 +39,7 @@ public final class TxtLibrary {
 
     private TxtLibrary() {}
 
-    /** 与音乐目录、壁纸目录同一个爹：config/mcphone/<功能>/ */
-    private static final Path DIR = Path.of("config/mcphone/reader/books");
+    private static Path directoryPath() { return ClientPaths.resolve(PhonePaths.BOOKS); }
 
     /**
      * 一本书最大读多少。
@@ -65,7 +66,7 @@ public final class TxtLibrary {
     public record Entry(String fileName, String title, long bytes) {
 
         public Path path() {
-            return DIR.resolve(fileName);
+            return directoryPath().resolve(fileName);
         }
 
         /** 这本书在 BookRef 里的 id，见类注释 */
@@ -93,18 +94,18 @@ public final class TxtLibrary {
         List<Entry> out = new ArrayList<>();
 
         try {
-            Files.createDirectories(DIR);
+            Files.createDirectories(directoryPath());
         } catch (IOException e) {
-            MCphone.LOGGER.warn("[MCphone] 建不出小说目录 {}：{}", DIR, e.toString());
+            MCphone.LOGGER.warn("[MCphone] 建不出小说目录 {}：{}", directoryPath(), e.toString());
         }
 
-        if (Files.isDirectory(DIR)) {
-            try (Stream<Path> files = Files.list(DIR)) {
+        if (Files.isDirectory(directoryPath())) {
+            try (Stream<Path> files = Files.list(directoryPath())) {
                 files.filter(Files::isRegularFile)
                      .filter(TxtLibrary::isTxt)
                      .forEach(path -> out.add(entryOf(path)));
             } catch (IOException e) {
-                MCphone.LOGGER.warn("[MCphone] 扫描小说目录 {} 失败：{}", DIR, e.toString());
+                MCphone.LOGGER.warn("[MCphone] 扫描小说目录 {} 失败：{}", directoryPath(), e.toString());
             }
         }
 
@@ -161,11 +162,11 @@ public final class TxtLibrary {
      */
     public static Path directory() {
         try {
-            Files.createDirectories(DIR);
+            Files.createDirectories(directoryPath());
         } catch (IOException e) {
-            MCphone.LOGGER.warn("[MCphone] 建不出小说目录 {}：{}", DIR, e.toString());
+            MCphone.LOGGER.warn("[MCphone] 建不出小说目录 {}：{}", directoryPath(), e.toString());
         }
-        return DIR;
+        return directoryPath();
     }
 
     /**
@@ -186,12 +187,12 @@ public final class TxtLibrary {
                 return null;
             }
 
-            Files.createDirectories(DIR);
+            Files.createDirectories(directoryPath());
 
             String fileName = uniqueName(source.getFileName().toString(),
-                    name -> Files.exists(DIR.resolve(name)));
+                    name -> Files.exists(directoryPath().resolve(name)));
 
-            Files.copy(source, DIR.resolve(fileName));
+            Files.copy(source, directoryPath().resolve(fileName));
             refresh();
             MCphone.LOGGER.info("[MCphone] 收下一本小说：{}", fileName);
             return fileName;

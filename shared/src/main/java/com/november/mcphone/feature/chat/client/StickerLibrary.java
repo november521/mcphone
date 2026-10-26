@@ -1,5 +1,7 @@
 package com.november.mcphone.feature.chat.client;
 
+import com.november.mcphone.core.client.ClientPaths;
+import com.november.mcphone.core.PhonePaths;
 import com.november.mcphone.core.client.ImageCodec;
 import com.november.mcphone.core.client.ImageFolder;
 
@@ -8,7 +10,7 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * 表情库 —— 扫描 {@code config/mcphone/stickers/}，那就是玩家自己的表情包。
+ * 表情库 —— 扫描 {@code mcphone/stickers/}，那就是玩家自己的表情包。
  *
  * 为什么是一个目录，而不是游戏里的"导入"按钮
  *
@@ -24,12 +26,9 @@ import java.util.Set;
  * 来的都有。
  *
  * 存在客户端而不是存档里：表情是"我这个人"的东西，换服务器、换存档都该跟着走，
- * 与书架收藏（config/mcphone/reader/shelf.json）同一个道理。
+ * 与书架收藏（mcphone/data/reader/shelf.json）同一个道理。
  */
 public final class StickerLibrary {
-
-    /** 与音乐目录、壁纸目录同一个爹：config/mcphone/<功能>/ */
-    private static final Path DIR = Path.of("config/mcphone/stickers");
 
     /**
      * 缩略图长边上限。表情格子与相册的一样大（33×24），96 足够；
@@ -44,7 +43,7 @@ public final class StickerLibrary {
             Set.of(".png", ".jpg", ".jpeg", ".gif", ".bmp");
 
     private static final ImageFolder FOLDER = new ImageFolder(
-            () -> DIR, EXTENSIONS, THUMB_MAX_SIDE, MIN_CACHED, "sticker_thumb_");
+            () -> ClientPaths.resolve(PhonePaths.STICKERS), EXTENSIONS, THUMB_MAX_SIDE, MIN_CACHED, "sticker_thumb_");
 
     private StickerLibrary() {}
 

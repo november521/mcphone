@@ -1,5 +1,7 @@
 package com.november.mcphone.core.script.client;
 
+import com.november.mcphone.core.client.ClientPaths;
+import com.november.mcphone.core.PhonePaths;
 import com.november.mcphone.MCphone;
 import com.november.mcphone.core.script.pkg.AppPackage;
 import com.november.mcphone.core.script.pkg.Manifest;
@@ -35,7 +37,7 @@ import java.util.stream.Stream;
 public final class ScriptAppFolder {
 
     /** 目录名，挂在游戏目录下。与截图、书库那几处同一个层级，玩家找得到。 */
-    public static final String DIR = "mcphone/apps";
+    public static final String DIR = PhonePaths.APPS.relative();
 
     /** 一个文件读出来的东西，外加它的时间戳。 */
     private record Loaded(ScriptApp app, String digest) {
@@ -51,9 +53,8 @@ public final class ScriptAppFolder {
 
     /** 目录的绝对路径。取不到游戏目录（没有客户端）时返回 null。 */
     public static Path dir() {
-        Minecraft mc = Minecraft.getInstance();
-        if (mc == null || mc.gameDirectory == null) return null;
-        return mc.gameDirectory.toPath().resolve(DIR);
+        if (ClientPaths.gameDirectoryOrNull() == null) return null;
+        return ClientPaths.resolve(PhonePaths.APPS);
     }
 
     /**

@@ -1,5 +1,6 @@
 package com.november.mcphone.core.script.server.economy;
 
+import com.november.mcphone.core.PhonePaths;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtIo;
 import net.minecraft.server.MinecraftServer;
@@ -36,7 +37,7 @@ final class EconomySnapshot {
     }
 
     static Path path(MinecraftServer server) {
-        return server.getWorldPath(LevelResource.ROOT).resolve("mcphone").resolve("economy").resolve("economy.dat");
+        return PhonePaths.WORLD_ECONOMY.in(server.getWorldPath(LevelResource.ROOT)).resolve("economy.dat");
     }
 
     /** 整份替换。失败时抛，目标文件一个字节都没动。 */

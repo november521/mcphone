@@ -18,6 +18,9 @@ public final class StateRules {
 
     public static final int MAX_KEYS = 16;
     public static final int MAX_STRING = 64;
+    /** SFC page strings; legacy IR and single-line inputs retain MAX_STRING. Units are UTF-16. */
+    public static final int MAX_PAGE_STRING = 4096;
+    public static final int MAX_PAGE_TEXT = 16 * 1024;
     public static final int MAX_ARRAY = 32;
     public static final int MAX_OBJECT_KEYS = 16;
     /** 数组套对象是 2 层，再往里就拒。 */
@@ -41,7 +44,17 @@ public final class StateRules {
 
     /** 作者写的值（初值、@click 写入、IR 的 set）不合规时返回理由，合规返回 null。 */
     public static String check(Object value) {
-        return check(value, 0, true);
+        return check(value, MAX_STRING);
+    }
+
+    public static String check(Object value, int stringLimit) { return check(value, 0, true, stringLimit); }
+
+    /** Count all string leaves, including arrays/objects; callers validate shape before counting. */
+    public static long textUnits(Object value) {
+        if (value instanceof String s) return s.length();
+        if (value instanceof List<?> list) return list.stream().mapToLong(StateRules::textUnits).sum();
+        if (value instanceof Map<?, ?> map) return map.values().stream().mapToLong(StateRules::textUnits).sum();
+        return 0;
     }
 
     /**
@@ -49,16 +62,16 @@ public final class StateRules {
      * 32 项 / 64 字是给作者手写的，服务端的列表本来就可能更长，§9.4.5 的 2048 截断就是为它留的。
      */
     public static String checkShape(Object value) {
-        return check(value, 0, false);
+        return check(value, 0, false, MAX_STRING);
     }
 
-    private static String check(Object value, int depth, boolean limits) {
+    private static String check(Object value, int depth, boolean limits, int stringLimit) {
         String kind = kind(value);
         if (kind == null) return "只能是 int / bool / string / array / object，给的是 " + (value == null ? "null" : "别的");
         switch (kind) {
             case "string" -> {
                 int len = ((String) value).length();
-                return limits && len > MAX_STRING ? "字符串 " + len + " 字，最多 " + MAX_STRING + " 字" : null;
+                return limits && len > stringLimit ? "字符串 " + len + " 字，最多 " + stringLimit + " 字" : null;
             }
             case "array" -> {
                 if (depth >= MAX_DEPTH) return "嵌套超过 " + MAX_DEPTH + " 层";
@@ -66,7 +79,7 @@ public final class StateRules {
                 if (limits && list.size() > MAX_ARRAY) return "数组 " + list.size() + " 项，最多 " + MAX_ARRAY + " 项";
                 Object ref = null;
                 for (Object e : list) {
-                    String why = check(e, depth + 1, limits);
+                    String why = check(e, depth + 1, limits, stringLimit);
                     if (why != null) return why;
                     // 同构：模板里 v-for 出来的每一项要能用同一套写法读，对象要同一组键。空数组不当基准，否则 [[], [1], ['x']] 能过
                     if (ref != null && !sameShape(ref, e)) return "数组元素要同一种形状，混了 " + shape(ref) + " 和 " + shape(e);
@@ -86,7 +99,7 @@ public final class StateRules {
                     }
                     Object v = e.getValue();
                     if (v instanceof List<?> || v instanceof Map<?, ?>) return "对象只能一层，'" + k + "' 的值不能再是 array / object";
-                    String why = check(v, depth + 1, limits);
+                    String why = check(v, depth + 1, limits, stringLimit);
                     if (why != null) return why;
                 }
                 return null;

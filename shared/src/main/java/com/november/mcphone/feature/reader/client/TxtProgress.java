@@ -1,5 +1,7 @@
 package com.november.mcphone.feature.reader.client;
 
+import com.november.mcphone.core.client.ClientPaths;
+import com.november.mcphone.core.PhonePaths;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.november.mcphone.MCphone;
@@ -47,7 +49,7 @@ public final class TxtProgress {
 
     private TxtProgress() {}
 
-    private static final Path FILE = Path.of("config/mcphone/reader/progress.json");
+    private static Path file() { return ClientPaths.resolve(PhonePaths.READER_PROGRESS); }
 
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
 
@@ -95,8 +97,8 @@ public final class TxtProgress {
         if (cached != null) return cached;
 
         Map<String, Spot> out = new HashMap<>();
-        if (Files.isRegularFile(FILE)) {
-            try (Reader r = Files.newBufferedReader(FILE, StandardCharsets.UTF_8)) {
+        if (Files.isRegularFile(file())) {
+            try (Reader r = Files.newBufferedReader(file(), StandardCharsets.UTF_8)) {
                 State state = GSON.fromJson(r, State.class);
                 if (state != null && state.books != null) {
                     for (Entry e : state.books) {
@@ -106,7 +108,7 @@ public final class TxtProgress {
                 }
             } catch (Exception e) {
                 MCphone.LOGGER.warn("[MCphone] 读取阅读进度 {} 失败，这次从头开始：{}",
-                        FILE, e.toString());
+                        file(), e.toString());
             }
         }
 
@@ -128,10 +130,10 @@ public final class TxtProgress {
         try {
             // 【整份替换，不是直写】：直写会先把这个文件截成 0 字节，写到一半崩掉就丢掉
             // 【所有书】的进度。而这个方法每翻一页调一次 —— 那个窗口开得很勤，见 AtomicWrite
-            AtomicWrite.replace(FILE, w -> GSON.toJson(state, w));
+            AtomicWrite.replace(file(), w -> GSON.toJson(state, w));
         } catch (IOException e) {
             // 只警告不抛：写不进去最多是这次的进度没记住，不该把界面带崩
-            MCphone.LOGGER.warn("[MCphone] 写入阅读进度 {} 失败：{}", FILE, e.toString());
+            MCphone.LOGGER.warn("[MCphone] 写入阅读进度 {} 失败：{}", file(), e.toString());
         }
     }
 }

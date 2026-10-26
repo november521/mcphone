@@ -144,11 +144,12 @@ public class ScriptNodeTest {
             {"button", "1", "1", "1", "text i18n args enabled enabledIf onClick"},
             {"toggle", "0", "1", "0", "bind label i18n enabled"},
             {"tab-bar", "0", "1", "0", "bind tabs"},
+            {"text-input", "0", "1", "0", "bind placeholder max-length enabled"},
     };
 
     static void typeTable() {
-        eq(NodeType.values().length, 18, "§4.7 的枚举是 18 个，不是标题写的 16");
-        eq(SPEC.length, 18, "§5.4 速查表也是 18 行");
+        eq(NodeType.values().length, 19, "18 个基础组件与一个单行输入组件");
+        eq(SPEC.length, 19, "组件能力表包含单行输入");
 
         for (int i = 0; i < SPEC.length; i++) {
             String[] row = SPEC[i];

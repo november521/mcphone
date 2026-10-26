@@ -1,5 +1,6 @@
 package com.november.mcphone.core.client;
 
+import com.november.mcphone.core.PhonePaths;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.november.mcphone.MCphone;
@@ -23,7 +24,7 @@ import java.util.*;
 
 /**
  * 手机 App 注册表：CATALOG（SPI 扫描到的全部 App，永不移除）与 INSTALLED（主屏装了哪些，有序＝主屏排列）。
- * 状态按存档/服务器各存一份到 config/mcphone/installed/<存档标识>.json；
+ * 状态按存档/服务器各存一份到 mcphone/data/installed/<存档标识>.json；
  * known 记录见过哪些 App，用来区分"玩家卸载过"与"首次出现（按 isPreinstalled 决定）"。
  */
 public final class PhoneScreenRegistry {
@@ -41,10 +42,7 @@ public final class PhoneScreenRegistry {
     private static final Set<ResourceLocation> INSTALLED = new LinkedHashSet<>();
 
     /** 每个存档 / 每个服务器一份状态文件 */
-    private static final Path STATE_DIR = Path.of("config/mcphone/installed");
-
-    /** 旧的全局状态文件，只用于一次性迁移 */
-    private static final Path LEGACY_STATE_FILE = Path.of("config/mcphone/installed.json");
+    private static Path stateDirectory() { return ClientPaths.resolve(PhonePaths.INSTALLED); }
 
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
 
@@ -382,7 +380,7 @@ public final class PhoneScreenRegistry {
      * 读不出来就当没有 —— 那时本来也没什么可恢复的。
      */
     public static Set<ResourceLocation> savedInstalledIds() {
-        Path file = STATE_DIR.resolve(currentWorldKey() + ".json");
+        Path file = stateDirectory().resolve(currentWorldKey() + ".json");
         if (!Files.isRegularFile(file)) return Set.of();
         try (Reader r = Files.newBufferedReader(file, StandardCharsets.UTF_8)) {
             State s = GSON.fromJson(r, State.class);
@@ -427,8 +425,7 @@ public final class PhoneScreenRegistry {
         ensureLoaded();
 
         String key = currentWorldKey();
-        stateFile = STATE_DIR.resolve(key + ".json");
-        migrateLegacyIfNeeded();
+        stateFile = stateDirectory().resolve(key + ".json");
         loadState();
 
         MCphone.LOGGER.info("[MCphone] 已加载存档 '{}' 的 App 安装状态", key);
@@ -464,24 +461,6 @@ public final class PhoneScreenRegistry {
     private static String sanitize(String raw) {
         String s = raw.replaceAll("[^a-zA-Z0-9._-]", "_");
         return s.length() > 64 ? s.substring(0, 64) : s;
-    }
-
-    /** 一次性迁移：把旧的全局文件搬给第一个进入的存档，旧文件改名不删 */
-    private static void migrateLegacyIfNeeded() {
-        if (stateFile == null || Files.exists(stateFile)) return;
-        if (!Files.isRegularFile(LEGACY_STATE_FILE)) return;
-
-        try {
-            Path parent = stateFile.getParent();
-            if (parent != null) Files.createDirectories(parent);
-            Files.copy(LEGACY_STATE_FILE, stateFile);
-            Files.move(LEGACY_STATE_FILE,
-                    LEGACY_STATE_FILE.resolveSibling("installed.json.migrated"));
-            MCphone.LOGGER.info("[MCphone] 已把旧的全局安装状态迁移给当前存档，"
-                    + "旧文件改名为 installed.json.migrated");
-        } catch (IOException e) {
-            MCphone.LOGGER.warn("[MCphone] 迁移旧安装状态失败: {}", e.toString());
-        }
     }
 
     private static void loadState() {

@@ -1,5 +1,6 @@
 package com.november.mcphone.feature.chat.group;
 
+import com.november.mcphone.core.PhonePaths;
 import com.november.mcphone.MCphone;
 import com.november.mcphone.feature.chat.ChatImage;
 import net.minecraft.Util;
@@ -24,7 +25,7 @@ public final class GroupImageFiles {
     private static final Object LOCK = new Object();
     private static final WeakHashMap<MinecraftServer, Map<UUID, Integer>> ACTIVE = new WeakHashMap<>();
     private static final WeakHashMap<MinecraftServer, Boolean> SWEPT = new WeakHashMap<>();
-    private static Path folder(MinecraftServer server) { return server.getWorldPath(LevelResource.ROOT).resolve("mcphone/group-images"); }
+    private static Path folder(MinecraftServer server) { return PhonePaths.WORLD_GROUP_IMAGES.in(server.getWorldPath(LevelResource.ROOT)); }
     private static Path file(MinecraftServer server, UUID id) { return folder(server).resolve(id + ".png"); }
     public static UUID identity(UUID group, byte[] data) {
         try {

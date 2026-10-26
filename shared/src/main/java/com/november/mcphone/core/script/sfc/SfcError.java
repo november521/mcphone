@@ -27,7 +27,7 @@ public final class SfcError extends RuntimeException {
         E_SFC_NO_TEMPLATE("%s 缺少 <template> 块"),
         E_SFC_MANIFEST("%s:%d %s"),
 
-        E_TPL_UNKNOWN_ELEMENT("%s:%d 不认识的元素 <%s>%s。可用的 18 个：%s"),
+        E_TPL_UNKNOWN_ELEMENT("%s:%d 不认识的元素 <%s>%s。可用的 19 个：%s"),
         E_TPL_MUST_SELF_CLOSE("%s:%d <%s> 不能有子元素，写成 <%s />"),
         E_TPL_UNKNOWN_ATTR("%s:%d <%s> 没有属性 '%s'%s。它接受：%s"),
         E_TPL_LIKELY_MISSING_COLON("%s:%d %s=\"%s\" 是字符串。要用变量写成 :%s=\"%s\""),
@@ -42,12 +42,13 @@ public final class SfcError extends RuntimeException {
         E_EXPR_SYNTAX("%s:%d 表达式语法错误：%s"),
         E_EXPR_UNKNOWN_IDENT("%s:%d 不认识 '%s'%s。已声明的有：%s"),
         E_EXPR_NO_ASSIGNMENT("%s:%d {{ }} 里不能赋值，赋值只能写在 @click 里"),
-        E_EXPR_NO_CALLS("%s:%d P0 不支持调用方法，P1 开放 <script>"),
+        E_EXPR_NO_CALLS("%s:%d 模板表达式不支持调用方法；@click 只能调用内建操作或本页声明的函数"),
         E_EXPR_TYPE("%s:%d '%s' 两边类型是 %s 和 %s，这个运算不支持"),
         E_EXPR_TOO_COMPLEX("%s:%d 表达式太复杂（%d 个节点，上限 64），拆成 <script> 里的计算"),
         E_EXPR_TOO_LONG("%s:%d 表达式超过 256 字符"),
 
-        E_SCRIPT_P0_SUBSET("%s:%d P0 的 <script> 只能写 state = { ... }，方法与逻辑在 P1 开放"),
+        E_SCRIPT_P0_SUBSET("%s:%d <script> 顶层只接受 state = { 字面量初值 } 和普通函数声明"),
+        E_SCRIPT_FUNCTION("%s:%d 客户端脚本不合法：%s"),
         E_SCRIPT_STATE("%s:%d state 的 '%s' 不合法：%s");
 
         private final String text;

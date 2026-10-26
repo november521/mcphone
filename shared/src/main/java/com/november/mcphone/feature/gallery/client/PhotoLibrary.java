@@ -1,8 +1,9 @@
 package com.november.mcphone.feature.gallery.client;
 
+import com.november.mcphone.core.client.ClientPaths;
+import com.november.mcphone.core.PhonePaths;
 import com.november.mcphone.core.client.ImageCodec;
 import com.november.mcphone.core.client.ImageFolder;
-import net.minecraft.client.Minecraft;
 
 import java.nio.file.Path;
 import java.util.List;
@@ -19,9 +20,6 @@ import java.util.Set;
  */
 public final class PhotoLibrary {
 
-    /** 截图目录名，与原版 Screenshot.grab 写入的位置一致 */
-    private static final String SCREENSHOT_DIR = "screenshots";
-
     /** 缩略图长边上限（像素）。手机屏幕只有 120 宽，96 足够清晰。 */
     private static final int THUMB_MAX_SIDE = 96;
 
@@ -30,7 +28,7 @@ public final class PhotoLibrary {
 
     /** 只认 .png：截图目录里的东西都是原版写出来的 PNG，别的后缀多半是玩家自己放的别的东西 */
     private static final ImageFolder FOLDER = new ImageFolder(
-            () -> Minecraft.getInstance().gameDirectory.toPath().resolve(SCREENSHOT_DIR),
+            () -> ClientPaths.resolve(PhonePaths.SCREENSHOTS),
             Set.of(".png"), THUMB_MAX_SIDE, MIN_CACHED, "photo_thumb_");
 
     private PhotoLibrary() {}

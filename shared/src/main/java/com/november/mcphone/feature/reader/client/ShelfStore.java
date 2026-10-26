@@ -1,5 +1,7 @@
 package com.november.mcphone.feature.reader.client;
 
+import com.november.mcphone.core.client.ClientPaths;
+import com.november.mcphone.core.PhonePaths;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.november.mcphone.MCphone;
@@ -50,7 +52,7 @@ public final class ShelfStore {
     private ShelfStore() {}
 
     /** 与音乐目录、壁纸目录同一个爹：config/mcphone/<功能>/ */
-    private static final Path FILE = Path.of("config/mcphone/reader/shelf.json");
+    private static Path file() { return ClientPaths.resolve(PhonePaths.READER_SHELF); }
 
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
 
@@ -149,7 +151,7 @@ public final class ShelfStore {
     /**
      * 把这些书都放上架（已经在架上的不动）—— 本地小说走这一条。
      *
-     * <b>为什么本地书不必点 ☆</b>：玩家往 {@code config/mcphone/reader/books/} 里放一本书，
+     * <b>为什么本地书不必点 ☆</b>：玩家往 {@code mcphone/books/} 里放一本书，
      * 这个动作本身就是"我要看它"。再要求他去书城找一遍、点一下星，是在为一个已经表达过的
      * 意愿再收一次费。模组手册不一样——那是整合包塞给他的几十本，从里面挑几本才需要 ☆。
      *
@@ -210,8 +212,8 @@ public final class ShelfStore {
         if (cached != null) return cached;
 
         LinkedHashSet<Key> out = new LinkedHashSet<>();
-        if (Files.isRegularFile(FILE)) {
-            try (Reader r = Files.newBufferedReader(FILE, StandardCharsets.UTF_8)) {
+        if (Files.isRegularFile(file())) {
+            try (Reader r = Files.newBufferedReader(file(), StandardCharsets.UTF_8)) {
                 State state = GSON.fromJson(r, State.class);
                 if (state != null && state.books != null) {
                     for (Entry e : state.books) {
@@ -221,7 +223,7 @@ public final class ShelfStore {
                 }
             } catch (Exception e) {
                 MCphone.LOGGER.warn("[MCphone] 读取书架 {} 失败，这次按空书架处理：{}",
-                        FILE, e.toString());
+                        file(), e.toString());
             }
         }
 
@@ -241,10 +243,10 @@ public final class ShelfStore {
 
         try {
             // 【整份替换，不是直写】：直写写到一半崩掉，整个书架回到空，见 AtomicWrite
-            AtomicWrite.replace(FILE, w -> GSON.toJson(state, w));
+            AtomicWrite.replace(file(), w -> GSON.toJson(state, w));
         } catch (IOException e) {
             // 只警告不抛：写不进去最多是这次收藏没记住，不该把界面带崩
-            MCphone.LOGGER.warn("[MCphone] 写入书架 {} 失败：{}", FILE, e.toString());
+            MCphone.LOGGER.warn("[MCphone] 写入书架 {} 失败：{}", file(), e.toString());
         }
     }
 }

@@ -4,6 +4,15 @@
 
 ### 新增
 
+- 客户端内容和本地记录统一到游戏目录的 `mcphone/`：音乐、小说、壁纸、表情分类存放，安装记录、App 数据和收藏放在 `data/`；各文件夹入口同步更新。本次直接使用新路径，旧文件留在原处，不自动迁移或兼容读取。配置、签名密钥、世界数据及原版截图位置保持原样。
+- 应用商店右上角增加文件夹入口，一键打开当前游戏目录的 `mcphone/apps/`，目录不存在时自动创建；空列表也能使用。
+- SFC 客户端函数支持 0–4 个简单形参，按钮可传入字符串、整数、布尔值及列表索引/基本字段，复用同一个函数处理不同列表项；增加待办清单示例，失败时仍整体撤回点击。`onInit()` 保持无参。
+- SFC 脚本 App 支持长文本阅读：页面字符串和 text 正文上限为 4096 个 UTF-16 单元，配合既有换行与滚动阅读；增加整页文本预算并只绘制可见行。单行输入框及旧 IR 限制保持原样。
+- 脚本 App 支持无参 `onInit()`：页面首次创建时自动初始化，可读取本机保存的数据；返回已有页面时保留当前内容，关闭 App 后重开再次初始化，失败时保留默认值并提示。
+- 脚本 App 的客户端函数支持本地字符串读取和保存，按登录账号与 App 隔离，无需脚本服务端握手；按钮操作成功后原子保存，失败时保留原数据。名字检查器示例增加保存和读取按钮。
+- 脚本 App 可在 `<script>` 声明普通函数，并由按钮调用；函数可处理页面状态并即时刷新界面，失败或超限时撤回本次状态修改。
+- 脚本 App 新增单行 `text-input` 组件：绑定字符串状态并实时回显，支持占位提示、长度限制、禁用和原版文字编辑；切页、失焦或隐藏时释放输入焦点。
+
 - 美西螈私聊和群聊的附件菜单支持发送位置，点击后把当前 X、Y、Z 方块坐标作为普通文字消息发送；服务器关闭图片或图片上传队列已满时仍可使用。
 - 美西螈私聊右上角的三个点可直接查看对方的个人资料；返回原聊天时保留未发送文字、引用及滚动位置，查看资料期间仍处理发送确认。群聊继续打开群详情。
 - 美西螈私聊和群聊支持收藏已加载的图片，收藏列表可预览图片，详情支持动图播放、保存到相册及取消收藏；收藏后可独立查看，不依赖原消息和服务器图片保留时间。
@@ -39,6 +48,15 @@
 ## English
 
 ### Added
+
+- Client content and local records now use the game directory's `mcphone/` tree, with media in dedicated folders and install records, App data and favorites under `data/`. Folder shortcuts use the new locations. Old files remain untouched and are not migrated or read automatically. Configuration, signing keys, world data and vanilla screenshots keep their locations.
+- Added a folder shortcut to the App Store header. It opens `mcphone/apps/` in the current game directory and creates it if missing, including when the store list is empty.
+- SFC client functions accept 0–4 simple parameters. Buttons can pass strings, integers, booleans and list indices/primitive fields to reuse one function across rows. Added a todo-list sample; failed clicks still roll back atomically. `onInit()` remains zero-argument.
+- SFC script apps support long-text reading: page strings and text bodies accept up to 4096 UTF-16 units with existing wrapping and scrolling. Page text budgets and visible-line rendering bound the work; single-line inputs and legacy IR retain their limits.
+- Script apps can declare a zero-argument `onInit()` to initialize each new page state and restore local data. Returning preserves the page; reopening the App initializes it again. Failures keep defaults and show a notice.
+- Client script functions can read and save local strings, isolated by login account and App without a script-server handshake. Successful clicks save atomically; failures preserve existing data. The name-checker sample now includes save and load buttons.
+- Script apps can declare page-local functions and invoke them from buttons. Valid state changes refresh the UI; errors and execution-limit failures roll back the click.
+- Script apps can use a single-line `text-input` bound to string state, with live updates, placeholders, length limits, disabled state and vanilla text editing. Page changes, focus loss and hidden fields release keyboard focus.
 
 - The attachment menu in Axolotl private and group chats can send the player's current X, Y and Z block coordinates as a plain text message. Location remains available when images are disabled or the image upload queue is full.
 - The top-right menu in Axolotl private chats opens the other player's profile. Returning preserves the unsent draft, reply preview and scroll position, while send confirmations continue to be processed. Group chats still open group details.

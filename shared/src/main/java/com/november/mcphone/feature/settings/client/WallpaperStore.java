@@ -1,5 +1,7 @@
 package com.november.mcphone.feature.settings.client;
 
+import com.november.mcphone.core.client.ClientPaths;
+import com.november.mcphone.core.PhonePaths;
 import com.mojang.blaze3d.platform.NativeImage;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.texture.DynamicTexture;
@@ -19,19 +21,17 @@ import java.util.List;
 import javax.imageio.ImageIO;
 
 /**
- * 壁纸存储 —— 扫描 config/mcphone/wallpapers/ 目录，加载 PNG 为纹理。
+ * 壁纸存储 —— 扫描 mcphone/wallpapers/ 目录，加载 PNG 为纹理。
  *
  * 支持任意尺寸 PNG，渲染时会等比例适配到手机屏幕。
  *
  * 玩家使用流程：
- * 1. 把任意尺寸的 PNG 图片放入 config/mcphone/wallpapers/
+ * 1. 把任意尺寸的 PNG 图片放入 mcphone/wallpapers/
  * 2. 打开手机 → 设置 → 壁纸 → 选择壁纸
  */
 public final class WallpaperStore {
 
     private static final Logger LOGGER = LoggerFactory.getLogger("mcphone/WallpaperStore");
-
-    private static final String WALLPAPER_DIR = "config/mcphone/wallpapers";
 
     /** 已加载的壁纸列表 */
     private static final List<WallpaperEntry> WALLPAPERS = new ArrayList<>();
@@ -71,7 +71,7 @@ public final class WallpaperStore {
      * 那比我们在手机屏幕上憋一句错误提示要清楚。
      */
     public static Path directory() {
-        Path dir = Path.of(WALLPAPER_DIR);
+        Path dir = ClientPaths.resolve(PhonePaths.WALLPAPERS);
         if (!Files.isDirectory(dir)) {
             try {
                 Files.createDirectories(dir);
@@ -100,7 +100,7 @@ public final class WallpaperStore {
      * 释放不能省——贴图是显存，只加不减的话，反复增删壁纸会一路涨上去。
      */
     public static void refresh() {
-        Path dir = Path.of(WALLPAPER_DIR);
+        Path dir = ClientPaths.resolve(PhonePaths.WALLPAPERS);
         if (!Files.isDirectory(dir)) {
             try {
                 Files.createDirectories(dir);

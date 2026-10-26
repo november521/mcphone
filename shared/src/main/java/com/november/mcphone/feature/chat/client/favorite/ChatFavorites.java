@@ -1,5 +1,6 @@
 package com.november.mcphone.feature.chat.client.favorite;
 
+import com.november.mcphone.core.PhonePaths;
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.level.storage.LevelResource;
 import java.nio.charset.StandardCharsets;
@@ -19,7 +20,7 @@ public final class ChatFavorites {
     public static Path path(Path directory,UUID account,String server) {
         try {
             String key=HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(server.getBytes(StandardCharsets.UTF_8)));
-            return directory.resolve("config/mcphone/chat/favorites").resolve(account.toString()).resolve(key+".json");
+            return PhonePaths.FAVORITES.in(directory).resolve(account.toString()).resolve(key+".json");
         } catch (java.security.NoSuchAlgorithmException e) { throw new IllegalStateException(e); }
     }
     public static FavoriteStore current() {

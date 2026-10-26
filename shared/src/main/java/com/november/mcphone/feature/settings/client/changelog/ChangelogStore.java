@@ -1,5 +1,6 @@
 package com.november.mcphone.feature.settings.client.changelog;
 
+import com.november.mcphone.core.PhonePaths;
 import com.november.mcphone.core.client.AtomicWrite;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -16,7 +17,7 @@ public final class ChangelogStore {
         try {
             String key = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
                     .digest(scope.getBytes(StandardCharsets.UTF_8)));
-            return directory.resolve("config/mcphone/changelog").resolve(account.toString()).resolve(key + ".txt");
+            return PhonePaths.CHANGELOG.in(directory).resolve(account.toString()).resolve(key + ".txt");
         } catch (java.security.NoSuchAlgorithmException e) { throw new IllegalStateException(e); }
     }
     public static String read(Path file) throws IOException {
