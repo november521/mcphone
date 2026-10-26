@@ -124,7 +124,7 @@
     "com/november/mcphone/platform/client/ClientTicks.java": 26,
     "com/november/mcphone/platform/client/DiscSongs.java": 27,
     "com/november/mcphone/platform/client/Draw.java": 88,
-    "com/november/mcphone/platform/client/EditBoxes.java": 6,
+    "com/november/mcphone/platform/client/EditBoxes.java": 12,
     "com/november/mcphone/platform/client/KeyModifiers.java": 6,
     "com/november/mcphone/platform/client/PhoneBookIcons.java": 2,
     "com/november/mcphone/platform/client/PhoneContainerScreenBase.java": 13,

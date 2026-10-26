@@ -1,5 +1,6 @@
 package com.november.mcphone.core.script.server.economy;
 
+import com.november.mcphone.core.PhonePaths;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -51,7 +52,7 @@ import java.util.Set;
 public final class EconomyConfig {
 
     /** 相对世界根的文件名（与 {@code EconomyRuntime} 现有流水落点同一写法）。 */
-    public static final String FILE = "serverconfig/mcphone-economy.json";
+    public static final String FILE = PhonePaths.WORLD_ECONOMY_CONFIG.relative();
 
     /** 顶层唯一认得的段。 */
     public static final String SECTION = "currency";

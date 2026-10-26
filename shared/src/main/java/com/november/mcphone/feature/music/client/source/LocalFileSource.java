@@ -1,5 +1,7 @@
 package com.november.mcphone.feature.music.client.source;
 
+import com.november.mcphone.core.client.ClientPaths;
+import com.november.mcphone.core.PhonePaths;
 import com.november.mcphone.MCphone;
 import com.november.mcphone.feature.music.Track;
 import com.november.mcphone.feature.music.client.playback.AudioDecoders;
@@ -16,9 +18,9 @@ import java.util.List;
 import java.util.stream.Stream;
 
 /**
- * 本地文件音源 —— {@code config/mcphone/music/} 下的音乐。
+ * 本地文件音源 —— {@code mcphone/music/} 下的音乐。
  *
- * 为什么是 config 而不是存档目录
+ * 为什么存在客户端而不是存档目录
  *
  * 这是玩家自己的音乐，不属于任何一个世界。放进存档的话，换个存档就得
  * 再拷一遍，删存档还会把人家的歌一起删掉。
@@ -36,21 +38,22 @@ public final class LocalFileSource implements MusicSource {
     /** 音源标识。会进播放记录，别改 */
     public static final String ID = "local";
 
-    /** 玩家放歌的地方。相对游戏根目录，与项目里其他 config 路径一致 */
-    public static final Path MUSIC_DIR = Path.of("config", "mcphone", "music");
+    /** 相对布局常量；实际文件访问使用当前游戏实例，不读取旧目录。 */
+    public static final Path MUSIC_DIR = Path.of(PhonePaths.MUSIC.relative());
 
     private List<Track> cached = List.of();
 
     /** 音乐目录的统一入口；打开文件夹前也要补建，目录可能在进入 App 后被删除。 */
     public static Path directory() {
-        if (!Files.isDirectory(MUSIC_DIR)) {
+        Path dir = ClientPaths.resolve(PhonePaths.MUSIC);
+        if (!Files.isDirectory(dir)) {
             try {
-                Files.createDirectories(MUSIC_DIR);
+                Files.createDirectories(dir);
             } catch (IOException e) {
-                MCphone.LOGGER.warn("[MCphone] 建不出音乐目录 {}: {}", MUSIC_DIR, e.toString());
+                MCphone.LOGGER.warn("[MCphone] 建不出音乐目录 {}: {}", dir, e.toString());
             }
         }
-        return MUSIC_DIR;
+        return dir;
     }
 
     @Override
@@ -65,7 +68,8 @@ public final class LocalFileSource implements MusicSource {
 
     @Override
     public void refresh() {
-        if (!Files.isDirectory(MUSIC_DIR)) {
+        Path dir = ClientPaths.resolve(PhonePaths.MUSIC);
+        if (!Files.isDirectory(dir)) {
             // 目录不在就建一个：玩家照着提示去放歌时，那个文件夹得已经存在，
             // 否则他还得自己一层层建出来
             directory();
@@ -74,7 +78,7 @@ public final class LocalFileSource implements MusicSource {
         }
 
         List<Track> found = new ArrayList<>();
-        try (Stream<Path> files = Files.list(MUSIC_DIR)) {
+        try (Stream<Path> files = Files.list(dir)) {
             files.filter(Files::isRegularFile)
                  // 只收认得的格式：目录里常混着封面图、歌词、说明文件，
                  // 把它们列出来只会让玩家点到一个放不响的东西
@@ -90,7 +94,7 @@ public final class LocalFileSource implements MusicSource {
 
     @Override
     public AudioStream open(Track track) throws IOException {
-        Path file = MUSIC_DIR.resolve(track.id());
+        Path file = ClientPaths.resolve(PhonePaths.MUSIC).resolve(track.id());
 
         // 校验一次：track.id() 是文件名，而它一路从缓存传过来，中间文件
         // 可能已经被删了。不查的话 open 会抛一个语焉不详的 NoSuchFileException

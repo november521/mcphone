@@ -13,7 +13,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 本地 txt 书源 —— 玩家自己丢进 {@code config/mcphone/reader/books/} 的小说。
+ * 本地 txt 书源 —— 玩家自己丢进 {@code mcphone/books/} 的小说。
  *
  * <h2>与另外三个书源不一样的地方</h2>
  *

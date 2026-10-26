@@ -152,6 +152,7 @@
   "mcphone.store.error.no_source": "来源不可用: %s",
   "mcphone.store.error.not_found": "找不到App: %s",
   "mcphone.store.error.install_failed": "安装失败: %s",
+  "mcphone.store.error.open_folder": "无法打开 App 文件夹，请查看日志",
   "mcphone.gallery.empty": "还没有照片",
   "mcphone.gallery.empty_hint": "用相机拍的照片会出现在这里",
   "mcphone.settings.device_name": "设备名称",
@@ -431,7 +432,7 @@
   "mcphone.reader.txt.broken_hint": "文件可能太大（超过 32 MB）、正被别的程序占着，或者压根不是文本。具体原因写在游戏日志里（latest.log，搜 MCphone）。",
   "mcphone.reader.tab_store": "书城",
   "mcphone.reader.shelf_empty": "书架还是空的",
-  "mcphone.reader.shelf_empty_hint": "把 txt 小说放进 config/mcphone/reader/books/（点右上角的文件夹图标直接打开它），或者把文件拖进游戏窗口——放进去就在这儿了，不用再去书城收藏。模组的教程手册在「书城」，点右边的 ☆ 收到这儿来。",
+  "mcphone.reader.shelf_empty_hint": "把 txt 小说放进 mcphone/books/（点右上角的文件夹图标直接打开它），或者把文件拖进游戏窗口——放进去就在这儿了，不用再去书城收藏。模组的教程手册在「书城」，点右边的 ☆ 收到这儿来。",
   "mcphone.reader.shelf_empty_hint_no_txt": "去「书城」点书右边的 ☆，它就放到这儿了。常翻的那几本收进来，以后不用每次从几十本里翻。",
   "mcphone.picker.title": "选择一张图片",
   "mcphone.picker.filter.image": "图片文件",
@@ -569,5 +570,7 @@
   "mcphone.changelog.title": "更新日志",
   "mcphone.changelog.close": "关闭",
   "mcphone.changelog.empty": "此构建暂无更新日志。",
-  "mcphone.changelog.upcoming": "待发布"
+  "mcphone.changelog.upcoming": "待发布",
+  "mcphone.script.client_function.failed": "操作未完成，页面数据已保留。详情见客户端日志。",
+  "mcphone.script.initialization.failed": "页面初始化未完成，已保留默认值。详情见客户端日志。"
 }

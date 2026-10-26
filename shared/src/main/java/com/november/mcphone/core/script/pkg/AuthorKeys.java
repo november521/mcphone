@@ -1,5 +1,6 @@
 package com.november.mcphone.core.script.pkg;
 
+import com.november.mcphone.core.PhonePaths;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.AtomicMoveNotSupportedException;
@@ -52,7 +53,7 @@ import java.util.Set;
  */
 public final class AuthorKeys {
 
-    public static final String DIR = "config/mcphone/keys";
+    public static final String DIR = PhonePaths.AUTHOR_KEYS.relative();
     public static final String PRIVATE_FILE = "author.key";
     public static final String PUBLIC_FILE = "author.pub";
 

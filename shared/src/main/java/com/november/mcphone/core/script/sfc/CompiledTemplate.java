@@ -1,5 +1,6 @@
 package com.november.mcphone.core.script.sfc;
 
+import com.november.mcphone.core.script.engine.ClientScript;
 import com.november.mcphone.core.script.layout.NodeType;
 
 import java.util.List;
@@ -41,11 +42,15 @@ public final class CompiledTemplate {
 
     private final Element root;
     private final Map<String, Object> state;
+    private final ClientScript script;
 
-    CompiledTemplate(Element root, Map<String, Object> state) {
+    CompiledTemplate(Element root, Map<String, Object> state, ClientScript script) {
         this.root = root;
         this.state = state;
+        this.script = script;
     }
+
+    ClientScript script() { return script; }
 
     Element root() {
         return root;

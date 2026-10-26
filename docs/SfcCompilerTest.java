@@ -6,6 +6,7 @@ import com.november.mcphone.core.script.layout.NodeParser;
 import com.november.mcphone.core.script.layout.NodeType;
 import com.november.mcphone.core.script.layout.ScriptNodeTest;
 import com.november.mcphone.core.script.layout.UiState;
+import com.november.mcphone.core.script.layout.StateRules;
 import com.november.mcphone.core.script.pkg.Manifest;
 import com.november.mcphone.core.script.pkg.PackageError;
 
@@ -155,8 +156,10 @@ public class SfcCompilerTest {
         // ---- 静态属性误当变量 ----
         rejects("<progress value=\"count\"/>", "E_TPL_LIKELY_MISSING_COLON");
 
-        // ---- P0 的 script 子集 ----
-        rejects("<script>\nfunction f(){}\n</script>" + MIN_TPL, "E_SCRIPT_P0_SUBSET");
+        // ---- 字面量初值与客户端函数 ----
+        accepts("<script>\nfunction f(){}\n</script>" + MIN_TPL);
+        accepts("<script>\nfunction f(arg){}\n</script>" + MIN_TPL);
+        rejects("<script>\nfunction f(a,b,c,d,e){}\n</script>" + MIN_TPL, "E_SCRIPT_FUNCTION");
         accepts("<script>\nstate = { a: 1 }\n</script>" + MIN_TPL);
 
         // ============ 以下是骨架之外补的 ============
@@ -669,7 +672,7 @@ public class SfcCompilerTest {
         rejects("<script>\nstate = { a: [[[1]]] }\n</script>" + MIN_TPL, "E_SCRIPT_STATE");
         rejects("<script>\nstate = { a: [1, 'x'] }\n</script>" + MIN_TPL, "E_SCRIPT_STATE");
         rejects("<script>\nstate = { a: null }\n</script>" + MIN_TPL, "E_SCRIPT_STATE");
-        rejects("<script>\nstate = { a: '" + "x".repeat(65) + "' }\n</script>" + MIN_TPL, "E_SCRIPT_STATE");
+        rejects("<script>\nstate = { a: '" + "x".repeat(StateRules.MAX_PAGE_STRING + 1) + "' }\n</script>" + MIN_TPL, "E_SCRIPT_STATE");
         rejects("<script>\nstate = { _a: 1 }\n</script>" + MIN_TPL, "E_SCRIPT_STATE");
         rejects("<script>\nstate = { a: 1, a: 2 }\n</script>" + MIN_TPL, "E_SCRIPT_STATE");
         StringBuilder many = new StringBuilder("<script>\nstate = {");
@@ -798,15 +801,16 @@ public class SfcCompilerTest {
         check(!syntax.message().contains("at line") && syntax.col() > 0, "manifest 语法错去掉 Gson 的块内行列，列号保留：" + syntax.message());
 
         // text 的判据没有旁路
-        rejects("<column>" + "x".repeat(600) + "</column>", "E_TPL_BAD_VALUE");
+        rejects("<column>" + "x".repeat(StateRules.MAX_PAGE_STRING + 1) + "</column>", "E_TPL_BAD_VALUE");
         rejects("<column>a&#1;b</column>", "E_TPL_BAD_VALUE");
-        rejects("<text text=\"" + "x".repeat(600) + "\"/>", "E_TPL_BAD_VALUE");
+        rejects("<text text=\"" + "x".repeat(StateRules.MAX_PAGE_STRING + 1) + "\"/>", "E_TPL_BAD_VALUE");
         rejects("<toggle bind=\"on\" label=\"" + "x".repeat(600) + "\"/>", "E_TPL_BAD_VALUE");
         for (int len : new int[]{NodeParser.MAX_TEXT, NodeParser.MAX_TEXT + 1}) {
             String s = "x".repeat(len);
             boolean ir = acceptsIr("{\"pages\":{\"main\":{\"type\":\"text\",\"text\":\"" + s + "\"}},\"entry\":\"main\"}");
             boolean tpl = caught(() -> PropRules.parseStatic(PropRules.of(NodeType.TEXT).get("text"), s)) == null;
-            eq(tpl, ir, "text 长 " + len + " 模板与 IR 判得一样");
+            eq(ir, len <= NodeParser.MAX_TEXT, "IR text 长 " + len + " 保留旧上限");
+            check(tpl, "SFC text 长 " + len + " 进入长文范围");
         }
 
         // 块标签后面跟空白
@@ -925,7 +929,7 @@ public class SfcCompilerTest {
         // 字面文字报错指到文字本身
         Err literal = errorOf("<manifest>\n" + MANIFEST + "\n</manifest>\n<template>\n<column>\n<box/>\n  a&#1;b\n</column>\n</template>\n");
         check(literal.line() == 7 && literal.col() == 3 && literal.message().contains("U+0001"), "文字里的控制字符报在它那一行、文案看得见：" + literal.message());
-        rejects("<text>{{ title }}" + "x".repeat(600) + "</text>", "E_TPL_BAD_VALUE");
+        rejects("<text>{{ title }}" + "x".repeat(StateRules.MAX_PAGE_STRING + 1) + "</text>", "E_TPL_BAD_VALUE");
 
         // 块标签尖括号里带空白；manifest 文案不删空；语句长度不算空白
         Err inner = errorOf("<manifest>\n" + MANIFEST + "\n</manifest>\n<template>\n<box/>\n</template >\n");
@@ -1290,20 +1294,21 @@ public class SfcCompilerTest {
             {"E_EXPR_SYNTAX", "%s:%d 表达式语法错误：%s"},
             {"E_EXPR_UNKNOWN_IDENT", "%s:%d 不认识 '%s'%s。已声明的有：%s"},
             {"E_EXPR_NO_ASSIGNMENT", "%s:%d {{ }} 里不能赋值，赋值只能写在 @click 里"},
-            {"E_EXPR_NO_CALLS", "%s:%d P0 不支持调用方法，P1 开放 <script>"},
+            {"E_EXPR_NO_CALLS", "%s:%d 模板表达式不支持调用方法；@click 只能调用内建操作或本页声明的函数"},
             {"E_EXPR_TYPE", "%s:%d '%s' 两边类型是 %s 和 %s，这个运算不支持"},
             {"E_EXPR_TOO_COMPLEX", "%s:%d 表达式太复杂（%d 个节点，上限 64），拆成 <script> 里的计算"},
             {"E_EXPR_TOO_LONG", "%s:%d 表达式超过 256 字符"},
-            {"E_SCRIPT_P0_SUBSET", "%s:%d P0 的 <script> 只能写 state = { ... }，方法与逻辑在 P1 开放"},
+            {"E_SCRIPT_P0_SUBSET", "%s:%d <script> 顶层只接受 state = { 字面量初值 } 和普通函数声明"},
     };
 
     /** 与 §9.11 不逐字相同、或 §9.11 没有的码，各带理由。 */
     static final Map<String, String> DEVIATIONS = Map.of(
-            "E_TPL_UNKNOWN_ELEMENT", "§9.11 文案末尾的 ... 换成 %s，填实际的 18 个名字",
+            "E_TPL_UNKNOWN_ELEMENT", "§9.11 文案末尾的 ... 换成 %s，填实际的 19 个名字",
             "E_SFC_MANIFEST", "§9.11 没有 <manifest> 的码；包一层 PackageError，前面补 文件:行",
             "E_TPL_SYNTAX", "§9.11 没有模板语法错的码：多余的闭标签、多个根、属性写两次、v-for 写法不对",
             "E_TPL_BAD_VALUE", "§9.11 没有静态属性取值不合规的码；对应 §4.9 的 E_BAD_VALUE",
-            "E_SCRIPT_STATE", "§9.7 的键名、个数、长度、同构、层数没有对应的码");
+            "E_SCRIPT_STATE", "§9.7 的键名、个数、长度、同构、层数没有对应的码",
+            "E_SCRIPT_FUNCTION", "客户端函数的语法、名称、数量和形参声明需要单独的编译期诊断");
 
     static void errorTable() {
         Set<String> covered = new TreeSet<>();

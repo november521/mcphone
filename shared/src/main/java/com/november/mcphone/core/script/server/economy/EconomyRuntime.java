@@ -1,5 +1,6 @@
 package com.november.mcphone.core.script.server.economy;
 
+import com.november.mcphone.core.PhonePaths;
 import com.november.mcphone.MCphone;
 import com.november.mcphone.api.economy.Currency;
 import com.november.mcphone.api.economy.EscrowId;
@@ -113,7 +114,7 @@ public final class EconomyRuntime {
         stop();
         EconomyData data = EconomyData.get(server);
         // 整份锁住的存档不接进流水：它永远不写存档点，接上了流水就会替它自动补存档点、说它"存过了"
-        TxnLog log = new TxnLog(server.getWorldPath(LevelResource.ROOT).resolve("mcphone").resolve("economy"),
+        TxnLog log = new TxnLog(PhonePaths.WORLD_ECONOMY.in(server.getWorldPath(LevelResource.ROOT)),
                 ZoneId.systemDefault(), data.wholeLock() == null ? data : null);
         Instant now = Instant.now();
         // 整份锁住时存档读不出来，流水比它超前多少无从谈起；而且锁住的存档永远不写存档点，报了每次开服都会重报

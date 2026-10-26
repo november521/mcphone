@@ -1,10 +1,11 @@
 package com.november.mcphone.feature.settings.client;
 
+import com.november.mcphone.core.client.ClientPaths;
+import com.november.mcphone.core.PhonePaths;
 import com.november.mcphone.core.client.GuiUtil;
 import com.november.mcphone.core.client.PhoneTheme;
 import com.november.mcphone.core.script.pkg.AuthorKeys;
 import com.november.mcphone.core.script.pkg.PackageError;
-import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
@@ -69,8 +70,7 @@ public final class AuthorKeyPage {
     }
 
     private Path gameDir() {
-        Minecraft mc = Minecraft.getInstance();
-        return mc == null || mc.gameDirectory == null ? Path.of(".") : mc.gameDirectory.toPath();
+        return ClientPaths.gameDirectory();
     }
 
     private void refresh() {
@@ -217,7 +217,7 @@ public final class AuthorKeyPage {
             }
             if (backupY > 0 && my >= backupY && my <= backupY + ROW) {
                 // 备份是一个目录、两个文件（只备私钥恢复不了）
-                Path out = gameDir().resolve("mcphone-author-key-backup");
+                Path out = PhonePaths.AUTHOR_BACKUP.in(gameDir());
                 AuthorKeys.exportBackup(gameDir(), out);
                 notice = Component.translatable("mcphone.sig.key_exported", out.toString());
                 return true;

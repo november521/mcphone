@@ -28,7 +28,7 @@ import java.util.function.Supplier;
 /**
  * 一个"装着图的目录"：扫描它、按需出缩略图、缓存有上限。
  *
- * 相册（截图目录）与美西螈的表情（{@code config/mcphone/stickers/}）要的是同一件事，
+ * 相册（截图目录）与美西螈的表情（{@code mcphone/stickers/}）要的是同一件事，
  * 只有目录、认哪些后缀、缩略图多大这几处不同，所以做成实例而不是又一份静态类。
  *
  * 为什么不一次性全部加载

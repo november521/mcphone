@@ -1,5 +1,6 @@
 package com.november.mcphone.feature.camera.client;
 
+import com.november.mcphone.core.PhonePaths;
 import com.november.mcphone.core.client.AppOptions;
 import com.november.mcphone.core.client.ClientConfig;
 import com.november.mcphone.core.client.PhoneTheme;
@@ -240,7 +241,7 @@ public final class CameraStamp {
                 + "_Y" + Mth.floor(player.getY())
                 + "_Z" + Mth.floor(player.getZ());
 
-        return nextName(new File(gameDirectory, "screenshots"), base);
+        return nextName(PhonePaths.SCREENSHOTS.in(gameDirectory.toPath()).toFile(), base);
     }
 
     /** 上一次发出去的基底与序号，见 {@link #nextName} */

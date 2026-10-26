@@ -374,6 +374,12 @@ public final class NodeParser {
                             path, "enabledIf"));
                 }
             }
+            case TEXT_INPUT -> {
+                out.put("bind", bind(obj, path, String.class, "string"));
+                if (obj.has("placeholder")) out.put("placeholder", visibleText(obj, "placeholder", path, MAX_TEXT));
+                intProp(obj, out, "max-length", path, 1, StateRules.MAX_STRING);
+                boolProp(obj, out, "enabled", path);
+            }
             case TOGGLE -> {
                 out.put("bind", bind(obj, path, Boolean.class, "bool"));
                 if (obj.has("label")) out.put("label", visibleText(obj, "label", path, MAX_TEXT));

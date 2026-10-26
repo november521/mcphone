@@ -1,5 +1,7 @@
 package com.november.mcphone.core.script.client;
 
+import com.november.mcphone.core.client.ClientPaths;
+import com.november.mcphone.core.PhonePaths;
 import com.november.mcphone.MCphone;
 import com.november.mcphone.api.client.app.IPhoneApp;
 import com.november.mcphone.api.client.store.AppInfo;
@@ -148,9 +150,6 @@ public final class LocalScriptSource implements IAppSource {
      * <p><b>这是 UX，不是边界</b>（§13.8）：这一段整个删掉也只是让商店的按钮不灰，
      * 真正的判定在服务端审批部署那一侧，调的是同一个 {@link SdkGate}。
      */
-    /** 信任库落盘的位置（§12.3）。 */
-    private static final String TRUST_FILE = "config/mcphone/authors.json";
-
     /**
      * 这一局的信任库（§12.3 的 TOFU）。<b>惰性从盘上读，改完立刻写回。</b>
      *
@@ -160,9 +159,7 @@ public final class LocalScriptSource implements IAppSource {
     private static TrustStore trust;
 
     private static Path trustFile() {
-        var mc = net.minecraft.client.Minecraft.getInstance();
-        Path game = mc == null || mc.gameDirectory == null ? Path.of(".") : mc.gameDirectory.toPath();
-        return game.resolve(TRUST_FILE);
+        return ClientPaths.resolve(PhonePaths.AUTHORS);
     }
 
     private static TrustStore trust() {

@@ -2,6 +2,7 @@ package com.november.mcphone.core.script.sfc;
 
 import com.november.mcphone.core.script.layout.NodeParser;
 import com.november.mcphone.core.script.layout.NodeType;
+import com.november.mcphone.core.script.layout.StateRules;
 import com.november.mcphone.core.script.pkg.PackageError;
 
 import java.util.ArrayList;
@@ -15,17 +16,17 @@ import java.util.regex.Pattern;
 /**
  * 模板属性 → Node props（施工方案 §5.4 的专有字段、§9.4.2 的静态与绑定）。
  *
- * <p>取值范围与 {@link NodeParser} 的逐字段判据一致，SfcCompilerTest 拿边界值两边对打。静态值编译期不合规就拒；
+ * <p>普通控件沿用 {@link NodeParser} 的逐字段判据，SFC text 正文支持独立的长文上限。静态值编译期不合规就拒；
  * 绑定值在实例化时才知道，不合规时夹紧或丢掉并记 warn，不抛：数据可能来自服务端。
  */
 final class PropRules {
 
-    enum Kind { INT, BOOL, TEXT, STRING, ICON, IMAGE_SRC, BIND_INT, BIND_BOOL, TABS, ARGS }
+    enum Kind { INT, BOOL, TEXT, STRING, ICON, IMAGE_SRC, BIND_INT, BIND_BOOL, BIND_STRING, TABS, ARGS }
 
     /** 一个属性。staticOnly 的只能写字面值（bind 是 key 名），boundOnly 的只能写 :attr（数组）。 */
     record Spec(String name, Kind kind, int min, int max) {
         boolean staticOnly() {
-            return kind == Kind.BIND_INT || kind == Kind.BIND_BOOL;
+            return kind == Kind.BIND_INT || kind == Kind.BIND_BOOL || kind == Kind.BIND_STRING;
         }
 
         boolean boundOnly() {
@@ -41,12 +42,13 @@ final class PropRules {
             return switch (kind) {
                 case INT -> max == Integer.MAX_VALUE ? "≥ " + min + " 的整数" : min + "–" + max + " 的整数";
                 case BOOL -> "true / false";
-                case TEXT -> "最多 " + NodeParser.MAX_TEXT + " 字，除换行外没有控制字符";
+                case TEXT -> "最多 " + textLimit(this) + " 字，除换行外没有控制字符";
                 case STRING -> "字符串";
                 case ICON -> String.join(" ", Names.sorted(NodeParser.ICON_NAMES));
                 case IMAGE_SRC -> "包内相对路径，以 .png 结尾";
                 case BIND_INT -> "state 里一个 int 的 key 名";
                 case BIND_BOOL -> "state 里一个 bool 的 key 名";
+                case BIND_STRING -> "state 里一个 string 的 key 名";
                 case TABS -> ":tabs=\"[{text:'…'}, …]\"，2–4 项，每项恰好一个 text / i18n / icon";
                 case ARGS -> ":args=\"[…]\"，最多 " + NodeParser.MAX_ARGS + " 个 string 或 int";
             };
@@ -77,7 +79,7 @@ final class PropRules {
             case SPACER -> put(out, "size", Kind.INT, 0, Integer.MAX_VALUE);
             case DIVIDER -> put(out, "vertical", Kind.BOOL, 0, 0);
             case TEXT -> {
-                put(out, "text", Kind.TEXT, 0, 0);
+                put(out, "text", Kind.TEXT, 0, StateRules.MAX_PAGE_STRING);
                 put(out, "i18n", Kind.STRING, 0, 0);
                 put(out, "args", Kind.ARGS, 0, 0);
             }
@@ -104,6 +106,12 @@ final class PropRules {
                 put(out, "text", Kind.TEXT, 0, 0);
                 put(out, "i18n", Kind.STRING, 0, 0);
                 put(out, "args", Kind.ARGS, 0, 0);
+                put(out, "enabled", Kind.BOOL, 0, 0);
+            }
+            case TEXT_INPUT -> {
+                put(out, "bind", Kind.BIND_STRING, 0, 0);
+                put(out, "placeholder", Kind.TEXT, 0, 0);
+                put(out, "max-length", Kind.INT, 1, com.november.mcphone.core.script.layout.StateRules.MAX_STRING);
                 put(out, "enabled", Kind.BOOL, 0, 0);
             }
             case TOGGLE -> {
@@ -134,7 +142,7 @@ final class PropRules {
             case IMAGE -> List.of(List.of("src"));
             case ICON -> List.of(List.of("name"));
             case ITEM -> List.of(List.of("item"));
-            case TOGGLE -> List.of(List.of("bind"));
+            case TOGGLE, TEXT_INPUT -> List.of(List.of("bind"));
             case TAB_BAR -> List.of(List.of("bind"), List.of("tabs"));
             default -> List.of();
         };
@@ -163,7 +171,7 @@ final class PropRules {
                 throw new Bad(spec.allowed());
             }
             case TEXT -> {
-                if (raw.length() > NodeParser.MAX_TEXT || !visible(raw)) throw new Bad(spec.allowed());
+                if (raw.length() > textLimit(spec) || !visible(raw)) throw new Bad(spec.allowed());
                 return raw;
             }
             case ICON -> {
@@ -203,7 +211,7 @@ final class PropRules {
             }
             case TEXT -> {
                 if (v instanceof List<?> || v instanceof Map<?, ?>) c.warn(where + " 得到 " + Values.kind(v) + "，显示为空");
-                return visibleText(Values.text(v), c, where);
+                return visibleText(Values.text(v), c, where, textLimit(spec));
             }
             case STRING -> {
                 return v instanceof String ? v : drop(c, where, v, spec);
@@ -235,9 +243,15 @@ final class PropRules {
 
     /** 超长截断、控制字符换成空格，各记一条 warn。 */
     private static String visibleText(String s, EvalContext c, String where) {
-        if (s.length() > NodeParser.MAX_TEXT) {
-            c.warn(where + " 有 " + s.length() + " 字，截到 " + NodeParser.MAX_TEXT);
-            s = Values.cut(s, NodeParser.MAX_TEXT);
+        return visibleText(s, c, where, NodeParser.MAX_TEXT);
+    }
+
+    private static int textLimit(Spec spec) { return spec.max > 0 ? spec.max : NodeParser.MAX_TEXT; }
+
+    private static String visibleText(String s, EvalContext c, String where, int max) {
+        if (s.length() > max) {
+            c.warn(where + " 有 " + s.length() + " 字，截到 " + max);
+            s = Values.cut(s, max);
         }
         if (!visible(s)) {
             c.warn(where + " 含控制字符，换成空格");

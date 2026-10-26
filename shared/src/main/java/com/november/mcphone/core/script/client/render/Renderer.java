@@ -39,28 +39,31 @@ public final class Renderer {
 
     /** 画一页。Frame 要在这一帧开头新建，悬停才是这一帧的。 */
     public static void draw(LayoutNode root, Frame f) {
-        draw(root, f, f.canvas.x(), f.canvas.y());
+        draw(root, f, f.canvas.x(), f.canvas.y(), f.canvas.y(),
+                (int) Math.min(Integer.MAX_VALUE, (long) f.canvas.y() + f.canvas.height()));
     }
 
-    private static void draw(LayoutNode n, Frame f, int ox, int oy) {
+    private static void draw(LayoutNode n, Frame f, int ox, int oy, int clipTop, int clipBottom) {
         int x = n.x + ox;
         int y = n.y + oy;
         boolean sized = n.w > 0 && n.h > 0;
-        if (sized) paintSelf(n, f, x, y);
+        if (sized) paintSelf(n, f, x, y, clipTop, clipBottom);
         if (isScroller(n)) {
-            if (sized) f.canvas.clipped(x, y, n.w, n.h, () -> drawScrolled(n, f, ox, oy));
+            int top = Math.max(clipTop, y);
+            int bottom = (int) Math.min(clipBottom, (long) y + n.h);
+            if (sized && top < bottom) f.canvas.clipped(x, y, n.w, n.h, () -> drawScrolled(n, f, ox, oy, top, bottom));
         } else {
             // 0 尺寸的容器也画子节点：写死 height: 0 的 column 里溢出去的子节点看得见，HitTest 也点得到
-            for (LayoutNode c : n.children) draw(c, f, ox, oy);
+            for (LayoutNode c : n.children) draw(c, f, ox, oy, clipTop, clipBottom);
         }
     }
 
-    private static void drawScrolled(LayoutNode n, Frame f, int ox, int oy) {
+    private static void drawScrolled(LayoutNode n, Frame f, int ox, int oy, int clipTop, int clipBottom) {
         int sy = clampScroll(n);
         int[] range = childRange(n, sy);
         for (int i = range[0]; i <= range[1]; i++) {
             LayoutEngine.layoutItem(n, i, f.tm);
-            draw(n.children.get(i), f, ox, oy - sy);
+            draw(n.children.get(i), f, ox, oy - sy, clipTop, clipBottom);
         }
     }
 
@@ -69,7 +72,7 @@ public final class Renderer {
         return switch (n.node.type()) {
             case BUTTON -> n.node.props().get("enabledIf") instanceof Node.ShowIf condition
                     ? state.test(condition) : n.node.flag("enabled", true);
-            case TOGGLE -> n.node.flag("enabled", true);
+            case TOGGLE, TEXT_INPUT -> n.node.flag("enabled", true);
             default -> true;
         };
     }
@@ -136,7 +139,7 @@ public final class Renderer {
     //  paintSelf（§8.4）
     // ============================================================
 
-    private static void paintSelf(LayoutNode n, Frame f, int x, int y) {
+    private static void paintSelf(LayoutNode n, Frame f, int x, int y, int clipTop, int clipBottom) {
         PhoneCanvas c = f.canvas;
         PhoneStyle p = c.style();
         GuiGraphics g = c.graphics();
@@ -167,7 +170,10 @@ public final class Renderer {
         int innerH = Math.max(0, n.h - s.padTop() - s.padBottom());
 
         switch (type) {
-            case TEXT, BUTTON -> drawLines(g, font, n.lines(), s, px, py, innerW, fg);
+            case TEXT_INPUT -> {
+                if (f.inputs != null) f.inputs.draw(n, c, fg);
+            }
+            case TEXT, BUTTON -> drawLines(g, font, n.lines(), s, px, py, innerW, fg, clipTop, clipBottom);
             case IMAGE -> {
                 ResourceLocation tex = AppTextures.of(f.pkg, n.node.str("src", ""));
                 if (tex == null) {
@@ -234,10 +240,12 @@ public final class Renderer {
 
     /** text 与没有 children 的 button 的换行结果。有 children 的按钮 lines 为 null，文字由子节点画。 */
     private static void drawLines(GuiGraphics g, Font font, List<String> lines, Style s, int px, int py, int innerW,
-                                  int fg) {
+                                  int fg, int clipTop, int clipBottom) {
         if (lines == null) return;
-        int ty = py;
-        for (String line : lines) {
+        int[] range = lineRange(lines.size(), py, font.lineHeight, clipTop, clipBottom);
+        int ty = py + range[0] * font.lineHeight;
+        for (int i = range[0]; i < range[1]; i++) {
+            String line = lines.get(i);
             int lw = font.width(line);
             int tx = switch (s.textAlign()) {
                 case LEFT -> px;
@@ -247,6 +255,17 @@ public final class Renderer {
             g.drawString(font, line, tx, ty, fg, s.shadow());
             ty += font.lineHeight;
         }
+    }
+
+    /** Visible lines plus one on either side for glyph overhang/shadow. Bottom is exclusive. */
+    static int[] lineRange(int count, int y, int height, int top, int bottom) {
+        if (count <= 0 || bottom <= top) return new int[]{0, 0};
+        long h = Math.max(1, height);
+        long first = Math.floorDiv((long) top - y, h) - 1;
+        long end = -Math.floorDiv(-((long) bottom - y), h) + 1;
+        int from = (int) Math.max(0, Math.min(count, first));
+        int to = (int) Math.max(from, Math.min(count, end));
+        return new int[]{from, to};
     }
 
     /** 图片还没有贴图时占住它的位置：一块按钮色加一个叉。 */

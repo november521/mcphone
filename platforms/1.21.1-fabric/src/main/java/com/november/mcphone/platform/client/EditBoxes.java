@@ -21,6 +21,9 @@ public final class EditBoxes {
 
     private EditBoxes() {}
 
+    /** The caret uses elapsed time on this version. */
+    public static void tick(EditBox box) { }
+
     /** 光标移到末尾，不选中。 */
     public static void moveCursorToEnd(EditBox box) {
         box.moveCursorToEnd(false);

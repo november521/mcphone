@@ -220,6 +220,13 @@ public final class Style {
                 b.background = Token.BUTTON;
                 b.hoverBackground(Token.BUTTON_HOVER);
             }
+            case TEXT_INPUT -> {
+                b.width = SizeSpec.FILL;
+                b.padTop = b.padBottom = 3;
+                b.padLeft = b.padRight = 3;
+                b.background = Token.BUTTON;
+                b.hoverBackground(Token.BUTTON_HOVER);
+            }
             case DIVIDER -> b.color = Token.SUBTLE;             // §5.2
             default -> { }
         }

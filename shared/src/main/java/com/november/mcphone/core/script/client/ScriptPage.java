@@ -8,6 +8,7 @@ import com.november.mcphone.core.client.PhoneScreen;
 import com.november.mcphone.core.script.client.render.FontMeasure;
 import com.november.mcphone.core.script.client.render.Frame;
 import com.november.mcphone.core.script.client.render.HitTest;
+import com.november.mcphone.core.script.client.render.TextInputs;
 import com.november.mcphone.core.script.client.render.Renderer;
 import com.november.mcphone.core.script.client.tex.AppTextures;
 import com.november.mcphone.core.script.layout.ImageSizes;
@@ -17,7 +18,9 @@ import com.november.mcphone.core.script.layout.NodeType;
 import com.november.mcphone.core.script.layout.TextMeasure;
 import com.november.mcphone.core.script.layout.UiState;
 import com.november.mcphone.core.script.net.ScriptRpcResult;
+import com.november.mcphone.core.script.server.store.LocalStore;
 import com.november.mcphone.core.script.sfc.SfcCompiler;
+import com.november.mcphone.core.script.sfc.PageStates;
 import com.november.mcphone.core.script.sfc.Statements;
 import com.november.mcphone.core.script.sfc.TemplateInstance;
 import net.minecraft.client.Minecraft;
@@ -29,6 +32,7 @@ import java.util.Deque;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Supplier;
 
 /**
  * 一个脚本 App 画在手机屏幕里的那一页（施工方案 §8.7、§10）。
@@ -58,6 +62,8 @@ public final class ScriptPage implements IPhonePage {
     private static final String FONT_PROBE = "MCphone 字体";
 
     private final ScriptApp app;
+    private final TextInputs inputs = new TextInputs();
+    private Supplier<LocalStore> storage;
     /** 页面（包括副手 HUD）占用旧包时，自动更新延后，避免释放仍在使用的贴图。 */
     private static final Map<net.minecraft.resources.ResourceLocation, Integer> OPEN = new HashMap<>();
     private boolean opened;
@@ -72,7 +78,7 @@ public final class ScriptPage implements IPhonePage {
     private final Deque<String> back = new ArrayDeque<>();
 
     /** 页名 → 那一页的 state。退回来时接着用，不是从初值重来。 */
-    private final Map<String, UiState> states = new HashMap<>();
+    private final PageStates states = new PageStates();
 
     private UiState state;
     private TemplateInstance instance;
@@ -137,6 +143,7 @@ public final class ScriptPage implements IPhonePage {
             opened = true;
         }
         closed = false;
+        storage = ScriptLocalStorage.forApp(app.id().toString());
         openPage("");
     }
 
@@ -148,6 +155,7 @@ public final class ScriptPage implements IPhonePage {
      */
     @Override
     public void onClose() {
+        inputs.clear();
         if (opened) {
             OPEN.computeIfPresent(app.id(), (id, count) -> count <= 1 ? null : count - 1);
             opened = false;
@@ -157,6 +165,7 @@ public final class ScriptPage implements IPhonePage {
         tree = null;
         scroll.clear();
         states.clear();
+        storage = null;
         closed = true;
     }
 
@@ -168,14 +177,21 @@ public final class ScriptPage implements IPhonePage {
             return;
         }
         current = name;
+        inputs.clear();
         pressedKey = null;   // 上一页那个按钮的 key 在这一页可能指到另一个节点，跨页串色
         // 每一页各自的 state：从详情页退回来时，玩家在上一页勾的开关还在
-        state = states.computeIfAbsent(name, k -> UiState.of(page.template().initialState()));
-        instance = new TemplateInstance(page.template(), app.id() + (name.isEmpty() ? "" : "/" + name));
+        String file = app.id() + (name.isEmpty() ? "" : "/" + name);
+        PageStates.Opened pageState = states.open(name, page.template(), file, storage);
+        state = pageState.state();
+        instance = new TemplateInstance(page.template(), file);
         tree = null;
         layout = null;
         scroll.clear();
         lastRevision = -1;
+        for (String warning : pageState.warnings()) MCphone.LOGGER.warn("[MCphone] {}", warning);
+        if (!pageState.warnings().isEmpty()) {
+            showToast(Component.translatable("mcphone.script.initialization.failed").getString());
+        }
     }
 
     // ============================================================
@@ -191,10 +207,11 @@ public final class ScriptPage implements IPhonePage {
         font = c.font();
 
         TextMeasure tm = new FontMeasure(c.font());
-        if (needsRelayout(c, tm)) relayout(c, tm);
+        if (needsRelayout(c, tm)) relayout(c.width(), c.height(), tm);
         if (layout == null) return;
+        refreshInputs();
 
-        Frame frame = new Frame(layout, c, state, app.pkg(), pressedNow());
+        Frame frame = new Frame(layout, c, state, app.pkg(), pressedNow(), inputs);
         Renderer.draw(layout, frame);
         renderToast(c);
     }
@@ -223,7 +240,7 @@ public final class ScriptPage implements IPhonePage {
         return !language().equals(lastLanguage);
     }
 
-    private void relayout(PhoneCanvas c, TextMeasure tm) {
+    private void relayout(int width, int height, TextMeasure tm) {
         SfcCompiler.Page page = app.page(current);
         if (page == null) return;
 
@@ -231,11 +248,11 @@ public final class ScriptPage implements IPhonePage {
         tree = instance.instantiate(state, ClientHandshake.backendContext(app.id().toString()));
         for (String w : tree.warnings()) MCphone.LOGGER.warn("[MCphone] {}", w);
 
-        layout = LayoutEngine.layout(tree.root(), page.stylesheet(), state, c.width(), c.height(), tm, images());
+        layout = LayoutEngine.layout(tree.root(), page.stylesheet(), state, width, height, tm, images());
         restoreScroll(layout);
 
-        lastW = c.width();
-        lastH = c.height();
+        lastW = width;
+        lastH = height;
         lastRevision = state.revision();
         lastLineHeight = tm.lineHeight();
         lastProbe = tm.width(FONT_PROBE);
@@ -307,7 +324,9 @@ public final class ScriptPage implements IPhonePage {
     @Override
     public boolean mouseClicked(double mx, double my, int button) {
         if (layout == null || tree == null || font == null) return false;
+        refreshInputs();
         LayoutNode hit = HitTest.pick(layout, cx, cy, cw, ch, mx, my, new FontMeasure(font));
+        if (inputs.mouseClicked(hit, mx, my, button)) return true;
         if (hit == null) return false;
 
         NodeType type = hit.node.type();
@@ -315,17 +334,17 @@ public final class ScriptPage implements IPhonePage {
             // 禁用的按钮吃掉这一下：落到宿主手里就成了"点手机里面 = 关机"（§5.3）
             if (!Renderer.isEnabled(hit, state)) return true;
             press(hit);
-            run(tree.click(hit.node, state, 0));
+            run(tree.click(hit.node, state, 0, storage));
             return true;
         }
         if (type == NodeType.TOGGLE) {
             press(hit);
-            run(tree.click(hit.node, state, 0));
+            run(tree.click(hit.node, state, 0, storage));
             return true;
         }
         if (type == NodeType.TAB_BAR) {
             press(hit);
-            run(tree.click(hit.node, state, HitTest.segmentAt(hit, cx, mx)));
+            run(tree.click(hit.node, state, HitTest.segmentAt(hit, cx, mx), storage));
             return true;
         }
         return false;
@@ -351,7 +370,10 @@ public final class ScriptPage implements IPhonePage {
     private void run(Statements.Outcome outcome) {
         if (outcome == null) return;
         for (String w : outcome.warnings()) MCphone.LOGGER.warn("[MCphone] {}", w);
-        if (!outcome.applied()) return;
+        if (!outcome.applied()) {
+            showToast(Component.translatable("mcphone.script.client_function.failed").getString());
+            return;
+        }
 
         for (String action : outcome.calls()) callAction(action);
 
@@ -421,27 +443,56 @@ public final class ScriptPage implements IPhonePage {
     @Override
     public boolean mouseScrolled(double mx, double my, double amount) {
         if (layout == null || font == null) return false;
+        refreshInputs();
         LayoutNode scroller = HitTest.pickScroller(layout, cx, cy, cw, ch, mx, my, new FontMeasure(font));
         // 滚到头就不吃这一下，留给手机页面（§8.7）
-        return scroller != null && HitTest.scroll(scroller, amount);
+        boolean changed = scroller != null && HitTest.scroll(scroller, amount);
+        if (changed) refreshInputs();
+        return changed;
     }
 
-    /** P0 不处理键盘。 */
+    /** Bring state-driven visibility/enabled changes into effect before the next keyboard event. */
+    private void refreshInputs() {
+        if (closed || layout == null || font == null) return;
+        TextMeasure tm = new FontMeasure(font);
+        if (state.revision() != lastRevision || ClientHandshake.revision() != lastHandshakeRevision) relayout(cw, ch, tm);
+        inputs.sync(layout, state, font, cx, cy, cw, ch);
+        // A max-length change can normalize a bound value; rebuild its text echoes in the same frame.
+        if (state.revision() != lastRevision) {
+            relayout(cw, ch, tm);
+            inputs.sync(layout, state, font, cx, cy, cw, ch);
+        }
+    }
+
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        return false;
+        refreshInputs();
+        return inputs.keyPressed(keyCode, scanCode, modifiers);
     }
 
     @Override
     public boolean charTyped(char codePoint, int modifiers) {
-        return false;
+        refreshInputs();
+        return inputs.charTyped(codePoint, modifiers);
     }
 
-    /** P0 必须 false：没有任何输入焦点，返回 true 会把背包键也吃掉，玩家关不掉手机（§8.7）。 */
+    @Override
+    public boolean charTyped(int codePoint, int modifiers) {
+        refreshInputs();
+        return inputs.charTyped(codePoint, modifiers);
+    }
+
     @Override
     public boolean capturesKeyboard() {
-        return false;
+        refreshInputs();
+        return inputs.focused();
     }
+
+    @Override
+    public void onInputCancelled() { inputs.blur(); }
+
+    @Override
+    public void tick() { inputs.tick(); }
 
     /** 返回栈里还有东西就退一层，没有就让宿主退回主屏。 */
     @Override

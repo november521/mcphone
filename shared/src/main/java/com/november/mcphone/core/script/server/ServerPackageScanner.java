@@ -1,5 +1,6 @@
 package com.november.mcphone.core.script.server;
 
+import com.november.mcphone.core.PhonePaths;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -48,7 +49,7 @@ import java.util.Map;
 public final class ServerPackageScanner {
 
     /** 相对世界根的待审目录。 */
-    public static final String DIR = "mcphone/store/incoming";
+    public static final String DIR = PhonePaths.WORLD_INCOMING.relative();
     /** 一次扫描最多看几个文件，别让一堆垃圾包把开服拖住。 */
     public static final int MAX_FILES = 64;
 
@@ -187,7 +188,7 @@ public final class ServerPackageScanner {
     static Path configPath(MinecraftServer server) {
         // getFile 两版都在，但返回类型不同（1.20.1 是 File、1.21.1 是 Path）：用 toString 收敛，
         // 避免在共用层里出现版本专有的转换。getServerDirectory 在 1.20.1 上不存在，不能用。
-        return Path.of(server.getFile("config/mcphone/authors.json").toString());
+        return Path.of(server.getFile(PhonePaths.AUTHORS.relative()).toString());
     }
 
     /** 一趟扫描的结果：新进队几条 + 这一趟读到的包（按摘要，供装配复用）。 */

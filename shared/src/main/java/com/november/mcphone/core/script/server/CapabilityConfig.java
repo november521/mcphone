@@ -1,5 +1,6 @@
 package com.november.mcphone.core.script.server;
 
+import com.november.mcphone.core.PhonePaths;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -55,7 +56,7 @@ import java.util.Set;
 public final class CapabilityConfig {
 
     /** 相对世界根的文件名。 */
-    public static final String FILE = "serverconfig/mcphone-capabilities.json";
+    public static final String FILE = PhonePaths.WORLD_CAPABILITIES.relative();
 
     /** 预设档位（§31.2）。 */
     public enum Preset {

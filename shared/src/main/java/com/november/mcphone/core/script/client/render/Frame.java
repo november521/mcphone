@@ -23,6 +23,7 @@ public final class Frame {
     final UiState state;
     final AppPackage pkg;
     final LayoutNode pressed;
+    final TextInputs inputs;
     private final Set<LayoutNode> hovered;
 
     /**
@@ -30,12 +31,17 @@ public final class Frame {
      * @param pressed 这一帧要叠按下色的按钮，没有时为 null
      */
     public Frame(LayoutNode root, PhoneCanvas canvas, UiState state, AppPackage pkg, LayoutNode pressed) {
+        this(root, canvas, state, pkg, pressed, null);
+    }
+
+    public Frame(LayoutNode root, PhoneCanvas canvas, UiState state, AppPackage pkg, LayoutNode pressed, TextInputs inputs) {
         AppTextures.beginFrame(pkg);
         this.canvas = canvas;
         this.tm = new FontMeasure(canvas.font());
         this.state = state;
         this.pkg = pkg;
         this.pressed = pressed;
+        this.inputs = inputs;
         this.hovered = canvas.hoveredContent()
                 ? HitTest.hoverChain(root, canvas.x(), canvas.y(), canvas.width(), canvas.height(),
                         canvas.mouseX(), canvas.mouseY(), tm)

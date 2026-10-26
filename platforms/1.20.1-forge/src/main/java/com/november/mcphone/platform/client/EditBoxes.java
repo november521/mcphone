@@ -21,6 +21,9 @@ public final class EditBoxes {
 
     private EditBoxes() {}
 
+    /** 1.20.1 uses a tick counter for the text caret. */
+    public static void tick(EditBox box) { box.tick(); }
+
     /** 光标移到末尾，不选中。 */
     public static void moveCursorToEnd(EditBox box) {
         box.moveCursorToEnd();
