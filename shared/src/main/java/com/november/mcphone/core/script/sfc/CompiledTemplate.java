@@ -50,7 +50,7 @@ public final class CompiledTemplate {
         this.script = script;
     }
 
-    ClientScript script() { return script; }
+    public ClientScript script() { return script; }
 
     Element root() {
         return root;

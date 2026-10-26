@@ -572,5 +572,6 @@
   "mcphone.changelog.empty": "No release notes are available in this build.",
   "mcphone.changelog.upcoming": "Upcoming",
   "mcphone.script.client_function.failed": "Action failed. Page data was kept. See the client log for details.",
-  "mcphone.script.initialization.failed": "Page initialization failed. Default values were kept. See the client log for details."
+  "mcphone.script.initialization.failed": "Page initialization failed. Default values were kept. See the client log for details.",
+  "mcphone.script.http_callback.failed": "Response processing failed. Page data was kept. See the client log for details."
 }

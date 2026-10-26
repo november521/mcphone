@@ -17,6 +17,9 @@ import com.november.mcphone.core.script.layout.LayoutNode;
 import com.november.mcphone.core.script.layout.NodeType;
 import com.november.mcphone.core.script.layout.TextMeasure;
 import com.november.mcphone.core.script.layout.UiState;
+import com.november.mcphone.core.script.engine.ClientScript;
+import com.november.mcphone.core.script.http.HttpRequests;
+import com.november.mcphone.core.script.http.HttpSession;
 import com.november.mcphone.core.script.net.ScriptRpcResult;
 import com.november.mcphone.core.script.server.store.LocalStore;
 import com.november.mcphone.core.script.sfc.SfcCompiler;
@@ -64,6 +67,7 @@ public final class ScriptPage implements IPhonePage {
     private final ScriptApp app;
     private final TextInputs inputs = new TextInputs();
     private Supplier<LocalStore> storage;
+    private HttpSession http;
     /** 页面（包括副手 HUD）占用旧包时，自动更新延后，避免释放仍在使用的贴图。 */
     private static final Map<net.minecraft.resources.ResourceLocation, Integer> OPEN = new HashMap<>();
     private boolean opened;
@@ -144,6 +148,8 @@ public final class ScriptPage implements IPhonePage {
         }
         closed = false;
         storage = ScriptLocalStorage.forApp(app.id().toString());
+        if (http != null) http.close();
+        http = new HttpSession(ScriptLocalStorage.accountGuard());
         openPage("");
     }
 
@@ -155,6 +161,8 @@ public final class ScriptPage implements IPhonePage {
      */
     @Override
     public void onClose() {
+        if (http != null) http.close();
+        http = null;
         inputs.clear();
         if (opened) {
             OPEN.computeIfPresent(app.id(), (id, count) -> count <= 1 ? null : count - 1);
@@ -181,7 +189,8 @@ public final class ScriptPage implements IPhonePage {
         pressedKey = null;   // 上一页那个按钮的 key 在这一页可能指到另一个节点，跨页串色
         // 每一页各自的 state：从详情页退回来时，玩家在上一页勾的开关还在
         String file = app.id() + (name.isEmpty() ? "" : "/" + name);
-        PageStates.Opened pageState = states.open(name, page.template(), file, storage);
+        PageStates.Opened pageState = states.open(name, page.template(), file, storage,
+                target -> requests(page.template().script(), target, file));
         state = pageState.state();
         instance = new TemplateInstance(page.template(), file);
         tree = null;
@@ -200,6 +209,7 @@ public final class ScriptPage implements IPhonePage {
 
     @Override
     public void render(PhoneCanvas c) {
+        if (http != null) http.poll();
         cx = c.x();
         cy = c.y();
         cw = c.width();
@@ -334,17 +344,17 @@ public final class ScriptPage implements IPhonePage {
             // 禁用的按钮吃掉这一下：落到宿主手里就成了"点手机里面 = 关机"（§5.3）
             if (!Renderer.isEnabled(hit, state)) return true;
             press(hit);
-            run(tree.click(hit.node, state, 0, storage));
+            run(tree.click(hit.node, state, 0, storage, requests()));
             return true;
         }
         if (type == NodeType.TOGGLE) {
             press(hit);
-            run(tree.click(hit.node, state, 0, storage));
+            run(tree.click(hit.node, state, 0, storage, requests()));
             return true;
         }
         if (type == NodeType.TAB_BAR) {
             press(hit);
-            run(tree.click(hit.node, state, HitTest.segmentAt(hit, cx, mx), storage));
+            run(tree.click(hit.node, state, HitTest.segmentAt(hit, cx, mx), storage, requests()));
             return true;
         }
         return false;
@@ -355,11 +365,33 @@ public final class ScriptPage implements IPhonePage {
         pressedUntil = System.currentTimeMillis() + 120L;
     }
 
+    private HttpRequests requests() {
+        return requests(app.page(current).template().script(), state,
+                app.id() + (current.isEmpty() ? "" : "/" + current));
+    }
+
+    private HttpRequests requests(ClientScript script, UiState target, String file) {
+        HttpSession session = http;
+        Supplier<LocalStore> local = storage;
+        return new HttpRequests(session == null ? 0 : session.available(), batch -> {
+            if (session == null || session != http || closed) return;
+            for (HttpRequests.Request request : batch) {
+                session.submit(request, result -> {
+                    if (closed || session != http) return;
+                    java.util.List<String> warnings = PageStates.respond(script, request, result, target, file, local,
+                            requests(script, target, file));
+                    for (String warning : warnings) MCphone.LOGGER.warn("[MCphone] {}", warning);
+                    if (!warnings.isEmpty()) showToast(Component.translatable("mcphone.script.http_callback.failed").getString());
+                });
+            }
+        });
+    }
+
     /**
      * 一次点击的后果（§9.6）。三个内建动作同时写了的话按 close → back → nav 的先后取一个：
      * 关掉之后再导航没有意义，而方案把先后留给了页面。
      *
-     * <p>{@code call(...)} 是唯一出网的语句（§15.1），排在导航之前执行：页面关掉也好、
+     * <p>{@code call(...)} 的服务端动作排在导航之前执行：页面关掉也好、
      * 跳走也好，作者写下的那次调用都得发出去。
      *
      * <p><b>结果的可见性有边界</b>：同一个 App 内 {@code nav} 到别的页仍是同一个
@@ -492,7 +524,10 @@ public final class ScriptPage implements IPhonePage {
     public void onInputCancelled() { inputs.blur(); }
 
     @Override
-    public void tick() { inputs.tick(); }
+    public void tick() {
+        inputs.tick();
+        if (http != null) http.poll();
+    }
 
     /** 返回栈里还有东西就退一层，没有就让宿主退回主屏。 */
     @Override

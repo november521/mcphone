@@ -56,7 +56,7 @@ function process(text) {
 
 - 按钮调用函数；另可声明下文的无参 `onInit()`，在页面首次创建时自动执行。装包、编译、绘制模板都不会执行作者函数。顶层只接受字面量 `state` 和普通函数声明。
 - 函数可使用局部变量、分支、循环、受限的 JS 内建方法，也可调用本页其他函数并传参。读写状态使用 `state.draft` 等字段；模板仍用 `draft`。
-- 模板插值和 `:属性` 仍走原有表达式系统，不支持调用函数；客户端函数只能从 `@click` 调用，返回值忽略。普通无参调用 `process()` 继续可用。
+- 模板插值和 `:属性` 仍走原有表达式系统，不支持调用函数；按钮可从 `@click` 调用客户端函数，宿主另支持 `onInit()` 和下文的 HTTP 回调，返回值均忽略。普通无参调用 `process()` 继续可用。
 - 每个顶层函数可声明 0–4 个简单且不重复的形参，名称遵循状态键规则，不能占用宿主、内建名称或 `arguments`；不接受默认参数、剩余参数、解构或生成器。`onInit` 必须保持无参。
 - `@click` 实参与形参数量必须相同；实参使用已有模板表达式，可传字符串、32 位整数、布尔值，以及循环索引或循环项的这些基本字段。不传整个数组、对象、`null`、事件对象或 Java 对象；动态类型不合规时整次点击失败，不隐式转换。字符串参数沿用当前页面长度限制。
 - 实参在执行到该语句时求值，能读取同次点击中前面语句更新的页面状态。循环变量取自点击节点绑定的那一项。原有单条语句 256 字符、表达式节点上限与一次点击最多 4 条语句的限制继续生效。
@@ -65,7 +65,7 @@ function process(text) {
 - 状态按原有页面生命周期保留。局部变量、额外全局变量和闭包不会跨调用保存；函数应把需要保留的数据显式写进 `state`。
 - 每页最多 16 个顶层函数；含函数的脚本最多 65,536 个 UTF-16 代码单元。函数名遵循状态键名规则，不能占用内建操作、宿主名称或 JS 标准全局名称。
 - 复用 Rhino 1.9.1 的现有沙箱、尺寸检查和执行预算。每次调用最多 200 万指令单位、50 ms 观察器墙钟预算；超限会中止并撤回状态修改。原生内建操作仍依赖沙箱的尺寸闸，墙钟不是系统级抢占期限。
-- 函数可以操作页面 `state`，并通过下文的 `ctx.store` 读写本机字符串；没有 `phone`、`fetch`、定时器、模块加载或 Java/Minecraft 对象。已有 `@click="call('动作')"` 继续可用，函数内部没有 RPC 接口。
+- 函数可以操作页面 `state`，通过 `ctx.store` 读写本机字符串，通过下文的 `ctx.http.request` 发起客户端网络请求；没有 `phone`、`fetch`、定时器、模块加载或 Java/Minecraft 对象。已有 `@click="call('动作')"` 继续可用，函数内部没有 RPC 接口。
 
 完整可安装示例见 `docs/samples/client-functions.vue`（“名字检查器”），安装方式与输入框示例相同。
 
@@ -82,6 +82,70 @@ function toggleTask(index) {
 ```
 
 完整可安装示例见 `docs/samples/function-args.vue`（“待办清单”1.0.0）：点击每行只切换该项，重置按钮用 `setAll(false)` 复用有参函数。这是客户端本页函数传参；服务端 `call('动作')` 的协议和参数能力保持原样。
+
+## 客户端异步 HTTP / JSON 请求
+
+按钮函数、`onInit()` 和 HTTP 回调可以请求外部 HTTP/HTTPS 接口。请求由玩家自己的客户端发出，不经过 Minecraft 服务端，也不需要脚本服务端握手。这与尚未开放的服务端 `net.fetch` 能力无关。
+
+```js
+state = { question: '你好', answer: '', loading: false }
+
+function send() {
+  state.loading = true
+  ctx.http.request({
+    url: 'http://127.0.0.1:18765/answer',
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ question: state.question }),
+    timeoutMs: 30000
+  }, 'received')
+}
+
+function received(status, body, error) {
+  state.loading = false
+  if (error) {
+    state.answer = '请求失败：' + error
+    return
+  }
+  try {
+    var data = JSON.parse(body)
+    state.answer = typeof data.answer === 'string' ? data.answer.slice(0, 4096) : '响应缺少 answer 字段'
+  } catch (e) {
+    state.answer = '响应格式不符合预期'
+  }
+}
+```
+
+`ctx.http.request(options, callbackName)` 返回 `undefined`。第二个参数是本页声明的**三个简单形参**的函数名字符串，不能传函数对象、闭包或 `onInit`。回调在新的沙箱环境中执行，读取该页的最新 `state`；局部变量不会从发起请求时保留到回调。
+
+| 选项 | 规则 |
+|---|---|
+| `url` | 必填，完整 HTTP/HTTPS URL，最多 2048 字符；不接受 URL 内的账号、密码或片段。支持本机接口。 |
+| `method` | `GET` 或 `POST`，默认 `GET`。 |
+| `headers` | 可选的普通对象，字符串键值，最多 16 项，合计最多 8 KiB；名称最多 64 字符，值最多 4096 个无控制字符的 Latin-1 字符。禁止重复名称及 Host、Content-Length 等传输层请求头。 |
+| `body` | 可选的字符串，最多 64 KiB UTF-8 字节；JSON 用 `JSON.stringify` 生成。GET 不接受非空正文。POST 默认补上 JSON Content-Type，占用请求头配额。 |
+| `timeoutMs` | 1000–120000 的整数，默认 30000 毫秒；包含等待响应正文的时间。 |
+
+请求选项和请求头只读取自身字段，不接受 getter/setter、Symbol 或未知选项，不对对象做隐式字符串转换。输入框仍最多 64 个 UTF-16 单元；较长的固定 URL 或凭据可以在脚本中组合或由现有本地字符串存储读取，网络接口本身不扩大输入框限制。
+
+回调形式为 `received(status, body, error)`：
+
+| 结果 | `status` | `body` | `error` |
+|---|---:|---|---|
+| HTTP 2xx | 实际状态码 | 完整 UTF-8 正文 | 空串 |
+| HTTP 非 2xx（含重定向） | 实际状态码 | 完整 UTF-8 正文 | `HTTP_STATUS` |
+| 超时 / 连接失败 / 正文超限 / 非法 UTF-8 / 全局请求数已满 | `0` | 空串 | `TIMEOUT` / `NETWORK_ERROR` / `RESPONSE_TOO_LARGE` / `INVALID_UTF8` / `BUSY` |
+
+- 每个打开的 App 最多等待 4 个请求；额外请求在脚本操作提交前失败。全客户端最多有 16 个传输中的请求。完成回调按就绪顺序处理，不保证与发送顺序相同。
+- 后台只负责网络收发；回调在客户端界面线程处理，受原有执行预算约束。等待网络不占用脚本的执行预算，也不阻塞绘制。没有 Promise、`async/await`、流式输出或回调闭包。
+- 整次点击、初始化或回调的脚本与状态校验、本地保存均成功后才发出该次暂存的请求。失败时这些请求不会发出；已经发出的 HTTP 请求及远端效果不能由后来的回调失败撤回。
+- 响应正文最多 64 KiB **字节**，超限中止读取；只按严格 UTF-8 解码，不自动跟随重定向，不自动携带浏览器 Cookie 或 Minecraft 登录凭据。需要认证的接口由 App 显式提供请求头；宿主错误不包含 URL、请求头或响应正文。
+- 回调的 `body` 可以暂时超过页面字符串的 4096 单元限制，方便解析 JSON；写回 `state` 时仍执行原有单字符串、整页长度和类型检查。回调失败时撤回本次状态、存储及后续请求，并显示提示；原有等待状态也会保留，作者应在回调中处理预期的解析失败。
+- 本 App 内导航会保留原页状态，响应仍交给发起请求的那一页，不会写到当前的另一页。关闭 App、重新打开或切换登录账号会取消旧请求并丢弃旧结果，不再调用回调。
+
+可安装示例为 `docs/samples/http-json.vue`。先运行 `python docs/samples/http-demo.py` 启动只监听 `127.0.0.1:18765` 的本地演示接口，再把 `.vue` 放入 `mcphone/apps/` 安装。它演示“输入 → 等待 → 完整回复 / 错误 → 再试”，不调用付费服务，也不生成 AI 回答。把示例 URL 的 `/answer` 换成 `/error`、`/slow`、`/large` 可检查 HTTP 错误、正文超时和响应超限。
+
+实现使用 JDK 自带的 [HttpClient](https://docs.oracle.com/en/java/javase/17/docs/api/java.net.http/java/net/http/HttpClient.html) 和受限的响应订阅器，无额外网络依赖。
 
 ## 页面初始化 onInit
 

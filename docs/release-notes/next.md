@@ -4,6 +4,7 @@
 
 ### 新增
 
+- 脚本 App 支持客户端异步 HTTP/JSON 请求：GET/POST、请求头、正文、超时和页面函数回调，可在没有脚本服务端握手时使用；请求随整次操作成功提交，关闭 App 或切换账号会取消等待。增加网络问答及本地接口演示。
 - 客户端内容和本地记录统一到游戏目录的 `mcphone/`：音乐、小说、壁纸、表情分类存放，安装记录、App 数据和收藏放在 `data/`；各文件夹入口同步更新。本次直接使用新路径，旧文件留在原处，不自动迁移或兼容读取。配置、签名密钥、世界数据及原版截图位置保持原样。
 - 应用商店右上角增加文件夹入口，一键打开当前游戏目录的 `mcphone/apps/`，目录不存在时自动创建；空列表也能使用。
 - SFC 客户端函数支持 0–4 个简单形参，按钮可传入字符串、整数、布尔值及列表索引/基本字段，复用同一个函数处理不同列表项；增加待办清单示例，失败时仍整体撤回点击。`onInit()` 保持无参。
@@ -49,6 +50,7 @@
 
 ### Added
 
+- Script apps can send asynchronous client-side HTTP/JSON requests with GET/POST, headers, bodies, timeouts and page-function callbacks, without a script-server handshake. Requests are published only after the operation commits; closing the App or changing accounts cancels pending work. Added a request demo and a local fixture server.
 - Client content and local records now use the game directory's `mcphone/` tree, with media in dedicated folders and install records, App data and favorites under `data/`. Folder shortcuts use the new locations. Old files remain untouched and are not migrated or read automatically. Configuration, signing keys, world data and vanilla screenshots keep their locations.
 - Added a folder shortcut to the App Store header. It opens `mcphone/apps/` in the current game directory and creates it if missing, including when the store list is empty.
 - SFC client functions accept 0–4 simple parameters. Buttons can pass strings, integers, booleans and list indices/primitive fields to reuse one function across rows. Added a todo-list sample; failed clicks still roll back atomically. `onInit()` remains zero-argument.
