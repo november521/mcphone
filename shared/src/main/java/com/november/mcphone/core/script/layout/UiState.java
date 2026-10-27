@@ -19,12 +19,15 @@ public final class UiState {
     private int revision;
     private final int stringLimit;
     private final int textBudget;
+    private final PageParameters parameters;
 
-    private UiState(Map<String, Object> values, Map<String, Object> declared, int stringLimit, int textBudget) {
+    private UiState(Map<String, Object> values, Map<String, Object> declared, int stringLimit, int textBudget,
+                    PageParameters parameters) {
         this.values = values;
         this.declared = declared;
         this.stringLimit = stringLimit;
         this.textBudget = textBudget;
+        this.parameters = Objects.requireNonNull(parameters, "parameters");
     }
 
     /** 以初值建一份，例如 {@code NodeParser.Ui#state()}。初值按 §9.7 的全部规则查，不合规抛 {@link IllegalArgumentException}。 */
@@ -34,10 +37,18 @@ public final class UiState {
 
     /** Frontend SFC pages have bounded long strings; shared IR validation keeps its original limits. */
     public static UiState page(Map<String, Object> initial) {
-        return create(initial, StateRules.MAX_PAGE_STRING, StateRules.MAX_PAGE_TEXT);
+        return page(initial, PageParameters.EMPTY);
+    }
+
+    public static UiState page(Map<String, Object> initial, PageParameters parameters) {
+        return create(initial, StateRules.MAX_PAGE_STRING, StateRules.MAX_PAGE_TEXT, parameters);
     }
 
     private static UiState create(Map<String, Object> initial, int stringLimit, int textBudget) {
+        return create(initial, stringLimit, textBudget, PageParameters.EMPTY);
+    }
+
+    private static UiState create(Map<String, Object> initial, int stringLimit, int textBudget, PageParameters parameters) {
         if (initial.size() > StateRules.MAX_KEYS) {
             throw new IllegalArgumentException("state 最多 " + StateRules.MAX_KEYS + " 个 key，给了 " + initial.size() + " 个");
         }
@@ -52,7 +63,7 @@ public final class UiState {
             copy.put(key, StateRules.freeze(e.getValue()));
         }
         if (textBudget > 0 && StateRules.textUnits(copy) > textBudget) throw new IllegalArgumentException("页面 state 文本总量最多 " + textBudget + " 个 UTF-16 单元");
-        return new UiState(copy, Collections.unmodifiableMap(new LinkedHashMap<>(copy)), stringLimit, textBudget);
+        return new UiState(copy, Collections.unmodifiableMap(new LinkedHashMap<>(copy)), stringLimit, textBudget, parameters);
     }
 
     public static UiState empty() {
@@ -61,10 +72,12 @@ public final class UiState {
 
     /** 同一份声明、当前值的副本，revision 从 0 起。点击先在副本上试，全部成功才写回原件。 */
     public UiState copy() {
-        return new UiState(new LinkedHashMap<>(values), declared, stringLimit, textBudget);
+        return new UiState(new LinkedHashMap<>(values), declared, stringLimit, textBudget, parameters);
     }
 
     public int stringLimit() { return stringLimit; }
+
+    public PageParameters parameters() { return parameters; }
 
     /** 全部键值，只读。模板编译拿它知道声明了哪些 key、各是什么种类。 */
     public Map<String, Object> values() {
