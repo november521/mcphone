@@ -189,7 +189,7 @@ public final class ClientScript {
                 scope.setParentScope(null);
                 Object snapshot = toJs(cx, scope, values);
                 ScriptableObject.defineProperty(scope, "state", snapshot, ScriptableObject.EMPTY);
-                installContext(cx, scope, storage, requests);
+                installContext(cx, scope, storage, requests, state);
                 code.exec(cx, scope); // Only function declarations survived the compile-time AST pass.
                 Object fn = scope.get(name, scope);
                 if (!(fn instanceof Callable callable)) throw new Failure("客户端函数不可调用");
@@ -229,7 +229,8 @@ public final class ClientScript {
         }
     }
 
-    private void installContext(Context cx, ScriptableObject scope, LocalStore.Transaction storage, HttpRequests requests) {
+    private void installContext(Context cx, ScriptableObject scope, LocalStore.Transaction storage, HttpRequests requests,
+                                UiState state) {
         ScriptableObject store = HostFn.obj(cx, scope);
         storeFunction(store, scope, "getString", 2, (c, s, args) -> {
             if (args.length < 1 || args.length > 2) throw HostError.invalid("getString 需要键名和可选的默认字符串");
@@ -246,6 +247,13 @@ public final class ClientScript {
         });
         store.sealObject();
         ScriptableObject ctx = HostFn.obj(cx, scope);
+        ScriptableObject params = HostFn.obj(cx, scope);
+        for (var entry : state.parameters().values().entrySet()) {
+            ScriptableObject.defineProperty(params, entry.getKey(), entry.getValue(),
+                    ScriptableObject.READONLY | ScriptableObject.PERMANENT);
+        }
+        params.sealObject();
+        ScriptableObject.defineProperty(ctx, "params", params, ScriptableObject.READONLY | ScriptableObject.PERMANENT);
         ScriptableObject.defineProperty(ctx, "store", store, ScriptableObject.READONLY | ScriptableObject.PERMANENT);
         ScriptableObject http = HostFn.obj(cx, scope);
         storeFunction(http, scope, "request", 2, (c, s, args) -> {

@@ -3,6 +3,7 @@ package com.november.mcphone.core.script.sfc;
 import com.november.mcphone.core.script.engine.ClientScript;
 import com.november.mcphone.core.script.http.HttpRequests;
 import com.november.mcphone.core.script.layout.UiState;
+import com.november.mcphone.core.script.layout.PageParameters;
 import com.november.mcphone.core.script.server.store.LocalStore;
 
 import java.util.HashMap;
@@ -23,10 +24,16 @@ public final class PageStates {
 
     public Opened open(String name, CompiledTemplate template, String file, Supplier<LocalStore> storage,
                        Function<UiState, HttpRequests> network) {
-        UiState existing = states.get(name);
-        if (existing != null) return new Opened(existing, List.of());
+        return open(name, template, file, storage, network, PageParameters.EMPTY);
+    }
 
-        UiState state = UiState.page(template.initialState());
+    /** Keep only the latest parameter variant for each named page; back entries retain their own state. */
+    public Opened open(String name, CompiledTemplate template, String file, Supplier<LocalStore> storage,
+                       Function<UiState, HttpRequests> network, PageParameters parameters) {
+        UiState existing = states.get(name);
+        if (existing != null && existing.parameters().equals(parameters)) return new Opened(existing, List.of());
+
+        UiState state = UiState.page(template.initialState(), parameters);
         // Failed hooks also count as attempted: returning to the page must not silently retry or erase edits.
         states.put(name, state);
         ClientScript script = template.script();
@@ -42,6 +49,12 @@ public final class PageStates {
         } catch (ClientScript.Failure failure) {
             return failed(state, file, failure.getMessage());
         }
+    }
+
+    /** Restore the exact originating state, even after a different variant of that page was opened. */
+    public Opened restore(String name, UiState retained) {
+        states.put(name, retained);
+        return new Opened(retained, List.of());
     }
 
     private static Opened failed(UiState state, String file, String reason) {

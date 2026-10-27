@@ -17,6 +17,7 @@ import com.november.mcphone.core.script.layout.LayoutNode;
 import com.november.mcphone.core.script.layout.NodeType;
 import com.november.mcphone.core.script.layout.TextMeasure;
 import com.november.mcphone.core.script.layout.UiState;
+import com.november.mcphone.core.script.layout.PageParameters;
 import com.november.mcphone.core.script.engine.ClientScript;
 import com.november.mcphone.core.script.http.HttpRequests;
 import com.november.mcphone.core.script.http.HttpSession;
@@ -78,10 +79,11 @@ public final class ScriptPage implements IPhonePage {
 
     /** 当前在哪一页，空串是入口页。 */
     private String current = "";
-    /** 返回栈，存页名。 */
-    private final Deque<String> back = new ArrayDeque<>();
+    /** Back retains exact page instances; changing parameters cannot overwrite a previous entry. */
+    private record BackEntry(String name, UiState state, Map<String, Integer> scroll) {}
+    private final Deque<BackEntry> back = new ArrayDeque<>();
 
-    /** 页名 → 那一页的 state。退回来时接着用，不是从初值重来。 */
+    /** Latest parameter variant per page; back entries retain their exact originating state. */
     private final PageStates states = new PageStates();
 
     private UiState state;
@@ -173,12 +175,17 @@ public final class ScriptPage implements IPhonePage {
         tree = null;
         scroll.clear();
         states.clear();
+        back.clear();
         storage = null;
         closed = true;
     }
 
-    /** 切到某一页：重建 state 与实例，滚动位置不跨页保留。 */
+    /** Enter with empty parameters; back navigation restores its captured state and scroll positions. */
     private void openPage(String name) {
+        openPage(name, PageParameters.EMPTY, null);
+    }
+
+    private void openPage(String name, PageParameters parameters, BackEntry retained) {
         SfcCompiler.Page page = app.page(name);
         if (page == null) {
             MCphone.LOGGER.warn("[MCphone] {} 里没有 '{}' 这一页，nav 不动", app.id(), name);
@@ -189,13 +196,16 @@ public final class ScriptPage implements IPhonePage {
         pressedKey = null;   // 上一页那个按钮的 key 在这一页可能指到另一个节点，跨页串色
         // 每一页各自的 state：从详情页退回来时，玩家在上一页勾的开关还在
         String file = app.id() + (name.isEmpty() ? "" : "/" + name);
-        PageStates.Opened pageState = states.open(name, page.template(), file, storage,
-                target -> requests(page.template().script(), target, file));
+        PageStates.Opened pageState = retained == null
+                ? states.open(name, page.template(), file, storage,
+                    target -> requests(page.template().script(), target, file), parameters)
+                : states.restore(name, retained.state());
         state = pageState.state();
         instance = new TemplateInstance(page.template(), file);
         tree = null;
         layout = null;
         scroll.clear();
+        if (retained != null) scroll.putAll(retained.scroll());
         lastRevision = -1;
         for (String warning : pageState.warnings()) MCphone.LOGGER.warn("[MCphone] {}", warning);
         if (!pageState.warnings().isEmpty()) {
@@ -417,7 +427,7 @@ public final class ScriptPage implements IPhonePage {
             if (!popBack()) close();
             return;
         }
-        if (outcome.nav() != null) navTo(outcome.nav());
+        if (outcome.nav() != null) navTo(outcome.nav(), outcome.navParameters());
     }
 
     /**
@@ -450,20 +460,22 @@ public final class ScriptPage implements IPhonePage {
     }
 
     /** 走到另一页，当前这页压进返回栈。 */
-    private void navTo(String name) {
+    private void navTo(String name, PageParameters parameters) {
         if (app.page(name) == null) {
             MCphone.LOGGER.warn("[MCphone] {} 里没有 '{}' 这一页，nav 不动", app.id(), name);
             return;
         }
-        if (name.equals(current)) return;
+        if (name.equals(current) && state.parameters().equals(parameters)) return;
+        keepScroll();
         if (back.size() >= MAX_NAV) back.removeLast();   // 丢最老的那层，别让 nav 循环把栈堆满
-        back.push(current);
-        openPage(name);
+        back.push(new BackEntry(current, state, Map.copyOf(scroll)));
+        openPage(name, parameters, null);
     }
 
     private boolean popBack() {
         if (back.isEmpty()) return false;
-        openPage(back.pop());
+        BackEntry retained = back.pop();
+        openPage(retained.name(), retained.state().parameters(), retained);
         return true;
     }
 

@@ -3,6 +3,7 @@ package com.november.mcphone.core.script.sfc;
 import com.november.mcphone.core.script.engine.ClientScript;
 import com.november.mcphone.core.script.http.HttpRequests;
 import com.november.mcphone.core.script.layout.UiState;
+import com.november.mcphone.core.script.layout.PageParameters;
 import com.november.mcphone.core.script.server.store.LocalStore;
 import com.november.mcphone.core.script.sfc.ExprParser.Scope;
 import com.november.mcphone.core.script.sfc.ExprParser.Tok;
@@ -30,7 +31,7 @@ public final class Statements {
     public static final int MAX_ACTION_LEN = 64;
 
     private static final String SHAPES =
-            "@click 只能写 x = 表达式、x++、x--、close()、back()、nav('页面')、call('动作') 或本页函数";
+            "@click 只能写 x = 表达式、x++、x--、close()、back()、nav('页面')、nav('页面', {id:1})、call('动作') 或本页函数";
 
     sealed interface Stmt permits Assign, Step, Close, Back, Nav, Call, LocalCall {
     }
@@ -47,7 +48,7 @@ public final class Statements {
     record Back() implements Stmt {
     }
 
-    record Nav(Expr.Compiled page) implements Stmt {
+    record Nav(Expr.Compiled page, Expr.Compiled parameters) implements Stmt {
     }
 
     /** 宿主转发的一条 RPC（§15.1）。参数与回调还写不了（P1 的 <script>），这里只点一下发空参数。 */
@@ -63,7 +64,10 @@ public final class Statements {
      * {@code calls} 是要宿主发出去的动作 id，按书写顺序。
      */
     public record Outcome(boolean applied, boolean close, boolean back, String nav,
-                          List<String> calls, List<String> warnings) {
+                          List<String> calls, List<String> warnings, PageParameters navParameters) {
+        public Outcome(boolean applied, boolean close, boolean back, String nav, List<String> calls, List<String> warnings) {
+            this(applied, close, back, nav, calls, warnings, PageParameters.EMPTY);
+        }
     }
 
     /** 实例化时绑好 v-for 变量的一条 @click，点击时执行。 */
@@ -138,8 +142,21 @@ public final class Statements {
                 case "nav" -> {
                     p.next();
                     Typed page = p.parse(scope);
+                    Expr.Compiled parameters = null;
+                    if (p.at(",")) {
+                        p.next();
+                        Tok at = p.peek();
+                        Typed value = p.parse(scope);
+                        if (value.type() != ExprParser.T.OBJ && value.type() != ExprParser.T.ANY) {
+                            throw ExprParser.syntax(at, "nav 的第二个参数必须是普通对象");
+                        }
+                        if (page.nodes() + value.nodes() + 1 > ExprParser.MAX_NODES) {
+                            throw SfcError.at(Code.E_EXPR_TOO_COMPLEX, at.line(), at.col(), page.nodes() + value.nodes() + 1);
+                        }
+                        parameters = compiled(value, at, src);
+                    }
                     p.expect(")");
-                    return new Nav(compiled(page, t, src));
+                    return new Nav(compiled(page, t, src), parameters);
                 }
                 case "call" -> {
                     p.next();
@@ -236,7 +253,7 @@ public final class Statements {
             if (s instanceof Assign a) {
                 moved.add(new Assign(a.key(), shift(a.value(), lines)));
             } else if (s instanceof Nav n) {
-                moved.add(new Nav(shift(n.page(), lines)));
+                moved.add(new Nav(shift(n.page(), lines), n.parameters() == null ? null : shift(n.parameters(), lines)));
             } else if (s instanceof LocalCall call) {
                 moved.add(new LocalCall(call.name(), call.arguments().stream().map(a -> shift(a, lines)).toList()));
             } else {
@@ -275,6 +292,7 @@ public final class Statements {
         boolean close = false;
         boolean back = false;
         String nav = null;
+        PageParameters navParameters = PageParameters.EMPTY;
         List<String> calls = new ArrayList<>();
         Set<String> changed = new LinkedHashSet<>();
         for (Stmt s : list) {
@@ -295,6 +313,11 @@ public final class Statements {
             } else if (s instanceof Nav nv) {
                 Object v = nv.page().run(c);
                 if (!(v instanceof String page)) return failed(c, "nav(...) 要页面名字符串，得到的是 " + Values.kind(v));
+                try {
+                    navParameters = nv.parameters() == null ? PageParameters.EMPTY : PageParameters.from(nv.parameters().run(c));
+                } catch (IllegalArgumentException e) {
+                    return failed(c, e.getMessage());
+                }
                 nav = page;
             } else if (s instanceof Call call) {
                 calls.add(call.actionId());
@@ -317,7 +340,7 @@ public final class Statements {
         String why = state.writeProblems(scratch);
         if (why != null) return failed(c, why);
         for (String k : changed) state.set(k, scratch.get(k));
-        return new Outcome(true, close, back, nav, List.copyOf(calls), c.warnings());
+        return new Outcome(true, close, back, nav, List.copyOf(calls), c.warnings(), navParameters);
     }
 
     private static Outcome failed(EvalContext c, String reason) {
