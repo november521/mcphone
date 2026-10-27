@@ -12,7 +12,7 @@ import java.util.Map;
 import java.util.function.Supplier;
 import java.util.function.Function;
 
-/** State retained within one open App; automatic initialization belongs to state creation, not rendering. */
+/** State retained within one open App; lifecycle hooks belong to activation, never rendering or ticking. */
 public final class PageStates {
     private final Map<String, UiState> states = new HashMap<>();
 
@@ -31,23 +31,30 @@ public final class PageStates {
     public Opened open(String name, CompiledTemplate template, String file, Supplier<LocalStore> storage,
                        Function<UiState, HttpRequests> network, PageParameters parameters) {
         UiState existing = states.get(name);
-        if (existing != null && existing.parameters().equals(parameters)) return new Opened(existing, List.of());
+        if (existing != null && existing.parameters().equals(parameters)) {
+            return activate(existing, template, "onResume", file, storage, network);
+        }
 
         UiState state = UiState.page(template.initialState(), parameters);
-        // Failed hooks also count as attempted: returning to the page must not silently retry or erase edits.
+        // Failed initialization counts as attempted too; retained pages never retry onInit or lose edits.
         states.put(name, state);
+        return activate(state, template, "onInit", file, storage, network);
+    }
+
+    private static Opened activate(UiState state, CompiledTemplate template, String hook, String file,
+                                   Supplier<LocalStore> storage, Function<UiState, HttpRequests> network) {
         ClientScript script = template.script();
-        if (script == null || !script.declares("onInit")) return new Opened(state, List.of());
+        if (script == null || !script.declares(hook)) return new Opened(state, List.of());
 
         try (LocalStore.Transaction transaction = new LocalStore.Transaction(storage);
              HttpRequests requests = network == null ? null : network.apply(state)) {
-            Map<String, Object> next = script.invoke("onInit", List.of(), state.values(), state, transaction, requests);
-            if (!transaction.commit()) return failed(state, file, "本地存储保存失败，原文件已保留");
+            Map<String, Object> next = script.invoke(hook, List.of(), state.values(), state, transaction, requests);
+            if (!transaction.commit()) return failed(state, file, hook, "本地存储保存失败，原文件已保留");
             for (var entry : next.entrySet()) state.set(entry.getKey(), entry.getValue());
             if (requests != null) requests.commit();
             return new Opened(state, List.of());
         } catch (ClientScript.Failure failure) {
-            return failed(state, file, failure.getMessage());
+            return failed(state, file, hook, failure.getMessage());
         }
     }
 
@@ -57,8 +64,16 @@ public final class PageStates {
         return new Opened(retained, List.of());
     }
 
-    private static Opened failed(UiState state, String file, String reason) {
-        return new Opened(state, List.of(file + " onInit(): " + reason + "，初始化未完成，页面保留默认值"));
+    /** Restore a back entry and refresh it once, without reinitializing its retained state or parameters. */
+    public Opened restore(String name, UiState retained, CompiledTemplate template, String file,
+                          Supplier<LocalStore> storage, Function<UiState, HttpRequests> network) {
+        states.put(name, retained);
+        return activate(retained, template, "onResume", file, storage, network);
+    }
+
+    private static Opened failed(UiState state, String file, String hook, String reason) {
+        String kept = "onInit".equals(hook) ? "，初始化未完成，页面保留默认值" : "，恢复刷新未完成，页面保留原状态";
+        return new Opened(state, List.of(file + " " + hook + "(): " + reason + kept));
     }
 
     /** Deliver into the originating retained page, with the same state/store/request commit rules as a click. */
