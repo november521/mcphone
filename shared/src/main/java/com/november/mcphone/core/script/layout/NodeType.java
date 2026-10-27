@@ -29,7 +29,8 @@ public enum NodeType {
     BUTTON  ("button",   true,  true,  true,  "text", "i18n", "args", "enabled", "enabledIf", "onClick"),
     TOGGLE  ("toggle",   false, true,  false, "bind", "label", "i18n", "enabled"),
     TAB_BAR ("tab-bar",  false, true,  false, "bind", "tabs"),
-    TEXT_INPUT("text-input", false, true, false, "bind", "placeholder", "max-length", "enabled");
+    TEXT_INPUT("text-input", false, true, false, "bind", "placeholder", "max-length", "enabled"),
+    TEXTAREA("textarea", false, true, false, "bind", "placeholder", "max-length", "enabled");
 
     public final String json;
     public final boolean container;
@@ -66,7 +67,7 @@ public enum NodeType {
         out.add("class");
         out.add("showIf");
         out.add("children");
-        if (interactive && this != TEXT_INPUT) out.add("onClick");
+        if (interactive && !textEditor()) out.add("onClick");
         out.addAll(props);
         return out;
     }
@@ -78,6 +79,8 @@ public enum NodeType {
         }
         return null;
     }
+
+    public boolean textEditor() { return this == TEXT_INPUT || this == TEXTAREA; }
 
     /** 全部 json 名，按枚举顺序，用于报错时列出允许的取值。 */
     public static String allNames() {

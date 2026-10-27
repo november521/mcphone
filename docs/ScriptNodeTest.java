@@ -145,11 +145,12 @@ public class ScriptNodeTest {
             {"toggle", "0", "1", "0", "bind label i18n enabled"},
             {"tab-bar", "0", "1", "0", "bind tabs"},
             {"text-input", "0", "1", "0", "bind placeholder max-length enabled"},
+            {"textarea", "0", "1", "0", "bind placeholder max-length enabled"},
     };
 
     static void typeTable() {
-        eq(NodeType.values().length, 19, "18 个基础组件与一个单行输入组件");
-        eq(SPEC.length, 19, "组件能力表包含单行输入");
+        eq(NodeType.values().length, 20, "18 个基础组件与单行、多行输入组件");
+        eq(SPEC.length, 20, "组件能力表包含两种文本输入");
 
         for (int i = 0; i < SPEC.length; i++) {
             String[] row = SPEC[i];

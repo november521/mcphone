@@ -451,7 +451,7 @@ public final class TemplateCompiler {
 
         Map<String, Object> staticProps = new LinkedHashMap<>();
         // Keep editing focus tied to this template element when conditional siblings change paths.
-        if (type == NodeType.TEXT_INPUT) staticProps.put("input-site", raw.line + ":" + raw.col);
+        if (type.textEditor()) staticProps.put("input-site", raw.line + ":" + raw.col);
         for (Attr a : statics) {
             PropRules.Spec spec = specs.get(a.name);
             if (spec.numberOrBool() && a.value != null && (inner.isState(a.value) || inner.isLoopVar(a.value))) {

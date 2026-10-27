@@ -476,12 +476,23 @@ public final class ScriptPage implements IPhonePage {
     public boolean mouseScrolled(double mx, double my, double amount) {
         if (layout == null || font == null) return false;
         refreshInputs();
+        LayoutNode hit = HitTest.pick(layout, cx, cy, cw, ch, mx, my, new FontMeasure(font));
+        if (inputs.mouseScrolled(hit, amount)) return true;
         LayoutNode scroller = HitTest.pickScroller(layout, cx, cy, cw, ch, mx, my, new FontMeasure(font));
         // 滚到头就不吃这一下，留给手机页面（§8.7）
         boolean changed = scroller != null && HitTest.scroll(scroller, amount);
         if (changed) refreshInputs();
         return changed;
     }
+
+    @Override
+    public boolean mouseDragged(double mx, double my, int button, double dx, double dy) {
+        refreshInputs();
+        return inputs.mouseDragged(mx, my, button);
+    }
+
+    @Override
+    public boolean mouseReleased(double mx, double my, int button) { return inputs.mouseReleased(button); }
 
     /** Bring state-driven visibility/enabled changes into effect before the next keyboard event. */
     private void refreshInputs() {

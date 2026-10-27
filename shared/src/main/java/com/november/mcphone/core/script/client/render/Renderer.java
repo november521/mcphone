@@ -72,7 +72,7 @@ public final class Renderer {
         return switch (n.node.type()) {
             case BUTTON -> n.node.props().get("enabledIf") instanceof Node.ShowIf condition
                     ? state.test(condition) : n.node.flag("enabled", true);
-            case TOGGLE, TEXT_INPUT -> n.node.flag("enabled", true);
+            case TOGGLE, TEXT_INPUT, TEXTAREA -> n.node.flag("enabled", true);
             default -> true;
         };
     }
@@ -170,7 +170,7 @@ public final class Renderer {
         int innerH = Math.max(0, n.h - s.padTop() - s.padBottom());
 
         switch (type) {
-            case TEXT_INPUT -> {
+            case TEXT_INPUT, TEXTAREA -> {
                 if (f.inputs != null) f.inputs.draw(n, c, fg);
             }
             case TEXT, BUTTON -> drawLines(g, font, n.lines(), s, px, py, innerW, fg, clipTop, clipBottom);
