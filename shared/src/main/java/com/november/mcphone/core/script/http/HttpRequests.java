@@ -5,10 +5,12 @@ import java.net.http.HttpRequest;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 
 /** Plain bounded values only. A batch is published after the enclosing state/store transaction commits. */
@@ -16,12 +18,20 @@ public final class HttpRequests implements AutoCloseable {
     public static final int MAX_PENDING = 4;
     public static final int MAX_BODY_BYTES = 64 * 1024;
     public static final int DEFAULT_TIMEOUT_MS = 30_000;
+    // Never reuse IDs while this client is running, including across App closes and account changes.
+    private static final AtomicInteger NEXT_ID = new AtomicInteger(1);
     private static final Set<String> RESTRICTED = Set.of("connection", "content-length", "expect", "host",
             "upgrade", "transfer-encoding", "proxy-authorization", "proxy-connection");
 
     public record Request(String url, String method, Map<String, String> headers, String body,
-                          int timeoutMs, String callback) {
+                          int timeoutMs, String callback, int id) {
+        public Request(String url, String method, Map<String, String> headers, String body,
+                       int timeoutMs, String callback) {
+            this(url, method, headers, body, timeoutMs, callback, 0);
+        }
+
         public Request {
+            if (id < 0) throw invalid("请求编号不能为负数");
             if (url == null || url.length() > 2048) throw invalid("URL 最多 2048 个字符");
             URI uri;
             try { uri = URI.create(url); }
@@ -73,28 +83,58 @@ public final class HttpRequests implements AutoCloseable {
 
     private final int capacity;
     private final Consumer<List<Request>> sender;
+    private final HttpSession session;
+    private final Set<Integer> cancellable;
+    private final Set<Integer> cancellations = new LinkedHashSet<>();
     private final List<Request> staged = new ArrayList<>();
     private boolean closed;
 
     public HttpRequests(int capacity, Consumer<List<Request>> sender) {
-        this.capacity = Math.max(0, Math.min(MAX_PENDING, capacity));
-        this.sender = sender;
+        this(capacity, sender, null);
     }
 
-    public void add(Request request) {
+    /** Snapshot owned flights on the UI thread; cancellation is published only with a successful transaction. */
+    public HttpRequests(HttpSession session, Consumer<List<Request>> sender) {
+        this(session == null ? 0 : session.available(), sender, session);
+    }
+
+    private HttpRequests(int capacity, Consumer<List<Request>> sender, HttpSession session) {
+        this.capacity = Math.max(0, Math.min(MAX_PENDING, capacity));
+        this.sender = sender;
+        this.session = session;
+        this.cancellable = session == null ? Set.of() : session.requestIds();
+    }
+
+    /** Retain the original internal caller signature; scripts use enqueue to obtain the ID. */
+    public void add(Request request) { enqueue(request); }
+
+    public int enqueue(Request request) {
         if (closed || sender == null) throw invalid("当前页面没有可用的网络请求宿主");
-        if (staged.size() >= capacity) throw invalid("当前 App 最多同时等待 4 个请求，请等待已有请求完成");
-        staged.add(request);
+        if (staged.size() >= capacity + cancellations.size()) throw invalid("当前 App 最多同时等待 4 个请求，请等待已有请求完成");
+        int id = NEXT_ID.getAndUpdate(value -> value == Integer.MAX_VALUE ? value : value + 1);
+        if (id == Integer.MAX_VALUE) throw invalid("请求编号已用尽，请重启游戏");
+        staged.add(new Request(request.url(), request.method(), request.headers(), request.body(),
+                request.timeoutMs(), request.callback(), id));
+        return id;
+    }
+
+    /** Unknown/completed IDs (and the initial state value 0) are harmless no-ops. */
+    public void cancel(int id) {
+        if (closed || sender == null) throw invalid("当前页面没有可用的网络请求宿主");
+        if (id < 0) throw invalid("请求编号须为非负的 32 位整数");
+        if (!staged.removeIf(request -> request.id() == id) && cancellable.contains(id)) cancellations.add(id);
     }
 
     public void commit() {
         if (closed) throw new IllegalStateException("请求批次已经结束");
         List<Request> requests = List.copyOf(staged);
+        Set<Integer> cancelled = Set.copyOf(cancellations);
         close();
+        if (session != null) for (int id : cancelled) session.cancel(id);
         if (!requests.isEmpty()) sender.accept(requests);
     }
 
-    @Override public void close() { closed = true; staged.clear(); }
+    @Override public void close() { closed = true; staged.clear(); cancellations.clear(); }
 
     private static int utf8Bytes(String text) {
         for (int i = 0; i < text.length(); i++) {

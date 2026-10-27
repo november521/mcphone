@@ -111,11 +111,11 @@ function toggleTask(index) {
 按钮函数、`onInit()` 和 HTTP 回调可以请求外部 HTTP/HTTPS 接口。请求由玩家自己的客户端发出，不经过 Minecraft 服务端，也不需要脚本服务端握手。这与尚未开放的服务端 `net.fetch` 能力无关。
 
 ```js
-state = { question: '你好', answer: '', loading: false }
+state = { question: '你好', answer: '', loading: false, requestId: 0 }
 
 function send() {
   state.loading = true
-  ctx.http.request({
+  state.requestId = ctx.http.request({
     url: 'http://127.0.0.1:18765/answer',
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -125,6 +125,7 @@ function send() {
 }
 
 function received(status, body, error) {
+  state.requestId = 0
   state.loading = false
   if (error) {
     state.answer = '请求失败：' + error
@@ -139,7 +140,23 @@ function received(status, body, error) {
 }
 ```
 
-`ctx.http.request(options, callbackName)` 返回 `undefined`。第二个参数是本页声明的**三个简单形参**的函数名字符串，不能传函数对象、闭包或 `onInit`。回调在新的沙箱环境中执行，读取该页的最新 `state`；局部变量不会从发起请求时保留到回调。
+`ctx.http.request(options, callbackName)` 在开发分支返回正的 32 位整数请求编号，可存入事先声明为整数的 state 字段；已发布的 1.12.0 返回 `undefined`。旧 App 忽略返回值的调用方式继续可用。第二个参数是本页声明的**三个简单形参**的函数名字符串，不能传函数对象、闭包或 `onInit`。回调在新的沙箱环境中执行，读取该页的最新 `state`；局部变量不会从发起请求时保留到回调。
+
+开发分支支持取消单个请求：
+
+```js
+function cancelRequest() {
+  ctx.http.cancel(state.requestId)
+  state.requestId = 0
+  state.loading = false
+  state.answer = '已取消，可以重新发送'
+}
+```
+
+- `ctx.http.cancel(id)` 返回 `undefined`，只接受非负的 32 位整数。`0`、已完成或未知的编号无操作；负数、小数、字符串等非法参数会终止整次操作。编号只用于当前打开的 App，不应保存到磁盘或当成持久身份；其他 App 的编号不能取消它自己的请求。
+- 取消与 state、本地保存和待发请求一起提交。脚本、状态校验或保存失败时，取消也撤回，原请求继续。整次操作成功后，取消释放该 App 的等待名额并尝试中止本机传输；可在同次操作中先取消再发送新请求，即使原来四个名额全满。同一次操作中新建又取消的请求不会发出。
+- 取消后不再调用该请求尚未执行的回调，也包括已经收到但仍在排队的响应。已经执行的回调不会撤回；等待状态、按钮和提示由 App 在取消函数中更新。切换页面仍保留请求，是否显式取消由 App 决定。
+- 取消不能撤回远端已执行的操作，也不保证远端 AI 停止生成或停止计费；需要远端支持的停止协议由 App 另行调用。
 
 | 选项 | 规则 |
 |---|---|
@@ -166,7 +183,7 @@ function received(status, body, error) {
 - 回调的 `body` 可以暂时超过页面字符串的 4096 单元限制，方便解析 JSON；写回 `state` 时仍执行原有单字符串、整页长度和类型检查。回调失败时撤回本次状态、存储及后续请求，并显示提示；原有等待状态也会保留，作者应在回调中处理预期的解析失败。
 - 本 App 内导航会保留原页状态，响应仍交给发起请求的那一页，不会写到当前的另一页。关闭 App、重新打开或切换登录账号会取消旧请求并丢弃旧结果，不再调用回调。
 
-可安装示例为 `docs/samples/http-json.vue`。先运行 `python docs/samples/http-demo.py` 启动只监听 `127.0.0.1:18765` 的本地演示接口，再把 `.vue` 放入 `mcphone/apps/` 安装。它演示“输入 → 等待 → 完整回复 / 错误 → 再试”，不调用付费服务，也不生成 AI 回答。把示例 URL 的 `/answer` 换成 `/error`、`/slow`、`/large` 可检查 HTTP 错误、正文超时和响应超限。
+可安装示例为 `docs/samples/http-json.vue`（开发分支示例 1.1.0，需要支持取消的新构建）。先运行 `python docs/samples/http-demo.py` 启动只监听 `127.0.0.1:18765` 的本地演示接口，再把 `.vue` 放入 `mcphone/apps/` 安装。它演示“发送 → 取消 → 再次发送 → 只显示新回复”，不调用付费服务，也不生成 AI 回答。把示例 URL 的 `/answer` 换成 `/delay` 可等待 4 秒测试取消；`/error`、`/slow`、`/large` 可检查 HTTP 错误、正文超时和响应超限。
 
 实现使用 JDK 自带的 [HttpClient](https://docs.oracle.com/en/java/javase/17/docs/api/java.net.http/java/net/http/HttpClient.html) 和受限的响应订阅器，无额外网络依赖。
 

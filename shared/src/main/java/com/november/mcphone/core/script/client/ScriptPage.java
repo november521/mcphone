@@ -383,7 +383,7 @@ public final class ScriptPage implements IPhonePage {
     private HttpRequests requests(ClientScript script, UiState target, String file) {
         HttpSession session = http;
         Supplier<LocalStore> local = storage;
-        return new HttpRequests(session == null ? 0 : session.available(), batch -> {
+        return new HttpRequests(session, batch -> {
             if (session == null || session != http || closed) return;
             for (HttpRequests.Request request : batch) {
                 session.submit(request, result -> {
