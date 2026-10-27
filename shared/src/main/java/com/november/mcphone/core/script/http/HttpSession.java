@@ -11,6 +11,8 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.CompletionStage;
@@ -27,7 +29,7 @@ public final class HttpSession implements AutoCloseable {
         CompletableFuture<HttpRequests.Result> send(HttpRequests.Request request);
     }
 
-    private record Flight(CompletableFuture<HttpRequests.Result> future, Consumer<HttpRequests.Result> receiver) {}
+    private record Flight(int id, CompletableFuture<HttpRequests.Result> future, Consumer<HttpRequests.Result> receiver) {}
     private final List<Flight> pending = new ArrayList<>();
     private final BooleanSupplier active;
     private final Transport transport;
@@ -51,7 +53,18 @@ public final class HttpSession implements AutoCloseable {
         CompletableFuture<HttpRequests.Result> future;
         try { future = transport.send(request); }
         catch (RuntimeException e) { future = CompletableFuture.completedFuture(new HttpRequests.Result(0, "", "NETWORK_ERROR")); }
-        pending.add(new Flight(future, receiver));
+        pending.add(new Flight(request.id(), future, receiver));
+    }
+
+    Set<Integer> requestIds() {
+        return pending.stream().map(Flight::id).filter(id -> id > 0).collect(Collectors.toUnmodifiableSet());
+    }
+
+    /** UI-thread only. Remove before cancelling so even an already completed future cannot deliver later. */
+    public void cancel(int id) {
+        for (Flight flight : List.copyOf(pending)) {
+            if (flight.id() == id && id > 0 && pending.remove(flight)) flight.future().cancel(true);
+        }
     }
 
     /** Deliver a bounded snapshot; callback-created requests cannot recurse or run until another poll. */

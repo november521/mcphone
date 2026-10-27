@@ -261,9 +261,17 @@ public final class ClientScript {
             if (requests == null) throw HostError.invalid("当前页面没有可用的网络请求宿主");
             String callback = HostFn.str(args, 1, "request");
             if (arity(callback) != 3 || "onInit".equals(callback)) throw HostError.invalid("HTTP 回调须为本页声明的三参数函数");
-            try { requests.add(readRequest(c, args[0], callback)); }
+            try { return requests.enqueue(readRequest(c, args[0], callback)); }
             catch (IllegalArgumentException e) { throw HostError.invalid(e.getMessage()); }
             catch (Failure e) { throw HostError.invalid(e.getMessage()); }
+        });
+        storeFunction(http, scope, "cancel", 1, (c, s, args) -> {
+            if (args.length != 1 || !(args[0] instanceof Number number) || !Double.isFinite(number.doubleValue())
+                    || number.doubleValue() != Math.rint(number.doubleValue()) || number.doubleValue() < 0
+                    || number.doubleValue() > Integer.MAX_VALUE) throw HostError.invalid("cancel 需要非负的 32 位整数请求编号");
+            if (requests == null) throw HostError.invalid("当前页面没有可用的网络请求宿主");
+            try { requests.cancel(number.intValue()); }
+            catch (IllegalArgumentException e) { throw HostError.invalid(e.getMessage()); }
             return com.november.mcphone.internal.rhino.javascript.Undefined.instance;
         });
         http.sealObject();

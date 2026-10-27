@@ -18,6 +18,8 @@ class Handler(BaseHTTPRequestHandler):
             return
         if self.path == '/slow':
             time.sleep(12)
+        elif self.path == '/delay':
+            time.sleep(4)
         status = 500 if self.path == '/error' else 200
         answer = '这是一条本地接口演示回复。\n你发送的问题是：' + str(question)
         answer += '\n\n请求由游戏客户端直接发送，没有经过 Minecraft 服务端。'
