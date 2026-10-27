@@ -1,0 +1,10 @@
+{
+  "format": 1,
+  "id": "example:navigation_params",
+  "version": "1.0.0",
+  "name": "便签导航演示",
+  "author": "MCPhone",
+  "description": "列表传入便签编号，详情页独立编辑，返回保留原页内容。",
+  "icon": "assets/icon.png",
+  "engine": "declarative-1"
+}
