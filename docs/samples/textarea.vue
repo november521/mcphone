@@ -1,5 +1,5 @@
 <manifest>
-{"format":1,"id":"example:textarea","version":"1.0.0","name":"本地便签","author":"MCPhone"}
+{"format":1,"id":"example:textarea","version":"1.1.0","name":"本地便签","author":"MCPhone"}
 </manifest>
 <template>
 <column class="page">
@@ -9,6 +9,7 @@
     <button id="save" @click="save()">保存</button>
     <button id="clear" @click="clear()">清空编辑区</button>
   </row>
+  <button id="delete" @click="deleteNote()">删除已保存便签</button>
   <text :text="status" />
 </column>
 </template>
@@ -27,6 +28,12 @@ function save() {
 function clear() {
   state.note = ''
   state.status = '编辑区已清空；保存后才覆盖记录。'
+}
+
+function deleteNote() {
+  ctx.store.remove('note')
+  state.note = ''
+  state.status = '已删除保存的便签，重开不会恢复。'
 }
 </script>
 <style>

@@ -186,7 +186,7 @@ public final class ClientStorageTest {
         quota(() -> keys.setBool("extra", true), "legacy bool writer respects same quota");
         check(keys.save() && LocalStore.openClient(root, ACCOUNT, "test:keys").keys().size() == 64, "full key set reloads");
         Fixture facade = fixture(root, "state.result = Object.keys(ctx).sort().join(',') + ':' + Object.keys(ctx.store).sort().join(',') + ':' + Object.keys(ctx.http).sort().join(',');");
-        check(facade.fire().applied() && facade.echo().equals("http,params,store:getString,setString:cancel,request"),
+        check(facade.fire().applied() && facade.echo().equals("http,params,store:getString,remove,setString:cancel,request"),
                 "ctx exposes readonly params, storage methods and bounded HTTP request/cancel methods");
         AtomicReference<UUID> retainedAccount = new AtomicReference<>(ACCOUNT);
         Fixture retained = new Fixture(INITIAL + "function run() { var box = JSON.parse.prototype; "

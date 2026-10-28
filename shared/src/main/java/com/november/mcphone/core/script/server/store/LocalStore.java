@@ -194,6 +194,16 @@ public final class LocalStore {
             dirty |= !store.values.get(key).equals(before);
         }
 
+        /** Remove only from this transaction's snapshot; a missing key does not require a write. */
+        public void remove(String key) {
+            checkClientKey(key);
+            LocalStore store = current();
+            if (store.values.has(key)) {
+                store.remove(key);
+                dirty = true;
+            }
+        }
+
         /** Called only after the complete click and its UI state have been validated. */
         public boolean commit() {
             if (closed) throw new IllegalStateException("本次按钮操作已经结束，存储接口已失效");

@@ -245,6 +245,12 @@ public final class ClientScript {
             storeCall(() -> { storage.setString(key, value); return ""; });
             return com.november.mcphone.internal.rhino.javascript.Undefined.instance;
         });
+        storeFunction(store, scope, "remove", 1, (c, s, args) -> {
+            if (args.length != 1) throw HostError.invalid("remove 需要一个存储键名");
+            String key = HostFn.str(args, 0, "remove");
+            storeCall(() -> { storage.remove(key); return ""; });
+            return com.november.mcphone.internal.rhino.javascript.Undefined.instance;
+        });
         store.sealObject();
         ScriptableObject ctx = HostFn.obj(cx, scope);
         ScriptableObject params = HostFn.obj(cx, scope);
