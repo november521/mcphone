@@ -51,15 +51,17 @@ public final class TemplateInstance {
         private final List<String> warnings;
         private final boolean truncated;
         private final Map<Node, Statements.Bound> clicks;
+        private final Map<Node, Statements.Bound> inputs;
         private final Set<Node> nodes;
         private final String file;
 
-        private Tree(Node root, List<String> warnings, boolean truncated, Map<Node, Statements.Bound> clicks,
+        private Tree(Node root, List<String> warnings, boolean truncated, Map<Node, Statements.Bound> clicks, Map<Node, Statements.Bound> inputs,
                      Set<Node> nodes, String file) {
             this.root = root;
             this.warnings = warnings;
             this.truncated = truncated;
             this.clicks = clicks;
+            this.inputs = inputs;
             this.nodes = nodes;
             this.file = file;
         }
@@ -99,18 +101,25 @@ public final class TemplateInstance {
         public Statements.Outcome click(Node hit, UiState state, int segment, Supplier<LocalStore> storage,
                                          HttpRequests requests) {
             try (HttpRequests batch = requests) {
-                return clickTransaction(hit, state, segment, storage, batch);
+                return eventTransaction(hit, state, segment, storage, batch, false);
             }
         }
 
-        private Statements.Outcome clickTransaction(Node hit, UiState state, int segment, Supplier<LocalStore> storage,
-                                                     HttpRequests requests) {
+        /** Run after an accepted user edit. Its value is already in state and survives callback failure. */
+        public Statements.Outcome input(Node edited, UiState state, Supplier<LocalStore> storage, HttpRequests requests) {
+            try (HttpRequests batch = requests) {
+                return eventTransaction(edited, state, 0, storage, batch, true);
+            }
+        }
+
+        private Statements.Outcome eventTransaction(Node hit, UiState state, int segment, Supplier<LocalStore> storage,
+                                                     HttpRequests requests, boolean input) {
             if (!nodes.contains(hit)) {
                 throw new IllegalArgumentException("这个节点不是这棵树产出的：点击要用同一次 instantiate 的树去查");
             }
-            Statements.Bound bound = clicks.get(hit);
+            Statements.Bound bound = (input ? inputs : clicks).get(hit);
             String bind = hit.str("bind", null);
-            boolean binds = bind != null && state.get(bind) != null
+            boolean binds = !input && bind != null && state.get(bind) != null
                     && (hit.type() == NodeType.TOGGLE || hit.type() == NodeType.TAB_BAR);
             if (hit.type() == NodeType.TAB_BAR && binds) {
                 int count = hit.props().get("tabs") instanceof List<?> tabs ? tabs.size() : 0;
@@ -132,7 +141,7 @@ public final class TemplateInstance {
                 if (outcome.applied()) {
                     if (!transaction.commit()) {
                         List<String> warnings = new ArrayList<>(outcome.warnings());
-                        warnings.add(file + " 本地存储保存失败，原文件和页面数据已保留，本次点击未完成");
+                        warnings.add(file + " 本地存储保存失败，原文件和页面数据已保留，" + (input ? "本次输入回调" : "本次点击") + "未完成");
                         return new Statements.Outcome(false, false, false, null, List.of(), List.copyOf(warnings));
                     }
                     for (Map.Entry<String, Object> e : trial.values().entrySet()) state.set(e.getKey(), e.getValue());
@@ -151,6 +160,7 @@ public final class TemplateInstance {
         boolean textTruncated;
         final Set<String> ids = new HashSet<>();
         final Map<Node, Statements.Bound> clicks = new IdentityHashMap<>();
+        final Map<Node, Statements.Bound> inputs = new IdentityHashMap<>();
         final Set<Node> nodes = Collections.newSetFromMap(new IdentityHashMap<>());
         final Map<String, Object> host;
 
@@ -175,7 +185,7 @@ public final class TemplateInstance {
         Node root = node(compiled.root(), c, pass, null);
         if (pass.truncated) c.warnAlways("节点超过 " + NodeParser.MAX_NODES + " 个，多出来的没有进树");
         if (pass.textTruncated) c.warnAlways("页面正文超过 " + StateRules.MAX_PAGE_TEXT + " 个 UTF-16 单元，超出部分未显示");
-        return new Tree(root, c.warnings(), pass.truncated || pass.textTruncated, pass.clicks, pass.nodes, file);
+        return new Tree(root, c.warnings(), pass.truncated || pass.textTruncated, pass.clicks, pass.inputs, pass.nodes, file);
     }
 
     public String file() {
@@ -232,6 +242,8 @@ public final class TemplateInstance {
         pass.nodes.add(out);
         if (e.click() != null) pass.clicks.put(out,
                 new Statements.Bound(e.click(), c.boundNames(), c.boundValues(), pass.host));
+        if (e.input() != null) pass.inputs.put(out,
+                new Statements.Bound(e.input(), c.boundNames(), c.boundValues(), pass.host));
         return out;
     }
 

@@ -22,7 +22,7 @@ public final class CompiledTemplate {
      */
     record Element(NodeType type, int line, String id, List<String> classes, Map<String, Object> staticProps,
                    Map<String, BoundProp> boundProps, ForSpec vFor, Expr.Compiled vIf, Expr.Compiled key,
-                   Statements click, List<Child> children) implements Child {
+                   Statements click, Statements input, List<Child> children) implements Child {
     }
 
     record BoundProp(PropRules.Spec spec, Expr.Compiled expr) {

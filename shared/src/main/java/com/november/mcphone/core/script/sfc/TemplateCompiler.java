@@ -351,6 +351,7 @@ public final class TemplateCompiler {
         Attr vFor = null;
         Attr key = null;
         Attr click = null;
+        Attr input = null;
         Attr id = null;
         Attr cls = null;
         List<Attr> statics = new ArrayList<>();
@@ -366,11 +367,13 @@ public final class TemplateCompiler {
                 case "class" -> cls = a;
                 default -> {
                     if (a.name.startsWith("@")) {
-                        if (!CLICKABLE.contains(type) && a.name.equals("@click")) {
-                            throw SfcError.at(Code.E_TPL_EVENT_NOT_ALLOWED, a.line, a.col, tag);
-                        }
-                        if (!a.name.equals("@click")) throw unknownAttr(raw, a, specs);
-                        click = a;
+                        if (a.name.equals("@input")) {
+                            if (!type.textEditor()) throw badValue(tag, a, "@input 只支持 text-input 和 textarea");
+                            input = a;
+                        } else if (a.name.equals("@click")) {
+                            if (!CLICKABLE.contains(type)) throw SfcError.at(Code.E_TPL_EVENT_NOT_ALLOWED, a.line, a.col, tag);
+                            click = a;
+                        } else throw unknownAttr(raw, a, specs);
                     } else if (a.name.startsWith(":")) {
                         PropRules.Spec spec = specs.get(a.name.substring(1));
                         if (spec == null || spec.staticOnly()) throw unknownAttr(raw, a, specs);
@@ -389,7 +392,7 @@ public final class TemplateCompiler {
         if (vFor != null && (vElse != null || vElseIf != null)) {
             throw syntax(vFor.line, vFor.col, "v-for 不能和 v-else / v-else-if 写在同一个元素上");
         }
-        for (Attr a : new Attr[]{vIf, vElseIf, vFor, key, click}) {
+        for (Attr a : new Attr[]{vIf, vElseIf, vFor, key, click, input}) {
             if (a != null && (a.value == null || a.value.isBlank())) throw syntax(a.line, a.col, a.name + " 要写值");
         }
         if (vElse != null && vElse.value != null) throw syntax(vElse.line, vElse.col, "v-else 不写值");
@@ -476,6 +479,7 @@ public final class TemplateCompiler {
         Expr.Compiled keyExpr = key != null ? expr(key, inner) : null;
         Statements statements = null;
         if (click != null) statements = statements(click, inner);
+        Statements inputStatements = input == null ? null : statements(input, inner);
 
         // 子内容
         boolean hasElementChild = false;
@@ -515,7 +519,7 @@ public final class TemplateCompiler {
         }
 
         return new Element(type, raw.line + lineOffset, idValue, List.copyOf(classes), Collections.unmodifiableMap(staticProps),
-                Collections.unmodifiableMap(boundProps), forSpec, perItemIf, keyExpr, statements, List.copyOf(children));
+                Collections.unmodifiableMap(boundProps), forSpec, perItemIf, keyExpr, statements, inputStatements, List.copyOf(children));
     }
 
     /** 兄弟节点：把 v-if / v-else-if / v-else 收成一串，文字各成一个 text 节点。 */
@@ -695,7 +699,9 @@ public final class TemplateCompiler {
     private Statements statements(Attr a, Scope scope) {
         Decoded d = decodeMapped(a.raw);
         try {
-            return Statements.parse(d.text(), scope, a.valueLine, a.valueCol, script).shifted(lineOffset);
+            return (a.name.equals("@input")
+                    ? Statements.parseInput(d.text(), scope, a.valueLine, a.valueCol, script)
+                    : Statements.parse(d.text(), scope, a.valueLine, a.valueCol, script)).shifted(lineOffset);
         } catch (SfcError e) {
             throw remap(e, d, a.raw, a.valueLine, a.valueCol);
         }
@@ -767,6 +773,7 @@ public final class TemplateCompiler {
             if (!s.staticOnly()) accepted.add(":" + s.name());
         }
         if (CLICKABLE.contains(raw.type)) accepted.add("@click");
+        if (raw.type.textEditor()) accepted.add("@input");
         return SfcError.at(Code.E_TPL_UNKNOWN_ATTR, a.line, a.col, raw.name, a.name, Names.hint(a.name, accepted),
                 String.join(" ", accepted));
     }

@@ -1,0 +1,10 @@
+{
+  "format": 1,
+  "id": "example:input_events",
+  "version": "1.0.0",
+  "name": "便签即时输入演示",
+  "author": "MCPhone",
+  "description": "输入即时筛选，多行编辑即时预览，保存后返回刷新。",
+  "icon": "assets/icon.png",
+  "engine": "declarative-1"
+}

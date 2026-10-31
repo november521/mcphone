@@ -33,11 +33,18 @@ public final class TextInputs {
     private final Pointer pointer;
     private final Supplier<String> clipboard;
     private final Consumer<String> copy;
+    private final Consumer<LayoutNode> onInput;
     private Map<String, Entry> fields = new LinkedHashMap<>();
     private Entry focused;
     private Entry dragged;
 
     public TextInputs() { this(EditBox::new, (box, x, y, button) -> box.mouseClicked(x, y, button)); }
+
+    public TextInputs(Consumer<LayoutNode> onInput) {
+        this(EditBox::new, (box, x, y, button) -> box.mouseClicked(x, y, button),
+                () -> Minecraft.getInstance().keyboardHandler.getClipboard(),
+                text -> Minecraft.getInstance().keyboardHandler.setClipboard(text), onInput);
+    }
 
     TextInputs(Factory factory, Pointer pointer) {
         this(factory, pointer, () -> Minecraft.getInstance().keyboardHandler.getClipboard(),
@@ -45,7 +52,13 @@ public final class TextInputs {
     }
 
     TextInputs(Factory factory, Pointer pointer, Supplier<String> clipboard, Consumer<String> copy) {
+        this(factory, pointer, clipboard, copy, node -> {});
+    }
+
+    TextInputs(Factory factory, Pointer pointer, Supplier<String> clipboard, Consumer<String> copy,
+               Consumer<LayoutNode> onInput) {
         this.factory = factory; this.pointer = pointer; this.clipboard = clipboard; this.copy = copy;
+        this.onInput = java.util.Objects.requireNonNull(onInput);
     }
 
     private static final class Entry {
@@ -54,6 +67,7 @@ public final class TextInputs {
         final Font font;
         final String bind;
         final String site;
+        final Consumer<LayoutNode> onInput;
         LayoutNode node;
         UiState state;
         boolean enabled;
@@ -61,22 +75,16 @@ public final class TextInputs {
         int x, y, width, height;
         int areaLimit = -1;
 
-        Entry(EditBox box, Font font, String bind, String site, boolean multiline) {
+        Entry(EditBox box, Font font, String bind, String site, boolean multiline, Consumer<LayoutNode> onInput) {
             this.box = box;
             this.font = font;
             this.bind = bind;
             this.site = site;
+            this.onInput = onInput;
             if (multiline) {
                 // Keep vanilla's OS text-input focus notification (required since 26.1).
                 // This box is a focus delegate only; text, selection and painting belong to area.
-                this.area = new TextAreaEditor(new FontMeasure(font), value -> {
-                    if (syncing || !enabled || state == null) return false;
-                    Map<String, Object> next = new LinkedHashMap<>(state.values());
-                    next.put(bind, value);
-                    if (state.writeProblems(next) != null) return false;
-                    state.set(bind, value);
-                    return true;
-                });
+                this.area = new TextAreaEditor(new FontMeasure(font), this::commit);
                 return;
             }
             this.area = null;
@@ -88,9 +96,23 @@ public final class TextInputs {
                         syncing = true;
                         try { box.setValue(normalized); } finally { syncing = false; }
                     }
-                    state.set(bind, normalized);
+                    if (!commit(normalized)) {
+                        syncing = true;
+                        try { box.setValue(state.getString(bind)); } finally { syncing = false; }
+                    }
                 }
             });
+        }
+
+        private boolean commit(String value) {
+            if (syncing || !enabled || state == null) return false;
+            if (value.equals(state.getString(bind))) return true;
+            Map<String, Object> next = new LinkedHashMap<>(state.values());
+            next.put(bind, value);
+            if (state.writeProblems(next) != null) return false;
+            state.set(bind, value);
+            onInput.accept(node);
+            return true;
         }
 
         void focus(boolean value) { box.setFocused(value); }
@@ -140,7 +162,7 @@ public final class TextInputs {
         Entry entry = fields.get(node.key);
         if (entry == null || entry.font != font || entry.state != state
                 || !entry.bind.equals(bind) || !entry.site.equals(site) || (entry.area != null) != multiline) {
-            entry = new Entry(factory.create(font, 0, 0, width - 1, font.lineHeight, Component.empty()), font, bind, site, multiline);
+            entry = new Entry(factory.create(font, 0, 0, width - 1, font.lineHeight, Component.empty()), font, bind, site, multiline, onInput);
         }
         entry.node = node;
         entry.state = state;

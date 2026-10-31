@@ -66,7 +66,7 @@ public final class ScriptPage implements IPhonePage {
     private static final String FONT_PROBE = "MCphone 字体";
 
     private final ScriptApp app;
-    private final TextInputs inputs = new TextInputs();
+    private final TextInputs inputs = new TextInputs(this::inputChanged);
     private Supplier<LocalStore> storage;
     private HttpSession http;
     /** 页面（包括副手 HUD）占用旧包时，自动更新延后，避免释放仍在使用的贴图。 */
@@ -341,6 +341,11 @@ public final class ScriptPage implements IPhonePage {
     // ============================================================
     //  输入（§8.7）
     // ============================================================
+
+    private void inputChanged(LayoutNode edited) {
+        if (closed || tree == null || state == null) return;
+        run(tree.input(edited.node, state, storage, requests()));
+    }
 
     @Override
     public boolean mouseClicked(double mx, double my, int button) {
