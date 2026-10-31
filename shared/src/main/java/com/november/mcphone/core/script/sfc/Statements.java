@@ -91,11 +91,13 @@ public final class Statements {
     private final List<Stmt> list;
     private final int line;
     private final ClientScript script;
+    private final boolean input;
 
-    private Statements(List<Stmt> list, int line, ClientScript script) {
+    private Statements(List<Stmt> list, int line, ClientScript script, boolean input) {
         this.list = list;
         this.line = line;
         this.script = script;
+        this.input = input;
     }
 
     List<Stmt> list() {
@@ -107,23 +109,37 @@ public final class Statements {
     }
 
     static Statements parse(String src, Scope scope, int line, int col, ClientScript script) {
+        return parse(src, scope, line, col, script, false);
+    }
+
+    /** Input events invoke one declared page function; navigation and RPC statements remain click actions. */
+    static Statements parseInput(String src, Scope scope, int line, int col, ClientScript script) {
+        return parse(src, scope, line, col, script, true);
+    }
+
+    private static Statements parse(String src, Scope scope, int line, int col, ClientScript script, boolean input) {
+        String event = input ? "@input" : "@click";
         // 只防超大输入；单条语句的 256 字符在下面按记号量，空白不算
         if (src.length() > MAX_STATEMENTS * ExprParser.MAX_LENGTH * 4) throw SfcError.at(Code.E_EXPR_TOO_LONG, line, col);
         ExprParser p = new ExprParser(src, line, col, false);
-        if (p.peek().kind() == 'e') throw ExprParser.syntax(p.peek(), "@click 是空的");
+        if (p.peek().kind() == 'e') throw ExprParser.syntax(p.peek(), event + " 是空的");
         List<Stmt> out = new ArrayList<>();
         while (p.peek().kind() != 'e') {
             Tok first = p.peek();
             if (out.size() == MAX_STATEMENTS) throw ExprParser.syntax(first, "@click 最多 " + MAX_STATEMENTS + " 条语句");
             if (span(p) > ExprParser.MAX_LENGTH) throw SfcError.at(Code.E_EXPR_TOO_LONG, first.line(), first.col());
-            out.add(statement(p, scope, src, script));
+            Stmt next = statement(p, scope, src, script);
+            if (input && (!(next instanceof LocalCall) || !out.isEmpty())) {
+                throw ExprParser.syntax(first, "@input 只接受一次本页函数调用，例如 changed()");
+            }
+            out.add(next);
             if (p.at(";")) {
                 p.next();
             } else if (p.peek().kind() != 'e') {
                 throw ExprParser.syntax(p.peek(), "两条语句之间要用 ; 隔开");
             }
         }
-        return new Statements(List.copyOf(out), line, script);
+        return new Statements(List.copyOf(out), line, script, input);
     }
 
     private static Stmt statement(ExprParser p, Scope scope, String src, ClientScript script) {
@@ -260,7 +276,7 @@ public final class Statements {
                 moved.add(s);
             }
         }
-        return new Statements(List.copyOf(moved), line + lines, script);
+        return new Statements(List.copyOf(moved), line + lines, script, input);
     }
 
     static Expr.Compiled shift(Expr.Compiled c, int lines) {
@@ -343,8 +359,8 @@ public final class Statements {
         return new Outcome(true, close, back, nav, List.copyOf(calls), c.warnings(), navParameters);
     }
 
-    private static Outcome failed(EvalContext c, String reason) {
-        c.warn(reason + "，这组 @click 一条都不执行");
+    private Outcome failed(EvalContext c, String reason) {
+        c.warn(reason + "，这组 " + (input ? "@input" : "@click") + " 一条都不执行");
         return new Outcome(false, false, false, null, List.of(), c.warnings());
     }
 }
