@@ -155,6 +155,17 @@ public final class ClientResumeTest {
     private static UiState state(ScriptPage host) throws Exception {return (UiState) field(host, "state");}
     private static void nav(ScriptPage host, String name, int id) throws Exception {invoke(host, "navTo", new Class<?>[]{String.class, PageParameters.class}, name, new PageParameters(Map.of("id", id)));}
     private static Node node(Node root, String id) {if (id.equals(root.id())) return root; for (Node child : root.children()) {Node found = node(child, id); if (found != null) return found;} return null;}
+    private static List<String> noteTitles(Node root) {
+        var titles = new java.util.ArrayList<String>();
+        if (root.type() == NodeType.BUTTON && root.str("text", "").startsWith("便签 ")) titles.add(root.str("text", ""));
+        for (Node child : root.children()) titles.addAll(noteTitles(child));
+        return titles;
+    }
+    private static LayoutNode layoutNode(LayoutNode root, String id) {
+        if (id.equals(root.node.id())) return root;
+        for (LayoutNode child : root.children) {LayoutNode found = layoutNode(child, id); if (found != null) return found;}
+        return null;
+    }
     private static void click(ScriptPage host, ScriptApp app, String id) throws Exception {
         String name = (String) field(host, "current"); var tree = new TemplateInstance(app.page(name).template(), name).instantiate(state(host));
         @SuppressWarnings("unchecked") Supplier<LocalStore> storage = (Supplier<LocalStore>) field(host, "storage");
@@ -206,6 +217,13 @@ public final class ClientResumeTest {
         ScriptPage host = new ScriptPage(app); var storage = storage(root, app.manifest().id()); set(host, "storage", storage);
         invoke(host, "openPage", new Class<?>[]{String.class}, ""); UiState list = state(host);
         check(list.getInt("refreshes") == 0, "example initial load does not count as resume");
+        var template = new TemplateInstance(app.entry().template(), "app.vue");
+        list.set("query", " 2 "); click(host, app, "filter");
+        check(list.getString("activeQuery").equals("2") && noteTitles(template.instantiate(list).root()).equals(List.of("便签 2")), "example filters the rendered list by title and trims whitespace");
+        list.set("query", "不存在的内容"); click(host, app, "filter");
+        check(noteTitles(template.instantiate(list).root()).isEmpty(), "example renders no unrelated notes when nothing matches");
+        list.set("query", ""); click(host, app, "filter");
+        check(noteTitles(template.instantiate(list).root()).equals(List.of("便签 1", "便签 2", "便签 3")), "empty filter restores all notes");
         list.set("query", "便签"); click(host, app, "filter"); list.set("query", "未应用草稿");
         click(host, app, "open"); state(host).set("note", "中".repeat(31) + "😀新正文"); click(host, app, "save"); click(host, app, "back");
         @SuppressWarnings("unchecked") List<Map<String, Object>> notes = (List<Map<String, Object>>) list.get("notes");
@@ -219,6 +237,10 @@ public final class ClientResumeTest {
         for (int[] size : new int[][]{{120,176},{226,158}}) {
             var layout = LayoutEngine.layout(new TemplateInstance(app.entry().template(), "app.vue").instantiate(list).root(), app.entry().stylesheet(), list, size[0], size[1], font, ImageSizes.NONE);
             check(layout.h <= size[1] && layout.w <= size[0], "example root fits phone and tablet");
+            LayoutNode query = layoutNode(layout, "query");
+            check(query != null && query.w >= 32 && query.h > 0 && com.november.mcphone.core.script.client.render.HitTest.pick(layout, 0, 0, size[0], size[1], query.x + query.w / 2.0, query.y + query.h / 2.0, font) == query, "example search input has usable width and is reachable on phone and tablet");
+            LayoutNode filter = layoutNode(layout, "filter");
+            check(filter != null && filter.w > 0 && filter.h > 0 && com.november.mcphone.core.script.client.render.HitTest.pick(layout, 0, 0, size[0], size[1], filter.x + filter.w / 2.0, filter.y + filter.h / 2.0, font) == filter, "example filter button is reachable on phone and tablet");
         }
         host.onClose(); ScriptPage reopened = new ScriptPage(app); set(reopened, "storage", storage); invoke(reopened, "openPage", new Class<?>[]{String.class}, "");
         check(state(reopened).getInt("refreshes") == 0 && state(reopened).getString("query").isEmpty(), "close/reopen starts a fresh page instead of resuming"); reopened.onClose();

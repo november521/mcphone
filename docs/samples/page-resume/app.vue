@@ -60,7 +60,7 @@ function excerpt(text) {
 </script>
 <style>
 .page { height: fill; gap: 4; padding: 4; }
-.search { gap: 4; }
+.search { width: fill; gap: 4; }
 .query { width: 0; grow: 1; }
 .notes { height: 0; grow: 1; }
 .items { gap: 6; }

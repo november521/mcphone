@@ -1,7 +1,7 @@
 {
   "format": 1,
   "id": "example:page_resume",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "name": "页面恢复刷新演示",
   "author": "MCPhone",
   "description": "详情保存或删除后返回刷新列表，保留筛选与草稿。",
