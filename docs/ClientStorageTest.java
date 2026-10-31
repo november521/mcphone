@@ -185,9 +185,13 @@ public final class ClientStorageTest {
         quota(() -> keys.setString("extra", ""), "65th key rejected");
         quota(() -> keys.setBool("extra", true), "legacy bool writer respects same quota");
         check(keys.save() && LocalStore.openClient(root, ACCOUNT, "test:keys").keys().size() == 64, "full key set reloads");
-        Fixture facade = fixture(root, "state.result = Object.keys(ctx).sort().join(',') + ':' + Object.keys(ctx.store).sort().join(',') + ':' + Object.keys(ctx.http).sort().join(',');");
-        check(facade.fire().applied() && facade.echo().equals("http,params,store:getString,remove,setString:cancel,request"),
-                "ctx exposes readonly params, storage methods and bounded HTTP request/cancel methods");
+        Fixture facade = fixture(root, "state.count = Object.keys(ctx).sort().join(',') === 'http,params,store,timer' "
+                + "&& Object.keys(ctx.store).sort().join(',') === 'getString,remove,setString' "
+                + "&& Object.keys(ctx.http).sort().join(',') === 'cancel,request' "
+                + "&& Object.keys(ctx.timer).sort().join(',') === 'after,cancel' "
+                + "&& typeof ctx.timer.after === 'function' && typeof ctx.timer.cancel === 'function' ? 1 : 0;");
+        check(facade.fire().applied() && facade.state.getInt("count") == 1,
+                "ctx exposes only params, storage, bounded HTTP and one-shot timer methods");
         AtomicReference<UUID> retainedAccount = new AtomicReference<>(ACCOUNT);
         Fixture retained = new Fixture(INITIAL + "function run() { var box = JSON.parse.prototype; "
                 + "if (state.count === 0) { box.savedStore = ctx.store; box.savedStore.getString('name'); state.count = 1; } "

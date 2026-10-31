@@ -143,10 +143,9 @@ public final class ClientTimerTest {
     }
 
     public static void main(String[] args)throws Exception {
-        Path root=Files.createTempDirectory("mcphone-timer-").toAbsolutePath().normalize();Path classes=Path.of(ClientTimerTest.class.getProtectionDomain().getCodeSource().getLocation().toURI());Path language=classes.resolve("assets/minecraft/lang/en_us.json");boolean created=!Files.exists(language);
-        if(created){Files.createDirectories(language.getParent());Files.writeString(language,"{\"mcphone.script.client_function.failed\":\"Page action failed.\"}");}
+        Path root=Files.createTempDirectory("mcphone-timer-").toAbsolutePath().normalize();
         try{scheduler();bridgeAndTransactions(root);hosts();sample();}
-        finally{if(created)Files.deleteIfExists(language);try(var paths=Files.walk(root)){for(Path path:paths.sorted(Comparator.reverseOrder()).toList())Files.deleteIfExists(path);}}
+        finally{try(var paths=Files.walk(root)){for(Path path:paths.sorted(Comparator.reverseOrder()).toList())Files.deleteIfExists(path);}}
         System.out.println("ClientTimerTest: "+checks+" checks passed");
     }
 }
