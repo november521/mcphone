@@ -1,0 +1,10 @@
+{
+  "format": 1,
+  "id": "example:delayed_search",
+  "version": "1.0.0",
+  "name": "搜索防抖演示",
+  "author": "MCPhone",
+  "description": "停下输入后查询一次，支持取消与切页自动清理。",
+  "icon": "assets/icon.png",
+  "engine": "declarative-1"
+}

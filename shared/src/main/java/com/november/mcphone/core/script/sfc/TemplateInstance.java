@@ -6,6 +6,7 @@ import com.november.mcphone.core.script.layout.NodeType;
 import com.november.mcphone.core.script.layout.UiState;
 import com.november.mcphone.core.script.layout.StateRules;
 import com.november.mcphone.core.script.http.HttpRequests;
+import com.november.mcphone.core.script.timer.DelayedCallbacks;
 import com.november.mcphone.core.script.server.store.LocalStore;
 import com.november.mcphone.core.script.sfc.CompiledTemplate.BoundProp;
 import com.november.mcphone.core.script.sfc.CompiledTemplate.Chain;
@@ -100,20 +101,30 @@ public final class TemplateInstance {
 
         public Statements.Outcome click(Node hit, UiState state, int segment, Supplier<LocalStore> storage,
                                          HttpRequests requests) {
-            try (HttpRequests batch = requests) {
-                return eventTransaction(hit, state, segment, storage, batch, false);
+            return click(hit, state, segment, storage, requests, null);
+        }
+
+        public Statements.Outcome click(Node hit, UiState state, int segment, Supplier<LocalStore> storage,
+                                         HttpRequests requests, DelayedCallbacks.Batch timers) {
+            try (HttpRequests batch = requests; DelayedCallbacks.Batch tasks = timers) {
+                return eventTransaction(hit, state, segment, storage, batch, tasks, false);
             }
         }
 
         /** Run after an accepted user edit. Its value is already in state and survives callback failure. */
         public Statements.Outcome input(Node edited, UiState state, Supplier<LocalStore> storage, HttpRequests requests) {
-            try (HttpRequests batch = requests) {
-                return eventTransaction(edited, state, 0, storage, batch, true);
+            return input(edited, state, storage, requests, null);
+        }
+
+        public Statements.Outcome input(Node edited, UiState state, Supplier<LocalStore> storage, HttpRequests requests,
+                                         DelayedCallbacks.Batch timers) {
+            try (HttpRequests batch = requests; DelayedCallbacks.Batch tasks = timers) {
+                return eventTransaction(edited, state, 0, storage, batch, tasks, true);
             }
         }
 
         private Statements.Outcome eventTransaction(Node hit, UiState state, int segment, Supplier<LocalStore> storage,
-                                                     HttpRequests requests, boolean input) {
+                                                     HttpRequests requests, DelayedCallbacks.Batch timers, boolean input) {
             if (!nodes.contains(hit)) {
                 throw new IllegalArgumentException("这个节点不是这棵树产出的：点击要用同一次 instantiate 的树去查");
             }
@@ -137,7 +148,7 @@ public final class TemplateInstance {
             try (LocalStore.Transaction transaction = new LocalStore.Transaction(storage)) {
                 Statements.Outcome outcome = bound == null
                         ? new Statements.Outcome(true, false, false, null, List.of(), List.of())
-                        : bound.run(trial, file, transaction, requests);
+                        : bound.run(trial, file, transaction, requests, timers);
                 if (outcome.applied()) {
                     if (!transaction.commit()) {
                         List<String> warnings = new ArrayList<>(outcome.warnings());
@@ -146,6 +157,7 @@ public final class TemplateInstance {
                     }
                     for (Map.Entry<String, Object> e : trial.values().entrySet()) state.set(e.getKey(), e.getValue());
                     if (requests != null) requests.commit();
+                    if (timers != null) timers.commit();
                 }
                 return outcome;
             }
