@@ -94,7 +94,9 @@ public final class ClientScript {
                         throw bad(parameter.getLineno(), "形参必须是合法且不重复的简单名称，不能占用宿主或内建名称");
                     }
                 }
-                if ("onInit".equals(name) && !parameters.isEmpty()) throw bad(fn.getLineno(), "onInit 必须是无参函数");
+                if (("onInit".equals(name) || "onResume".equals(name)) && !parameters.isEmpty()) {
+                    throw bad(fn.getLineno(), name + " 必须是无参函数");
+                }
                 if (names.putIfAbsent(name, parameters.size()) != null) throw bad(fn.getLineno(), "函数 '" + name + "' 重复声明");
                 if (names.size() > MAX_FUNCTIONS) throw bad(fn.getLineno(), "每页最多 16 个顶层函数");
                 blank(literals, ast);

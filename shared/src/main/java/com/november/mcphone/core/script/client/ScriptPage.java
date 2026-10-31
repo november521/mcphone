@@ -199,7 +199,8 @@ public final class ScriptPage implements IPhonePage {
         PageStates.Opened pageState = retained == null
                 ? states.open(name, page.template(), file, storage,
                     target -> requests(page.template().script(), target, file), parameters)
-                : states.restore(name, retained.state());
+                : states.restore(name, retained.state(), page.template(), file, storage,
+                    target -> requests(page.template().script(), target, file));
         state = pageState.state();
         instance = new TemplateInstance(page.template(), file);
         tree = null;
@@ -209,7 +210,7 @@ public final class ScriptPage implements IPhonePage {
         lastRevision = -1;
         for (String warning : pageState.warnings()) MCphone.LOGGER.warn("[MCphone] {}", warning);
         if (!pageState.warnings().isEmpty()) {
-            showToast(Component.translatable("mcphone.script.initialization.failed").getString());
+            showToast(Component.translatable("mcphone.script.client_function.failed").getString());
         }
     }
 
