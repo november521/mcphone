@@ -4,6 +4,7 @@
 
 ### 新增
 
+- 脚本 App 支持点击动作 `openUrl(url)`，在整次点击成功后用系统默认浏览器打开 HTTP/HTTPS 网页，每次最多一个；失败不打开，自动回调不可使用。提供 MC 百科搜索及原文跳转示例，不依赖 MCEF。
 - 脚本 App 增加 `ctx.timer.after` / `ctx.timer.cancel` 一次性延迟回调，可实现输入防抖。任务使用单调时间、在客户端页面 tick 执行，数量和延时受限；创建/取消随事务提交，切页或关闭自动清理。提供搜索防抖演示。
 - 脚本 App 的 `text-input` 和 `textarea` 支持 `@input` 调用本页函数，实现输入即时筛选、校验与预览。仅用户实际修改内容时触发，代码赋值不递归触发；回调失败撤回其效果，保留已接受的输入。提供便签即时输入演示。
 - 脚本 App 支持无参页面恢复回调 `onResume()`：返回旧页或再次进入缓存页时刷新数据，保留原状态和返回滚动位置；失败时撤回本次刷新。提供保存/删除后返回更新列表并保留筛选草稿的示例。
@@ -16,6 +17,7 @@
 
 ### Added
 
+- Script apps can use the click action `openUrl(url)` to open one HTTP/HTTPS page in the system browser after the whole click commits. Failed actions do not open links, and automatic callbacks cannot use this action. Added an MC encyclopedia search example with original-page links; MCEF is not required.
 - Script apps can schedule/cancel one-shot callbacks with `ctx.timer.after` and `ctx.timer.cancel` for debounced input. Bounded tasks use a monotonic clock and run on client page ticks, commit with the surrounding transaction, and are cleared on navigation or close. Added a debounced-search example.
 - Script apps can call a page function through `@input` on `text-input` and `textarea` for live filtering, validation and previews. Only accepted user edits trigger it; programmatic writes do not recurse. Callback effects roll back on failure while accepted text is preserved. Added an instant-input notes example.
 - Script apps can declare `onResume()` to refresh a retained page when returning or navigating to it again. Existing state and back-scroll positions are preserved; failed refreshes roll back their effects. Added a multipage example that refreshes saved/deleted notes while keeping search drafts and filters.

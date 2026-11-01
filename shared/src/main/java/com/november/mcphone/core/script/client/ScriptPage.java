@@ -20,6 +20,7 @@ import com.november.mcphone.core.script.layout.UiState;
 import com.november.mcphone.core.script.layout.PageParameters;
 import com.november.mcphone.core.script.engine.ClientScript;
 import com.november.mcphone.core.script.timer.DelayedCallbacks;
+import com.november.mcphone.core.script.sfc.WebLinks;
 import com.november.mcphone.core.script.http.HttpRequests;
 import com.november.mcphone.core.script.http.HttpSession;
 import com.november.mcphone.core.script.net.ScriptRpcResult;
@@ -70,6 +71,7 @@ public final class ScriptPage implements IPhonePage {
 
     private final ScriptApp app;
     private final LongSupplier timerClock;
+    private final java.util.function.Consumer<String> urlOpener;
     private final TextInputs inputs = new TextInputs(this::inputChanged);
     private Supplier<LocalStore> storage;
     private HttpSession http;
@@ -142,12 +144,22 @@ public final class ScriptPage implements IPhonePage {
     private long pressedUntil;
 
     public ScriptPage(ScriptApp app) {
-        this(app, System::nanoTime);
+        this(app, System::nanoTime, url -> net.minecraft.Util.getPlatform().openUri(url));
     }
 
     ScriptPage(ScriptApp app, LongSupplier timerClock) {
+        this(app, timerClock, url -> net.minecraft.Util.getPlatform().openUri(url));
+    }
+
+    /** Isolate the OS boundary in checks; normal pages always use the platform browser. */
+    ScriptPage(ScriptApp app, java.util.function.Consumer<String> urlOpener) {
+        this(app, System::nanoTime, urlOpener);
+    }
+
+    private ScriptPage(ScriptApp app, LongSupplier timerClock, java.util.function.Consumer<String> urlOpener) {
         this.app = app;
         this.timerClock = java.util.Objects.requireNonNull(timerClock);
+        this.urlOpener = java.util.Objects.requireNonNull(urlOpener);
     }
 
     // ============================================================
@@ -465,6 +477,14 @@ public final class ScriptPage implements IPhonePage {
         }
 
         for (String action : outcome.calls()) callAction(action);
+
+        if (outcome.externalUrl() != null) {
+            try { urlOpener.accept(WebLinks.checked(outcome.externalUrl())); }
+            catch (RuntimeException e) {
+                MCphone.LOGGER.warn("[MCphone] 打开脚本 App 网页失败：{}", app.id());
+                showToast(Component.translatable("mcphone.script.open_url.failed").getString());
+            }
+        }
 
         if (outcome.close()) {
             close();
