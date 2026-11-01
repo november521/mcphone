@@ -2,6 +2,7 @@ package com.november.mcphone.core.script.sfc;
 
 import com.november.mcphone.core.script.engine.ClientScript;
 import com.november.mcphone.core.script.http.HttpRequests;
+import com.november.mcphone.core.script.timer.DelayedCallbacks;
 import com.november.mcphone.core.script.layout.UiState;
 import com.november.mcphone.core.script.layout.PageParameters;
 import com.november.mcphone.core.script.server.store.LocalStore;
@@ -84,7 +85,12 @@ public final class Statements {
         }
 
         public Outcome run(UiState state, String file, LocalStore.Transaction storage, HttpRequests requests) {
-            return statements.run(state, file, names, values, host, storage, requests);
+            return run(state, file, storage, requests, null);
+        }
+
+        public Outcome run(UiState state, String file, LocalStore.Transaction storage, HttpRequests requests,
+                           DelayedCallbacks.Batch timers) {
+            return statements.run(state, file, names, values, host, storage, requests, timers);
         }
     }
 
@@ -302,6 +308,12 @@ public final class Statements {
 
     private Outcome run(UiState state, String file, List<String> names, List<Object> values,
                         Map<String, Object> host, LocalStore.Transaction storage, HttpRequests requests) {
+        return run(state, file, names, values, host, storage, requests, null);
+    }
+
+    private Outcome run(UiState state, String file, List<String> names, List<Object> values,
+                        Map<String, Object> host, LocalStore.Transaction storage, HttpRequests requests,
+                        DelayedCallbacks.Batch timers) {
         Map<String, Object> scratch = new LinkedHashMap<>(state.values());
         EvalContext c = new EvalContext(scratch, host, file);
         for (int i = 0; i < names.size(); i++) c.push(names.get(i), values.get(i));
@@ -341,7 +353,7 @@ public final class Statements {
                 try {
                     List<Object> arguments = new ArrayList<>();
                     for (Expr.Compiled argument : call.arguments()) arguments.add(argument.run(c));
-                    Map<String, Object> result = script.invoke(call.name(), arguments, scratch, state, storage, requests);
+                    Map<String, Object> result = script.invoke(call.name(), arguments, scratch, state, storage, requests, timers);
                     scratch.putAll(result);
                     changed.addAll(result.keySet());
                 } catch (ClientScript.Failure failure) {

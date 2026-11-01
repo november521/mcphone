@@ -3,6 +3,7 @@ package com.november.mcphone.core.script.engine;
 import com.november.mcphone.core.script.layout.StateRules;
 import com.november.mcphone.core.script.layout.UiState;
 import com.november.mcphone.core.script.http.HttpRequests;
+import com.november.mcphone.core.script.timer.DelayedCallbacks;
 import com.november.mcphone.core.script.server.store.LocalStore;
 import com.november.mcphone.core.script.server.store.StoreQuota;
 import com.november.mcphone.internal.rhino.javascript.Callable;
@@ -151,18 +152,31 @@ public final class ClientScript {
 
     public synchronized Map<String, Object> invoke(String name, List<?> arguments, Map<String, Object> values,
                                                    UiState state, LocalStore.Transaction storage, HttpRequests requests) {
-        return invoke(name, arguments, values, state, storage, requests, state.stringLimit());
+        return invoke(name, arguments, values, state, storage, requests, null);
+    }
+
+    public synchronized Map<String, Object> invoke(String name, List<?> arguments, Map<String, Object> values,
+                                                   UiState state, LocalStore.Transaction storage, HttpRequests requests,
+                                                   DelayedCallbacks.Batch timers) {
+        return invoke(name, arguments, values, state, storage, requests, timers, state.stringLimit());
     }
 
     /** Only the HTTP host can pass the bounded response body beyond the normal template string limit. */
     public synchronized Map<String, Object> respond(HttpRequests.Request request, HttpRequests.Result response,
                                                     UiState state, LocalStore.Transaction storage, HttpRequests requests) {
+        return respond(request, response, state, storage, requests, null);
+    }
+
+    public synchronized Map<String, Object> respond(HttpRequests.Request request, HttpRequests.Result response,
+                                                    UiState state, LocalStore.Transaction storage, HttpRequests requests,
+                                                    DelayedCallbacks.Batch timers) {
         return invoke(request.callback(), List.of(response.status(), response.body(), response.error()),
-                state.values(), state, storage, requests, HttpRequests.MAX_BODY_BYTES);
+                state.values(), state, storage, requests, timers, HttpRequests.MAX_BODY_BYTES);
     }
 
     private Map<String, Object> invoke(String name, List<?> arguments, Map<String, Object> values,
-                                       UiState state, LocalStore.Transaction storage, HttpRequests requests, int argumentLimit) {
+                                       UiState state, LocalStore.Transaction storage, HttpRequests requests,
+                                       DelayedCallbacks.Batch timers, int argumentLimit) {
         if (!declares(name)) throw new Failure("没有声明客户端函数 '" + name + "'");
         if (arguments.size() != arity(name)) throw new Failure("客户端函数 '" + name + "' 需要 " + arity(name) + " 个参数");
         Object[] args = new Object[arguments.size()];
@@ -191,7 +205,7 @@ public final class ClientScript {
                 scope.setParentScope(null);
                 Object snapshot = toJs(cx, scope, values);
                 ScriptableObject.defineProperty(scope, "state", snapshot, ScriptableObject.EMPTY);
-                installContext(cx, scope, storage, requests, state);
+                installContext(cx, scope, storage, requests, state, timers);
                 code.exec(cx, scope); // Only function declarations survived the compile-time AST pass.
                 Object fn = scope.get(name, scope);
                 if (!(fn instanceof Callable callable)) throw new Failure("客户端函数不可调用");
@@ -232,7 +246,7 @@ public final class ClientScript {
     }
 
     private void installContext(Context cx, ScriptableObject scope, LocalStore.Transaction storage, HttpRequests requests,
-                                UiState state) {
+                                UiState state, DelayedCallbacks.Batch timers) {
         ScriptableObject store = HostFn.obj(cx, scope);
         storeFunction(store, scope, "getString", 2, (c, s, args) -> {
             if (args.length < 1 || args.length > 2) throw HostError.invalid("getString 需要键名和可选的默认字符串");
@@ -284,6 +298,28 @@ public final class ClientScript {
         });
         http.sealObject();
         ScriptableObject.defineProperty(ctx, "http", http, ScriptableObject.READONLY | ScriptableObject.PERMANENT);
+        ScriptableObject timer = HostFn.obj(cx, scope);
+        storeFunction(timer, scope, "after", 2, (c, s, args) -> {
+            if (args.length != 2 || !(args[0] instanceof Number number) || !Double.isFinite(number.doubleValue())
+                    || number.doubleValue() != Math.rint(number.doubleValue()) || number.doubleValue() < DelayedCallbacks.MIN_DELAY_MS
+                    || number.doubleValue() > DelayedCallbacks.MAX_DELAY_MS) throw HostError.invalid("after 需要 50–60000 毫秒的整数和回调函数名");
+            if (timers == null) throw HostError.invalid("当前页面没有可用的延迟任务宿主");
+            String callback = HostFn.str(args, 1, "after");
+            if (arity(callback) != 0) throw HostError.invalid("延迟回调须为本页声明的无参函数");
+            try { return timers.after(number.intValue(), callback); }
+            catch (IllegalArgumentException e) { throw HostError.invalid(e.getMessage()); }
+        });
+        storeFunction(timer, scope, "cancel", 1, (c, s, args) -> {
+            if (args.length != 1 || !(args[0] instanceof Number number) || !Double.isFinite(number.doubleValue())
+                    || number.doubleValue() != Math.rint(number.doubleValue()) || number.doubleValue() < 0
+                    || number.doubleValue() > Integer.MAX_VALUE) throw HostError.invalid("cancel 需要非负的 32 位整数任务编号");
+            if (timers == null) throw HostError.invalid("当前页面没有可用的延迟任务宿主");
+            try { timers.cancel(number.intValue()); }
+            catch (IllegalArgumentException e) { throw HostError.invalid(e.getMessage()); }
+            return com.november.mcphone.internal.rhino.javascript.Undefined.instance;
+        });
+        timer.sealObject();
+        ScriptableObject.defineProperty(ctx, "timer", timer, ScriptableObject.READONLY | ScriptableObject.PERMANENT);
         ctx.sealObject();
         ScriptableObject.defineProperty(scope, "ctx", ctx, ScriptableObject.READONLY | ScriptableObject.PERMANENT);
     }

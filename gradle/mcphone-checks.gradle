@@ -243,6 +243,19 @@ tasks.named('jar').configure { finalizedBy tasks.named('pruneOldJars') }
 // 它该受的那道校验：对外 API 的示例代码不能是编不过的。
 
 def assertTestsClasses = layout.buildDirectory.dir('classes/assert-tests')
+def assertTestsResources = layout.buildDirectory.dir('resources/assert-tests')
+def assertionLanguage = assertTestsResources.map { it.file('assets/minecraft/lang/en_us.json') }
+def assertionMessages = '{"mcphone.script.client_function.failed":"Page action failed.","mcphone.script.http_callback.failed":"Request callback failed."}'
+// Stable test-only resource: parallel JVMs must not create/delete a shared language file.
+tasks.register('prepareAssertTestResources') {
+    inputs.property('messages', assertionMessages)
+    outputs.file(assertionLanguage)
+    doLast {
+        def output = assertionLanguage.get().asFile
+        output.parentFile.mkdirs()
+        output.setText(assertionMessages, 'UTF-8')
+    }
+}
 // 递归而不是只扫顶层：把测试挪进子目录是个再自然不过的整理动作，而顶层写死的
 // '*.java' 遇上它是【静默少跑几份】，不是报错。
 // 【docs/ 也按层分】
@@ -303,8 +316,8 @@ def assertTestTasks = assertTestMains.collect { fqcn ->
     tasks.register("assertTest${simple}", JavaExec) {
         description = "跑 ${simple}"
         group = 'verification'
-        dependsOn tasks.named('compileAssertTests')
-        classpath = files(assertTestsClasses, sourceSets.main.output, sourceSets.main.compileClasspath)
+        dependsOn tasks.named('compileAssertTests'), tasks.named('prepareAssertTestResources')
+        classpath = files(assertTestsResources, assertTestsClasses, sourceSets.main.output, sourceSets.main.compileClasspath)
         mainClass = fqcn
         javaLauncher = javaToolchains.launcherFor(projectToolchain)
     }

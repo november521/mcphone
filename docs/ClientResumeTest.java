@@ -248,17 +248,8 @@ public final class ClientResumeTest {
 
     public static void main(String[] args) throws Exception {
         Path root = Files.createTempDirectory("mcphone-resume-").toAbsolutePath().normalize();
-        // Headless assertion classpaths omit Minecraft's vanilla language asset. Keep this fixture in test output only.
-        Path classes = Path.of(ClientResumeTest.class.getProtectionDomain().getCodeSource().getLocation().toURI()).toAbsolutePath().normalize();
-        Path language = classes.resolve("assets/minecraft/lang/en_us.json");
-        boolean createdLanguage = !Files.exists(language);
-        if (createdLanguage) {
-            Files.createDirectories(language.getParent());
-            Files.writeString(language, "{\"mcphone.script.client_function.failed\":\"Page action failed.\"}");
-        }
         try {lifecycle(); transactions(root); requests(); host(); sample(root);}
         finally {
-            if (createdLanguage) Files.deleteIfExists(language);
             try (var paths = Files.walk(root)){for (Path path : paths.sorted(Comparator.reverseOrder()).toList()) Files.deleteIfExists(path);}
         }
         System.out.println("ClientResumeTest: " + checks + " checks passed");

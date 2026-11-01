@@ -19,6 +19,7 @@ import com.november.mcphone.core.script.layout.TextMeasure;
 import com.november.mcphone.core.script.layout.UiState;
 import com.november.mcphone.core.script.layout.PageParameters;
 import com.november.mcphone.core.script.engine.ClientScript;
+import com.november.mcphone.core.script.timer.DelayedCallbacks;
 import com.november.mcphone.core.script.http.HttpRequests;
 import com.november.mcphone.core.script.http.HttpSession;
 import com.november.mcphone.core.script.net.ScriptRpcResult;
@@ -37,6 +38,8 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Supplier;
+import java.util.function.BooleanSupplier;
+import java.util.function.LongSupplier;
 
 /**
  * 一个脚本 App 画在手机屏幕里的那一页（施工方案 §8.7、§10）。
@@ -66,9 +69,13 @@ public final class ScriptPage implements IPhonePage {
     private static final String FONT_PROBE = "MCphone 字体";
 
     private final ScriptApp app;
+    private final LongSupplier timerClock;
     private final TextInputs inputs = new TextInputs(this::inputChanged);
     private Supplier<LocalStore> storage;
     private HttpSession http;
+    private BooleanSupplier activeAccount = () -> true;
+    private DelayedCallbacks timers;
+    private UiState timerOwner;
     /** 页面（包括副手 HUD）占用旧包时，自动更新延后，避免释放仍在使用的贴图。 */
     private static final Map<net.minecraft.resources.ResourceLocation, Integer> OPEN = new HashMap<>();
     private boolean opened;
@@ -135,7 +142,12 @@ public final class ScriptPage implements IPhonePage {
     private long pressedUntil;
 
     public ScriptPage(ScriptApp app) {
+        this(app, System::nanoTime);
+    }
+
+    ScriptPage(ScriptApp app, LongSupplier timerClock) {
         this.app = app;
+        this.timerClock = java.util.Objects.requireNonNull(timerClock);
     }
 
     // ============================================================
@@ -151,7 +163,8 @@ public final class ScriptPage implements IPhonePage {
         closed = false;
         storage = ScriptLocalStorage.forApp(app.id().toString());
         if (http != null) http.close();
-        http = new HttpSession(ScriptLocalStorage.accountGuard());
+        activeAccount = ScriptLocalStorage.accountGuard();
+        http = new HttpSession(activeAccount);
         openPage("");
     }
 
@@ -165,6 +178,9 @@ public final class ScriptPage implements IPhonePage {
     public void onClose() {
         if (http != null) http.close();
         http = null;
+        if (timers != null) timers.close();
+        timers = null;
+        timerOwner = null;
         inputs.clear();
         if (opened) {
             OPEN.computeIfPresent(app.id(), (id, count) -> count <= 1 ? null : count - 1);
@@ -191,6 +207,9 @@ public final class ScriptPage implements IPhonePage {
             MCphone.LOGGER.warn("[MCphone] {} 里没有 '{}' 这一页，nav 不动", app.id(), name);
             return;
         }
+        if (timers != null) timers.close();
+        timers = new DelayedCallbacks(activeAccount, timerClock);
+        timerOwner = null;
         current = name;
         inputs.clear();
         pressedKey = null;   // 上一页那个按钮的 key 在这一页可能指到另一个节点，跨页串色
@@ -198,10 +217,13 @@ public final class ScriptPage implements IPhonePage {
         String file = app.id() + (name.isEmpty() ? "" : "/" + name);
         PageStates.Opened pageState = retained == null
                 ? states.open(name, page.template(), file, storage,
-                    target -> requests(page.template().script(), target, file), parameters)
+                    target -> requests(page.template().script(), target, file), parameters,
+                    target -> timers(page.template().script(), target, file))
                 : states.restore(name, retained.state(), page.template(), file, storage,
-                    target -> requests(page.template().script(), target, file));
+                    target -> requests(page.template().script(), target, file),
+                    target -> timers(page.template().script(), target, file));
         state = pageState.state();
+        timerOwner = state;
         instance = new TemplateInstance(page.template(), file);
         tree = null;
         layout = null;
@@ -344,7 +366,7 @@ public final class ScriptPage implements IPhonePage {
 
     private void inputChanged(LayoutNode edited) {
         if (closed || tree == null || state == null) return;
-        run(tree.input(edited.node, state, storage, requests()));
+        run(tree.input(edited.node, state, storage, requests(), timers()));
     }
 
     @Override
@@ -360,17 +382,17 @@ public final class ScriptPage implements IPhonePage {
             // 禁用的按钮吃掉这一下：落到宿主手里就成了"点手机里面 = 关机"（§5.3）
             if (!Renderer.isEnabled(hit, state)) return true;
             press(hit);
-            run(tree.click(hit.node, state, 0, storage, requests()));
+            run(tree.click(hit.node, state, 0, storage, requests(), timers()));
             return true;
         }
         if (type == NodeType.TOGGLE) {
             press(hit);
-            run(tree.click(hit.node, state, 0, storage, requests()));
+            run(tree.click(hit.node, state, 0, storage, requests(), timers()));
             return true;
         }
         if (type == NodeType.TAB_BAR) {
             press(hit);
-            run(tree.click(hit.node, state, HitTest.segmentAt(hit, cx, mx), storage, requests()));
+            run(tree.click(hit.node, state, HitTest.segmentAt(hit, cx, mx), storage, requests(), timers()));
             return true;
         }
         return false;
@@ -395,11 +417,30 @@ public final class ScriptPage implements IPhonePage {
                 session.submit(request, result -> {
                     if (closed || session != http) return;
                     java.util.List<String> warnings = PageStates.respond(script, request, result, target, file, local,
-                            requests(script, target, file));
+                            requests(script, target, file), timers(script, target, file));
                     for (String warning : warnings) MCphone.LOGGER.warn("[MCphone] {}", warning);
                     if (!warnings.isEmpty()) showToast(Component.translatable("mcphone.script.http_callback.failed").getString());
                 });
             }
+        });
+    }
+
+    private DelayedCallbacks.Batch timers() {
+        return timers(app.page(current).template().script(), state,
+                app.id() + (current.isEmpty() ? "" : "/" + current));
+    }
+
+    private DelayedCallbacks.Batch timers(ClientScript script, UiState target, String file) {
+        DelayedCallbacks session = timers;
+        if (session == null || (timerOwner != null && timerOwner != target)) return null;
+        timerOwner = target;
+        Supplier<LocalStore> local = storage;
+        return session.batch(callback -> {
+            if (closed || session != timers || target != state) return;
+            var result = PageStates.delayed(target, script, callback, file, local,
+                    ignored -> requests(script, target, file), ignored -> timers(script, target, file));
+            for (String warning : result.warnings()) MCphone.LOGGER.warn("[MCphone] {}", warning);
+            if (!result.warnings().isEmpty()) showToast(Component.translatable("mcphone.script.client_function.failed").getString());
         });
     }
 
@@ -556,6 +597,7 @@ public final class ScriptPage implements IPhonePage {
     public void tick() {
         inputs.tick();
         if (http != null) http.poll();
+        if (timers != null) timers.poll();
     }
 
     /** 返回栈里还有东西就退一层，没有就让宿主退回主屏。 */
