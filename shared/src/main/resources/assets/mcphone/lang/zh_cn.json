@@ -573,5 +573,6 @@
   "mcphone.changelog.upcoming": "待发布",
   "mcphone.script.client_function.failed": "操作未完成，页面数据已保留。详情见客户端日志。",
   "mcphone.script.initialization.failed": "页面初始化未完成，已保留默认值。详情见客户端日志。",
-  "mcphone.script.http_callback.failed": "响应处理未完成，页面数据已保留。详情见客户端日志。"
+  "mcphone.script.http_callback.failed": "响应处理未完成，页面数据已保留。详情见客户端日志。",
+  "mcphone.script.open_url.failed": "无法打开网页，请检查系统默认浏览器。"
 }

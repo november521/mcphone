@@ -32,9 +32,9 @@ public final class Statements {
     public static final int MAX_ACTION_LEN = 64;
 
     private static final String SHAPES =
-            "@click 只能写 x = 表达式、x++、x--、close()、back()、nav('页面')、nav('页面', {id:1})、call('动作') 或本页函数";
+            "@click 只能写 x = 表达式、x++、x--、close()、back()、nav('页面')、nav('页面', {id:1})、openUrl('网址')、call('动作') 或本页函数";
 
-    sealed interface Stmt permits Assign, Step, Close, Back, Nav, Call, LocalCall {
+    sealed interface Stmt permits Assign, Step, Close, Back, Nav, Call, LocalCall, OpenUrl {
     }
 
     record Assign(String key, Expr.Compiled value) implements Stmt {
@@ -52,6 +52,8 @@ public final class Statements {
     record Nav(Expr.Compiled page, Expr.Compiled parameters) implements Stmt {
     }
 
+    record OpenUrl(Expr.Compiled url) implements Stmt {}
+
     /** 宿主转发的一条 RPC（§15.1）。参数与回调还写不了（P1 的 <script>），这里只点一下发空参数。 */
     record Call(String actionId) implements Stmt {
     }
@@ -65,7 +67,11 @@ public final class Statements {
      * {@code calls} 是要宿主发出去的动作 id，按书写顺序。
      */
     public record Outcome(boolean applied, boolean close, boolean back, String nav,
-                          List<String> calls, List<String> warnings, PageParameters navParameters) {
+                          List<String> calls, List<String> warnings, PageParameters navParameters, String externalUrl) {
+        public Outcome(boolean applied, boolean close, boolean back, String nav,
+                       List<String> calls, List<String> warnings, PageParameters navParameters) {
+            this(applied, close, back, nav, calls, warnings, navParameters, null);
+        }
         public Outcome(boolean applied, boolean close, boolean back, String nav, List<String> calls, List<String> warnings) {
             this(applied, close, back, nav, calls, warnings, PageParameters.EMPTY);
         }
@@ -135,6 +141,9 @@ public final class Statements {
             if (out.size() == MAX_STATEMENTS) throw ExprParser.syntax(first, "@click 最多 " + MAX_STATEMENTS + " 条语句");
             if (span(p) > ExprParser.MAX_LENGTH) throw SfcError.at(Code.E_EXPR_TOO_LONG, first.line(), first.col());
             Stmt next = statement(p, scope, src, script);
+            if (next instanceof OpenUrl && out.stream().anyMatch(s -> s instanceof OpenUrl)) {
+                throw ExprParser.syntax(first, "一次点击最多打开一个网页");
+            }
             if (input && (!(next instanceof LocalCall) || !out.isEmpty())) {
                 throw ExprParser.syntax(first, "@input 只接受一次本页函数调用，例如 changed()");
             }
@@ -155,6 +164,16 @@ public final class Statements {
         String name = t.text();
 
         if (ExprParser.is(after, "(")) {
+            // Preserve existing Apps that already declared their own openUrl function.
+            if (name.equals("openUrl") && (script == null || !script.declares(name))) {
+                p.next();
+                Typed url = p.parse(scope);
+                if (url.type() != ExprParser.T.STR && url.type() != ExprParser.T.ANY) {
+                    throw ExprParser.syntax(t, "openUrl 需要网址字符串");
+                }
+                p.expect(")");
+                return new OpenUrl(compiled(url, t, src));
+            }
             switch (name) {
                 case "close", "back" -> {
                     p.next();
@@ -278,6 +297,8 @@ public final class Statements {
                 moved.add(new Nav(shift(n.page(), lines), n.parameters() == null ? null : shift(n.parameters(), lines)));
             } else if (s instanceof LocalCall call) {
                 moved.add(new LocalCall(call.name(), call.arguments().stream().map(a -> shift(a, lines)).toList()));
+            } else if (s instanceof OpenUrl link) {
+                moved.add(new OpenUrl(shift(link.url(), lines)));
             } else {
                 moved.add(s);
             }
@@ -320,6 +341,7 @@ public final class Statements {
         boolean close = false;
         boolean back = false;
         String nav = null;
+        String externalUrl = null;
         PageParameters navParameters = PageParameters.EMPTY;
         List<String> calls = new ArrayList<>();
         Set<String> changed = new LinkedHashSet<>();
@@ -349,6 +371,9 @@ public final class Statements {
                 nav = page;
             } else if (s instanceof Call call) {
                 calls.add(call.actionId());
+            } else if (s instanceof OpenUrl link) {
+                try { externalUrl = WebLinks.checked(link.url().run(c)); }
+                catch (IllegalArgumentException e) { return failed(c, e.getMessage()); }
             } else if (s instanceof LocalCall call) {
                 try {
                     List<Object> arguments = new ArrayList<>();
@@ -368,7 +393,7 @@ public final class Statements {
         String why = state.writeProblems(scratch);
         if (why != null) return failed(c, why);
         for (String k : changed) state.set(k, scratch.get(k));
-        return new Outcome(true, close, back, nav, List.copyOf(calls), c.warnings(), navParameters);
+        return new Outcome(true, close, back, nav, List.copyOf(calls), c.warnings(), navParameters, externalUrl);
     }
 
     private Outcome failed(EvalContext c, String reason) {
