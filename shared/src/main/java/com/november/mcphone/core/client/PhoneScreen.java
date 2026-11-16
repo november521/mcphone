@@ -421,7 +421,7 @@ public final class PhoneScreen extends PhoneScreenBase {
         };
         if (target == null) return;
 
-        if (!ServerConfig.allowChatImages()) {
+        if (!ServerConfig.clientAllowChatImages()) {
             tellPlayer("mcphone.chat.image_disabled");
             return;
         }
@@ -922,8 +922,10 @@ public final class PhoneScreen extends PhoneScreenBase {
         // 从这里往下，所有页面拿到的都是换算过的坐标——它们按 120×200 算命中，
         // 而屏幕上画出来的是放大过的。{@link #render} 里那句铺背景的用的是原始坐标：
         // 它铺的是整个窗口，不在手机这层缩放里
-        final int mouseX = changelogPopup ? NO_MOUSE : (int) Math.round(unscaledX(rawMouseX));
-        final int mouseY = changelogPopup ? NO_MOUSE : (int) Math.round(unscaledY(rawMouseY));
+        final double pointerX = unscaledX(rawMouseX);
+        final double pointerY = unscaledY(rawMouseY);
+        final int mouseX = changelogPopup ? NO_MOUSE : (int) Math.round(pointerX);
+        final int mouseY = changelogPopup ? NO_MOUSE : (int) Math.round(pointerY);
 
         // 下面每一页都要这四个数。取成局部量是为了让分派那一长串看得见页面之间的差别
         // （谁多收一个 partialTick、谁要窗口尺寸），而不是被四个一模一样的常量名淹掉
@@ -951,7 +953,7 @@ public final class PhoneScreen extends PhoneScreenBase {
         renderStatusBar(g);
 
         switch (mode) {
-            case CHANGELOG -> changelogPage.render(g, phoneLeft, phoneTop, sw, sh, statusH, navH, font, false);
+            case CHANGELOG -> changelogPage.render(g, phoneLeft, phoneTop, sw, sh, statusH, navH, font, false, mouseX, mouseY);
             case MAIN              -> homeGrid.render(g, phoneLeft, phoneTop, metrics, font,
                     nowMs, mouseX, mouseY, partialTick);
             case SETTINGS          -> {
@@ -1055,7 +1057,8 @@ public final class PhoneScreen extends PhoneScreenBase {
 
         renderNavBar(g, mouseX, mouseY);
         if (changelogPopup) {
-            changelogDialog.render(g, phoneLeft, phoneTop, metrics.screenW(), sh, statusH, navH, font, true);
+            changelogDialog.render(g, phoneLeft, phoneTop, metrics.screenW(), sh, statusH, navH,
+                    font, true, pointerX, pointerY);
             if (changelogRecord != null) {
                 ChangelogClient.shown(changelogRecord);
                 changelogRecord = null;

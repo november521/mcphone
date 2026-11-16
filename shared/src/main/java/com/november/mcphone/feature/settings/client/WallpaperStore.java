@@ -1,5 +1,7 @@
 package com.november.mcphone.feature.settings.client;
 
+import com.november.mcphone.platform.ResourceIds;
+
 import com.november.mcphone.core.client.ClientPaths;
 import com.november.mcphone.core.PhonePaths;
 import com.mojang.blaze3d.platform.NativeImage;
@@ -191,7 +193,7 @@ public final class WallpaperStore {
             // 键里带一个只增不减的序号，理由见 textureSeq
             String texKey = "wp_" + (textureSeq++) + "_"
                     + displayName.toLowerCase().replaceAll("[^a-z0-9_]", "_");
-            ResourceLocation texLoc = ResourceLocation.fromNamespaceAndPath("mcphone", texKey);
+            ResourceLocation texLoc = ResourceIds.create("mcphone", texKey);
             DynamicTexture dynTex = new DynamicTexture(nativeImage);
             Minecraft.getInstance().getTextureManager().register(texLoc, dynTex);
 

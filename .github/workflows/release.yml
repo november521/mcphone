@@ -201,7 +201,7 @@ jobs:
 
           for T in $TARGETS; do
             PROJ=$(jq -r --arg t "$T" '.[$t].project' versions/targets.json)
-            JAVA=$(jq -r --arg t "$T" '.[$t].java'    versions/targets.json)
+            JAVA=$(jq -r --arg t "$T" '.[$t] | .gradle_java // .java' versions/targets.json)
             eval "TARGET_JAVA_HOME=\${JAVA_HOME_${JAVA}_X64:-}"
             if [ -z "$TARGET_JAVA_HOME" ]; then
               echo "::error::目标 $T 要 Java $JAVA，这台机器上没装。把它加进上面的 java-version。"

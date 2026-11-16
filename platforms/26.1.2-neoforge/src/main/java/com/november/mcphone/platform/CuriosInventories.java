@@ -34,4 +34,19 @@ public final class CuriosInventories {
         // 9.x 直接就是 Optional
         return CuriosApi.getCuriosInventory(entity);
     }
+    public static boolean isSupported() { return true; }
+    public static boolean isEquipped(LivingEntity entity, java.util.function.Predicate<net.minecraft.world.item.ItemStack> filter) {
+        return of(entity).map(inventory -> inventory.isEquipped(filter)).orElse(false);
+    }
+    public static Optional<com.november.mcphone.compat.CuriosCompat.CurioSlotRef> find(LivingEntity entity, java.util.function.Predicate<net.minecraft.world.item.ItemStack> filter) {
+        return of(entity).flatMap(inventory -> inventory.findFirstCurio(filter)).map(result ->
+                new com.november.mcphone.compat.CuriosCompat.CurioSlotRef(result.slotContext().identifier(), result.slotContext().index()));
+    }
+    public static net.minecraft.world.item.ItemStack get(LivingEntity entity, String id, int index) {
+        return of(entity).flatMap(inventory -> inventory.findCurio(id, index)).map(result -> result.stack())
+                .orElse(net.minecraft.world.item.ItemStack.EMPTY);
+    }
+    public static void set(LivingEntity entity, String id, int index, net.minecraft.world.item.ItemStack stack) {
+        of(entity).ifPresent(inventory -> inventory.setEquippedCurio(id, index, stack));
+    }
 }

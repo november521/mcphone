@@ -60,7 +60,7 @@ public final class CameraFlash {
 
     /** 自带的那份链定义：只有一张 swap 中转贴图，两个 pass 在代码里加，见类注释 */
     private static final ResourceLocation BLUR =
-            ResourceLocation.fromNamespaceAndPath(MCphone.MODID, "shaders/post/camera_blur.json");
+            new ResourceLocation(MCphone.MODID, "shaders/post/camera_blur.json");
 
     /** 原版那支模糊着色器的名字。{@code shaders/program/blur.json}，我们不自带 */
     private static final String BLUR_PROGRAM = "blur";

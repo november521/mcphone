@@ -37,7 +37,7 @@ public final class CuriosCompat {
      * 就绪"的时机去填，反而容易在加载早期取到错的值。
      */
     public static boolean isLoaded() {
-        return ModPresence.isLoaded(CURIOS_MODID);
+        return ModPresence.isLoaded(CURIOS_MODID) && CuriosInventories.isSupported();
     }
 
     /**
@@ -55,9 +55,7 @@ public final class CuriosCompat {
      * 别把它并回去。
      */
     private static boolean isEquippedInternal(LivingEntity entity, Predicate<ItemStack> filter) {
-        return CuriosInventories.of(entity)
-                .map(inventory -> inventory.isEquipped(filter))
-                .orElse(false);
+        return CuriosInventories.isEquipped(entity, filter);
     }
 
     /**
@@ -77,10 +75,7 @@ public final class CuriosCompat {
 
     private static Optional<CurioSlotRef> findEquippedInternal(LivingEntity entity,
                                                                Predicate<ItemStack> filter) {
-        return CuriosInventories.of(entity)
-                .flatMap(inventory -> inventory.findFirstCurio(filter))
-                .map(result -> new CurioSlotRef(
-                        result.slotContext().identifier(), result.slotContext().index()));
+        return CuriosInventories.find(entity, filter);
     }
 
     /** 取饰品栏某个位置上的物品。没装 Curios、位置不存在时都返回空堆 */
@@ -90,10 +85,7 @@ public final class CuriosCompat {
     }
 
     private static ItemStack getEquippedInternal(LivingEntity entity, String slotId, int index) {
-        return CuriosInventories.of(entity)
-                .flatMap(inventory -> inventory.findCurio(slotId, index))
-                .map(result -> result.stack())
-                .orElse(ItemStack.EMPTY);
+        return CuriosInventories.get(entity, slotId, index);
     }
 
     /**
@@ -110,7 +102,6 @@ public final class CuriosCompat {
 
     private static void setEquippedInternal(LivingEntity entity, String slotId, int index,
                                             ItemStack stack) {
-        CuriosInventories.of(entity)
-                .ifPresent(inventory -> inventory.setEquippedCurio(slotId, index, stack));
+        CuriosInventories.set(entity, slotId, index, stack);
     }
 }

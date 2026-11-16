@@ -1,5 +1,7 @@
 package com.november.mcphone.core.script.client;
 
+import com.november.mcphone.platform.ResourceIds;
+
 import com.november.mcphone.core.client.ClientPaths;
 import com.november.mcphone.core.PhonePaths;
 import com.november.mcphone.MCphone;
@@ -34,7 +36,7 @@ import java.util.function.Consumer;
 public final class LocalScriptSource implements IAppSource {
 
     public static final ResourceLocation ID =
-            ResourceLocation.fromNamespaceAndPath(MCphone.MODID, "local_script");
+            ResourceIds.create(MCphone.MODID, "local_script");
 
     /** id → 适配器。同一个包只有一个实例：注册表里那个与商店里那个必须是同一个。 */
     private static final LocalScriptCatalog CATALOG = new LocalScriptCatalog(

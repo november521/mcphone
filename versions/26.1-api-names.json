@@ -2,6 +2,7 @@
   "_comment": "26.1 编译入口的纯名称和版本门面类型绑定。不改协议字面量、注释或共用业务；真实行为在平台实现，覆盖类型必须显式声明。仅 26.1.2 NeoForge 使用。",
   "qualified": {
     "net.minecraft.resources.ResourceLocation": "net.minecraft.resources.Identifier",
+    "net.minecraft.ResourceLocationException": "net.minecraft.IdentifierException",
     "net.minecraft.client.gui.GuiGraphics": "com.november.mcphone.platform.client.port.PhoneGraphics",
     "net.minecraft.client.gui.components.EditBox": "com.november.mcphone.platform.client.port.PhoneEditBox",
     "net.minecraft.Util": "net.minecraft.util.Util",
@@ -20,6 +21,7 @@
   },
   "names": {
     "ResourceLocation": "Identifier",
+    "ResourceLocationException": "IdentifierException",
     "writeResourceLocation": "writeIdentifier",
     "readResourceLocation": "readIdentifier",
     "GuiGraphics": "PhoneGraphics",

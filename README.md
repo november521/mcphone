@@ -2,7 +2,7 @@
 
 把一部能用的智能手机塞进 Minecraft —— 拍照、翻相册、换壁纸、听歌、聊天、装 App。
 
-**Minecraft 26.1.2**（NeoForge 26.1.2.100+、Java 25）· **Minecraft 1.21.1**（NeoForge 21.1.200+ / Fabric）· **Minecraft 1.20.1**（Forge 47.4.0+）· 客户端与服务端都需安装
+**Minecraft 26.1.2**（NeoForge 26.1.2.100+、Java 25）· **Minecraft 1.21.1**（NeoForge 21.1.200+ / Fabric）· **Minecraft 1.20.1**（Forge 47.4.0+ / Fabric）· 客户端与服务端都需安装
 
 [下载：Modrinth](https://modrinth.com/mod/mcphone) ·
 [CurseForge](https://www.curseforge.com/minecraft/mc-mods/mcphone) ·
@@ -34,7 +34,7 @@ wiki 是文档的唯一真源，仓库里不再另存一份。
 老版本因而长期滞后。
 
 支持哪些目标由 [`versions/targets.json`](versions/targets.json) 声明 ——
-每个 Minecraft 版本都有 Forge / NeoForge / Fabric 三条，目前正式发布的四个目标：
+每个 Minecraft 版本都有 Forge / NeoForge / Fabric 三条，正式发布矩阵中的目标：
 
 | 目标 | Minecraft | 加载器 | 状态 |
 |---|---|---|---|
@@ -42,6 +42,9 @@ wiki 是文档的唯一真源，仓库里不再另存一份。
 | `1.21.1-fabric` | 1.21.1 | Fabric | 产物进 Release |
 | `1.21.1-neoforge` | 1.21.1 | NeoForge | 产物进 Release |
 | `1.20.1-forge` | 1.20.1 | Forge | 产物进 Release |
+| `1.20.1-fabric` | 1.20.1 | Fabric | 产物进 Release |
+
+Minecraft 1.20.1 Fabric 需要 Java 17、Fabric Loader 0.16.14+ 和 Fabric API 0.92.2+1.20.1 或更新的 1.20.1 版本。该目标由 Java 21 启动 Gradle，并使用 Java 17 工具链编译。
 
 代码按共用范围分层：`shared/` 全部目标共用，`layers/` 下按 Minecraft 版本或加载器
 再分，`platforms/<目标名>/` 是目标专有。各目标的 Gradle、Java 版本可以不同，

@@ -1,0 +1,16 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.november.mcphone.mixin",
+  "compatibilityLevel": "JAVA_17",
+  "mixins": ["PlayerDataMixin"],
+  "client": [
+    "client.KeyboardHandlerMixin",
+    "client.MouseHandlerMixin",
+    "client.KeyMappingAccessor",
+    "client.SoundEngineMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

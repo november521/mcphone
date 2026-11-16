@@ -7,7 +7,6 @@ import com.november.mcphone.feature.terminal.TerminalSlot;
 import com.november.mcphone.feature.terminal.integration.TerminalIntegration;
 import com.november.mcphone.feature.terminal.integration.Terminals;
 import com.november.mcphone.feature.terminal.integration.ae2.Ae2Integration;
-import com.november.mcphone.feature.terminal.integration.refinedstorage.RefinedStorageIntegration;
 import com.november.mcphone.feature.terminal.integration.toms.TomsStorageIntegration;
 import com.november.mcphone.feature.terminal.net.TerminalActionPacket;
 import net.minecraft.client.Minecraft;
@@ -50,7 +49,7 @@ public final class TerminalApp extends PhoneApp {
      */
     private static final List<RequiredMod> COMPANIONS = List.of(
             new RequiredMod(Ae2Integration.MODID, Ae2Integration.NAME),
-            new RequiredMod(RefinedStorageIntegration.MODID, RefinedStorageIntegration.NAME),
+            new RequiredMod("refinedstorage", "Refined Storage"),
             new RequiredMod(TomsStorageIntegration.MODID, TomsStorageIntegration.NAME));
 
     @Override

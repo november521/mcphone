@@ -1,5 +1,7 @@
 package com.november.mcphone.feature.reader.client.compat;
 
+import com.november.mcphone.platform.ResourceIds;
+
 import com.november.mcphone.MCphone;
 import com.november.mcphone.core.client.GuiUtil;
 import com.november.mcphone.feature.reader.BookRef;
@@ -65,7 +67,7 @@ public final class ArsNouveauQuirk implements BookQuirk {
 
     /** 它留在 Patchouli 里的那本遗留书 */
     private static final ResourceLocation WORN_NOTEBOOK =
-            ResourceLocation.fromNamespaceAndPath(ARS_NOUVEAU_MODID, "worn_notebook");
+            ResourceIds.create(ARS_NOUVEAU_MODID, "worn_notebook");
 
     /**
      * 它自己的开书入口。用 openBook() 而不是 IndexScreen.open()：前者是它的物品
@@ -84,7 +86,7 @@ public final class ArsNouveauQuirk implements BookQuirk {
      * 我们得能发现：{@link #hasLegacyIcon} 查不到就退回通用书图，不会画成紫黑格子。
      */
     private static final ResourceLocation LEGACY_ICON =
-            ResourceLocation.fromNamespaceAndPath(ARS_NOUVEAU_MODID, "textures/item/worn_notebook.png");
+            ResourceIds.create(ARS_NOUVEAU_MODID, "textures/item/worn_notebook.png");
 
     /** 图标尺寸，与文件一致。写成常量是为了让"这张图多大"只有一处说法 */
     private static final int LEGACY_ICON_SIZE = 16;

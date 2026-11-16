@@ -1,5 +1,7 @@
 package com.november.mcphone.core.client;
 
+import com.november.mcphone.platform.ResourceIds;
+
 import com.november.mcphone.MCphone;
 import com.november.mcphone.core.PhoneLocation;
 import net.minecraft.resources.ResourceLocation;
@@ -39,10 +41,10 @@ import java.util.UUID;
 public final class PhoneSession {
 
     private static final ResourceLocation CHAT_APP =
-            ResourceLocation.fromNamespaceAndPath(MCphone.MODID, "chat");
+            ResourceIds.create(MCphone.MODID, "chat");
 
     private static final ResourceLocation READER_APP =
-            ResourceLocation.fromNamespaceAndPath(MCphone.MODID, "reader");
+            ResourceIds.create(MCphone.MODID, "reader");
 
     /** 允许续开的 App。加成员见类注释 */
     private static final Set<ResourceLocation> RESUMABLE = Set.of(CHAT_APP, READER_APP);

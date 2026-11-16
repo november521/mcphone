@@ -47,7 +47,7 @@ jobs:
           [[ "$TARGET" =~ ^[0-9]+(\.[0-9]+)+-(forge|neoforge|fabric)$ ]]
           # 发布资格按当前主分支；构建代码按原标签，两者必须是同一个平台配置。
           jq -e --arg t "$TARGET" '.[$t].buildable == true' versions/targets.json
-          CONFIG=$(jq -c --arg t "$TARGET" '.[$t] | {project,java,loader,minecraft}' versions/targets.json)
+          CONFIG=$(jq -c --arg t "$TARGET" '.[$t] | {project,java,gradle_java,loader,minecraft}' versions/targets.json)
           NOTES="docs/release-notes/supplements/${TAG}-${TARGET}.md"
           test -f "$NOTES"
           mkdir -p "$RUNNER_TEMP/supplement"
@@ -59,11 +59,12 @@ jobs:
           jq -e --arg n "$ASSET" '[.assets[] | select(.name == $n)] | length == 0' "$RUNNER_TEMP/supplement/release.json"
           git checkout --detach "$TAG"
           test "$(grep '^mod_version=' gradle.properties | cut -d= -f2- | tr -d '[:space:]')" = "${TAG#v}"
-          test "$(jq -c --arg t "$TARGET" '.[$t] | {project,java,loader,minecraft}' versions/targets.json)" = "$CONFIG"
+          test "$(jq -c --arg t "$TARGET" '.[$t] | {project,java,gradle_java,loader,minecraft}' versions/targets.json)" = "$CONFIG"
           test -d "$(jq -r '.project' <<< "$CONFIG")"
           {
             echo "version=${TAG#v}"
             echo "java=$(jq -r '.java' <<< "$CONFIG")"
+            echo "gradle_java=$(jq -r '.gradle_java // .java' <<< "$CONFIG")"
             echo "loader=$(jq -r '.loader | ascii_downcase' <<< "$CONFIG")"
             echo "minecraft=$(jq -r '.minecraft' <<< "$CONFIG")"
           } >> "$GITHUB_OUTPUT"
@@ -72,7 +73,9 @@ jobs:
       - uses: actions/setup-java@v6
         with:
           distribution: temurin
-          java-version: ${{ steps.target.outputs.java }}
+          java-version: |
+            ${{ steps.target.outputs.java }}
+            ${{ steps.target.outputs.gradle_java }}
       - uses: gradle/actions/setup-gradle@v5
 
       - name: 完整构建与下限验证

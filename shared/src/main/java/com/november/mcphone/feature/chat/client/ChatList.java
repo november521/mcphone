@@ -219,7 +219,7 @@ public final class ChatList {
         // 传送图标只给在线的人。这里读的是【服务端】的开关 —— 它读得到，靠的是加载器
         // 把 SERVER 档的配置推给客户端；哪些目标做得到，见 versions/targets.json 的
         // server_config_sync。读错了只是图标显隐不对，真正的拦截在 TeleportService。
-        boolean canTeleport = group == null && c.online() && ServerConfig.allowFriendTeleport();
+        boolean canTeleport = group == null && c.online() && ServerConfig.clientAllowFriendTeleport();
         String unread = c.unread() > 0 ? unreadLabel(c.unread()) : "";
         int badgeW = unread.isEmpty() ? 0 : Math.max(ChatLayout.UNREAD_HEIGHT, UnreadBadge.width(font, unread));
         var layout = ChatLayout.card(w, ChatUi.lineHeight(font, ChatLayout.TEXT_SCALE),

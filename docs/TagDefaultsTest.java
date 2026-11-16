@@ -136,7 +136,7 @@ public class TagDefaultsTest {
         check(Files.isRegularFile(src), "落地端源码在：" + src);
         if (!Files.isRegularFile(src)) return;
         String text = Files.readString(src, StandardCharsets.UTF_8);
-        check(text.contains("ResourceLocation.fromNamespaceAndPath(\"mcphone\", \"giftable\")"),
+        check(text.contains("ResourceIds.create(\"mcphone\", \"giftable\")"),
                 "GIFTABLE 常量指着 mcphone:giftable");
         check(text.contains("TagKey.create(Registries.ITEM"), "GIFTABLE 是物品标签");
         check(text.contains("stack.is(GIFTABLE)"), "item.give 落地前真的查这个标签");

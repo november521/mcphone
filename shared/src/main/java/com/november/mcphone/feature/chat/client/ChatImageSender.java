@@ -219,7 +219,7 @@ public final class ChatImageSender {
 
         // 上限在这里取，不在后台线程里取：那是服主的配置（连上来时同步过来的），
         // 读它是主线程的事，而且一次上传从头到尾该按同一个数来
-        final int maxBytes = ChatImage.maxBytes();
+        final int maxBytes = com.november.mcphone.core.ServerConfig.clientChatImageMaxBytes();
 
         Util.backgroundExecutor().execute(() -> {
             Attempt attempt;

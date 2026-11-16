@@ -1,5 +1,7 @@
 package com.november.mcphone.core.script.client.render;
 
+import com.november.mcphone.platform.ResourceIds;
+
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.november.mcphone.MCphone;
 import com.november.mcphone.core.client.GuiUtil;
@@ -31,7 +33,7 @@ public final class IconAtlas {
     public static void draw(GuiGraphics g, String name, int x, int y, int size, int argb) {
         if (size <= 0) return;
         if (texture == null) {
-            texture = ResourceLocation.fromNamespaceAndPath(MCphone.MODID, "textures/script/icons.png");
+            texture = ResourceIds.create(MCphone.MODID, "textures/script/icons.png");
         }
         int index = NAMES.indexOf(name);
         if (index < 0) index = NAMES.indexOf("info");
