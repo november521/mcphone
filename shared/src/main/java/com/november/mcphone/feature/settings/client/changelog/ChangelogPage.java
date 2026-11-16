@@ -103,8 +103,9 @@ public final class ChangelogPage {
     }
 
     private boolean hitsCloseButton(double mouseX, double mouseY) {
-        return modal && GuiUtil.hit(mouseX, mouseY, left + CLOSE_INSET, textBottom + CLOSE_INSET,
-                width - CLOSE_INSET * 2, bottom - textBottom - CLOSE_INSET * 2);
+        // fill 的右、下坐标不属于按钮，悬停与点击都沿用这个范围。
+        return modal && mouseX >= left + CLOSE_INSET && mouseX < left + width - CLOSE_INSET
+                && mouseY >= textBottom + CLOSE_INSET && mouseY < bottom - CLOSE_INSET;
     }
 
     /** 正文只在打开、宽度、语言、字体或配色变化时重排，滚动不重新解析历史。 */

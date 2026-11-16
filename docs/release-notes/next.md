@@ -17,6 +17,7 @@
 ### 修复
 
 - 鼠标移到更新公告的关闭按钮上时，按钮底色、边框和文字会高亮。
+- 在 HUD 中点击方块键切回全屏时会保留当前页面。关闭全屏后手机会收起，按 G 可再次唤出 HUD。
 
 ## English
 
@@ -35,3 +36,4 @@
 ### Fixed
 
 - The update announcement’s Close button highlights its background, border, and label on hover.
+- Switching from HUD to fullscreen with the square button preserves the current page. Closing fullscreen dismisses the HUD, and G can show it again.
