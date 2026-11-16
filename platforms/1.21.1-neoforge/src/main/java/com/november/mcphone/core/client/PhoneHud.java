@@ -353,6 +353,18 @@ public final class PhoneHud {
         mc.setScreen(null);
     }
 
+    /** 方块键明确退出 HUD；后续关闭全屏不再自动挂回去，G 仍可重新唤出。 */
+    static void showFullscreen(PhoneScreen current) {
+        Minecraft mc = Minecraft.getInstance();
+        if (current == null || phone != current || mc.screen != current) return;
+
+        phone = null;
+        interacting = false;
+        manual = Override.HIDE;
+        // 已是当前 Screen，不重复 setScreen，以免 removed() 提前关掉页面。
+        current.releaseFromHud();
+    }
+
     /**
      * 按开机键或右键手机时问一句：要开的就是副手上挂着的这一部吗？
      *

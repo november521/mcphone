@@ -208,7 +208,8 @@ public final class PhoneScreen extends PhoneScreenBase {
      * </ul>
      *
      * 同一部手机按住 Alt 时 hudMode 为 true（在原地放大操作），按开机键全屏打开时由
-     * PhoneHud 翻成 false（挪到屏幕正中），而 hudOwned 全程为 true。
+     * PhoneHud 翻成 false（挪到屏幕正中），而 hudOwned 仍为 true；方块键则明确退出
+     * HUD 托管，把关闭责任交回普通全屏界面。
      */
     private boolean hudOwned;
 
@@ -1314,7 +1315,7 @@ public final class PhoneScreen extends PhoneScreenBase {
                 return true;
             }
             case TASKS -> {
-                if (hudMode) PhoneHud.openFullscreen(location);
+                if (hudMode) PhoneHud.showFullscreen(this);
                 else PhoneHud.showAsHud(this);
                 return true;
             }
@@ -1914,6 +1915,12 @@ public final class PhoneScreen extends PhoneScreenBase {
     void adoptByHud() {
         this.hudOwned = true;
         setHudMode(true);
+    }
+
+    /** 同一实例交回全屏：保留页面，由 removed() 在真正关闭时释放资源。 */
+    void releaseFromHud() {
+        this.hudOwned = false;
+        setHudMode(false);
     }
 
     /** 画在 HUD 那个角上（true）还是屏幕正中（false） */

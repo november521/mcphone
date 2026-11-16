@@ -102,6 +102,15 @@ public final class ChangelogTest {
         check(!page.mouseClicked(5, 130, 0));
         check(!page.mouseClicked(20, 125, 1));
         check(page.mouseClicked(20, 125, 0));
+        check(page.mouseClicked(13, 123, 0));
+        check(page.mouseClicked(106.99, 146.99, 0));
+        check(!page.mouseClicked(12.99, 125, 0));
+        check(!page.mouseClicked(107, 125, 0));
+        check(!page.mouseClicked(20, 122.99, 0));
+        check(!page.mouseClicked(20, 147, 0));
+        field(page, "modal", false);
+        check(!page.mouseClicked(20, 125, 0));
+        field(page, "modal", true);
         @SuppressWarnings("unchecked") var hits = (List<Object>) field(page, "links");
         hits.add(null); // 模拟上一帧的命中区域；滚动后不可再使用它。
         page.scroll(20, 30, 1);
