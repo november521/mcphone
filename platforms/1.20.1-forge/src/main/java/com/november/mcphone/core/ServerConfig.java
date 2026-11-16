@@ -146,4 +146,7 @@ public final class ServerConfig {
     public static boolean terminalKeepPowered() {
         return !SPEC.isLoaded() || TERMINAL_KEEP_POWERED.get();
     }
+    public static boolean clientAllowFriendTeleport() { return allowFriendTeleport(); }
+    public static boolean clientAllowChatImages() { return allowChatImages(); }
+    public static int clientChatImageMaxBytes() { return chatImageMaxBytes(); }
 }

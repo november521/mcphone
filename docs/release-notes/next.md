@@ -4,6 +4,7 @@
 
 ### 新增
 
+- 支持 Minecraft 1.20.1 Fabric，客户端和服务端都需安装。游戏需要 Java 17、Fabric Loader 0.16.14+ 和 Fabric API 0.92.2+1.20.1 或更新的 1.20.1 版本。
 - 脚本 App 支持点击动作 `openUrl(url)`，在整次点击成功后用系统默认浏览器打开 HTTP/HTTPS 网页，每次最多一个；失败不打开，自动回调不可使用。提供 MC 百科搜索及原文跳转示例，不依赖 MCEF。
 - 脚本 App 增加 `ctx.timer.after` / `ctx.timer.cancel` 一次性延迟回调，可实现输入防抖。任务使用单调时间、在客户端页面 tick 执行，数量和延时受限；创建/取消随事务提交，切页或关闭自动清理。提供搜索防抖演示。
 - 脚本 App 的 `text-input` 和 `textarea` 支持 `@input` 调用本页函数，实现输入即时筛选、校验与预览。仅用户实际修改内容时触发，代码赋值不递归触发；回调失败撤回其效果，保留已接受的输入。提供便签即时输入演示。
@@ -13,10 +14,15 @@
 - 脚本 App 支持页面导航传参：`nav('detail', { id: 1 })` 可将少量字符串、整数、布尔值带给目标页，通过只读 `ctx.params` 读取；参数变化重新初始化，返回恢复原页状态与滚动位置。提供多页便签演示。
 - 脚本 App 增加 `textarea` 多行文本输入组件，支持换行、自动折行、键盘与鼠标选区、复制粘贴和内部滚动；与单行输入共用焦点管理，遵守页面文本预算。提供可保存并在重开后恢复的本地便签示例。
 
+### 修复
+
+- 鼠标移到更新公告的关闭按钮上时，按钮底色、边框和文字会高亮。
+
 ## English
 
 ### Added
 
+- Added Minecraft 1.20.1 Fabric support for clients and servers. Requires Java 17, Fabric Loader 0.16.14 or later, and Fabric API 0.92.2+1.20.1 or later for Minecraft 1.20.1.
 - Script apps can use the click action `openUrl(url)` to open one HTTP/HTTPS page in the system browser after the whole click commits. Failed actions do not open links, and automatic callbacks cannot use this action. Added an MC encyclopedia search example with original-page links; MCEF is not required.
 - Script apps can schedule/cancel one-shot callbacks with `ctx.timer.after` and `ctx.timer.cancel` for debounced input. Bounded tasks use a monotonic clock and run on client page ticks, commit with the surrounding transaction, and are cleared on navigation or close. Added a debounced-search example.
 - Script apps can call a page function through `@input` on `text-input` and `textarea` for live filtering, validation and previews. Only accepted user edits trigger it; programmatic writes do not recurse. Callback effects roll back on failure while accepted text is preserved. Added an instant-input notes example.
@@ -25,3 +31,7 @@
 - Script apps receive a request ID from `ctx.http.request` and can cancel one request with `ctx.http.cancel(id)`, suppressing undelivered callbacks and freeing its local pending slot. Cancellation commits with page state and local storage; a failed transaction leaves the original request active. Added a cancel button to the HTTP example.
 - Script apps can pass small primitive parameters with `nav('detail', { id: 1 })` and read them through readonly `ctx.params`. Changed parameters create a fresh page state; going back restores the original state and scroll positions. Added a multipage note example.
 - Script apps can use a `textarea` component for multiline editing, wrapping, keyboard and mouse selection, clipboard operations and internal scrolling. It shares focus handling with single-line inputs and respects page text budgets. Added a local note example with explicit saving and restore on reopen.
+
+### Fixed
+
+- The update announcement’s Close button highlights its background, border, and label on hover.

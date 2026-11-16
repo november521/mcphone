@@ -1,5 +1,7 @@
 package com.november.mcphone.feature.reader.client.source;
 
+import com.november.mcphone.platform.ResourceIds;
+
 import com.november.mcphone.MCphone;
 import com.november.mcphone.core.client.PhoneScreen;
 import com.november.mcphone.feature.reader.BookRef;
@@ -68,7 +70,7 @@ public final class TxtBookSource implements BookSource {
         List<BookRef> out = new ArrayList<>(entries.size());
         for (TxtLibrary.Entry entry : entries) {
             out.add(new BookRef(SOURCE_ID,
-                    ResourceLocation.fromNamespaceAndPath(MCphone.MODID, PATH_PREFIX + entry.id()),
+                    ResourceIds.create(MCphone.MODID, PATH_PREFIX + entry.id()),
                     Component.literal(entry.title()),
                     null,
                     ownerLine(entry)));

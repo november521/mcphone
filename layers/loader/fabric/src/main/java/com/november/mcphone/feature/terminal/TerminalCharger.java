@@ -88,7 +88,8 @@ public final class TerminalCharger {
      * 卡槽空着、里头那台不吃电（Tom's）、或者服主关了开关，都是直接返回。
      */
     public static void topUp(ServerPlayer player) {
-        if (!ServerConfig.terminalKeepPowered()) return;
+        if (!ServerConfig.terminalKeepPowered()
+                || !com.november.mcphone.platform.ModPresence.isLoaded("team_reborn_energy")) return;
 
         ItemStack terminal = TerminalSlot.get(player);
         if (terminal.isEmpty()) return;

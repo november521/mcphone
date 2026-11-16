@@ -1,5 +1,7 @@
 package com.november.mcphone.feature.store;
 
+import com.november.mcphone.platform.ResourceIds;
+
 import com.november.mcphone.MCphone;
 import com.november.mcphone.api.cost.IAppPriceProvider;
 import com.november.mcphone.api.cost.ICost;
@@ -19,10 +21,10 @@ public final class BuiltinAppPrices implements IAppPriceProvider {
 
     /** 与 WaystonesCompat 里那处保持同一个注册名 */
     private static final ResourceLocation WARP_STONE_ITEM =
-            ResourceLocation.fromNamespaceAndPath("waystones", "warp_stone");
+            ResourceIds.create("waystones", "warp_stone");
 
     private static ResourceLocation app(String path) {
-        return ResourceLocation.fromNamespaceAndPath(MCphone.MODID, path);
+        return ResourceIds.create(MCphone.MODID, path);
     }
 
     @Override

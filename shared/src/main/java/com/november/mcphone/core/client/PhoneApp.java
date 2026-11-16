@@ -1,5 +1,7 @@
 package com.november.mcphone.core.client;
 
+import com.november.mcphone.platform.ResourceIds;
+
 import com.november.mcphone.MCphone;
 import com.november.mcphone.api.client.app.IPhoneApp;
 import com.november.mcphone.core.client.PhoneSkin;
@@ -36,7 +38,7 @@ public abstract class PhoneApp implements IPhoneApp {
      */
     protected PhoneApp(String path) {
         this.path = path;
-        this.id = ResourceLocation.fromNamespaceAndPath(MCphone.MODID, path);
+        this.id = ResourceIds.create(MCphone.MODID, path);
     }
 
     @Override
@@ -72,9 +74,9 @@ public abstract class PhoneApp implements IPhoneApp {
     @Override
     public ResourceLocation getIconTexture() {
         return PhoneSkin.resolveWithLegacy(
-                ResourceLocation.fromNamespaceAndPath(
+                ResourceIds.create(
                         MCphone.MODID, "textures/app/" + path + ".png"),
-                ResourceLocation.fromNamespaceAndPath(
+                ResourceIds.create(
                         MCphone.MODID, "textures/gui/app_icon_" + path + ".png"));
     }
 

@@ -1,5 +1,7 @@
 package com.november.mcphone.feature.weather.client;
 
+import com.november.mcphone.platform.ResourceIds;
+
 import com.november.mcphone.MCphone;
 import com.november.mcphone.core.client.FontPalette;
 import com.november.mcphone.core.client.PhoneTheme;
@@ -82,7 +84,7 @@ public final class WeatherPage {
 
         // ---- 天气图标，居中 ----
         int iconX = phoneLeft + (screenW - ICON_SIZE) / 2;
-        GuiUtil.drawTexture(g, ResourceLocation.fromNamespaceAndPath(
+        GuiUtil.drawTexture(g, ResourceIds.create(
                         MCphone.MODID, "textures/" + kind.iconPath() + ".png"),
                 iconX, y, ICON_SIZE, ICON_SIZE, ICON_SIZE, ICON_SIZE);
         y += ICON_SIZE + 4;

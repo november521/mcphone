@@ -1,5 +1,7 @@
 package com.november.mcphone.core.script.server;
 
+import com.november.mcphone.platform.ResourceIds;
+
 import com.november.mcphone.MCphone;
 import com.november.mcphone.core.script.ItemRefs;
 import com.november.mcphone.core.script.net.ScriptErrorCode;
@@ -55,7 +57,7 @@ public final class ServerIntentApplier implements IntentApplier {
 
     /** 礼包白名单的标签 id：默认只含原版，服主在数据包里维护（改标签不用重新审批）。 */
     private static final TagKey<Item> GIFTABLE =
-            TagKey.create(Registries.ITEM, ResourceLocation.fromNamespaceAndPath("mcphone", "giftable"));
+            TagKey.create(Registries.ITEM, ResourceIds.create("mcphone", "giftable"));
 
     /** UUID → 在线玩家。离线返回 null（结果回 UNAVAILABLE，不静默吞）。 */
     private final Function<UUID, ServerPlayer> players;

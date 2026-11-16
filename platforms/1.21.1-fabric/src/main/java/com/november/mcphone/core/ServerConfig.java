@@ -161,4 +161,7 @@ public final class ServerConfig {
     private static int clampKb(int kb) {
         return Math.max(IMAGE_MIN_KB, Math.min(IMAGE_MAX_KB, kb));
     }
+    public static boolean clientAllowFriendTeleport() { return allowFriendTeleport(); }
+    public static boolean clientAllowChatImages() { return allowChatImages(); }
+    public static int clientChatImageMaxBytes() { return chatImageMaxBytes(); }
 }

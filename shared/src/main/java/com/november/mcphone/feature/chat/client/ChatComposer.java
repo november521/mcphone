@@ -149,7 +149,7 @@ final class ChatComposer {
         String send = Component.translatable("mcphone.chat.send").getString();
         boolean hasText = box != null && ChatLayout.hasText(box.getValue());
         var layout = ChatLayout.composer(w, ChatUi.width(font, send, ChatLayout.SEND_SCALE), hasText);
-        boolean canSendImages = ServerConfig.allowChatImages() && !ChatImageSender.isFull();
+        boolean canSendImages = ServerConfig.clientAllowChatImages() && !ChatImageSender.isFull();
         int barX = x + layout.inputX();
         int boxW = layout.inputWidth();
         float iconY = y + (INPUT_H - ATTACH_BTN) / 2f;

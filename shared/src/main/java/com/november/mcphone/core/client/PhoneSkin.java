@@ -1,5 +1,7 @@
 package com.november.mcphone.core.client;
 
+import com.november.mcphone.platform.ResourceIds;
+
 import com.google.gson.JsonObject;
 import com.november.mcphone.MCphone;
 import net.minecraft.client.Minecraft;
@@ -245,15 +247,15 @@ public final class PhoneSkin {
          * 给它编一个 textures/gui/ 下的名字只会让人以为那儿曾经有过东西。
          */
         Element(String path) {
-            this.texture = ResourceLocation.fromNamespaceAndPath(
+            this.texture = ResourceIds.create(
                     MCphone.MODID, "textures/" + path + ".png");
             this.legacyTexture = null;
         }
 
         Element(String path, String legacyFileName) {
-            this.texture = ResourceLocation.fromNamespaceAndPath(
+            this.texture = ResourceIds.create(
                     MCphone.MODID, "textures/" + path + ".png");
-            this.legacyTexture = ResourceLocation.fromNamespaceAndPath(
+            this.legacyTexture = ResourceIds.create(
                     MCphone.MODID, "textures/gui/" + legacyFileName + ".png");
         }
 
@@ -474,7 +476,7 @@ public final class PhoneSkin {
             Integer textColor = null;
             try {
                 SkinMetadata metadata = PhoneSkinMetadata.read(res.get());
-                ResourceLocation metaLocation = ResourceLocation.fromNamespaceAndPath(
+                ResourceLocation metaLocation = ResourceIds.create(
                         loc.getNamespace(), loc.getPath() + ".mcmeta");
                 boolean samePack = mc.getResourceManager().getResource(metaLocation)
                         .map(meta -> meta.sourcePackId().equals(res.get().sourcePackId())).orElse(false);

@@ -81,7 +81,12 @@
   },
   "fabric": {
     "loader": "Fabric",
-    "populated": false,
-    "note": "Fabric 各个 Minecraft 版本共用的代码。与版本轴那几层对称：那边是「同版本、三个加载器共用」，这边是「同加载器、各版本共用」。眼下是空的 —— 本仓还没有第二个 Fabric 目标可以对照，哪些代码在 Fabric 的两个版本之间真的一样是猜不出来的。等第二个 Fabric 目标并进来，拿它逐文件比对，逐字相同的才搬进来。"
+    "populated": true,
+    "note": "Fabric entry points and adapters verified to be identical on 1.20.1 and 1.21.1."
+  },
+  "1.20.1": {
+    "since": "1.20.1",
+    "populated": true,
+    "note": "API and codecs shared by the 1.20.1 targets, before the data-component and StreamCodec changes."
   }
 }

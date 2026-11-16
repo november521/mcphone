@@ -1,5 +1,7 @@
 package com.november.mcphone.core.client;
 
+import com.november.mcphone.platform.ResourceIds;
+
 import com.mojang.blaze3d.platform.NativeImage;
 import com.november.mcphone.MCphone;
 import net.minecraft.client.Minecraft;
@@ -212,7 +214,7 @@ public final class ImageCodec {
 
     /** 把已就绪的 NativeImage 注册成贴图。必须在渲染线程调用 */
     public static Texture upload(NativeImage image, String namePrefix) {
-        ResourceLocation location = ResourceLocation.fromNamespaceAndPath(
+        ResourceLocation location = ResourceIds.create(
                 MCphone.MODID, namePrefix + (textureSeq++));
 
         // 尺寸要在 register 之前取：DynamicTexture 接管 NativeImage 后不该再碰它

@@ -933,6 +933,7 @@ public class EconomyDataTest {
         Path snap = eco.resolve("economy.dat");
         EconomySnapshot.write(snap, goodTag(UUID.randomUUID()));
         Path mcFile = dir.resolve("mcphone_economy.dat");                 // SavedData 不在
+        if (!Files.getFileStore(eco).supportsFileAttributeView("posix")) return;
         Files.setPosixFilePermissions(eco, java.util.EnumSet.noneOf(java.nio.file.attribute.PosixFilePermission.class));
         try {
             if (Files.exists(snap) || Files.notExists(snap)) {

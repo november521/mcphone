@@ -1,0 +1,87 @@
+plugins {
+    id 'java-library'
+    id 'maven-publish'
+    id 'fabric-loom' version "${loom_version}"
+    id 'idea'
+}
+
+def repoRoot = file('../..')
+def repoPropsFile = new File(repoRoot, 'gradle.properties')
+def repoProps = new Properties()
+repoPropsFile.withInputStream { repoProps.load(it) }
+['mod_id', 'mod_name', 'mod_license', 'mod_group_id', 'mod_version'].each { key ->
+    if (!repoProps.containsKey(key)) throw new GradleException("仓库根的 gradle.properties 缺 ${key}")
+    ext[key] = repoProps.getProperty(key)
+}
+
+apply from: '../../gradle/mcphone-layers.gradle'
+
+version = mod_version
+group = mod_group_id
+base.archivesName = mod_id
+
+// Loom runs on Java 21. The game, assertions, and published classes use Java 17.
+java.toolchain.languageVersion = JavaLanguageVersion.of(17)
+
+repositories {
+    maven {
+        name = 'Modrinth'
+        url = 'https://api.modrinth.com/maven'
+        content { includeGroup 'maven.modrinth' }
+    }
+    mavenCentral()
+}
+
+sourceSets.main.java.srcDir '../../shared/src/main/java'
+mcphoneLayers.each { layer ->
+    if (layer.javaDir.isDirectory()) sourceSets.main.java.srcDir layer.javaDir
+}
+sourceSets.main.resources {
+    srcDir '../../shared/src/main/resources'
+    mcphoneLayers.each { layer -> srcDir layer.resourcesDir }
+}
+
+dependencies {
+    minecraft "com.mojang:minecraft:${minecraft_version}"
+    mappings loom.officialMojangMappings()
+    modImplementation "net.fabricmc:fabric-loader:${loader_version}"
+    modImplementation "net.fabricmc.fabric-api:fabric-api:${fabric_version}"
+
+    include implementation("fr.delthas:javamp3:${javamp3_version}")
+    include implementation("com.formdev:flatlaf:${flatlaf_version}")
+
+    modCompileOnly 'maven.modrinth:waystones:14.1.21+fabric-1.20.1'
+    modCompileOnly 'maven.modrinth:balm:7.3.44+fabric-1.20.1'
+    modCompileOnly 'maven.modrinth:mcef:2.1.6-1.20.1'
+    modCompileOnly 'maven.modrinth:net-music:1.5.2-fabric+mc1.20.1'
+    modCompileOnly 'maven.modrinth:patchouli:1.20.1-85-fabric'
+    modCompileOnly 'maven.modrinth:ae2:15.4.12'
+    modCompileOnly 'maven.modrinth:applied-energistics-2-wireless-terminals:15.2.1-fabric'
+    modCompileOnly 'maven.modrinth:toms-storage:1.20-1.7.1-fabric'
+    modCompileOnly 'teamreborn:energy:3.0.0'
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.release = 17
+}
+
+processResources {
+    filteringCharset = 'UTF-8'
+    def replaceProperties = [
+            minecraft_version: minecraft_version,
+            loader_version: loader_version,
+            fabric_version: fabric_version,
+            mod_version: mod_version,
+    ]
+    inputs.properties replaceProperties
+    filesMatching('fabric.mod.json') {
+        expand replaceProperties
+    }
+}
+
+apply from: '../../gradle/mcphone-checks.gradle'
+apply from: '../../gradle/mcphone-sign.gradle'
+apply from: '../../gradle/mcphone-engine-dependency.gradle'
+
+

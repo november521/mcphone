@@ -1,5 +1,7 @@
 package com.november.mcphone.feature.reader.client.source;
 
+import com.november.mcphone.platform.ResourceIds;
+
 import com.november.mcphone.MCphone;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.Screen;
@@ -55,7 +57,7 @@ public final class ImmersiveEngineeringManual implements ExternalBook {
 
     /** 手册物品：拿它画图标，也拿它的名字当书名（它自带中文「工程师手册」） */
     private static final ResourceLocation MANUAL_ITEM =
-            ResourceLocation.fromNamespaceAndPath(MODID, "manual");
+            ResourceIds.create(MODID, "manual");
 
     /**
      * 书 id。刻意与物品 id 同名——它本来就是"那本手册"，而且玩家的书架按这个记，

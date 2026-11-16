@@ -92,7 +92,7 @@ jobs:
           T='${{ matrix.target }}'
           VERSION=$(grep -E '^mod_version=' gradle.properties | cut -d= -f2- | tr -d '[:space:]')
           PROJ=$(jq -r --arg t "$T" '.[$t].project'   versions/targets.json)
-          JAVA=$(jq -r --arg t "$T" '.[$t].java'      versions/targets.json)
+          JAVA=$(jq -r --arg t "$T" '.[$t] | .gradle_java // .java' versions/targets.json)
           BUILDABLE=$(jq -r --arg t "$T" '.[$t].buildable' versions/targets.json)
           echo "仓库版本号：$VERSION　工程：$PROJ　Java：$JAVA　buildable：$BUILDABLE"
 

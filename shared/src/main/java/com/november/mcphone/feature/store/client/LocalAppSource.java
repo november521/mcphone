@@ -1,5 +1,7 @@
 package com.november.mcphone.feature.store.client;
 
+import com.november.mcphone.platform.ResourceIds;
+
 import com.november.mcphone.MCphone;
 import com.november.mcphone.api.client.app.IPhoneApp;
 import com.november.mcphone.api.client.store.AppInfo;
@@ -20,7 +22,7 @@ import java.util.function.Consumer;
 public final class LocalAppSource implements IAppSource {
 
     public static final ResourceLocation ID =
-            ResourceLocation.fromNamespaceAndPath(MCphone.MODID, "local");
+            ResourceIds.create(MCphone.MODID, "local");
 
     @Override
     public ResourceLocation getId() { return ID; }
