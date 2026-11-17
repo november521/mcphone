@@ -2,19 +2,45 @@ package com.november.mcphone.core.client;
 
 import com.november.mcphone.MCphone;
 import com.november.mcphone.api.client.app.IPhoneApp;
+import com.november.mcphone.core.client.home.HomeArrangement;
+import com.november.mcphone.core.client.home.HomeInput;
+import com.november.mcphone.core.client.home.HomeInput.FolderDrag;
+import com.november.mcphone.core.client.home.HomeReflow;
+import com.november.mcphone.core.client.home.HomeReflow.Position;
+import com.november.mcphone.platform.ResourceIds;
+import net.minecraft.network.chat.Component;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.resources.ResourceLocation;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 主屏 —— App 图标网格、拖动排序、分页与翻页。
  * 只认手机本地坐标：四个输入方法收到的一律是已撤掉开机缩放的坐标，反变换留在 PhoneScreen。
- * 点开 App 只记进 {@link #consumeLaunchRequest()}，由 PhoneScreen 取走再决定怎么开。
+ * 点开 App 只记进 {@link #consumeOpenRequest()}，由 PhoneScreen 取走再决定怎么开。
  * 输入方法用的上下文（机身位置、字体、时刻）是上一帧 {@link #render} 带进来的。
  */
 public final class HomeGrid {
+    private static final ResourceLocation FOLDER_PLATE =
+            ResourceIds.create(MCphone.MODID, "textures/phone/home_folder_plate.png");
+    private static final int FOLDER_PLATE_TEXTURE_SIZE = 80;
+    private static final int DROP_ACCENT = 0xFFBFE6FF;
+    private static final int CUE_SCALE = 8;
+    private static final int PLATE_RADIUS = 2 * CUE_SCALE;
+    private static final int PLATE_EDGE = 5;
+    private static final float DRAG_OPACITY = 0.56f;
+    private static final float MERGE_DRAG_OPACITY = 0.32f;
+    private static final double MERGE_EXIT_MARGIN = 1.0;
+    private static final int PAGE_EDGE_GUTTER = 3;
+    private static final int CUE_FADE_MS = 80;
+
+    private record DropTarget(String groupId, HomeLayout.Insertion insertion) {}
+
+    private static final DropTarget NO_DROP = new DropTarget(null, null);
 
     private int phoneLeft, phoneTop;
 
@@ -43,40 +69,62 @@ public final class HomeGrid {
     private int hoveredAppIndex = -1;
 
     private int homePage = 0;
-
-    private boolean pressedBlank;
+    private final HomeInput input = new HomeInput(PhoneTheme.APP_DRAG_THRESHOLD, PhoneTheme.PAGE_SWIPE_THRESHOLD);
+    private double grabX, grabY;
+    private FolderDrag folderDrag;
+    private DropTarget preview = NO_DROP;
+    private long previewSinceMs;
+    private long frameDeltaMs;
+    private float mergeAmount;
+    private HomeReflow reflow = HomeReflow.NONE;
+    private int reflowPage;
+    private long reflowElapsedMs;
+    private long reflowFrameMs;
 
     /** 翻页动画：从哪一页滑过来的，什么时候开始滑 */
     private int slideFromPage;
     private long pageSlideStartMs;
-
-    /** 按下的是第几个 App。到底算点开还是算挪位置，松手时才定 */
-    private int pressedAppIndex = -1;
-
-    /** 按下点的本地坐标，用来量挪了多远 */
-    private double pressX, pressY;
-
-    private boolean draggingApp;
-    private double dragX, dragY;
-
-    /** 拖动时松手会插到哪儿（全局下标） */
-    private int dragTargetIndex = -1;
 
     /** 拖着图标停在屏幕哪一边（-1 左 / 0 没有 / 1 右），停够久就翻页 */
     private int edgeDwellSide;
     private long edgeDwellStartMs;
 
     /** 松手判定为"点开"的那个 App，等 PhoneScreen 来取 */
-    private IPhoneApp pendingLaunch;
+    private HomeArrangement.Entry pendingOpen;
 
     /** localMouse 是已撤掉开机缩放的本地坐标；nowMs 由调用方取一次传进来，同一帧里翻页动画与边缘停留要对齐 */
     public void render(GuiGraphics g, int phoneLeft, int phoneTop, DeviceMetrics metrics, Font font,
                        long nowMs,
                        double localMouseX, double localMouseY, float partialTick) {
+        layout(phoneLeft, phoneTop, metrics, font);
+        this.partialTick = partialTick;
+        // 留住上一帧真正画出的位置。动画中的图标按下后可以原地抓住，直到这次拖动结束。
+        if (!input.pressed() && !reflow.isEmpty()) {
+            reflowElapsedMs += Math.max(0, nowMs - reflowFrameMs);
+            if (reflowElapsedMs >= HomeReflow.DURATION_MS) reflow = HomeReflow.NONE;
+        }
+        reflowFrameMs = nowMs;
+        frameDeltaMs = Math.min(50, Math.max(0, nowMs - this.nowMs));
+        this.nowMs = nowMs;
+
+        if (pageSlideStartMs > 0 && nowMs - pageSlideStartMs >= PhoneTheme.PAGE_SLIDE_MS) {
+            pageSlideStartMs = 0;
+        }
+        homePage = HomeLayout.clampPage(homePage, entryCount(), pageSize());
+        hoveredAppIndex = hitEntry(localMouseX, localMouseY, false);
+        renderAppGrid(g);
+    }
+
+    private void layout(int phoneLeft, int phoneTop, DeviceMetrics metrics, Font font) {
+        if (this.phoneLeft != phoneLeft || this.phoneTop != phoneTop || !this.metrics.equals(metrics)
+                || (this.font != null && this.font.lineHeight != font.lineHeight)) {
+            reflow = HomeReflow.NONE;
+            cancelInput();
+        }
         this.phoneLeft = phoneLeft;
         this.phoneTop = phoneTop;
         this.metrics = metrics;
-        this.partialTick = partialTick;
+        this.font = font;
 
         // 图标整排居中，而不是靠左留一道固定边距——手机上算出来仍是 8，平板上是 5。
         // 居中的地方是【内容区】而不是整块屏幕：平板的导航条立在右边，把那 14 也算进来
@@ -86,140 +134,120 @@ public final class HomeGrid {
         this.gridStartY = phoneTop + PhoneTheme.STATUS_BAR_HEIGHT
                 + PhoneTheme.APP_GRID_PADDING_TOP;
 
-        this.font = font;
-        this.nowMs = nowMs;
-
-        // 翻页动画走完在这里清起点，slideProgress 保持纯查询
-        if (pageSlideStartMs > 0 && nowMs - pageSlideStartMs >= PhoneTheme.PAGE_SLIDE_MS) {
-            pageSlideStartMs = 0;
-        }
-
-        renderAppGrid(g);
-
-        updateAppHover(localMouseX, localMouseY);
     }
 
-    /** 返回 false 表示按在空处，由 PhoneScreen 决定是机身内空白（调 {@link #pressBlank}）还是机身外 */
     public boolean mousePressed(double lx, double ly) {
         int dot = hitTestPageDot(lx, ly, pageCount());
         if (dot >= 0) {
+            cancelInput();
             homePage = dot;
-            hoveredAppIndex = -1;
+            pageSlideStartMs = 0;
             return true;
         }
 
-        if (hoveredAppIndex >= 0) {
-            pressedAppIndex = hoveredAppIndex;
-            pressX = lx;
-            pressY = ly;
-            dragTargetIndex = pressedAppIndex;
-            draggingApp = false;
-            return true;
-        }
-        return false;
+        int index = hitEntry(lx, ly, false);
+        HomeArrangement.Entry entry = entryAt(index);
+        if (entry == null) return false;
+        Position origin = displayedPosition(entry.id(), index);
+        grabX = lx - origin.x();
+        grabY = ly - origin.y();
+        input.press(entry.id(), lx, ly);
+        return true;
     }
 
-    /** 在机身内的空白处按下了，横着拖就是翻页 */
     public void pressBlank(double lx, double ly) {
-        pressedBlank = true;
-        pressX = lx;
-        pressY = ly;
+        input.press(null, lx, ly);
+    }
+
+    public void continueFolderDrag(FolderDrag outbound, double lx, double ly,
+                                   int phoneLeft, int phoneTop, DeviceMetrics metrics, Font font) {
+        layout(phoneLeft, phoneTop, metrics, font);
+        cancelInput();
+        reflow = HomeReflow.NONE;
+        pageSlideStartMs = 0;
+        mergeAmount = 0f;
+        grabX = PhoneTheme.APP_ICON_SIZE / 2.0;
+        grabY = grabX;
+        folderDrag = outbound;
+        input.continueDrag(outbound.appId(), lx, ly);
     }
 
     public boolean mouseDragged(double lx, double ly) {
-        if (pressedAppIndex >= 0) {
-            if (!draggingApp) {
-                if (Math.abs(lx - pressX) < PhoneTheme.APP_DRAG_THRESHOLD
-                        && Math.abs(ly - pressY) < PhoneTheme.APP_DRAG_THRESHOLD) {
-                    return true;
-                }
-                draggingApp = true;
-            }
-
-            dragX = lx;
-            dragY = ly;
-            dragTargetIndex = dropIndexAt(lx, ly, PhoneScreenRegistry.getAppCount());
-            return true;
-        }
-
-        if (pressedBlank) {
-            double moved = lx - pressX;
-            if (Math.abs(moved) >= PhoneTheme.PAGE_SWIPE_THRESHOLD) {
-                goToPage(homePage + (moved < 0 ? 1 : -1));
-                // 翻没翻成都重设起点，否则到头后按住不动会每帧重复触发
-                pressX = lx;
-            }
-            return true;
-        }
-        return false;
+        if (!input.pressed()) return false;
+        int step = input.drag(lx, ly);
+        if (step != 0) goToPage(homePage + step);
+        return true;
     }
 
-    /** 松手才定性：这一下算"点开"还是"挪位置" */
     public boolean mouseReleased(double lx, double ly) {
-        if (pressedBlank) {
-            pressedBlank = false;
-            return true;
+        HomeArrangement.Entry hit = entryAt(hitEntry(lx, ly, false));
+        HomeInput.Release release = input.release(hit == null ? null : hit.id(), lx, ly);
+        resetEdgeDwell();
+        if (release == null) return false;
+        reflowFrameMs = System.currentTimeMillis();
+        if (release.clicked()) pendingOpen = hit;
+        if (release.dragged()) {
+            int from = indexOf(release.id());
+            Position ghost = dragPosition(lx, ly);
+            HomeArrangement.Entry source = dragSource(from);
+            if (source != null) commitDrop(source.id(), from, dropAt(source, from, lx, ly, ghost), ghost);
         }
-        if (pressedAppIndex >= 0) {
-            int from = pressedAppIndex;
-            int to = dragTargetIndex;
-            boolean dragged = draggingApp;
-
-            // 先清状态再动作：调用方拿到 launch 请求后可能当场跳走
-            pressedAppIndex = -1;
-            dragTargetIndex = -1;
-            draggingApp = false;
-
-            if (dragged) {
-                PhoneScreenRegistry.moveApp(from, to);
-                // 顺序变了，旧 hover 下标已不指向同一个 App
-                hoveredAppIndex = -1;
-            } else {
-                pendingLaunch = PhoneScreenRegistry.getApp(from);
-            }
-            return true;
-        }
-        return false;
+        folderDrag = null;
+        preview = NO_DROP;
+        return true;
     }
 
-    /** 滚轮翻页。只有一页或到头时也返回 true，把滚轮吃掉 */
+    public boolean cancelDrag() {
+        if (!input.pressed() || input.id() == null) return false;
+        cancelInput();
+        return true;
+    }
+
+    public void cancelInput() {
+        input.cancel();
+        folderDrag = null;
+        pendingOpen = null;
+        preview = NO_DROP;
+        reflowFrameMs = System.currentTimeMillis();
+        resetEdgeDwell();
+    }
+
+    private void resetEdgeDwell() {
+        edgeDwellSide = 0;
+        edgeDwellStartMs = 0;
+    }
+
     public boolean mouseScrolled(double scrollY) {
         if (scrollY == 0) return false;
+        cancelInput();
         goToPage(homePage + (scrollY > 0 ? -1 : 1));
         return true;
     }
 
-    /** 松手判定为"点开"的那个 App；没有则 null。取走即清 */
-    public IPhoneApp consumeLaunchRequest() {
-        IPhoneApp out = pendingLaunch;
-        pendingLaunch = null;
-        return out;
+    public HomeArrangement.Entry consumeOpenRequest() {
+        HomeArrangement.Entry entry = pendingOpen;
+        pendingOpen = null;
+        return entry;
     }
 
     private void renderAppGrid(GuiGraphics g) {
-        final int is = PhoneTheme.APP_ICON_SIZE;
-        final int pageSize = pageSize();
-
-        // 先结算边缘停留，这一帧可能翻页，之后的预览才对
-        updateEdgePageFlip();
-
-        // 只有拖动时才拷一份：getApps() 是只读视图，reorder 会就地改
-        List<IPhoneApp> ordered = PhoneScreenRegistry.getApps();
-        IPhoneApp floatingApp = null;
-        int floatingIndex = -1;
-        if (draggingApp && pressedAppIndex >= 0 && pressedAppIndex < ordered.size()) {
-            ordered = new ArrayList<>(ordered);
-            floatingApp = ordered.get(pressedAppIndex);
-            floatingIndex = Math.max(0, Math.min(dragTargetIndex, ordered.size() - 1));
-            HomeLayout.reorder(ordered, pressedAppIndex, floatingIndex);
-        }
-
-        // 每帧夹一次页码：卸载 App、换存档都可能让它指到不存在的页
-        homePage = HomeLayout.clampPage(homePage, ordered.size(), pageSize);
+        List<HomeArrangement.Entry> ordered = PhoneScreenRegistry.homeEntries();
+        int from = input.dragging() ? indexOf(input.id()) : -1;
+        HomeArrangement.Entry floating = input.dragging() ? dragSource(from) : null;
+        Position ghost = dragPosition(input.x(), input.y());
+        DropTarget next = floating == null ? NO_DROP : dropAt(floating, from, input.x(), input.y(), ghost);
+        if (!next.equals(preview)) previewSinceMs = nowMs;
+        preview = next;
+        if (preview.groupId() == null) updateEdgePageFlip();
+        else resetEdgeDwell();
+        float fadeStep = (float) frameDeltaMs / CUE_FADE_MS;
+        if (floating == null) mergeAmount = 0f;
+        else if (preview.groupId() == null) mergeAmount = Math.max(0f, mergeAmount - fadeStep);
+        else mergeAmount = Math.min(1f, mergeAmount + fadeStep);
 
         float slide = slideProgress();
         if (slide >= 1f) {
-            renderPageIcons(g, ordered, homePage, 0, floatingIndex);
+            renderPageIcons(g, ordered, homePage, 0, from);
         } else {
             int dir = homePage > slideFromPage ? 1 : -1;
             int w = metrics.contentWidth();
@@ -227,57 +255,262 @@ public final class HomeGrid {
 
             GuiUtil.enableScissor(g, phoneLeft, phoneTop + PhoneTheme.STATUS_BAR_HEIGHT,
                     phoneLeft + w, dotsTop());
-            renderPageIcons(g, ordered, slideFromPage, inX - dir * w, floatingIndex);
-            renderPageIcons(g, ordered, homePage, inX, floatingIndex);
+            renderPageIcons(g, ordered, slideFromPage, inX - dir * w, from);
+            renderPageIcons(g, ordered, homePage, inX, from);
             GuiUtil.disableScissor(g);
         }
 
-        renderPageDots(g, HomeLayout.pageCount(ordered.size(), pageSize));
+        renderPageDots(g, HomeLayout.pageCount(ordered.size(), pageSize()));
         renderEdgeHint(g);
 
-        // 浮起的那张最后画，才盖在别的图标上面
-        if (floatingApp != null) {
-            int fx = (int) dragX - is / 2;
-            int fy = (int) dragY - is / 2;
-            floatingApp.renderIcon(g, fx, fy, is, partialTick);
-            drawAppName(g, floatingApp.getDisplayName().getString(), fx, fy, is);
+        if (floating != null) {
+            GuiUtil.clipped(g, phoneLeft, phoneTop + PhoneTheme.STATUS_BAR_HEIGHT,
+                    phoneLeft + metrics.contentWidth(), dotsTop(), () -> drawDropPreview(g, floating, ghost));
         }
     }
 
-    /** 画某一页的图标。xOffset 是整页横向偏移（翻页动画用）；floatingIndex 是正被拖着的下标，-1 表示没有 */
-    private void renderPageIcons(GuiGraphics g, List<IPhoneApp> ordered,
-                                 int page, int xOffset, int floatingIndex) {
-        final int is = PhoneTheme.APP_ICON_SIZE;
-        final int cols = columns();
-        final int cellW = appCellWidth();
-        final int cellH = appCellHeight();
-        final int pageSize = pageSize();
-        final int start = page * pageSize;
-
-        for (int slot = 0; slot < pageSize; slot++) {
+    private void renderPageIcons(GuiGraphics g, List<HomeArrangement.Entry> ordered,
+                                 int page, int xOffset, int sourceIndex) {
+        int size = PhoneTheme.APP_ICON_SIZE;
+        int start = page * pageSize();
+        for (int slot = 0; slot < pageSize() && start + slot < ordered.size(); slot++) {
             int i = start + slot;
-            if (i < 0 || i >= ordered.size()) break;
-
-            int ix = gridStartX + (slot % cols) * cellW + xOffset;
-            int iy = gridStartY + (slot / cols) * cellH;
-
-            // 被拖的那一格只留空槽，它本人跟着鼠标走，最后单独画
-            if (i == floatingIndex) {
-                PhoneSkin.drawOrFill(g, PhoneSkin.Element.HOME_DROP_SLOT,
-                        ix, iy, is, is, PhoneTheme.COLOR_APP_DROP_SLOT);
-                continue;
-            }
-
-            if (i == hoveredAppIndex && !draggingApp) {
-                g.fill(ix - 2, iy - 2, ix + is + 2, iy + is + 2, PhoneTheme.COLOR_APP_PRESSED);
-            }
-
-            IPhoneApp app = ordered.get(i);
-            app.renderIcon(g, ix, iy, is, partialTick);
-
-            drawBadge(g, app, ix, iy, is);
-            drawAppName(g, app.getDisplayName().getString(), ix, iy, is);
+            HomeArrangement.Entry entry = ordered.get(i);
+            if (entry.id().equals(preview.groupId())) continue;
+            Position position = displayedPosition(entry.id(), i);
+            int ix = (int) Math.floor(position.x()) + xOffset;
+            int iy = (int) Math.floor(position.y());
+            boolean source = i == sourceIndex;
+            boolean hovered = i == hoveredAppIndex && !input.dragging();
+            withOffset(g, position.x() + xOffset - ix, position.y() - iy, () -> {
+                if (source) drawDragPlate(g, ix - 1, iy - 1, size + 2, appCellHeight(), 0x18C8DFFF, 0x48B9D8FF);
+                else if (hovered) g.fill(ix - 2, iy - 2, ix + size + 2, iy + size + 2, PhoneTheme.COLOR_APP_PRESSED);
+                drawEntry(g, entry, ix, iy, size);
+            });
         }
+    }
+
+    private void drawEntry(GuiGraphics g, HomeArrangement.Entry entry, int ix, int iy, int size) {
+        if (entry instanceof HomeArrangement.Folder folder) {
+            drawFolderImage(g, folder.members(), ix, iy, size, 1f);
+            drawFolderBadge(g, folder.members(), ix, iy, size);
+            drawAppName(g, folder.name(), ix, iy, size);
+            return;
+        }
+        IPhoneApp app = PhoneScreenRegistry.homeApp(entry.id());
+        if (app == null) return;
+        app.renderIcon(g, ix, iy, size, partialTick);
+        drawBadge(g, app, ix, iy, size);
+        drawAppName(g, app.getDisplayName().getString(), ix, iy, size);
+    }
+
+    private void drawFolderImage(GuiGraphics g, List<String> members, int x, int y, int size, float opacity) {
+        g.setColor(1f, 1f, 1f, opacity);
+        try {
+            GuiUtil.drawTexture(g, FOLDER_PLATE, x, y, size, size,
+                    FOLDER_PLATE_TEXTURE_SIZE, FOLDER_PLATE_TEXTURE_SIZE);
+        } finally {
+            g.setColor(1f, 1f, 1f, 1f);
+        }
+        drawFolderMembers(g, members, x, y, size, opacity);
+    }
+
+    private void drawFolderMembers(GuiGraphics g, List<String> members, int x, int y, int size, float opacity) {
+        int tile = (size - 6) / 2;
+        for (int i = 0; i < Math.min(4, members.size()); i++) {
+            IPhoneApp app = PhoneScreenRegistry.homeApp(members.get(i));
+            if (app == null) continue;
+            int ix = x + 2 + (i % 2) * (tile + 2);
+            int iy = y + 2 + (i / 2) * (tile + 2);
+            if (opacity == 1f) app.renderIcon(g, ix, iy, tile, partialTick);
+            else HomeDragIcon.draw(g, app, ix, iy, tile, partialTick, opacity);
+        }
+    }
+
+    private void drawFolderBadge(GuiGraphics g, List<String> members, int x, int y, int size) {
+        int unread = 0;
+        for (String id : members) {
+            IPhoneApp app = PhoneScreenRegistry.homeApp(id);
+            if (app != null) unread += Math.min(100, Math.max(0, UnreadBadge.count(app)));
+            if (unread > 99) break;
+        }
+        drawBadge(g, unread, x, y, size);
+    }
+
+    private void drawDropPreview(GuiGraphics g, HomeArrangement.Entry source, Position ghost) {
+        int size = PhoneTheme.APP_ICON_SIZE;
+        int x = (int) Math.floor(ghost.x());
+        int y = (int) Math.floor(ghost.y());
+        withOffset(g, ghost.x() - x, ghost.y() - y, () -> drawGhost(g, source, x, y, size));
+        if (preview.groupId() != null) drawGroupPreview(g, source.id(), indexOf(preview.groupId()), size);
+        else if (preview.insertion() != null) drawInsertion(g, preview.insertion(), size);
+    }
+
+    private void drawGhost(GuiGraphics g, HomeArrangement.Entry source, int x, int y, int size) {
+        float opacity = DRAG_OPACITY + (MERGE_DRAG_OPACITY - DRAG_OPACITY) * mergeAmount;
+        String name;
+        if (source instanceof HomeArrangement.Folder folder) {
+            drawFolderImage(g, folder.members(), x, y, size, opacity);
+            name = folder.name();
+        } else {
+            IPhoneApp app = PhoneScreenRegistry.homeApp(source.id());
+            if (app == null) return;
+            HomeDragIcon.draw(g, app, x, y, size, partialTick, opacity);
+            name = app.getDisplayName().getString();
+        }
+        float labelOpacity = opacity * (1f - mergeAmount);
+        if (labelOpacity >= 0.08f) {
+            GuiUtil.drawIconLabel(g, font, name, x, y, size, appCellWidth(),
+                    PhoneTheme.APP_NAME_SCALE, withOpacity(FontPalette.appName(), labelOpacity));
+        }
+    }
+
+    private void drawGroupPreview(GuiGraphics g, String sourceId, int targetIndex, int size) {
+        HomeArrangement.Entry target = entryAt(targetIndex);
+        if (target == null) return;
+        Position position = displayedPosition(target.id(), targetIndex);
+        int x = (int) Math.floor(position.x());
+        int y = (int) Math.floor(position.y());
+        withOffset(g, position.x() - x, position.y() - y, () -> drawGroupTile(g, target, sourceId, x, y, size));
+    }
+
+    private void drawGroupTile(GuiGraphics g, HomeArrangement.Entry target, String sourceId, int x, int y, int size) {
+        drawDragPlate(g, x - 2, y - 2, size + 4, size + 4, 0xE8485163, withOpacity(DROP_ACCENT, cueOpacity() * 0.8f));
+        if (target instanceof HomeArrangement.Folder folder) {
+            List<String> members = new ArrayList<>(folder.members().subList(0, Math.min(4, folder.members().size())));
+            members.add(sourceId);
+            drawFolderMembers(g, members, x, y, size, 1f);
+            drawAddBadge(g, x + size - 0.5f, y + 0.5f);
+            drawAppName(g, folder.name(), x, y, size);
+        } else {
+            drawFolderMembers(g, List.of(target.id(), sourceId), x, y, size, 1f);
+            drawAppName(g, Component.translatable("mcphone.home.folder.default").getString(), x, y, size);
+        }
+    }
+
+    private static void drawAddBadge(GuiGraphics g, float centerX, float centerY) {
+        g.pose().pushPose();
+        try {
+            g.pose().translate(centerX, centerY, 0);
+            g.pose().scale(1f / CUE_SCALE, 1f / CUE_SCALE, 1f);
+            drawRoundedRect(g, -15, -15, 15, 15, 15, 0xDA25354D);
+            // 淡边在小 GUI 比例下仍能托住较细的浅色笔画。
+            drawPlus(g, 10, 4, 0x65D5E9FF);
+            drawPlus(g, 9, 3, 0xF4EDF6FF);
+        } finally {
+            g.pose().popPose();
+        }
+    }
+
+    private static void drawPlus(GuiGraphics g, int arm, int stroke, int color) {
+        g.fill(-stroke, -arm, stroke, arm, color);
+        g.fill(-arm, -stroke, -stroke, stroke, color);
+        g.fill(stroke, -stroke, arm, stroke, color);
+    }
+
+    private void drawInsertion(GuiGraphics g, HomeLayout.Insertion insertion, int size) {
+        float opacity = cueOpacity();
+        g.pose().pushPose();
+        try {
+            g.pose().translate((float) insertion.x() - 0.5f / CUE_SCALE, (float) insertion.y(), 0);
+            g.pose().scale(1f / CUE_SCALE, 1f / CUE_SCALE, 1f);
+            int height = size * CUE_SCALE;
+            // HTML 的 2px 对应约 0.8 个逻辑像素。淡边让低缩放时的线芯仍然可辨。
+            drawRoundedRect(g, -17, -12, 18, height + 12, 17, withOpacity(0x0B94D7FF, opacity));
+            drawRoundedRect(g, -10, -6, 11, height + 6, 10, withOpacity(0x1994D7FF, opacity));
+            drawRoundedRect(g, -4, -1, 5, height + 1, 4, withOpacity(0x5094D7FF, opacity));
+            drawRoundedRect(g, -3, 0, 4, height, 3, withOpacity(DROP_ACCENT, opacity));
+        } finally {
+            g.pose().popPose();
+        }
+    }
+
+    private float cueOpacity() {
+        return 0.62f + 0.3f * Math.min(1f, Math.max(0f, (float) (nowMs - previewSinceMs) / CUE_FADE_MS));
+    }
+
+    private static void drawDragPlate(GuiGraphics g, int x, int y, int width, int height, int fill, int border) {
+        g.pose().pushPose();
+        try {
+            g.pose().translate(x, y, 0);
+            g.pose().scale(1f / CUE_SCALE, 1f / CUE_SCALE, 1f);
+            int w = width * CUE_SCALE;
+            int h = height * CUE_SCALE;
+            int radius = PLATE_RADIUS;
+            int feather = withOpacity(border, 0.35f);
+            // 亮边占 5/8 像素，余下 3/8 用较淡的颜色接到底色。整圈保留一个像素的覆盖。
+            drawPlateBand(g, w, radius, h - radius, 0, PLATE_EDGE, CUE_SCALE, fill, border, feather);
+            for (int row = 0; row < radius;) {
+                int outer = cornerInset(radius, row);
+                int edge = plateInset(radius, row, PLATE_EDGE, w / 2);
+                int inner = plateInset(radius, row, CUE_SCALE, w / 2);
+                int end = row + 1;
+                while (end < radius && cornerInset(radius, end) == outer
+                        && plateInset(radius, end, PLATE_EDGE, w / 2) == edge
+                        && plateInset(radius, end, CUE_SCALE, w / 2) == inner) end++;
+                drawPlateBand(g, w, row, end, outer, edge, inner, fill, border, feather);
+                drawPlateBand(g, w, h - end, h - row, outer, edge, inner, fill, border, feather);
+                row = end;
+            }
+        } finally {
+            g.pose().popPose();
+        }
+    }
+
+    private static int plateInset(int radius, int row, int padding, int halfWidth) {
+        return row < padding ? halfWidth : padding + cornerInset(radius - padding, row - padding);
+    }
+
+    private static void drawPlateBand(GuiGraphics g, int width, int top, int bottom,
+                                      int outer, int edge, int inner, int fill, int border, int feather) {
+        if (edge * 2 == width) {
+            g.fill(outer, top, width - outer, bottom, border);
+        } else {
+            g.fill(outer, top, edge, bottom, border);
+            g.fill(width - edge, top, width - outer, bottom, border);
+            if (inner * 2 == width) {
+                g.fill(edge, top, width - edge, bottom, feather);
+            } else {
+                g.fill(edge, top, inner, bottom, feather);
+                g.fill(inner, top, width - inner, bottom, fill);
+                g.fill(width - inner, top, width - edge, bottom, feather);
+            }
+        }
+    }
+
+    private static void drawRoundedRect(GuiGraphics g, int left, int top, int right, int bottom, int radius, int color) {
+        if (top + radius < bottom - radius) g.fill(left, top + radius, right, bottom - radius, color);
+        for (int row = 0; row < radius;) {
+            int inset = cornerInset(radius, row);
+            int end = row + 1;
+            while (end < radius && cornerInset(radius, end) == inset) end++;
+            g.fill(left + inset, top + row, right - inset, top + end, color);
+            g.fill(left + inset, bottom - end, right - inset, bottom - row, color);
+            row = end;
+        }
+    }
+
+    private static int cornerInset(int radius, int row) {
+        double dy = radius - row - 0.5;
+        return (int) Math.round(radius - Math.sqrt(radius * radius - dy * dy));
+    }
+
+    private static void withOffset(GuiGraphics g, double x, double y, Runnable draw) {
+        if (x == 0 && y == 0) {
+            draw.run();
+            return;
+        }
+        g.pose().pushPose();
+        try {
+            g.pose().translate((float) x, (float) y, 0);
+            draw.run();
+        } finally {
+            g.pose().popPose();
+        }
+    }
+
+    private static int withOpacity(int color, float opacity) {
+        return (color & 0xFFFFFF) | (Math.round((color >>> 24) * opacity) << 24);
     }
 
     /**
@@ -285,7 +518,10 @@ public final class HomeGrid {
      * 而网格左右各留了 8 像素，压不出屏幕。
      */
     private void drawBadge(GuiGraphics g, IPhoneApp app, int ix, int iy, int is) {
-        int count = badgeCountOf(app);
+        drawBadge(g, UnreadBadge.count(app), ix, iy, is);
+    }
+
+    private void drawBadge(GuiGraphics g, int count, int ix, int iy, int is) {
         if (count <= 0) return;
 
         String label = count > 99 ? "99+" : String.valueOf(count);
@@ -296,44 +532,18 @@ public final class HomeGrid {
         UnreadBadge.draw(g, font, label, x, y);
     }
 
-    /** 读一个 App 的角标数，读不出来当没有。兜 Throwable：附属 App 可能引用没装的模组类 */
-    private static int badgeCountOf(IPhoneApp app) {
-        try {
-            return app.getBadgeCount();
-        } catch (Throwable t) {
-            // 每帧每个图标问一次，出了事这里会刷屏，所以只记 debug
-            MCphone.LOGGER.debug("[MCphone] 读 {} 的角标数失败，当作没有",
-                    app.getClass().getName(), t);
-            return 0;
-        }
-    }
-
     /**
      * 拖着图标停在屏幕左右边上时自动翻页。
      * 每帧算一次而不是挂在 mouseDragged 上：鼠标不动就没有事件，计时器走不完。
      */
     private void updateEdgePageFlip() {
-        if (!draggingApp) {
+        if (!input.dragging() || !insideGridArea(input.x(), input.y())) {
             edgeDwellSide = 0;
             edgeDwellStartMs = 0;
             return;
         }
 
-        final int count = PhoneScreenRegistry.getAppCount();
-        final int pageSize = pageSize();
-
-        int side = 0;
-        if (dragX < phoneLeft + PhoneTheme.PAGE_EDGE_WIDTH) {
-            side = -1;
-        } else if (dragX > phoneLeft + metrics.contentWidth() - PhoneTheme.PAGE_EDGE_WIDTH) {
-            side = 1;
-        }
-
-        if (side != 0
-                && HomeLayout.clampPage(homePage + side, count, pageSize) == homePage) {
-            side = 0;
-        }
-
+        int side = pageEdgeSide(input.x(), PhoneTheme.PAGE_EDGE_WIDTH);
         if (side != edgeDwellSide) {
             edgeDwellSide = side;
             edgeDwellStartMs = nowMs;
@@ -344,14 +554,17 @@ public final class HomeGrid {
             goToPage(homePage + side);
             edgeDwellStartMs = nowMs;   // 按住不放就接着往下翻
 
-            // 页变了，同一鼠标位置的落点也变了
-            dragTargetIndex = dropIndexAt(dragX, dragY, count);
         }
+    }
+
+    private int pageEdgeSide(double x, int width) {
+        int side = x < phoneLeft + width ? -1 : x >= phoneLeft + metrics.contentWidth() - width ? 1 : 0;
+        return side != 0 && HomeLayout.clampPage(homePage + side, entryCount(), pageSize()) != homePage ? side : 0;
     }
 
     /** 边缘提示条，随停留时长由浅到深 */
     private void renderEdgeHint(GuiGraphics g) {
-        if (edgeDwellSide == 0 || !draggingApp) return;
+        if (edgeDwellSide == 0 || !input.dragging()) return;
 
         float progress = Math.min(1f,
                 (float) (nowMs - edgeDwellStartMs) / Math.max(1, PhoneTheme.PAGE_EDGE_DWELL_MS));
@@ -377,7 +590,7 @@ public final class HomeGrid {
     private float slideProgress() {
         if (pageSlideStartMs <= 0 || PhoneTheme.PAGE_SLIDE_MS <= 0) return 1f;
 
-        long elapsed = nowMs - pageSlideStartMs;
+        long elapsed = Math.max(0, nowMs - pageSlideStartMs);
         if (elapsed >= PhoneTheme.PAGE_SLIDE_MS) return 1f;
 
         float t = (float) elapsed / PhoneTheme.PAGE_SLIDE_MS;
@@ -429,7 +642,7 @@ public final class HomeGrid {
     /** 主屏一格的高度：图标加底下那行名字 */
     private int appCellHeight() {
         return PhoneTheme.APP_ICON_SIZE
-                + (int)(font.lineHeight * PhoneTheme.APP_NAME_SCALE) + 4;
+                + (int)((font == null ? 9 : font.lineHeight) * PhoneTheme.APP_NAME_SCALE) + 4;
     }
 
     /** 一行几个 —— 内容区多宽就排几个，手机 4 个、平板 8 个 */
@@ -457,12 +670,12 @@ public final class HomeGrid {
     }
 
     private int pageCount() {
-        return HomeLayout.pageCount(PhoneScreenRegistry.getAppCount(), pageSize());
+        return HomeLayout.pageCount(entryCount(), pageSize());
     }
 
     /** 翻到第几页，真的换页了才 true */
     private boolean goToPage(int page) {
-        int target = HomeLayout.clampPage(page, PhoneScreenRegistry.getAppCount(), pageSize());
+        int target = HomeLayout.clampPage(page, entryCount(), pageSize());
         if (target == homePage) return false;
 
         slideFromPage = homePage;
@@ -475,18 +688,71 @@ public final class HomeGrid {
         pageSlideStartMs = System.currentTimeMillis();
 
         hoveredAppIndex = -1;
+        preview = NO_DROP;
         return true;
     }
 
-    /** 鼠标位置对应的落点（全局下标，含页偏移） */
-    private int dropIndexAt(double lx, double ly, int count) {
-        if (count <= 0) return -1;
+    private Position restingPosition(int index) {
+        int slot = index % pageSize();
+        return new Position(gridStartX + (slot % columns()) * appCellWidth(),
+                gridStartY + (slot / columns()) * appCellHeight());
+    }
 
-        int slot = HomeLayout.slotAt(lx, ly, gridStartX, gridStartY,
-                appCellWidth(), appCellHeight(),
-                columns(), rowsPerPage());
+    private Position displayedPosition(String id, int index) {
+        Position resting = restingPosition(index);
+        return index / pageSize() == reflowPage ? reflow.position(id, resting, reflowElapsedMs) : resting;
+    }
 
-        return HomeLayout.dropIndex(homePage, slot, pageSize(), count);
+    private Position dragPosition(double x, double y) {
+        return new Position(x - grabX, y - grabY);
+    }
+
+    private Map<String, Position> pagePositions(int page, boolean displayed) {
+        List<HomeArrangement.Entry> entries = PhoneScreenRegistry.homeEntries();
+        Map<String, Position> positions = new HashMap<>();
+        int start = page * pageSize();
+        int end = Math.min(entries.size(), start + pageSize());
+        for (int index = start; index < end; index++) {
+            String id = entries.get(index).id();
+            positions.put(id, displayed ? displayedPosition(id, index) : restingPosition(index));
+        }
+        return positions;
+    }
+
+    private HomeArrangement.Entry dragSource(int from) {
+        return folderDrag == null ? entryAt(from) : new HomeArrangement.App(folderDrag.appId());
+    }
+
+    private void commitDrop(String sourceId, int from, DropTarget drop, Position ghost) {
+        if (drop.groupId() == null && drop.insertion() == null) return;
+        Map<String, Position> previous = pagePositions(homePage, true);
+        int destination;
+        Map<String, String> formerIds = Map.of();
+        if (folderDrag != null) {
+            int boundary = drop.insertion() == null ? -1 : drop.insertion().index();
+            destination = PhoneScreenRegistry.dropFolderApp(folderDrag.folderId(), sourceId, boundary, drop.groupId(),
+                    Component.translatable("mcphone.home.folder.default").getString());
+            if (destination < 0) return;
+            if (drop.groupId() == null) previous.put(sourceId, ghost);
+            else formerIds = Map.of(entryAt(destination).id(), drop.groupId());
+        } else if (drop.groupId() != null) {
+            int targetIndex = indexOf(drop.groupId());
+            if (!PhoneScreenRegistry.groupHomeApps(sourceId, drop.groupId(),
+                    Component.translatable("mcphone.home.folder.default").getString())) return;
+            destination = from < targetIndex ? targetIndex - 1 : targetIndex;
+            formerIds = Map.of(entryAt(destination).id(), drop.groupId());
+        } else {
+            destination = drop.insertion().index();
+            if (!PhoneScreenRegistry.moveHomeEntry(sourceId, destination)) return;
+            // 松手后让实心图标沿着拖影的位置继续滑入目标格。
+            previous.put(sourceId, ghost);
+        }
+        homePage = destination / pageSize();
+        pageSlideStartMs = 0;
+        hoveredAppIndex = -1;
+        reflowPage = homePage;
+        reflow = HomeReflow.between(previous, pagePositions(homePage, false), formerIds);
+        reflowElapsedMs = 0;
     }
 
     /** 图标下面那行名字。可用宽度是格子步距而不是图标宽 */
@@ -496,32 +762,95 @@ public final class HomeGrid {
                 PhoneTheme.APP_NAME_SCALE, FontPalette.appName());
     }
 
-    private void updateAppHover(double localX, double localY) {
-        int lx = (int) localX;
-        int ly = (int) localY;
+    private int hitEntry(double x, double y, boolean iconOnly) {
+        return hitEntry(x, y, iconOnly, -1);
+    }
 
-        final int count = PhoneScreenRegistry.getAppCount();
-        final int is = PhoneTheme.APP_ICON_SIZE;
-        final int cols = columns();
-        final int cellW = appCellWidth();
-        final int cellH = appCellHeight();
-        final int pageSize = pageSize();
-        final int start = homePage * pageSize;
+    private int hitEntry(double x, double y, boolean iconOnly, int excluded) {
+        if (slideProgress() < 1f || !insideGridArea(x, y)) return -1;
+        List<HomeArrangement.Entry> entries = PhoneScreenRegistry.homeEntries();
+        int size = PhoneTheme.APP_ICON_SIZE;
+        int start = homePage * pageSize();
+        int end = Math.min(entries.size(), start + pageSize());
+        int labelHeight = iconOnly ? 0 : appCellHeight() - size;
+        int labelHit = -1;
+        // 反过来查找，重叠时先命中盖在上面的图标。图案优先于另一格的名字。
+        for (int index = end - 1; index >= start; index--) {
+            if (index == excluded) continue;
+            Position position = displayedPosition(entries.get(index).id(), index);
+            if (hitsIcon(x, y, position, 0)) return index;
+            if (labelHit < 0 && labelHeight > 0 && x >= position.x() && x < position.x() + size
+                    && y >= position.y() + size && y < position.y() + size + labelHeight) labelHit = index;
+        }
+        return labelHit;
+    }
 
-        hoveredAppIndex = -1;
+    private boolean insideGridArea(double x, double y) {
+        return x >= phoneLeft && x < phoneLeft + metrics.contentWidth()
+                && y >= phoneTop + PhoneTheme.STATUS_BAR_HEIGHT && y < dotsTop();
+    }
 
-        // 翻页动画里不认 hover：图标还在半路上
-        if (slideProgress() < 1f) return;
-        for (int slot = 0; slot < pageSize; slot++) {
-            int i = start + slot;
-            if (i >= count) break;
-
-            int ix = gridStartX + (slot % cols) * cellW;
-            int iy = gridStartY + (slot / cols) * cellH;
-            if (lx >= ix && lx <= ix + is && ly >= iy && ly <= iy + is + 6) {
-                hoveredAppIndex = i;   // 全局下标，不是 slot
-                return;
+    private DropTarget dropAt(HomeArrangement.Entry source, int from, double pointerX, double pointerY, Position ghost) {
+        if (!insideGridArea(pointerX, pointerY) || slideProgress() < 1f) return NO_DROP;
+        // 即使图标中心碰到最外一列，鼠标贴边时也有一条专门触发翻页的区域。
+        if (pageEdgeSide(pointerX, PAGE_EDGE_GUTTER) != 0) return NO_DROP;
+        int halfSize = PhoneTheme.APP_ICON_SIZE / 2;
+        double x = ghost.x() + halfSize;
+        double y = ghost.y() + halfSize;
+        if (source instanceof HomeArrangement.App) {
+            int previous = indexOf(preview.groupId());
+            if (previous >= 0 && previous != from && previous / pageSize() == homePage
+                    && hitsIcon(x, y, displayedPosition(preview.groupId(), previous), MERGE_EXIT_MARGIN)) {
+                return preview;
+            }
+            int target = hitEntry(x, y, true, from);
+            if (target >= 0) {
+                String targetId = entryAt(target).id();
+                return folderDrag != null && folderDrag.folderId().equals(targetId)
+                        ? NO_DROP : new DropTarget(targetId, null);
             }
         }
+        HomeLayout.Insertion insertion = insertionAt(x, y, from);
+        return insertion == null ? NO_DROP : new DropTarget(null, insertion);
+    }
+
+    private HomeLayout.Insertion insertionAt(double x, double y, int from) {
+        int size = PhoneTheme.APP_ICON_SIZE;
+        if (reflow.isEmpty() || reflowPage != homePage) {
+            return HomeLayout.insertionAt(x, y, gridStartX, gridStartY, appCellWidth(), appCellHeight(),
+                    size, columns(), rowsPerPage(), homePage, entryCount(), from);
+        }
+        // 刚补位就按住下一个 App 时，插入线也要以冻结在画面里的位置为准。
+        int start = homePage * pageSize();
+        int end = Math.min(entryCount(), start + pageSize());
+        List<Position> positions = new ArrayList<>(end - start);
+        for (int i = start; i < end; i++) {
+            positions.add(displayedPosition(entryAt(i).id(), i));
+        }
+        return HomeLayout.insertionAtDrawnPositions(x, y, size, appCellWidth(), start, positions, from);
+    }
+
+    private static boolean hitsIcon(double x, double y, Position position, double margin) {
+        int size = PhoneTheme.APP_ICON_SIZE;
+        return x >= position.x() - margin && x < position.x() + size + margin
+                && y >= position.y() - margin && y < position.y() + size + margin;
+    }
+
+    private static int indexOf(String id) {
+        if (id == null) return -1;
+        List<HomeArrangement.Entry> entries = PhoneScreenRegistry.homeEntries();
+        for (int i = 0; i < entries.size(); i++) {
+            if (entries.get(i).id().equals(id)) return i;
+        }
+        return -1;
+    }
+
+    private static int entryCount() {
+        return PhoneScreenRegistry.homeEntries().size();
+    }
+
+    private static HomeArrangement.Entry entryAt(int index) {
+        List<HomeArrangement.Entry> entries = PhoneScreenRegistry.homeEntries();
+        return index >= 0 && index < entries.size() ? entries.get(index) : null;
     }
 }

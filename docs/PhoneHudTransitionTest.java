@@ -1,6 +1,9 @@
 package com.november.mcphone.core.client;
 
 import com.november.mcphone.core.PhoneLocation;
+import com.november.mcphone.core.client.home.HomeBackdrop;
+import com.november.mcphone.core.client.home.HomeFolderView;
+import com.november.mcphone.core.client.home.HomeInput;
 import com.november.mcphone.api.client.ui.IPhonePage;
 import com.november.mcphone.api.client.ui.PhoneCanvas;
 import com.november.mcphone.api.client.ui.PhoneViewport;
@@ -49,6 +52,15 @@ public final class PhoneHudTransitionTest {
             Minecraft mc = withoutConstructor(Minecraft.class);
             field(Minecraft.class, null, "instance", mc);
             PhoneScreen phone = withoutConstructor(PhoneScreen.class);
+            HomeGrid homeGrid = new HomeGrid();
+            HomeFolderView homeFolder = new HomeFolderView();
+            field(PhoneScreen.class, phone, "homeGrid", homeGrid);
+            field(PhoneScreen.class, phone, "homeFolder", homeFolder);
+            field(PhoneScreen.class, phone, "folderBackdrop", new HomeBackdrop());
+            HomeInput desktopInput = (HomeInput) field(HomeGrid.class, homeGrid, "input");
+            HomeInput folderInput = (HomeInput) field(HomeFolderView.class, homeFolder, "input");
+            desktopInput.continueDrag("mcphone:demo", 30, 40);
+            folderInput.continueDrag("mcphone:demo", 30, 40);
             PhonePageHost host = new PhonePageHost((page, error) -> { throw new AssertionError(error); });
             Page page = new Page();
             host.open(page, new PhoneViewport(0, 0, 120, 176, 1), true);
@@ -64,6 +76,7 @@ public final class PhoneHudTransitionTest {
             mc.screen = phone;
 
             phone.removed();
+            check(!desktopInput.pressed() && !folderInput.pressed(), "退出交互会取消主屏和文件夹拖动");
             check(page.closes == 0 && phone.isHudMode(), "退出 HUD 交互仍保留页面");
             PhoneScreen other = withoutConstructor(PhoneScreen.class);
             PhoneHud.showFullscreen(other);

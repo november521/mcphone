@@ -32,7 +32,7 @@ public final class PhoneTheme {
      */
     public static final int COLOR_SCREEN_BG = 0xFF0C1445;
 
-    /** 状态栏背景色，贴图见 PhoneSkin.Element.STATUS_BAR */
+    /** 商店与浏览器使用的面板底色 */
     public static final int COLOR_STATUS_BAR = 0xFF0F3460;
 
     /** App 图标按下时的覆盖色 */
@@ -50,25 +50,14 @@ public final class PhoneTheme {
     /** 拖图标停在屏幕边上的翻页提示条，停满时的透明度。兜底色，贴图见 PhoneSkin.Element.HOME_PAGE_EDGE */
     public static final int COLOR_PAGE_EDGE = 0x77FFFFFF;
 
-    /** 底部导航栏背景色，贴图见 PhoneSkin.Element.NAV_BAR */
-    public static final int COLOR_NAV_BAR = 0xFF16213E;
-
-    // 以下 FONT_COLOR_* 画在手机自带构件（导航栏、通知、气泡等）的实心底上，
-    // 底不变字也不能变——钉死，不随设置走；随「字体颜色」设置变的在 FontPalette。
-
-    /** 状态栏时间与信号、电池兜底图案。底是 COLOR_SCRIM 压暗层 */
+    // 系统控件使用固定字色；随「字体颜色」设置变的在 FontPalette。
+    /** 状态栏时间、状态图标与导航符号的颜色 */
     public static final int FONT_COLOR_STATUS = 0xFFFFFFFF;
 
-    /** 导航栏 ◀ ● ■ 三个符号。底是 COLOR_NAV_BAR */
+    /** 密钥和脚本保险库页面的次要文字 */
     public static final int FONT_COLOR_NAV = 0xFF888888;
 
-    /** 导航栏符号被鼠标悬着时 */
-    public static final int FONT_COLOR_NAV_HOVER = 0xFFFFFFFF;
-
-    /**
-     * 导航栏三个键【用贴图时】悬停提亮的倍数。字符符号走上面那个颜色，贴图改不了颜色只能整张乘一下。
-     * 1.8 让自带的 #828282 亮到 #EAEAEA，与字符版 #888→#FFF 的观感相当；再高会把浅色贴图压成一片白。
-     */
+    /** 可换肤图标悬停时的提亮倍数 */
     public static final float SKIN_HOVER_BRIGHTNESS = 1.8f;
 
     /** 通知里的发信人名字与右上角条数。底是 COLOR_TOAST_BG */
@@ -234,7 +223,7 @@ public final class PhoneTheme {
     public static final int COLOR_CAMERA_STAMP = 0xFFFFFFFF;
 
     /** 状态栏高度 */
-    public static final int STATUS_BAR_HEIGHT = 10;
+    public static final int STATUS_BAR_HEIGHT = 14;
 
     /**
      * 导航条那一条有多厚。
@@ -262,7 +251,7 @@ public final class PhoneTheme {
     public static final int APP_GRID_SPACING_X = 8;
 
     /** App 网格上边距（状态栏下方） */
-    public static final int APP_GRID_PADDING_TOP = 6;
+    public static final int APP_GRID_PADDING_TOP = 2;
 
     /**
      * 每行最多几个 App，是上限不是定值：实际列数由 {@link HomeLayout#colsThatFit} 按屏幕

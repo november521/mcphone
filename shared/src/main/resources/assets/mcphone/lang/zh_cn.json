@@ -1,4 +1,9 @@
 {
+  "mcphone.home.folder.default": "文件夹",
+  "mcphone.home.folder.add": "添加",
+  "mcphone.home.folder.choose": "添加 App",
+  "mcphone.home.folder.done": "完成",
+  "mcphone.home.folder.rename": "重命名文件夹",
   "mcphone.chat.layout.search": "搜索",
   "mcphone.chat.layout.chats": "聊天",
   "mcphone.chat.layout.contacts": "联系人",
