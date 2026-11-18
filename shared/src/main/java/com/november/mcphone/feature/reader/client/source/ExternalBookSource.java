@@ -34,7 +34,8 @@ public final class ExternalBookSource implements BookSource {
 
     /** 全部外部手册。加新的就往这里加一行 */
     private static final List<ExternalBook> WHITELIST = List.of(
-            new ImmersiveEngineeringManual()
+            new ImmersiveEngineeringManual(),
+            new OriginsOfDarkness()
     );
 
     /** 扫出来的书，类型必须是中性的——上层引用本类时不该被牵连着加载别人的类 */

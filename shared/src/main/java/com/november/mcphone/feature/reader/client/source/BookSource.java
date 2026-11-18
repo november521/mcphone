@@ -65,6 +65,11 @@ public interface BookSource {
     /** 打开一本书。翻书的界面由书源自己决定——Patchouli 的书就还给 Patchouli 画 */
     void open(BookRef book);
 
+    /** Alternate titles that also match a search for this book. */
+    default List<String> searchAliases(BookRef book) {
+        return List.of();
+    }
+
     /**
      * 画这本书在列表里的小图标。
      *

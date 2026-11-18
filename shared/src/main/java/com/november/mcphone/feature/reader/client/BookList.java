@@ -766,8 +766,15 @@ public final class BookList {
 
         List<Scored> hits = new ArrayList<>();
         for (BookRef book : all) {
+            String id = book.bookId().toString();
             int score = BookSearch.score(query,
-                    book.title().getString(), book.owner(), book.bookId().toString());
+                    book.title().getString(), book.owner(), id);
+            var source = BookSources.of(book);
+            if (source != null) {
+                for (String alias : source.searchAliases(book)) {
+                    score = Math.max(score, BookSearch.score(query, alias, book.owner(), id));
+                }
+            }
             if (score != BookSearch.NO_MATCH) hits.add(new Scored(book, score));
         }
 
