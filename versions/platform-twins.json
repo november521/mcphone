@@ -130,6 +130,7 @@
     "com/november/mcphone/platform/client/Draw.java": 88,
     "com/november/mcphone/platform/client/EditBoxes.java": 12,
     "com/november/mcphone/platform/client/KeyModifiers.java": 6,
+    "com/november/mcphone/platform/client/NativeExternalBookView.java": 6,
     "com/november/mcphone/platform/client/PhoneBookIcons.java": 2,
     "com/november/mcphone/platform/client/PhoneContainerScreenBase.java": 13,
     "com/november/mcphone/platform/client/PhoneKeyInput.java": 4,

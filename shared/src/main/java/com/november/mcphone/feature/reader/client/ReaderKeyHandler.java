@@ -3,6 +3,7 @@ package com.november.mcphone.feature.reader.client;
 import com.november.mcphone.core.client.PhoneHud;
 import com.november.mcphone.core.client.PhoneKeys;
 import com.november.mcphone.core.client.PhoneScreen;
+import com.november.mcphone.feature.reader.client.source.BookSources;
 import net.minecraft.client.Minecraft;
 
 /**
@@ -34,6 +35,7 @@ public final class ReaderKeyHandler {
      * <p>不收事件参数：两支的「刻结束」不是同一个事件，分辨的活在那个门面里做完了。
      */
     public static void tick() {
+        BookSources.tick();
         // 无论如何都要把积压的点击取空，否则关掉界面后会补翻好几页
         boolean prev = false;
         while (PhoneKeys.READER_PREV.consumeClick()) prev = true;

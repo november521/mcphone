@@ -41,10 +41,13 @@ public final class BookSources {
 
     private BookSources() {}
 
+    private static final ModonomiconSource MODONOMICON = new ModonomiconSource();
+
     /** 全部书源。加新的就往这里加一行 */
     private static final List<BookSource> SOURCES = List.of(
             new PatchouliSource(),
             new GuideMeSource(),
+            MODONOMICON,
             new ExternalBookSource(),
             // 玩家自己的 txt 排在最后：模组的手册是"这个整合包里有什么"，本地小说是
             // "我自己放了什么"，两类混排会让人以为书城里多了几本不认识的模组书
@@ -138,6 +141,11 @@ public final class BookSources {
             if (source.id().equals(book.sourceId())) return source;
         }
         return null;
+    }
+
+    /** Repair the return path for Modonomicon screens opened from the bookshelf. */
+    public static void tick() {
+        MODONOMICON.tickReturn();
     }
 
     /**
