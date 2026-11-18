@@ -1,5 +1,7 @@
 package com.november.mcphone.core.client;
 
+import com.november.mcphone.MCphone;
+import com.november.mcphone.api.client.app.IPhoneApp;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 
@@ -14,6 +16,15 @@ public final class UnreadBadge {
     /** 原版数字最后一列是字间距，九像素行框中的数字笔画高七像素。 */
     public static Ink numericInk(int advance, int lineHeight, float scale) {
         return new Ink(Math.max(0, advance - 1) * scale, Math.max(1, lineHeight - 2) * scale);
+    }
+
+    public static int count(IPhoneApp app) {
+        try {
+            return app.getBadgeCount();
+        } catch (Throwable t) {
+            MCphone.LOGGER.debug("[MCphone] Could not read badge for {}", app.getClass().getName(), t);
+            return 0;
+        }
     }
 
     public static int width(Font font, String label) {

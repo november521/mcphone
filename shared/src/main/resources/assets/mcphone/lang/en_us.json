@@ -1,4 +1,9 @@
 {
+  "mcphone.home.folder.default": "Folder",
+  "mcphone.home.folder.add": "Add",
+  "mcphone.home.folder.choose": "Add apps",
+  "mcphone.home.folder.done": "Done",
+  "mcphone.home.folder.rename": "Rename folder",
   "mcphone.chat.layout.search": "Search",
   "mcphone.chat.layout.chats": "Chats",
   "mcphone.chat.layout.contacts": "Contacts",

@@ -53,7 +53,7 @@ public final class PhoneSkin {
          */
         FRAME_TABLET("phone/frame_tablet", "phone_frame_tablet"),
 
-        /** 顶部状态栏背景。建议 120×10 */
+        /** 资源包可提供顶部状态栏背景，默认透明。建议 120×14。 */
         STATUS_BAR("phone/status_bar", "status_bar"),
 
         /** 状态栏右侧的满电图标。建议 24×24 透明贴图，半尺寸绘制；电池固定满电。 */
@@ -63,9 +63,9 @@ public final class PhoneSkin {
         SIGNAL_FULL("phone/signal_full"),
 
         /**
-         * 导航栏背景。建议 120×14。
+         * 资源包可提供导航栏背景，默认透明。建议 120×14。
          *
-         * 平板上这一条<b>立在右边</b>，同一张图会被拉成 14×158，所以画纯色或沿短边的
+         * 平板上这一条<b>立在右边</b>，同一张图会被拉成 14×154，所以画纯色或沿短边的
          * 渐变最稳；带方向的花纹在那儿会被抻长。
          */
         NAV_BAR("phone/nav_bar", "nav_bar"),

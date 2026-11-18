@@ -240,7 +240,7 @@ public final class ImageCodec {
     }
 
     /** ARGB → ABGR（NativeImage 的内部字节序） */
-    private static NativeImage toNative(BufferedImage src) {
+    static NativeImage toNative(BufferedImage src) {
         int w = src.getWidth();
         int h = src.getHeight();
 

@@ -3,6 +3,8 @@ package com.november.mcphone.core.client;
 import com.november.mcphone.core.PhonePaths;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.google.gson.JsonElement;
+import com.november.mcphone.core.client.home.HomeArrangement;
 import com.november.mcphone.MCphone;
 import com.november.mcphone.api.client.app.IPhoneApp;
 import com.november.mcphone.api.client.app.RequiredMod;
@@ -40,6 +42,7 @@ public final class PhoneScreenRegistry {
 
     /** 已安装 App 的 id，有序：顺序就是主屏排列 */
     private static final Set<ResourceLocation> INSTALLED = new LinkedHashSet<>();
+    private static final HomeArrangement HOME = new HomeArrangement();
 
     /** 每个存档 / 每个服务器一份状态文件 */
     private static Path stateDirectory() { return ClientPaths.resolve(PhonePaths.INSTALLED); }
@@ -118,6 +121,7 @@ public final class PhoneScreenRegistry {
             return false;
         }
         if (!INSTALLED.add(id)) return false;
+        HOME.reconcile(installedIds());
 
         saveState();
         MCphone.LOGGER.info("[MCphone] App 已安装: {}", id);
@@ -141,6 +145,7 @@ public final class PhoneScreenRegistry {
 
         app.onUninstall();
         INSTALLED.remove(id);
+        HOME.reconcile(installedIds());
         saveState();
         MCphone.LOGGER.info("[MCphone] App 已卸载: {}", id);
         return true;
@@ -154,24 +159,63 @@ public final class PhoneScreenRegistry {
             IPhoneApp app = CATALOG.get(id);
             if (app != null) out.add(app);
         }
-        // unmodifiableList 而不是 List.copyOf：省一次拷贝，主屏每帧都走这条路
         return Collections.unmodifiableList(out);
     }
 
-    /** 把主屏第 from 格挪到第 to 格，是插入不是交换。下标按 getApps() 算；真的变了才 true */
-    public static boolean moveApp(int from, int to) {
-        ensureLoaded();
+    public static List<HomeArrangement.Entry> homeEntries() {
+        return HOME.entries();
+    }
 
-        List<ResourceLocation> order = new ArrayList<>(INSTALLED);
-        // 与界面预览共用 HomeLayout.reorder，预览与落定才一致
-        if (!HomeLayout.reorder(order, from, to)) return false;
+    public static HomeArrangement.Folder homeFolder(String id) {
+        return HOME.folder(id);
+    }
 
-        // LinkedHashSet 没有就地重排，清空再灌回去
-        INSTALLED.clear();
-        INSTALLED.addAll(order);
+    public static IPhoneApp homeApp(String id) {
+        ResourceLocation key = id == null ? null : ResourceLocation.tryParse(id);
+        return key != null && INSTALLED.contains(key) ? CATALOG.get(key) : null;
+    }
 
+    public static boolean moveHomeEntry(String id, int to) {
+        return commitHomeChange(HOME.move(id, to));
+    }
+
+    public static boolean groupHomeApps(String source, String target, String name) {
+        return commitHomeChange(HOME.group(source, target, name));
+    }
+
+    public static boolean addFolderApps(String folder, List<String> ids) {
+        return commitHomeChange(HOME.add(folder, ids));
+    }
+
+    public static boolean renameFolder(String folder, String name) {
+        return commitHomeChange(HOME.rename(folder, name));
+    }
+
+    public static boolean moveFolderApp(String folder, String id, int to) {
+        return commitHomeChange(HOME.moveMember(folder, id, to));
+    }
+
+    public static int dropFolderApp(String folder, String id, int boundary, String target, String defaultName) {
+        int destination = HOME.dropMember(folder, id, boundary, target, defaultName);
+        commitHomeChange(destination >= 0);
+        return destination;
+    }
+
+    private static boolean commitHomeChange(boolean changed) {
+        if (!changed) return false;
+        syncInstalledOrder();
         saveState();
         return true;
+    }
+
+    private static List<String> installedIds() {
+        return INSTALLED.stream().map(ResourceLocation::toString).toList();
+    }
+
+    private static void syncInstalledOrder() {
+        List<String> ordered = HOME.appsInOrder();
+        INSTALLED.clear();
+        ordered.forEach(id -> INSTALLED.add(ResourceLocation.tryParse(id)));
     }
 
     /** 目录中尚未安装的 App —— 应用商店的"可下载"列表 */
@@ -346,6 +390,7 @@ public final class PhoneScreenRegistry {
     private static final class State {
         List<String> installed;
         List<String> known;
+        JsonElement home;
     }
 
     /** 解析状态文件里的一条 id，解析不了返回 null。裸串（老文件）补成 mcphone: —— 不能用 ResourceLocation.parse，它补成 minecraft: 会作废老玩家的状态 */
@@ -407,6 +452,7 @@ public final class PhoneScreenRegistry {
         if (revoked.isEmpty()) return;
 
         INSTALLED.removeAll(revoked);
+        HOME.reconcile(installedIds());
         saveState();
         MCphone.LOGGER.info("[MCphone] 有 {} 个付费 App 未购买，已从主屏移除: {}",
                 revoked.size(), revoked);
@@ -434,6 +480,7 @@ public final class PhoneScreenRegistry {
     /** 退出世界时调用，清空安装状态，否则下一个存档读进来之前会先显示上一个的主屏 */
     public static void unloadWorld() {
         INSTALLED.clear();
+        HOME.restore(List.of(), null);
         stateFile = null;
     }
 
@@ -464,6 +511,7 @@ public final class PhoneScreenRegistry {
     }
 
     private static void loadState() {
+        List<HomeArrangement.StoredEntry> home = null;
         Set<ResourceLocation> known = new HashSet<>();
         // 有序：这一串的顺序就是玩家上次摆好的主屏顺序
         Set<ResourceLocation> installed = new LinkedHashSet<>();
@@ -474,6 +522,12 @@ public final class PhoneScreenRegistry {
                 if (s != null) {
                     parseStoredIds(s.installed, installed);
                     parseStoredIds(s.known, known);
+                    try {
+                        HomeArrangement.StoredEntry[] entries = GSON.fromJson(s.home, HomeArrangement.StoredEntry[].class);
+                        if (entries != null) home = Arrays.asList(entries);
+                    } catch (RuntimeException e) {
+                        MCphone.LOGGER.warn("[MCphone] Invalid home layout in {}: {}", stateFile, e.toString());
+                    }
                 }
             } catch (Exception e) {
                 MCphone.LOGGER.warn("[MCphone] 读取 {} 失败，按默认安装状态处理: {}",
@@ -494,6 +548,9 @@ public final class PhoneScreenRegistry {
             if (shouldPreinstall(id, e.getValue())) INSTALLED.add(id);
         }
 
+        HOME.restore(installedIds(), home);
+        syncInstalledOrder();
+
         MCphone.LOGGER.info("[MCphone] 已安装 {} / 目录 {} 个 App",
                 INSTALLED.size(), CATALOG.size());
 
@@ -512,7 +569,8 @@ public final class PhoneScreenRegistry {
         if (stateFile == null) return;
 
         State s = new State();
-        s.installed = INSTALLED.stream().map(ResourceLocation::toString).toList();
+        s.installed = installedIds();
+        s.home = GSON.toJsonTree(HOME.snapshot());
         s.known = CATALOG.keySet().stream().map(ResourceLocation::toString).toList();
         try {
             // 【整份替换，不是直写】：直写写到一半崩掉，主屏装了哪些 App 全部回到默认，

@@ -1,6 +1,7 @@
 package com.november.mcphone.core.client;
 
 import com.november.mcphone.core.DeviceKind;
+import com.november.mcphone.core.client.home.HomeReflow.Position;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -45,6 +46,9 @@ public class DeviceLayoutTest {
         cellsThatFitEdges();
         gridInsetEdges();
         slotHitTesting();
+        desktopInsertion();
+        interruptedInsertion();
+        folderLayout();
 
         System.out.println();
         if (failures.isEmpty()) {
@@ -81,9 +85,9 @@ public class DeviceLayoutTest {
         // 内容区 —— 页面能用的那块。手机上导航条横在底下，平板上立在右边，
         // 于是一个扣的是高、一个扣的是宽
         eq(DeviceMetrics.PHONE.contentWidth(), 120, "手机内容区宽＝整块屏幕");
-        eq(DeviceMetrics.PHONE.contentHeight(), 176, "手机内容区高（扣状态栏与导航栏）");
+        eq(DeviceMetrics.PHONE.contentHeight(), 172, "手机内容区高（扣状态栏与导航栏）");
         eq(DeviceMetrics.TABLET.contentWidth(), 226, "平板内容区宽（扣掉右边那条导航条）");
-        eq(DeviceMetrics.TABLET.contentHeight(), 158, "平板内容区高（只扣状态栏）");
+        eq(DeviceMetrics.TABLET.contentHeight(), 154, "平板内容区高（只扣状态栏）");
 
         check(!DeviceMetrics.PHONE.sideNav(), "手机的导航条横在底下");
         check(DeviceMetrics.TABLET.sideNav(), "平板的导航条立在右边");
@@ -201,24 +205,24 @@ public class DeviceLayoutTest {
         eq(tb.x(), left + t.contentWidth(), "平板：条与内容区严丝合缝，不重叠也不留缝");
         eq(tb.y(), top + PhoneTheme.STATUS_BAR_HEIGHT, "平板：条从状态栏下面起，不占右上角的时钟");
         eq(tb.w(), PhoneTheme.NAV_BAR_HEIGHT, "平板：条立起来之后 14 是它的宽");
-        eq(tb.h(), 158, "平板：条一直到屏幕最下面");
+        eq(tb.y() + tb.h(), top + t.screenH(), "平板：条一直到屏幕最下面");
         check(tb.vertical(), "平板：条是立着的");
-        eq(tb.span(), 158, "平板：三个键分的是屏幕高");
+        eq(tb.span(), t.contentHeight(), "平板：三个键分的是状态栏以下的高度");
 
         int col = tb.x() + tb.w() / 2;
         eq(tb.cellAt(col, tb.y() + 5, cells), 0, "平板：最上面那格是返回");
         eq(tb.cellAt(col, tb.y() + 79, cells), 1, "平板：中间那格是主页");
         eq(tb.cellAt(col, top + 168 - 1, cells), 2,
                 "平板：最下面一个像素也要落在多任务上——余数归最后一格");
-        eq(tb.cellAt(col, tb.y() + 51, cells), 0, "平板：一格 52，第 51 行还是返回");
-        eq(tb.cellAt(col, tb.y() + 52, cells), 1, "平板：第 52 行已经是主页");
+        eq(tb.cellAt(col, tb.y() + 50, cells), 0, "平板：一格 51，第 50 行还是返回");
+        eq(tb.cellAt(col, tb.y() + 51, cells), 1, "平板：第 51 行已经是主页");
 
         eq(tb.cellAt(tb.x() - 1, tb.y() + 5, cells), -1, "平板：条左边一个像素是内容区，不算");
         eq(tb.cellAt(col, tb.y() - 1, cells), -1,
                 "平板：右上角那块是状态栏（时钟），不是返回键");
         eq(tb.cellAt(left + 8, top + 100, cells), -1, "平板：屏幕左边当然不算");
 
-        // 最后一格必须一直铺到条尾：158 除以 3 是 52，末尾那 2 个像素不能没人认领
+        // 最后一格必须铺到条尾，包含分格时剩下的像素。
         eq(tb.cellTo(2, cells), tb.span(), "平板：最后一格吃掉除不尽的余数");
         eq(tb.cellTo(0, cells), tb.cellFrom(1, cells), "格子首尾相接，中间不留缝");
         eq(tb.cellTo(1, cells), tb.cellFrom(2, cells), "格子首尾相接，中间不留缝");
@@ -293,5 +297,91 @@ public class DeviceLayoutTest {
                 "第二页第一格是全局第 32 个");
         eq(HomeLayout.pageCount(33, cols * rows), 2, "33 个 App 在平板上是两页");
         eq(HomeLayout.pageCount(33, 20), 2, "同样 33 个在手机上也是两页（一页 20）");
+    }
+
+    static void desktopInsertion() {
+        int top = 16, icon = PhoneTheme.APP_ICON_SIZE;
+        var right = HomeLayout.insertionAt(60, 26, 8, top, CELL_W, CELL_H, icon, 4, 5, 0, 10, 0);
+        var left = HomeLayout.insertionAt(60, 26, 8, top, CELL_W, CELL_H, icon, 4, 5, 0, 10, 3);
+        eq(right, new HomeLayout.Insertion(1, 60, top), "向右移动时下标扣掉被拖走的格");
+        eq(left, new HomeLayout.Insertion(2, 60, top), "向左移动时线在同一处");
+        eq(HomeLayout.insertionAt(32, 26, 8, top, CELL_W, CELL_H, icon, 4, 5, 0, 10, 1), null,
+                "放在自己左边不显示插入线");
+        eq(HomeLayout.insertionAt(60, 26, 8, top, CELL_W, CELL_H, icon, 4, 5, 0, 10, 1), null,
+                "放在自己右边不显示插入线");
+
+        var end = HomeLayout.insertionAt(117, 26, 8, top, CELL_W, CELL_H, icon, 4, 5, 0, 10, 2);
+        var start = HomeLayout.insertionAt(3, 55, 8, top, CELL_W, CELL_H, icon, 4, 5, 0, 10, 2);
+        eq(end, new HomeLayout.Insertion(3, 116, top), "上一行最右的线");
+        eq(start, new HomeLayout.Insertion(3, 4, top + CELL_H), "下一行最左的线对应同一下标");
+        eq(HomeLayout.insertionAt(111, 84, 8, top, CELL_W, CELL_H, icon, 4, 5, 0, 10, 0),
+                new HomeLayout.Insertion(9, 60, top + CELL_H * 2), "最后一行的空格指向队尾");
+        eq(HomeLayout.insertionAt(4, 150, 8, top, CELL_W, CELL_H, icon, 4, 5, 0, 10, 0),
+                new HomeLayout.Insertion(9, 60, top + CELL_H * 2), "最后一个 App 下方也指向队尾");
+        eq(HomeLayout.insertionAt(197, 26, 5, top, CELL_W, CELL_H, icon, 8, 4, 1, 41, 2),
+                new HomeLayout.Insertion(38, 197, top), "平板第二页第七与第八列之间用全局下标");
+        eq(HomeLayout.insertionAt(197, 26, 5, top, CELL_W, CELL_H, icon, 8, 4, 2, 41, 2), null,
+                "不存在的页面不给落点");
+    }
+
+    static void interruptedInsertion() {
+        int icon = PhoneTheme.APP_ICON_SIZE;
+        // 第一个图标刚拖到行尾，下一次按下时各图标还在原来的画面位置。
+        var positions = List.of(new Position(36, 16), new Position(64, 16),
+                new Position(92, 16), new Position(8, 16), new Position(8, 45));
+
+        eq(HomeLayout.insertionAtDrawnPositions(32, 26, icon, CELL_W, 0, positions, 4),
+                new HomeLayout.Insertion(0, 32, 16), "按住补位动画时插入线取画面上的间隙");
+        eq(HomeLayout.insertionAtDrawnPositions(32, 26, icon, CELL_W, 0, positions, 0), null,
+                "画面上自己的边缘仍是原位");
+        eq(HomeLayout.insertionAtDrawnPositions(4, 54, icon, CELL_W, 0, positions, 2),
+                new HomeLayout.Insertion(3, 4, 45), "第二行的线取实际画出的高度");
+        eq(HomeLayout.insertionAtDrawnPositions(32, 26, icon, CELL_W, 20, positions, 2),
+                new HomeLayout.Insertion(19, 32, 16), "下一页的插入位置用全局下标");
+    }
+
+    static void folderLayout() {
+        int left = 20, top = 30;
+        var phone = HomeLayout.folderGrid(DeviceMetrics.PHONE, left, top);
+        var tablet = HomeLayout.folderGrid(DeviceMetrics.TABLET, left, top);
+        eq(phone.columns(), 3, "Phone folder columns");
+        eq(phone.rows(), 3, "Phone folder rows");
+        eq(phone.panelWidth(), 88, "Phone folder fits about three quarters of the screen width");
+        eq(phone.panelHeight(), 100, "Phone folder aspect ratio is close to the portrait reference");
+        eq(phone.titleLeft(), phone.x(0), "Phone folder title aligns with the first icon");
+        eq(tablet.columns(), 4, "Tablet folder columns");
+        eq(tablet.rows(), 4, "Tablet folder rows");
+        eq(tablet.panelWidth(), 108, "Tablet folder fits 45 percent of the screen width");
+        eq(tablet.panelHeight(), 104, "Tablet folder is nearly square");
+        for (var metrics : List.of(DeviceMetrics.PHONE, DeviceMetrics.TABLET)) {
+            var grid = HomeLayout.folderGrid(metrics, left, top);
+            int last = grid.pageSize() - 1;
+            eq(grid.panelLeft() * 2 + grid.panelWidth(), 2 * left + metrics.screenW(), "Panel is horizontally centered");
+            eq(grid.panelTop() * 2 + grid.panelHeight(), 2 * top + metrics.screenH(), "Panel is vertically centered");
+            check(grid.titleY() - 3 >= top + PhoneTheme.STATUS_BAR_HEIGHT, "Title editor clears the status bar");
+            check(grid.panelLeft() + grid.panelWidth() <= left + metrics.contentWidth(), "Panel clears side navigation");
+            eq(grid.hit(grid.x(0), grid.y(0)), 0, "The first tile starts in the upper-left cell");
+            eq(grid.hit(grid.x(last), grid.y(last)), last, "Last folder cell is reachable");
+            eq(grid.hit(grid.x(0) + grid.iconSize(), grid.y(0)), -1, "Between icons is not clickable");
+            eq(grid.hit(grid.x(0), grid.y(0) - 1), -1, "Before the first row is not clickable");
+            check(grid.panelTop() > grid.titleY() + 12, "Title clears the frosted panel");
+            int panelBottom = grid.panelTop() + grid.panelHeight();
+            check(grid.y(last) + grid.rowHeight() <= panelBottom, "All rows fit inside the panel");
+            check(panelBottom <= grid.footerY() - 11, "Picker page controls clear the panel");
+            check(grid.containsPanel(grid.x(last) + 10, grid.y(last) + 10), "Last icon is inside the panel");
+            check(grid.containsPanel(grid.panelLeft() + 2, grid.top() + 16), "Panel padding accepts clicks");
+            check(!grid.containsPanel(grid.panelLeft(), grid.panelTop()), "Rounded corner counts as outside");
+            int centerX = grid.panelLeft() + grid.panelWidth() / 2;
+            int centerY = grid.panelTop() + grid.panelHeight() / 2;
+            check(!grid.containsPanel(grid.panelLeft() - 1, centerY), "Drop to the left of the panel is outside");
+            check(!grid.containsPanel(grid.panelLeft() + grid.panelWidth(), centerY), "Drop to the right of the panel is outside");
+            check(!grid.containsPanel(centerX, grid.panelTop() - 1), "Drop above the panel is outside");
+            check(!grid.containsPanel(centerX, panelBottom), "Drop below the panel is outside");
+            check(grid.containsPanel(centerX, panelBottom - 1), "Drop on the bottom interior stays in the folder");
+        }
+        eq(HomeLayout.pageCount(9, phone.pageSize()), 1, "Eight apps and an add tile fit on one phone page");
+        eq(HomeLayout.pageCount(10, phone.pageSize()), 2, "Tenth phone tile starts a new page");
+        eq(HomeLayout.pageCount(16, tablet.pageSize()), 1, "Fifteen apps and an add tile fit on one tablet page");
+        eq(HomeLayout.pageCount(17, tablet.pageSize()), 2, "Seventeenth tablet tile starts a new page");
     }
 }

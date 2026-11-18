@@ -1,5 +1,7 @@
 package com.november.mcphone.core.client;
 
+import com.november.mcphone.core.client.home.HomeReflow.Position;
+
 import java.util.List;
 
 /**
@@ -111,14 +113,77 @@ public final class HomeLayout {
         return Math.max(0, Math.min(page * pageSize + slot, appCount - 1));
     }
 
+    /** 主屏插入线。index 是移除被拖桌面项后的下标。文件夹拖出用 from = -1，桌面项仍在原位。 */
+    public record Insertion(int index, double x, double y) {}
+
+    /**
+     * 找到最靠近拖动图标中心的插入线。每行有左边、图标之间和右边的落点。
+     * 行末和下一行行首是同一个插入位置，但各自有可见的线。
+     * 最后一个 App 下方的空白落在队尾，原位的两条线都不改变顺序。
+     */
+    public static Insertion insertionAt(double x, double y, int gridX, int gridY,
+                                          int cellW, int cellH, int iconSize, int columns, int rows,
+                                          int page, int count, int from) {
+        if (cellW <= 0 || cellH <= 0 || iconSize <= 0 || iconSize > cellW || iconSize > cellH
+                || columns <= 0 || rows <= 0 || page < 0 || from < -1 || from >= count
+                || !Double.isFinite(x) || !Double.isFinite(y)) return null;
+        int pageSize = columns * rows;
+        if (page >= pageCount(count, pageSize)) return null;
+        int start = page * pageSize;
+        int visible = Math.min(pageSize, count - start);
+        int lastRow = (visible - 1) / columns;
+        // 比较的是各行图标的中心，避免名字下方的大间隙偏向上一行。
+        int nearestRow = (int) Math.floor((y - gridY + (cellH - iconSize) / 2.0) / cellH);
+        int row = Math.max(0, Math.min(lastRow, nearestRow));
+        int rowStart = start + row * columns;
+        int rowCount = Math.min(columns, start + visible - rowStart);
+
+        int gapStart = gridX - (cellW - iconSize) / 2;
+        int gap = y >= gridY + (lastRow + 1) * cellH ? rowCount
+                : (int) Math.max(0, Math.min(rowCount, Math.round((x - gapStart) / cellW)));
+        int boundary = rowStart + gap;
+        int index = from >= 0 && boundary > from ? boundary - 1 : boundary;
+        if (index == from) return null;
+        return new Insertion(index, gapStart + gap * cellW, gridY + row * cellH);
+    }
+
+    /**
+     * 补位动画被下一次拖动按住时，两个落点分别跟着各图标的左右边缘。
+     * 图标位置按列表顺序传入，线的位置按实际画面选，插入下标仍按对应 App 算。
+     */
+    public static Insertion insertionAtDrawnPositions(double x, double y, int iconSize, int cellW,
+                                                      int start, List<Position> positions, int from) {
+        if (iconSize <= 0 || iconSize > cellW || start < 0 || from < -1
+                || !Double.isFinite(x) || !Double.isFinite(y)) return null;
+        int halfGap = (cellW - iconSize) / 2;
+        double bestDistance = Double.POSITIVE_INFINITY;
+        Insertion nearest = null;
+
+        for (int i = 0; i < positions.size(); i++) {
+            Position position = positions.get(i);
+            int iconIndex = start + i;
+            double dy = y - (position.y() + iconSize / 2.0);
+            for (int side = 0; side < 2; side++) {
+                double markerX = position.x() - halfGap + side * cellW;
+                double dx = x - markerX;
+                double distance = dx * dx + dy * dy;
+                if (distance >= bestDistance) continue;
+                bestDistance = distance;
+                int boundary = iconIndex + side;
+                int index = from >= 0 && boundary > from ? boundary - 1 : boundary;
+                nearest = new Insertion(index, markerX, position.y());
+            }
+        }
+        return nearest == null || nearest.index() == from ? null : nearest;
+    }
+
     /**
      * 把第 from 个挪到第 to 个位置。就地改动传进来的列表。
      *
      * 【插入】而不是交换：把第 1 个拖到第 3 格，中间那些依次前移，就像真手机那样。
      * 交换的话玩家拖一个图标会让另一个莫名其妙地跳到他手指原来的位置上。
      *
-     * 拖动时的实时预览与松手后的落定共用这一个方法，两者才不可能对不上——各写
-     * 一遍的话，"看着会插到这儿、松手却去了那儿"这种 bug 迟早出现，而且极难查。
+     * 文件夹内的拖动预览与最终排列共用这个操作。主屏在松手时按插入线的下标更新排列。
      *
      * @return 真的改变了顺序才返回 true；下标越界或原地不动返回 false
      */
@@ -131,5 +196,69 @@ public final class HomeLayout {
 
         list.add(target, list.remove(from));
         return true;
+    }
+
+    /** Hit test inside the active portion of one cell, without clamping points in the gaps. */
+    public static int hitSlot(double x, double y, int gridX, int gridY, int cellW, int cellH,
+                              int columns, int rows, int insetX, int insetY, int width, int height) {
+        if (x < gridX || y < gridY || x >= gridX + columns * cellW || y >= gridY + rows * cellH) return -1;
+        int slot = slotAt(x, y, gridX, gridY, cellW, cellH, columns, rows);
+        double localX = x - gridX - slot % columns * cellW;
+        double localY = y - gridY - slot / columns * cellH;
+        if (localX < insetX || localX >= insetX + width || localY < insetY || localY >= insetY + height) return -1;
+        return slot;
+    }
+
+    public record FolderGrid(int left, int titleY, int top, int footerY, int columns, int rows,
+                             int pitch, int rowHeight, int iconSize, int panelWidth, int panelHeight,
+                             int titleInset, float labelScale) {
+        public static final int PANEL_RADIUS = 10;
+        private static final int TITLE_GAP = 14;
+
+        public int pageSize() { return columns * rows; }
+        public int width() { return (columns - 1) * pitch + iconSize; }
+        public int controlsWidth() { return Math.max(78, width()); }
+        public int controlsLeft() { return left - (controlsWidth() - width()) / 2; }
+        public int panelLeft() { return left - (panelWidth - width()) / 2; }
+        public int panelTop() { return titleY + TITLE_GAP; }
+        public int titleLeft() { return panelLeft() + titleInset; }
+        public int titleWidth() { return panelWidth - titleInset * 2; }
+        public int x(int slot) { return left + slot % columns * pitch; }
+        public int y(int slot) { return top + slot / columns * rowHeight; }
+
+        public int hit(double x, double y) {
+            return hitSlot(x, y, left, top, pitch, rowHeight, columns, rows, 0, 0, iconSize, rowHeight);
+        }
+
+        public boolean containsPanel(double x, double y) {
+            double px = x - panelLeft();
+            double py = y - panelTop();
+            if (px < 0 || py < 0 || px >= panelWidth || py >= panelHeight) return false;
+            double dx = Math.max(0, Math.max(PANEL_RADIUS - px, px - (panelWidth - PANEL_RADIUS)));
+            double dy = Math.max(0, Math.max(PANEL_RADIUS - py, py - (panelHeight - PANEL_RADIUS)));
+            return dx * dx + dy * dy <= PANEL_RADIUS * PANEL_RADIUS;
+        }
+    }
+
+    /** 文件夹和添加页共享每台设备的满页网格，App 数量只决定填哪些格。 */
+    public static FolderGrid folderGrid(DeviceMetrics metrics, int left, int top) {
+        boolean tablet = metrics.landscape();
+        int columns = tablet ? 4 : 3;
+        int rows = tablet ? 4 : 3;
+        int pitch = tablet ? 25 : 26;
+        int icon = tablet ? 15 : 18;
+        int rowHeight = tablet ? 22 : 27;
+        // 按参考图保留手机略高于宽、平板接近正方形的轮廓。
+        int panelWidth = tablet ? 108 : 88;
+        int panelHeight = tablet ? 104 : 100;
+        int panelTop = top + (metrics.screenH() - panelHeight) / 2;
+        int titleY = panelTop - FolderGrid.TITLE_GAP;
+        int gridTop = panelTop + (tablet ? 8 : 12);
+        int gridLeft = left + gridInset(metrics.screenW(), columns, pitch, pitch - icon);
+        int footerY = top + metrics.screenH() - metrics.bottomNavHeight() - 14;
+        int titleInset = tablet ? 5 : 9;
+        float labelScale = tablet ? 0.6f : 0.65f;
+        return new FolderGrid(gridLeft, titleY, gridTop, footerY, columns, rows,
+                pitch, rowHeight, icon, panelWidth, panelHeight, titleInset, labelScale);
     }
 }
