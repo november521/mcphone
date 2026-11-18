@@ -15,8 +15,7 @@
     "  两个都写     交集层：该加载器 × 该批版本      → 两个轴都钉住了，都不禁",
     "每挂一层，构建就注册一道 verifyLayer<层名>，按这张表校验它。",
     "",
-    "交集层眼下一个都没有：现有目标既不共用加载器，也不共用版本档。规则先放开，",
-    "目录等第一个占用者出现时再建，不预先造空目录。",
+    "交集层目前用于新版 Fabric 终端同步和 NeoForge 客户端发包。",
     "",
     "【目录是推出来的，不是声明的】",
     "  layers/version/<层名>/   只写 since 的",
@@ -83,6 +82,18 @@
     "loader": "Fabric",
     "populated": true,
     "note": "Fabric entry points and adapters verified to be identical on 1.20.1 and 1.21.1."
+  },
+  "fabric-1.21+": {
+    "since": "1.21",
+    "loader": "Fabric",
+    "populated": true,
+    "note": "Fabric 终端同步与客户端状态，使用 1.21 的物品栈和网络接口。"
+  },
+  "neoforge-1.21.11+": {
+    "since": "1.21.11",
+    "loader": "NeoForge",
+    "populated": true,
+    "note": "NeoForge 客户端数据包分发入口。"
   },
   "1.20.1": {
     "since": "1.20.1",

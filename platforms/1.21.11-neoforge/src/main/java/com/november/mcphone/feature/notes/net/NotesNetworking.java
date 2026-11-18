@@ -1,0 +1,119 @@
+package com.november.mcphone.feature.notes.net;
+
+import com.november.mcphone.core.PhoneItem;
+import com.november.mcphone.core.net.MCphoneNetwork;
+import com.november.mcphone.feature.notes.Note;
+import com.november.mcphone.feature.notes.NotePrinter;
+import com.november.mcphone.feature.notes.NoteService;
+import com.november.mcphone.core.net.RequestThrottle;
+import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerPlayer;
+import net.neoforged.neoforge.network.registration.PayloadRegistrar;
+
+/** 记事本网络包的注册与处理；只做传输层的事，业务规则在 {@link NoteService} */
+public final class NotesNetworking {
+
+    private NotesNetworking() {}
+
+    /** 由 NetworkHandler.register 调用 */
+    public static void register(PayloadRegistrar registrar) {
+        MCphoneNetwork.registerToServer(
+                registrar,
+                RequestNoteListPacket.TYPE,
+                RequestNoteListPacket.STREAM_CODEC,
+                NotesNetworking::handleRequestNoteList
+        );
+
+        MCphoneNetwork.registerToClient(
+                registrar,
+                SyncNoteListPacket.TYPE,
+                SyncNoteListPacket.STREAM_CODEC,
+                NotesNetworking::handleSyncNoteList
+        );
+
+        MCphoneNetwork.registerToServer(
+                registrar,
+                RequestNotePacket.TYPE,
+                RequestNotePacket.STREAM_CODEC,
+                NotesNetworking::handleRequestNote
+        );
+
+        MCphoneNetwork.registerToClient(
+                registrar,
+                SyncNotePacket.TYPE,
+                SyncNotePacket.STREAM_CODEC,
+                NotesNetworking::handleSyncNote
+        );
+
+        MCphoneNetwork.registerToServer(
+                registrar,
+                SaveNotePacket.TYPE,
+                SaveNotePacket.STREAM_CODEC,
+                NotesNetworking::handleSaveNote
+        );
+
+        MCphoneNetwork.registerToServer(
+                registrar,
+                DeleteNotePacket.TYPE,
+                DeleteNotePacket.STREAM_CODEC,
+                NotesNetworking::handleDeleteNote
+        );
+
+        MCphoneNetwork.registerToServer(
+                registrar,
+                PrintNotePacket.TYPE,
+                PrintNotePacket.STREAM_CODEC,
+                NotesNetworking::handlePrintNote
+        );
+    }
+
+    private static void handleRequestNoteList(RequestNoteListPacket packet, ServerPlayer player) {
+        if (!RequestThrottle.allow(player, RequestThrottle.Kind.NOTE_LIST)) return;
+
+        MCphoneNetwork.sendToPlayer(player, new SyncNoteListPacket(NoteService.buildSummaries(player)));
+    }
+
+    /** 笔记不存在时回一条正文为空的，界面收到后自会退回列表 */
+    private static void handleRequestNote(RequestNotePacket packet, ServerPlayer player) {
+        if (!RequestThrottle.allow(player, RequestThrottle.Kind.NOTE)) return;
+
+        Note note = NoteService.getNote(player, packet.id())
+                .orElseGet(() -> new Note(packet.id(), "", 0L));
+        MCphoneNetwork.sendToPlayer(player, new SyncNotePacket(note));
+    }
+
+    /** 无论成败都回发列表：成了让客户端拿到服务端分配的 id，没成让列表回到真值 */
+    private static void handleSaveNote(SaveNotePacket packet, ServerPlayer player) {
+        if (!RequestThrottle.allow(player, RequestThrottle.Kind.NOTE_ACTION)) return;
+        NoteService.saveNote(player, packet.id(), packet.body());
+        MCphoneNetwork.sendToPlayer(player, new SyncNoteListPacket(NoteService.buildSummaries(player)));
+    }
+
+    /** 同样无论成败都回发列表 */
+    private static void handleDeleteNote(DeleteNotePacket packet, ServerPlayer player) {
+        if (!RequestThrottle.allow(player, RequestThrottle.Kind.NOTE_ACTION)) return;
+        NoteService.deleteNote(player, packet.id());
+        MCphoneNetwork.sendToPlayer(player, new SyncNoteListPacket(NoteService.buildSummaries(player)));
+    }
+
+    /** 正文取服务端存的那份，不采信包里的内容；结果用动作栏告知玩家 */
+    private static void handlePrintNote(PrintNotePacket packet, ServerPlayer player) {
+        if (!RequestThrottle.allow(player, RequestThrottle.Kind.NOTE_ACTION)) return;
+        if (!PhoneItem.isCarriedBy(player)) return;
+
+        boolean done = NoteService.getNote(player, packet.id())
+                .map(note -> NotePrinter.print(player, note))
+                .orElse(false);
+
+        com.november.mcphone.platform.PlayerAccess.message(player, Component.translatable(
+                done ? "mcphone.notes.print_done" : "mcphone.notes.print_failed"), true);
+    }
+
+    private static void handleSyncNoteList(SyncNoteListPacket packet) {
+        NotesClientCache.setSummaries(packet.notes());
+    }
+
+    private static void handleSyncNote(SyncNotePacket packet) {
+        NotesClientCache.setOpenNote(packet.note());
+    }
+}

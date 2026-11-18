@@ -1,0 +1,139 @@
+package com.november.mcphone;
+
+import com.mojang.logging.LogUtils;
+import com.november.mcphone.core.ModAttachments;
+import com.november.mcphone.core.ModCreativeTabs;
+import com.november.mcphone.core.ModDataComponents;
+import com.november.mcphone.core.ModItems;
+import net.neoforged.bus.api.IEventBus;
+import net.neoforged.fml.ModContainer;
+import net.neoforged.fml.common.Mod;
+import org.slf4j.Logger;
+
+@Mod(MCphone.MODID)
+public class MCphone {
+
+    public static final String MODID = "mcphone";
+    public static final Logger LOGGER = LogUtils.getLogger();
+
+    /**
+     * 运行时的真实版本号，tooltip 用它填 %s，语言文件里不写死。
+     * 在构造函数里由 modContainer 赋值，不用 ModList 静态查询——那依赖 FML 的类加载时序，取不到时是静默的空值。
+     */
+    private static String version = "";
+
+    public MCphone(IEventBus modEventBus, ModContainer modContainer) {
+        ModItems.ITEMS.register(modEventBus);
+        ModDataComponents.COMPONENTS.register(modEventBus);
+        ModCreativeTabs.TABS.register(modEventBus);
+        com.november.mcphone.core.menu.ModMenus.MENUS.register(modEventBus);
+        ModAttachments.ATTACHMENT_TYPES.register(modEventBus);
+        com.november.mcphone.core.ModSounds.SOUND_EVENTS.register(modEventBus);
+        modEventBus.addListener(com.november.mcphone.core.net.NetworkHandler::register);
+
+        // 游戏总线，显式挂载：这三条漏了没有任何症状，只是下线玩家的表再也不缩小
+        net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener(
+                com.november.mcphone.core.net.RequestThrottle::onPlayerLoggedOut);
+        net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener(
+                com.november.mcphone.feature.music.DiscService::onPlayerLoggedOut);
+        net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener(
+                com.november.mcphone.feature.chat.ChatImageUploads::onPlayerLoggedOut);
+
+        // S17：连接 epoch 成对（登录建、登出忘）。两者必须写在同一处，漏一个的后果见 ScriptHost.newEpoch。
+        // 客户端拿到的 epoch 经握手（Handshake.Begin）下发 —— 那一半在 Stage 2。
+        net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener(
+                (net.neoforged.neoforge.event.entity.player.PlayerEvent.PlayerLoggedInEvent e) -> {
+                    if (e.getEntity() instanceof net.minecraft.server.level.ServerPlayer p) {
+                        long epoch = com.november.mcphone.core.script.server.ScriptHost.newEpoch(p);
+                        // S17 Stage 2：把 serverId / epoch / 部署表随握手下发（只含该玩家被授权的动作，UX）
+                        com.november.mcphone.core.script.server.HandshakeService.pushTo(p, epoch);
+                    }
+                });
+        net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener(
+                (net.neoforged.neoforge.event.entity.player.PlayerEvent.PlayerLoggedOutEvent e) -> {
+                    if (e.getEntity() instanceof net.minecraft.server.level.ServerPlayer p) {
+                        com.november.mcphone.core.script.server.ScriptHost.forget(p.getUUID());
+                    }
+                });
+
+        // 手机替卡槽里的终端供电。漏了它的症状是"终端在手机里会没电"，见 TerminalCharger
+        net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener(
+                com.november.mcphone.feature.terminal.TerminalCharger::onPlayerTick);
+
+        // 开服时清掉没有消息认领的图片文件，理由见 ChatImageStore.sweepOrphans
+        net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener(
+                com.november.mcphone.feature.chat.ChatImageStore::onServerStarted);
+
+        // 脚本 worker 的生死跟着服务器走（§15.5）。【停必须有】：单人游戏里服务器会在同一个
+        // JVM 里停掉再起来，不关的话线程池连同排队中的求值会带着上一个世界的引用活到下一个
+        // 世界，而那些求值回调到主线程时拿到的是一个已经死掉的 MinecraftServer。
+        // setDaemon(true) 是"万一这里漏了别挂住 JVM"的兜底，不是关闭方案本身
+        net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener(
+                (net.neoforged.neoforge.event.server.ServerStartedEvent e) -> {
+                    com.november.mcphone.core.script.server.economy.EconomyRuntime.start(e.getServer());
+                    com.november.mcphone.core.script.server.ScriptWorkers.start();
+                    // 脚本宿主（S15g）：建 StrikeTracker（必须主线程）、管线、登记进 ScriptRpcHandler
+                    com.november.mcphone.core.script.server.ScriptHost.start(e.getServer());
+                });
+        // 货币网关先关、再停 worker：worker 可能正等着主线程替它执行一笔货币调用，
+        // 反过来主线程就要白等到 worker 超时（见 CurrencyGateway.close）
+        net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener(
+                (net.neoforged.neoforge.event.server.ServerStoppingEvent e) -> {
+                    com.november.mcphone.core.script.server.economy.EconomyRuntime.stop();
+                    // 先摘管线（在飞的求值还有机会落地），再停 worker
+                    com.november.mcphone.core.script.server.ScriptHost.stop();
+                    com.november.mcphone.core.script.server.ScriptWorkers.stop();
+                });
+        // 超时托管每 5 分钟扫一次（见 EconomyRuntime.tick）
+        net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener(
+                (net.neoforged.neoforge.event.tick.ServerTickEvent.Post e) -> com.november.mcphone.core.script.server.economy.EconomyRuntime.tick());
+        net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener(
+                (net.neoforged.neoforge.event.tick.ServerTickEvent.Post e) ->
+                        tickDiscLoop(e.getServer().getPlayerList().getPlayers()));
+        net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener(
+                (net.neoforged.neoforge.event.RegisterCommandsEvent e) -> com.november.mcphone.core.script.server.economy.EconomyCommand.register(e.getDispatcher()));
+        // 脚本后端的 OP 管理命令（S17，§14.4）：部署/授权的 Stage 1 审批入口
+        net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener(
+                (net.neoforged.neoforge.event.RegisterCommandsEvent e) ->
+                        com.november.mcphone.core.script.server.ScriptAdminCommand.register(e.getDispatcher()));
+
+        // SERVER 而非 COMMON：必须由服主一份说了算，且 NeoForge 会同步给客户端供界面藏按钮
+        modContainer.registerConfig(net.neoforged.fml.config.ModConfig.Type.SERVER,
+                com.november.mcphone.core.ServerConfig.SPEC, "mcphone-server.toml");
+
+        // 「终端」App 接哪几家存储模组，setup 阶段才点数 —— 那时所有模组都构造完了。
+        // 为什么不能更早，见 Terminals.onCommonSetup
+        modEventBus.addListener(
+                com.november.mcphone.feature.terminal.integration.Terminals::onCommonSetup);
+
+        // 放在自家注册之后：兼容模块可能要看我们已经注册了什么
+        com.november.mcphone.compat.CompatModules.init(modEventBus);
+
+        version = modContainer.getModInfo().getVersion().toString();
+
+        LOGGER.info("MCphone 模组加载完成 —— 手机已就绪");
+    }
+
+    /** 接续唱片仓单曲循环；状态变化后立刻同步本轮的新终点。 */
+    private static void tickDiscLoop(Iterable<net.minecraft.server.level.ServerPlayer> players) {
+        for (net.minecraft.server.level.ServerPlayer player : players) {
+            try {
+                if (com.november.mcphone.feature.music.DiscService.tickLoop(player)) {
+                    com.november.mcphone.feature.music.DiscService.syncState(player);
+                }
+            } catch (VirtualMachineError fatal) {
+                throw fatal;
+            } catch (Throwable failure) {
+                // 与 C2S 的 handleSafely 同一个理由，而这里是【每 tick × 每个玩家】的扇出：
+                // 一个人身上出的事（例如仓里有个会让 JukeboxSong.fromStack 抛的物品栈）不隔离的话，
+                // 排在他后面的玩家这一 tick 全被跳过，而且每 tick 复现 —— 是跨玩家的影响。
+                LOGGER.error("[MCphone] 唱片循环的每 tick 扇出失败 player={}", player.getUUID(), failure);
+            }
+        }
+    }
+
+    /** 本模组版本号，如 "1.0.0"。模组构造前调用会得到空串。 */
+    public static String getVersion() {
+        return version;
+    }
+}

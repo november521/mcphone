@@ -163,8 +163,49 @@
       "1.20.3+",
       "1.20.5+",
       "1.21+",
-      "fabric"
+      "fabric",
+      "fabric-1.21+"
     ]
+  },
+  "1.21.11-forge": {
+    "minecraft": "1.21.11",
+    "loader": "Forge",
+    "loader_version": null,
+    "server_config_sync": true,
+    "mappings": "official",
+    "java": 21,
+    "gradle": "9.2.1",
+    "project": "platforms/1.21.11-forge",
+    "buildable": false,
+    "note": "本轮覆盖 NeoForge 和 Fabric。",
+    "layers": ["1.20.3+", "1.20.5+", "1.21+", "forge"],
+    "unverified": ["loader_version", "gradle"]
+  },
+  "1.21.11-neoforge": {
+    "minecraft": "1.21.11",
+    "loader": "NeoForge",
+    "loader_version": "21.11.48",
+    "server_config_sync": true,
+    "mappings": "official",
+    "java": 21,
+    "gradle": "9.2.1",
+    "project": "platforms/1.21.11-neoforge",
+    "buildable": true,
+    "note": "Minecraft 1.21.11 移植已通过构建和试玩验收。",
+    "layers": ["1.20.3+", "1.20.5+", "1.21+", "neoforge", "neoforge-1.21.11+"]
+  },
+  "1.21.11-fabric": {
+    "minecraft": "1.21.11",
+    "loader": "Fabric",
+    "loader_version": "0.19.5",
+    "server_config_sync": true,
+    "mappings": "official",
+    "java": 21,
+    "gradle": "9.7.1",
+    "project": "platforms/1.21.11-fabric",
+    "buildable": true,
+    "note": "Minecraft 1.21.11 移植已通过构建和试玩验收。",
+    "layers": ["1.20.3+", "1.20.5+", "1.21+", "fabric", "fabric-1.21+"]
   },
   "26.1.2-forge": {
     "minecraft": "26.1.2",
@@ -203,7 +244,8 @@
       "1.20.3+",
       "1.20.5+",
       "1.21+",
-      "neoforge"
+      "neoforge",
+      "neoforge-1.21.11+"
     ]
   },
   "26.1.2-fabric": {
@@ -221,7 +263,8 @@
       "1.20.3+",
       "1.20.5+",
       "1.21+",
-      "fabric"
+      "fabric",
+      "fabric-1.21+"
     ],
     "unverified": [
       "loader_version",

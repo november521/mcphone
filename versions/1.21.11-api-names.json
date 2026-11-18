@@ -1,0 +1,62 @@
+{
+  "_comment": "Minecraft 1.21.11 原版名称和 GUI 适配类型绑定，两种加载器共用。",
+  "qualified": {
+    "net.minecraft.resources.ResourceLocation": "net.minecraft.resources.Identifier",
+    "net.minecraft.ResourceLocationException": "net.minecraft.IdentifierException",
+    "net.minecraft.client.gui.GuiGraphics": "com.november.mcphone.platform.client.port.PhoneGraphics",
+    "net.minecraft.client.gui.components.EditBox": "com.november.mcphone.platform.client.port.PhoneEditBox",
+    "net.minecraft.Util": "net.minecraft.util.Util",
+    "com.mojang.blaze3d.systems.RenderSystem": "com.november.mcphone.platform.client.port.PhoneTextureState",
+    "Screen.hasShiftDown": "com.november.mcphone.platform.client.PhoneScreenBase.hasShiftDown",
+    "Screen.hasControlDown": "com.november.mcphone.platform.client.PhoneScreenBase.hasControlDown",
+    "Screen.hasAltDown": "com.november.mcphone.platform.client.PhoneScreenBase.hasAltDown",
+    "BuiltInRegistries.ITEM.get": "BuiltInRegistries.ITEM.getValue",
+    "Screen.isCopy": "com.november.mcphone.platform.client.port.PhoneInputs.isCopy",
+    "net.minecraft.client.gui.components.toasts.ToastComponent": "net.minecraft.client.gui.components.toasts.ToastManager",
+    "net.minecraft.client.renderer.texture.DynamicTexture": "com.november.mcphone.platform.client.port.PhoneDynamicTexture",
+    "net.minecraft.client.gui.components.PlayerFaceRenderer": "com.november.mcphone.platform.client.port.PhonePlayerFaceRenderer",
+    "dimension().location": "dimension().identifier",
+    "SharedConstants.getCurrentVersion().getName": "SharedConstants.getCurrentVersion().name",
+    "CustomPacketPayload.createType": "com.november.mcphone.platform.PhonePayloadTypes.create"
+  },
+  "names": {
+    "ResourceLocation": "Identifier",
+    "ResourceLocationException": "IdentifierException",
+    "writeResourceLocation": "writeIdentifier",
+    "readResourceLocation": "readIdentifier",
+    "GuiGraphics": "PhoneGraphics",
+    "EditBox": "PhoneEditBox",
+    "RenderSystem": "PhoneTextureState",
+    "ToastComponent": "ToastManager",
+    "getToasts": "getToastManager",
+    "serverLevel": "level",
+    "setPixelRGBA": "setPixelABGR",
+    "getPixelRGBA": "getPixelABGR",
+    "DynamicTexture": "PhoneDynamicTexture",
+    "PlayerFaceRenderer": "PhonePlayerFaceRenderer"
+  },
+  "overrides": [
+    "com/november/mcphone/platform/client/PhoneDesktopCapture.java",
+    "com/november/mcphone/platform/client/NativeExternalBookView.java",
+    "com/november/mcphone/core/PhoneItem.java",
+    "com/november/mcphone/core/client/PhoneItemProperties.java",
+    "com/november/mcphone/feature/reader/client/source/PatchouliSource.java",
+    "com/november/mcphone/feature/terminal/integration/refinedstorage/TerminalSlotReferenceFactory.java"
+  ],
+  "nativeSources": [
+    "com.november.mcphone.platform.client.PhoneScreenBase.java",
+    "com.november.mcphone.platform.client.PhoneContainerScreenBase.java",
+    "com.november.mcphone.platform.client.PhoneToastBase.java"
+  ],
+  "loaderOverrides": {
+    "NeoForge": [
+      "com/november/mcphone/core/client/MCphoneKeyBindings.java"
+    ],
+    "Fabric": [
+      "com/november/mcphone/mixin/client/KeyboardHandlerMixin.java",
+      "com/november/mcphone/mixin/client/MouseHandlerMixin.java",
+      "com/november/mcphone/mixin/client/SoundEngineMixin.java",
+      "com/november/mcphone/core/client/KeyModifier.java"
+    ]
+  }
+}

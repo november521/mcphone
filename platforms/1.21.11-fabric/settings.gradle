@@ -1,0 +1,17 @@
+pluginManagement {
+    repositories {
+        // fabric-loom 发在这里，Gradle 的插件门户上只有它的转发壳
+        maven {
+            name = 'Fabric'
+            url = 'https://maven.fabricmc.net/'
+        }
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+
+plugins {
+    id 'org.gradle.toolchains.foojay-resolver-convention' version '1.0.0'
+}
+
+rootProject.name = 'mcphone-fabric'

@@ -1,0 +1,14 @@
+{
+  "model": {
+    "type": "minecraft:condition",
+    "property": "mcphone:screen_on",
+    "on_true": {
+      "type": "minecraft:model",
+      "model": "mcphone:item/phone_white"
+    },
+    "on_false": {
+      "type": "minecraft:model",
+      "model": "mcphone:item/phone_black"
+    }
+  }
+}

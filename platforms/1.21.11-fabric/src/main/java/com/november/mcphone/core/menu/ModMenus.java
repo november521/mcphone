@@ -1,0 +1,76 @@
+package com.november.mcphone.core.menu;
+
+import com.november.mcphone.MCphone;
+import com.november.mcphone.feature.music.menu.DiscBayMenu;
+import com.november.mcphone.feature.terminal.menu.TerminalSlotMenu;
+import com.november.mcphone.platform.Holder;
+import net.minecraft.core.Registry;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.flag.FeatureFlags;
+import net.minecraft.world.inventory.MenuType;
+
+/**
+ * 菜单类型注册。
+ *
+ * 每个需要格子的地方在这里注册一个 MenuType。多数共用
+ * {@link PhoneContainerMenu}（区别只在容器来源与格数）；唱片仓是个例外，
+ * 它只有一格、还要限制只收唱片，所以自带一个菜单实现。
+ *
+ * 注册在 MCphone.onInitialize 中调用。
+ */
+public final class ModMenus {
+
+    private ModMenus() {}
+
+    /** 末影箱容量，与原版一致（3 行 ×9），在手机里按 6 列排 */
+    public static final int ENDER_CHEST_SIZE = 27;
+
+    /**
+     * 便携末影箱。
+     *
+     * 这里的工厂是【客户端】用的：服务端 openMenu 时自己 new 好菜单，
+     * 客户端只收到菜单类型与 id，靠这个工厂重建一个等大的空壳，
+     * 内容随后由原版的容器同步包填入。
+     */
+    public static final Holder<MenuType<PhoneContainerMenu>> ENDER_CHEST = Holder.of(new MenuType<>(
+            (containerId, playerInventory) -> new PhoneContainerMenu(
+                    ModMenus.ENDER_CHEST.get(), containerId, playerInventory, ENDER_CHEST_SIZE),
+            FeatureFlags.DEFAULT_FLAGS));
+
+    /**
+     * 手机终端卡槽 —— 一个终端格 ＋ 玩家背包，形状和下面的唱片仓一样。
+     *
+     * 客户端与服务端共用同一个构造，不像下面两个要占位容器：卡槽的内容是
+     * 玩家附件（见 {@link com.november.mcphone.feature.terminal.TerminalSlot}），
+     * 服务端在写入与登录时都会把值推给客户端（Fabric 1.21.1 的附件没有自动
+     * 同步，走的是手工的 {@code SyncPhoneTerminalPacket}），客户端本来就读得到，
+     * 不必等原版的容器同步包。
+     */
+    public static final Holder<MenuType<TerminalSlotMenu>> TERMINAL_SLOT = Holder.of(new MenuType<>(
+            TerminalSlotMenu::new,
+            FeatureFlags.DEFAULT_FLAGS));
+
+    /**
+     * 唱片仓 —— 一个唱片格 ＋ 玩家背包。
+     *
+     * 存在的理由是手机界面里没有背包：不开这个界面的话，玩家想把一张唱片
+     * 放进手机就得先关手机、把唱片翻到主手、再开手机。见 {@link DiscBayMenu}。
+     */
+    public static final Holder<MenuType<DiscBayMenu>> DISC_BAY = Holder.of(new MenuType<>(
+            DiscBayMenu::new,
+            FeatureFlags.DEFAULT_FLAGS));
+
+    /** 由 MCphone.onInitialize 调用 */
+    public static void register() {
+        Registry.register(BuiltInRegistries.MENU,
+                ResourceLocation.fromNamespaceAndPath(MCphone.MODID, "ender_chest"),
+                ENDER_CHEST.get());
+        Registry.register(BuiltInRegistries.MENU,
+                ResourceLocation.fromNamespaceAndPath(MCphone.MODID, "terminal_slot"),
+                TERMINAL_SLOT.get());
+        Registry.register(BuiltInRegistries.MENU,
+                ResourceLocation.fromNamespaceAndPath(MCphone.MODID, "disc_bay"),
+                DISC_BAY.get());
+    }
+}
